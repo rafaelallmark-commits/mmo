@@ -70,6 +70,9 @@ func _process(_d: float) -> void:
 	if Time.get_ticks_msec() - t0 > deadline_ms:
 		fail("tempo esgotado no passo " + step)
 		return
+	if step == "nav":
+		_nav_tick()
+		return
 	match step:
 		"entering":
 			if main.in_world and main.world and not main.world.me().is_empty():
@@ -257,3 +260,87 @@ func _act(kind: String, id: String) -> void:
 	var rng: float = {"npc": 4.5, "object": 2.8, "portal": 2.5}[kind]
 	main.world.pending_action = {"kind": kind, "id": id, "pos": pos, "range": rng}
 	Net.request("move", {"x": pos.x + 0.8, "z": pos.z + 0.8})
+
+
+# ---------------- capturas da navegação (--navshots=pasta) ----------------
+var nav_step := 0
+var nav_until := 0
+
+func start_nav(m) -> void:
+	main = m
+	t0 = Time.get_ticks_msec()
+	deadline_ms = 120000
+	step = "nav"
+	nav_until = Time.get_ticks_msec() + 1500
+	say("capturas de navegação em %s" % main.args["navshots"])
+
+func _nav_shot(name: String) -> void:
+	var path := "%s/%s.png" % [main.args["navshots"], name]
+	get_viewport().get_texture().get_image().save_png(path)
+	say("captura: " + path)
+
+func _nav_tick() -> void:
+	if Time.get_ticks_msec() < nav_until:
+		return
+	var next_wait := 1200
+	match nav_step:
+		0:
+			_nav_shot("01_titulo")
+			main.show_options()
+		1:
+			_nav_shot("02_opcoes")
+			main.options_panel.queue_free()
+			main.options_panel = null
+			main.show_login()
+		2:
+			_nav_shot("03_entrar")
+			main.account = main.args.get("account", "vitrine")
+			main.password = main.args.get("password", "vitrine123")
+			main.connect_and_login(true)
+			next_wait = 2000
+		3:
+			if main.state != "chars":
+				return
+			main.show_create()
+			main._create_class = main.args.get("class", "emberweaver")
+			main._build_create(main.args.get("name", "Vitrine"))
+		4:
+			_nav_shot("04_criacao")
+			if main.chars_cache.is_empty():
+				Net.request("create_char", {"name": main.args.get("name", "Vitrine"), "classId": main._create_class}, func(r):
+					if not r["ok"]:
+						fail("criação recusada: " + r["reason"])
+						return
+					Net.request("list_chars", {}, func(r2):
+						main.chars_cache = r2["chars"]
+						main.show_chars(int(r["char"]["id"]))))
+			else:
+				main.show_chars()
+			next_wait = 1500
+		5:
+			_nav_shot("05_personagens")
+			main.enter_world(main._selected_char)
+			next_wait = 250
+		6:
+			_nav_shot("06_carregando")
+			next_wait = 2500
+		7:
+			if not main.in_world:
+				return
+			Net.request("move", {"x": 30.0, "z": 50.0})
+			next_wait = 3500
+		8:
+			_nav_shot("07_mundo")
+			main.world.cam_dist = 13.0
+			next_wait = 1200
+		9:
+			_nav_shot("08_mundo_perto")
+			main.toggle_pause_menu()
+			next_wait = 600
+		10:
+			_nav_shot("09_menu_pausa")
+			say("OK")
+			get_tree().quit(0)
+			return
+	nav_step += 1
+	nav_until = Time.get_ticks_msec() + next_wait

@@ -127,13 +127,13 @@ func _build_hotbar(root: Control) -> void:
 	var p := PanelContainer.new()
 	p.add_theme_stylebox_override("panel", Theme_.panel_style(0.85))
 	p.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	p.position = Vector2(-310, -84)
+	p.position = Vector2(-290, -84)
 	root.add_child(p)
 	hotbar = HBoxContainer.new()
 	p.add_child(hotbar)
 	for i in 5:
 		var b := Button.new()
-		b.custom_minimum_size = Vector2(118, 46)
+		b.custom_minimum_size = Vector2(110, 46)
 		b.focus_mode = Control.FOCUS_NONE
 		b.autowrap_mode = TextServer.AUTOWRAP_WORD
 		b.add_theme_font_size_override("font_size", 11)
@@ -155,7 +155,7 @@ func _build_chat(root: Control) -> void:
 	p.add_theme_stylebox_override("panel", Theme_.panel_style(0.6))
 	p.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	p.position = Vector2(12, -230)
-	p.custom_minimum_size = Vector2(380, 200)
+	p.custom_minimum_size = Vector2(300, 200)
 	root.add_child(p)
 	var v := VBoxContainer.new()
 	p.add_child(v)
@@ -168,7 +168,8 @@ func _build_chat(root: Control) -> void:
 	chat_input = LineEdit.new()
 	chat_input.placeholder_text = "Enter para conversar"
 	v.add_child(chat_input)
-	chat_input.placeholder_text = "Enter: conversar · /g grupo · /s Nome sussurro · /convidar Nome · /sair"
+	chat_input.placeholder_text = "Enter: conversar (/g /s /convidar)"
+	chat_input.tooltip_text = "/g texto: grupo · /s Nome texto: sussurro · /convidar Nome · /sair: sai do grupo"
 	chat_input.text_submitted.connect(func(t: String):
 		_chat_command(t.strip_edges())
 		chat_input.text = ""
@@ -356,7 +357,7 @@ func refresh_target() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventKey) or not event.pressed or event.echo:
 		return
-	if chat_input.has_focus():
+	if chat_input.has_focus() or main.menu_open():
 		return
 	var k := (event as InputEventKey).keycode
 	match k:
@@ -369,11 +370,6 @@ func _unhandled_input(event: InputEvent) -> void:
 			if sheet_panel.visible:
 				pending_alloc = {}
 				_refresh_sheet()
-		KEY_ESCAPE:
-			inv_panel.visible = false
-			sheet_panel.visible = false
-			npc_panel.visible = false
-			journal_panel.visible = false
 		KEY_ENTER, KEY_KP_ENTER:
 			chat_input.grab_focus()
 		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5:
@@ -385,6 +381,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		_:
 			return
 	get_viewport().set_input_as_handled()
+
+## Esc: fecha o painel aberto mais alto. Retorna false se não havia nenhum (o main abre o menu).
+func close_top_panel() -> bool:
+	for p in [invite_panel, npc_panel, journal_panel, inv_panel, sheet_panel]:
+		if p and p.visible:
+			p.visible = false
+			return true
+	return false
 
 # ---------------- mensagens ----------------
 func _flash(text: String, color: Color) -> void:

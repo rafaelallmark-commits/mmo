@@ -2,12 +2,14 @@
 
 MMORPG 3D de ação PvE para PC, com câmera elevada, movimento por clique, caça em grupo em mapas compartilhados e equipamento que exige nível, classe e atributos. Cliente em **Godot 4**, servidor autoritativo de zona em **Node.js**, dados do jogo em **JSON editável**.
 
-> Estado atual: **Marco 1 concluído** — servidor autoritativo, cliente Godot 4, dados, persistência SQLite e teste de aceitação automatizado com dois clientes simulados. Jogáveis no M1: **Quebraferro** e **Tecelão da Brasa** na **Estrada Velha** (níveis 1–5).
+> Estado atual: **Marco 1 concluído**; **Marco 2 em andamento** — no servidor: as 8 classes, grupos, chat por canais, missões dos capítulos 1–3, cidades, Brejo e Oficina, prova de classe. No cliente: estrutura de navegação completa (título → entrar → personagens/criação → carregando → mundo, menu de pausa e opções) e visual em **3D estilizado com traço de anime** (cel shading, contorno, personagens de cabeça grande).
 
-![Combate na Estrada Velha](docs/img/combate.png)
-![Ficha, equipamento e descrição de item com requisitos pendentes em vermelho](docs/img/paineis.png)
+| | |
+|---|---|
+| ![Título](docs/img/01_titulo.png) | ![Criação de personagem](docs/img/04_criacao.png) |
+| ![Personagens](docs/img/05_personagens.png) | ![Mundo](docs/img/08_mundo_perto.png) |
 
-*Capturas reais do cliente (Godot 4.3, renderização por software em Linux), geradas pelo modo `--autotest`.*
+*Capturas reais do cliente (Godot 4.3, renderização por software em Linux), geradas pelo modo `--navshots`. Fluxo de telas em [docs/07-navegacao.md](docs/07-navegacao.md).*
 
 ## Documentação
 
@@ -19,6 +21,7 @@ MMORPG 3D de ação PvE para PC, com câmera elevada, movimento por clique, caç
 | [docs/04-progressao-e-formulas.md](docs/04-progressao-e-formulas.md) | Tabela de XP 1–20, XP por monstro, exemplos solo e em grupo, equipamento por faixa (todas as famílias de arma em todas as faixas), verificação de requisitos, dois exemplos de evolução passo a passo, fórmulas com exemplos calculados *(gerado dos dados)* |
 | [docs/05-arquitetura.md](docs/05-arquitetura.md) | Estrutura técnica, arquivos, protocolo, saque idempotente, reconexão, concorrência, critérios de aceitação dos 4 marcos, o que muda para teste público e múltiplas zonas |
 | [docs/06-mundo-e-mapas.md](docs/06-mundo-e-mapas.md) | Cidades, cinco áreas, regras de monstros, morte e resgate, combate legível, telas da interface |
+| [docs/07-navegacao.md](docs/07-navegacao.md) | Telas, camadas dentro do jogo, mapa do mundo, controles e direção gráfica |
 | [docs/DECISOES.md](docs/DECISOES.md) | Todas as decisões tomadas por conta própria e o motivo |
 
 ## Requisitos
@@ -82,9 +85,9 @@ Para já abrir com a conta preenchida:
 
 **Alternativa pelo editor**: abra o Godot, *Importar* → selecione `client/project.godot`. Em *Depurar → Personalizar instâncias de execução…* (*Debug → Customize Run Instances…*), marque *Ativar múltiplas instâncias* e defina **2**. Aperte F5: duas janelas do jogo abrem.
 
-Em cada janela: servidor `ws://127.0.0.1:7777`, **Criar conta** (ou **Entrar**), crie um personagem e clique nele para entrar.
+Em cada janela: **Jogar** → servidor `ws://127.0.0.1:7777`, **Criar conta** (ou **Entrar**) → **Criar novo personagem** (escolha a classe; a prévia 3D muda) → **Jogar**. **Esc** fecha painéis ou abre o menu (Opções, Trocar de personagem, Sair para o título).
 
-Controles: clique no chão anda; clique no monstro ataca; clique no saque coleta; **1/2** habilidades, **3/4** tônicos; **I** inventário (clique no item equipa/usa; passe o mouse para ver a descrição e a comparação); **C** ficha (pontos e habilidades); **Q/E** ou botão direito arrastando giram a câmera; roda do mouse aproxima; **Enter** conversa; **Esc** fecha painéis.
+Controles: clique no chão anda; clique no monstro ataca; clique no NPC conversa (missões, loja, prova de classe); clique no anel de um portal muda de mapa; clique no saque coleta; **1–3** habilidades, **4/5** tônicos; **J** missões; chat com `/g` (grupo), `/s Nome` (sussurro), `/convidar Nome`, `/sair`; **I** inventário (clique no item equipa/usa; passe o mouse para ver a descrição e a comparação); **C** ficha (pontos e habilidades); **Q/E** ou botão direito arrastando giram a câmera; roda do mouse aproxima; **Enter** conversa; **Esc** fecha painéis.
 
 Para jogar em rede local, rode o servidor em uma máquina e use `ws://IP-DA-MÁQUINA:7777` no campo Servidor.
 
@@ -133,6 +136,12 @@ Teste automático do **cliente** (headless, contra um servidor rodando), da raiz
 ```
 
 Ele cria a conta/personagem se preciso, entra no mundo pela mesma rotina da interface, anda até (30, 50), ataca um Rato de Sulco, coleta o saque e termina com `[autotest] OK` (código de saída 0). Mensagens `Parameter "m" is null` vêm do renderizador "dummy" do modo headless e são inofensivas.
+
+Percorrer todas as telas e salvar uma captura de cada (precisa de janela, não use `--headless`):
+
+```bash
+/Applications/Godot.app/Contents/MacOS/Godot --path client -- --navshots=/tmp/telas --server=ws://127.0.0.1:7777 --account=vitrine --password=vitrine123 --class=breaker --name=Brakka
+```
 
 ## 5. Reproduzir os cenários críticos à mão
 

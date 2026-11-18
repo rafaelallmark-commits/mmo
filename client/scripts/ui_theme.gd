@@ -36,3 +36,15 @@ static func bar_bg() -> StyleBoxFlat:
 	s.set_border_width_all(1)
 	s.set_corner_radius_all(2)
 	return s
+
+static func button_style(primary: bool, hover: bool) -> StyleBoxFlat:
+	var s := StyleBoxFlat.new()
+	var base := Color("#b5562c") if primary else Color("#3a302a")
+	s.bg_color = base.lightened(0.12) if hover else base
+	s.border_color = Color("#e3a548") if (primary or hover) else BORDER
+	s.set_border_width_all(1)
+	s.set_corner_radius_all(6)
+	s.set_content_margin_all(8)
+	s.shadow_color = Color(0, 0, 0, 0.35)
+	s.shadow_size = 3
+	return s

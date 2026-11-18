@@ -1,16 +1,20 @@
 extends Node3D
-## Mundo 3D: chão do mapa, câmera elevada (zoom e rotação), entidades interpoladas a partir
-## dos snapshots do servidor, clique no chão para mover e clique em monstro para atacar.
+## Mundo 3D: mapa, câmera elevada (zoom e rotação), entidades interpoladas a partir dos
+## snapshots do servidor e cliques (andar, atacar, falar, usar objeto, portal, coletar).
+## Visual: cel shading + contorno (ver art.gd e docs/07-navegacao.md).
+
+const Art = preload("res://scripts/art.gd")
 
 var main # main.gd
 var cam_pivot: Node3D
 var camera: Camera3D
 var cam_yaw := -0.6
 var cam_pitch := 0.95
-var cam_dist := 26.0
-var entities := {} # eid -> { node, label, target_pos, data }
+var cam_dist := 24.0
+var entities := {} # eid -> { node, label, target_pos, data, w }
 var loots := {} # loot id -> { node, data }
 var selected := ""
+var ally_selected := ""
 var select_ring: MeshInstance3D
 var dest_marker: MeshInstance3D
 var pending_pickup := ""
@@ -19,45 +23,43 @@ var pending_action := {} # { kind: npc|object|portal, id, pos, range }
 var npc_nodes := {}
 var object_nodes := {}
 var portal_nodes := {}
-var ally_selected := ""
 var _rotating := false
-const ROLE_NAMES := {"quest": "missões", "master": "mestre de classe", "smith": "ferreiro", "shop": "tônicos", "storage": "depósito"}
+var _t := 0.0
 
-const CLASS_COLORS := {"breaker": Color("#c8772f"), "emberweaver": Color("#e0482c"), "bastion": Color("#a07a3a"), "pikeman": Color("#8f6d3a"), "warden": Color("#6d8a3a"), "dawnshield": Color("#e8d27a"), "windwalker": Color("#7ac3c9"), "veilsinger": Color("#c9b8e8")}
-const FAMILY_COLORS := {"beast": Color("#7b5a44"), "machine": Color("#6f7a80"), "spirit": Color("#8fb7c9")}
+const ROLE_NAMES := {"quest": "missões", "master": "mestre de classe", "smith": "ferreiro", "shop": "tônicos", "storage": "depósito"}
+const GROUND_COLORS := {
+	"estrada_velha": [Color("#857549"), Color("#677a44")],
+	"brejo_bombas": [Color("#536b45"), Color("#425e50")],
+	"oficina_soterrada": [Color("#6a5f58"), Color("#5a5048")],
+	"arena_prova": [Color("#8a7a68"), Color("#7a6a5a")],
+	"pedrambar": [Color("#a89878"), Color("#968668")],
+	"vau_de_nacar": [Color("#9aa8a0"), Color("#88968e")],
+}
+const LEAF_COLORS := [Color("#6f8c3a"), Color("#8a9a3e"), Color("#a8743a"), Color("#5a7a4a")]
 
 func _ready() -> void:
+	var map: Dictionary = main.map_def()
 	var env := WorldEnvironment.new()
-	var e := Environment.new()
-	e.background_mode = Environment.BG_COLOR
-	e.background_color = Color("#2a2420")
-	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	e.ambient_light_color = Color("#8a7c6a")
-	e.ambient_light_energy = 0.7
-	e.fog_enabled = true
-	e.fog_light_color = Color("#3a302a")
-	e.fog_density = 0.006
-	env.environment = e
+	env.environment = Art.environment(map.get("id", ""))
 	add_child(env)
 	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-55, -35, 0)
-	sun.light_color = Color("#ffd9a8")
-	sun.light_energy = 1.1
+	sun.rotation_degrees = Vector3(-52, -40, 0)
+	sun.light_color = Color("#ffe2c0")
+	sun.light_energy = 1.0
 	sun.shadow_enabled = true
+	sun.directional_shadow_max_distance = 80.0
 	add_child(sun)
-	_build_map()
+	_build_map(map)
 	cam_pivot = Node3D.new()
 	add_child(cam_pivot)
 	camera = Camera3D.new()
-	camera.fov = 50
+	camera.fov = 45
 	cam_pivot.add_child(camera)
 	camera.current = true
-	select_ring = _mesh(_torus(0.9, 1.1), Color("#ffcf4a"), true)
+	select_ring = Art.part(self, _torus(0.9, 1.05), Art.toon(Color("#ffcf4a"), false, Color(0.8, 0.6, 0.1)), Vector3.ZERO)
 	select_ring.visible = false
-	add_child(select_ring)
-	dest_marker = _mesh(_torus(0.3, 0.45), Color("#9fd3d1"), true)
+	dest_marker = Art.part(self, _torus(0.3, 0.42), Art.toon(Color("#9fd3d1"), false, Color(0.3, 0.6, 0.6)), Vector3.ZERO)
 	dest_marker.visible = false
-	add_child(dest_marker)
 
 func _torus(inner: float, outer: float) -> TorusMesh:
 	var t := TorusMesh.new()
@@ -65,122 +67,162 @@ func _torus(inner: float, outer: float) -> TorusMesh:
 	t.outer_radius = outer
 	return t
 
-func _mesh(m: Mesh, c: Color, unshaded := false) -> MeshInstance3D:
-	var mi := MeshInstance3D.new()
-	mi.mesh = m
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = c
-	if unshaded:
-		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	if c.a < 1.0:
-		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mi.material_override = mat
-	return mi
-
-func _label(text: String, size := 48, color := Color.WHITE) -> Label3D:
+func _label(text: String, size := 40, color := Color.WHITE) -> Label3D:
 	var l := Label3D.new()
 	l.text = text
 	l.font_size = size
-	l.pixel_size = 0.01
+	l.pixel_size = 0.009
 	l.modulate = color
-	l.outline_size = 8
+	l.outline_size = 10
+	l.outline_modulate = Color("#1a1210")
 	l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	l.no_depth_test = true
 	return l
 
-func _build_map() -> void:
-	var map: Dictionary = main.map_def()
+func _build_map(map: Dictionary) -> void:
 	var size: Array = map.get("size", [160, 100])
 	var w := float(size[0])
 	var h := float(size[1])
+	var id: String = map.get("id", "")
+	var gc: Array = GROUND_COLORS.get(id, [Color("#8a7a5a"), Color("#7a8a4e")])
 	var ground := PlaneMesh.new()
 	ground.size = Vector2(w, h)
-	var ground_color := Color("#4a4636")
-	if map.get("city", false):
-		ground_color = Color("#5b5348")
-	elif map.get("id", "") == "brejo_bombas":
-		ground_color = Color("#3c4a3a")
-	elif map.get("id", "") in ["oficina_soterrada", "arena_prova"]:
-		ground_color = Color("#3a3634")
-	var g := _mesh(ground, ground_color)
-	g.position = Vector3(w / 2.0, 0, h / 2.0)
-	add_child(g)
-	# estrada velha: faixa clara de leste a oeste
-	var road := PlaneMesh.new()
-	road.size = Vector2(w, 6)
-	var r := _mesh(road, Color("#6b5f4a"))
-	r.position = Vector3(w / 2.0, 0.01, h / 2.0)
-	add_child(r)
+	ground.subdivide_width = 8
+	ground.subdivide_depth = 8
+	Art.part(self, ground, Art.ground(gc[0], gc[1]), Vector3(w / 2.0, 0, h / 2.0))
+	# borda do mapa (penhasco baixo) para não parecer que o mundo acaba no vazio
+	for side in [[Vector3(w / 2.0, -1.5, -1.5), Vector3(w + 6, 3, 3)], [Vector3(w / 2.0, -1.5, h + 1.5), Vector3(w + 6, 3, 3)], [Vector3(-1.5, -1.5, h / 2.0), Vector3(3, 3, h)], [Vector3(w + 1.5, -1.5, h / 2.0), Vector3(3, 3, h)]]:
+		Art.part(self, Art.box(side[1]), Art.toon(Color("#5a4a3e"), false), side[0])
+	var road_tint := Color("#a08c64") if not map.get("city", false) else Color("#a89e8a")
+	if id == "estrada_velha" or map.get("city", false):
+		var road := PlaneMesh.new()
+		road.size = Vector2(w, 6 if not map.get("city", false) else 10)
+		Art.part(self, road, Art.toon(road_tint, false), Vector3(w / 2.0, 0.02, h / 2.0 if not map.get("city", false) else 30.0))
 	for b in map.get("blocked", []):
-		var bx := BoxMesh.new()
 		var sx := float(b["x1"]) - float(b["x0"])
 		var sz := float(b["z1"]) - float(b["z0"])
-		bx.size = Vector3(sx, 3.0, sz)
-		var bm := _mesh(bx, Color("#3a3530"))
-		bm.position = Vector3(float(b["x0"]) + sx / 2.0, 1.5, float(b["z0"]) + sz / 2.0)
-		add_child(bm)
-		var bl := _label(b["name"], 40, Color("#9a927f"))
-		bl.position = bm.position + Vector3(0, 2.5, 0)
+		var center := Vector3(float(b["x0"]) + sx / 2.0, 0, float(b["z0"]) + sz / 2.0)
+		var bname: String = b["name"]
+		if "Lagoa" in bname or "rio" in bname:
+			var wp := PlaneMesh.new()
+			wp.size = Vector2(sx, sz)
+			Art.part(self, wp, Art.water(), center + Vector3(0, 0.04, 0))
+		else:
+			Art.part(self, Art.box(Vector3(sx, 2.6, sz)), Art.toon(Color("#7a6e64")), center + Vector3(0, 1.3, 0))
+			Art.part(self, Art.box(Vector3(sx * 0.6, 1.2, sz * 0.4)), Art.toon(Color("#8a7e72")), center + Vector3(sx * 0.1, 3.2, 0))
+		var bl := _label(bname, 34, Color("#e8dccb"))
+		bl.position = center + Vector3(0, 4.5, 0)
 		add_child(bl)
 	var gp: Dictionary = map.get("guardPost", {})
 	if not gp.is_empty():
-		var ring := CylinderMesh.new()
-		ring.top_radius = float(gp["safeRadius"])
-		ring.bottom_radius = float(gp["safeRadius"])
-		ring.height = 0.05
-		var rm := _mesh(ring, Color(0.62, 0.83, 0.82, 0.18), true)
-		rm.position = Vector3(float(gp["x"]), 0.03, float(gp["z"]))
-		add_child(rm)
-		var tower := CylinderMesh.new()
-		tower.top_radius = 0.6
-		tower.bottom_radius = 0.9
-		tower.height = 4.0
-		var tm := _mesh(tower, Color("#8a7a5a"))
-		tm.position = Vector3(float(gp["x"]) - 3, 2, float(gp["z"]) - 3)
-		add_child(tm)
-		var gl := _label(gp["name"], 56, Color("#e3a548"))
-		gl.position = tm.position + Vector3(0, 3, 0)
+		var gpos := Vector3(float(gp["x"]), 0, float(gp["z"]))
+		if float(gp["safeRadius"]) > 0 and float(gp["safeRadius"]) < 30:
+			var ring := Art.cyl(float(gp["safeRadius"]), float(gp["safeRadius"]), 0.04, 48)
+			var rm := StandardMaterial3D.new()
+			rm.albedo_color = Color(0.62, 0.83, 0.82, 0.16)
+			rm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			rm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			Art.part(self, ring, rm, gpos + Vector3(0, 0.03, 0))
+		for off in [Vector3(-3, 0, -3), Vector3(3, 0, -3)]:
+			var lan := Art.lantern()
+			lan.position = gpos + off
+			add_child(lan)
+		var gl := _label(gp["name"], 48, Color("#ffcf7a"))
+		gl.position = gpos + Vector3(0, 3.6, -3)
 		add_child(gl)
 	for n in map.get("npcs", []):
-		var cap := CapsuleMesh.new()
-		cap.radius = 0.45
-		cap.height = 1.8
-		var nm := _mesh(cap, Color("#d8c48a") if n.get("role", "") != "master" else Color("#e3a548"))
-		nm.position = Vector3(float(n["x"]), 0.9, float(n["z"]))
-		add_child(nm)
-		var nl := _label("%s\n[%s]" % [n["name"], ROLE_NAMES.get(n.get("role", ""), "")], 40, Color("#ffe39a"))
-		nl.position = nm.position + Vector3(0, 1.8, 0)
+		var npc := Art.character("", "", true, Color("#e3a548") if n.get("role", "") == "master" else Color("#c9b07a"))
+		npc.position = Vector3(float(n["x"]), 0, float(n["z"]))
+		npc.rotation.y = PI
+		add_child(npc)
+		var nl := _label("%s\n‹%s›" % [n["name"], ROLE_NAMES.get(n.get("role", ""), "")], 36, Color("#ffe39a"))
+		nl.position = npc.position + Vector3(0, 2.3, 0)
 		add_child(nl)
-		npc_nodes[n["id"]] = {"pos": Vector3(float(n["x"]), 0, float(n["z"])), "data": n, "label": nl}
+		npc_nodes[n["id"]] = {"pos": npc.position, "data": n, "node": npc}
 	for o in map.get("objects", []):
-		var bx := BoxMesh.new()
-		bx.size = Vector3(0.7, 0.7, 0.7)
-		var om := _mesh(bx, Color("#9fd3d1"), true)
-		om.position = Vector3(float(o["x"]), 0.35, float(o["z"]))
-		add_child(om)
-		var ol := _label(o["name"], 32, Color("#9fd3d1"))
-		ol.position = om.position + Vector3(0, 1.0, 0)
+		var op := Vector3(float(o["x"]), 0, float(o["z"]))
+		Art.part(self, Art.box(Vector3(0.7, 0.7, 0.7)), Art.toon(Color("#9fd3d1"), true, Color(0.15, 0.35, 0.35)), op + Vector3(0, 0.35, 0), Vector3.ONE, Vector3(0, 30, 0))
+		var ol := _label(o["name"], 30, Color("#bfeeee"))
+		ol.position = op + Vector3(0, 1.3, 0)
 		add_child(ol)
-		object_nodes[o["id"]] = {"pos": Vector3(float(o["x"]), 0, float(o["z"])), "data": o}
+		object_nodes[o["id"]] = {"pos": op, "data": o}
 	for pt in map.get("portals", []):
-		var ring := CylinderMesh.new()
-		ring.top_radius = float(pt["radius"])
-		ring.bottom_radius = float(pt["radius"])
-		ring.height = 0.06
-		var pm := _mesh(ring, Color(0.89, 0.65, 0.28, 0.45), true)
-		pm.position = Vector3(float(pt["x"]), 0.04, float(pt["z"]))
-		add_child(pm)
+		var pp := Vector3(float(pt["x"]), 0, float(pt["z"]))
+		var ring2 := Art.cyl(float(pt["radius"]), float(pt["radius"]), 0.06, 32)
+		var pm := StandardMaterial3D.new()
+		pm.albedo_color = Color(1.0, 0.7, 0.3, 0.45)
+		pm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		pm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		Art.part(self, ring2, pm, pp + Vector3(0, 0.05, 0))
+		for k in 2:
+			var post := Art.part(self, Art.cyl(0.15, 0.2, 3.0, 8), Art.toon(Color("#6b4a2e")), pp + Vector3(-1.6 + k * 3.2, 1.5, 0))
+			post.rotation_degrees.y = 0
+		Art.part(self, Art.box(Vector3(3.8, 0.3, 0.3)), Art.toon(Color("#b5562c")), pp + Vector3(0, 3.0, 0))
 		var dest: Dictionary = main.defs.get("maps", {}).get(pt["to"], {})
 		var lvl := int(pt.get("minLevel", 1))
-		var pl := _label("→ %s%s" % [dest.get("name", pt["to"]), (" (nível %d)" % lvl) if lvl > 1 else ""], 44, Color("#e3a548"))
-		pl.position = pm.position + Vector3(0, 1.5, 0)
+		var pl := _label("→ %s%s" % [dest.get("name", pt["to"]), (" (nível %d)" % lvl) if lvl > 1 else ""], 42, Color("#ffcf7a"))
+		pl.position = pp + Vector3(0, 3.8, 0)
 		add_child(pl)
-		portal_nodes[pt["id"]] = {"pos": Vector3(float(pt["x"]), 0, float(pt["z"])), "data": pt}
+		portal_nodes[pt["id"]] = {"pos": pp, "data": pt}
 	for sp in map.get("spawns", []):
 		var md: Dictionary = main.defs.get("monsters", {}).get(sp["monster"], {})
-		var sl := _label("%s (nv %d)" % [md.get("name", sp["monster"]), int(md.get("level", 1))], 36, Color(1, 1, 1, 0.35))
-		sl.position = Vector3(float(sp["x"]), 0.3, float(sp["z"]) + float(sp["radius"]) + 1)
+		var sl := _label("%s (nv %d)" % [md.get("name", sp["monster"]), int(md.get("level", 1))], 30, Color(1, 1, 1, 0.45))
+		sl.position = Vector3(float(sp["x"]), 0.4, float(sp["z"]) + float(sp["radius"]) + 1)
 		add_child(sl)
+	_scatter_props(map, w, h)
+
+## Árvores, pedras e grama com semente fixa por mapa, fora da estrada, portais e áreas de monstros.
+func _scatter_props(map: Dictionary, w: float, h: float) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(map.get("id", "mapa"))
+	var avoid := []
+	for sp in map.get("spawns", []):
+		avoid.append([Vector2(float(sp["x"]), float(sp["z"])), float(sp["radius"]) + 3.0])
+	for pt in map.get("portals", []):
+		avoid.append([Vector2(float(pt["x"]), float(pt["z"])), 6.0])
+	for n in map.get("npcs", []):
+		avoid.append([Vector2(float(n["x"]), float(n["z"])), 3.0])
+	for o in map.get("objects", []):
+		avoid.append([Vector2(float(o["x"]), float(o["z"])), 3.0])
+	var gp: Dictionary = map.get("guardPost", {})
+	if not gp.is_empty():
+		avoid.append([Vector2(float(gp["x"]), float(gp["z"])), minf(float(gp["safeRadius"]), 14.0) + 2.0])
+	var count := int(w * h / 90.0)
+	if map.get("city", false):
+		count = 26
+	var placed := 0
+	var tries := 0
+	while placed < count and tries < count * 6:
+		tries += 1
+		var p := Vector2(rng.randf_range(2, w - 2), rng.randf_range(2, h - 2))
+		var ok := true
+		for a in avoid:
+			if p.distance_to(a[0]) < a[1]:
+				ok = false
+				break
+		if ok and (map.get("id", "") == "estrada_velha" and absf(p.y - h / 2.0) < 5.0):
+			ok = false
+		if ok and map.get("city", false) and absf(p.y - 30.0) < 7.0:
+			ok = false
+		for b in map.get("blocked", []):
+			if p.x > float(b["x0"]) - 2 and p.x < float(b["x1"]) + 2 and p.y > float(b["z0"]) - 2 and p.y < float(b["z1"]) + 2:
+				ok = false
+		if not ok:
+			continue
+		var roll := rng.randf()
+		var prop: Node3D
+		if map.get("id", "") in ["oficina_soterrada", "arena_prova"]:
+			prop = Art.rock(rng) if roll < 0.7 else Art.lantern()
+		elif roll < 0.4:
+			prop = Art.tree(rng, LEAF_COLORS)
+		elif roll < 0.62:
+			prop = Art.rock(rng)
+		else:
+			prop = Art.grass(rng, Color("#9aa84e") if map.get("id", "") != "brejo_bombas" else Color("#6a8a5a"))
+		prop.position = Vector3(p.x, 0, p.y)
+		prop.rotation.y = rng.randf_range(0, TAU)
+		add_child(prop)
+		placed += 1
 
 func reset_entities() -> void:
 	for e in entities.values():
@@ -192,12 +234,21 @@ func reset_entities() -> void:
 	selected = ""
 
 # ---------------- snapshots ----------------
+func _weapon_family(def_id) -> String:
+	if def_id == null:
+		return ""
+	return main.defs["items"].get(def_id, {}).get("family", "")
+
 func apply_snapshot(snap: Dictionary) -> void:
 	var seen := {}
 	for d in snap.get("ents", []):
 		var eid: String = d["id"]
 		seen[eid] = true
 		var e: Dictionary = entities.get(eid, {})
+		if not e.is_empty() and d["k"] == "p" and e.get("w") != d.get("w"):
+			e["node"].queue_free()
+			entities.erase(eid)
+			e = {}
 		if e.is_empty():
 			e = _spawn_entity(d)
 			entities[eid] = e
@@ -210,7 +261,9 @@ func apply_snapshot(snap: Dictionary) -> void:
 			name = "%s  nv %d" % [main.defs["monsters"].get(d["def"], {}).get("name", d["def"]), int(d["lvl"])]
 		var frac := clampf(float(d["hp"]) / maxf(1.0, float(d["mhp"])), 0.0, 1.0)
 		e["label"].text = "%s\n%d / %d" % [name, int(d["hp"]), int(d["mhp"])]
-		e["label"].modulate = Color("#e8e1d3") if d["k"] == "p" else Color("#ffb08a").lerp(Color("#ff4a3a"), 1.0 - frac)
+		e["label"].visible = main.settings.get("show_names", true) or eid == selected
+		if d["k"] == "m":
+			e["label"].modulate = Color("#ffcf9a").lerp(Color("#ff4a3a"), 1.0 - frac)
 		e["node"].visible = not d.get("dead", false)
 	for eid in entities.keys():
 		if not seen.has(eid):
@@ -222,36 +275,17 @@ func apply_snapshot(snap: Dictionary) -> void:
 		main.hud.refresh_target()
 
 func _spawn_entity(d: Dictionary) -> Dictionary:
-	var root := Node3D.new()
-	add_child(root)
-	var body: MeshInstance3D
+	var root: Node3D
 	if d["k"] == "p":
-		var cap := CapsuleMesh.new()
-		cap.radius = 0.45
-		cap.height = 1.8
-		body = _mesh(cap, CLASS_COLORS.get(d.get("cls", ""), Color.WHITE))
-		body.position.y = 0.9
+		root = Art.character(d.get("cls", ""), _weapon_family(d.get("w")))
 	else:
-		var md: Dictionary = main.defs["monsters"].get(d["def"], {})
-		var scale := 1.0 + (0.8 if md.get("rank", "") == "elite" else 0.0) + float(md.get("level", 1)) * 0.04
-		var m: Mesh
-		if md.get("family", "") == "machine":
-			var bx := BoxMesh.new()
-			bx.size = Vector3(1.0, 1.0, 1.0) * scale
-			m = bx
-		else:
-			var sp := SphereMesh.new()
-			sp.radius = 0.5 * scale
-			sp.height = 1.0 * scale
-			m = sp
-		body = _mesh(m, FAMILY_COLORS.get(md.get("family", ""), Color.GRAY))
-		body.position.y = 0.5 * scale
-	root.add_child(body)
-	var label := _label("", 40, Color("#e8e1d3") if d["k"] == "p" else Color("#ffb08a"))
-	label.position.y = 2.6
+		root = Art.monster(main.defs["monsters"].get(d["def"], {}))
+	add_child(root)
+	var label := _label("", 34, Color("#f2ead8") if d["k"] == "p" else Color("#ffcf9a"))
+	label.position.y = 2.5 if d["k"] == "p" else 2.0
 	root.add_child(label)
 	root.position = Vector3(float(d["x"]), 0, float(d["z"]))
-	return {"node": root, "label": label, "target_pos": root.position, "data": d}
+	return {"node": root, "label": label, "target_pos": root.position, "data": d, "w": d.get("w"), "phase": randf() * TAU}
 
 func me() -> Dictionary:
 	return entities.get(main.ch.get("eid", ""), {})
@@ -261,24 +295,43 @@ func my_pos() -> Vector3:
 	return e["node"].position if not e.is_empty() else Vector3.ZERO
 
 func _process(delta: float) -> void:
+	_t += delta
 	for e in entities.values():
 		var n: Node3D = e["node"]
 		var tp: Vector3 = e["target_pos"]
+		var before := n.position
 		if n.position.distance_to(tp) > 8.0:
 			n.position = tp
 		else:
 			n.position = n.position.lerp(tp, clampf(delta * 12.0, 0.0, 1.0))
-	# câmera segue o personagem
+		# vira para onde anda; parado em combate, vira para o alvo
+		var mv := n.position - before
+		var face_dir := Vector3.ZERO
+		if mv.length() > 0.004:
+			face_dir = mv
+		else:
+			var tgt = e["data"].get("tgt", null)
+			if tgt != null and entities.has(tgt):
+				face_dir = entities[tgt]["node"].position - n.position
+		if face_dir.length() > 0.001:
+			var want := atan2(face_dir.x, face_dir.z)
+			n.rotation.y = lerp_angle(n.rotation.y, want, clampf(delta * 10.0, 0.0, 1.0))
+		var body := n.get_node_or_null("Body")
+		if body:
+			var moving := mv.length() > 0.004
+			var speed := 11.0 if moving else 2.2
+			var amp := 0.06 if moving else 0.025
+			body.position.y = absf(sin(_t * speed + float(e["phase"]))) * amp
 	var focus := my_pos()
 	cam_pivot.position = cam_pivot.position.lerp(focus, clampf(delta * 8.0, 0.0, 1.0))
+	var rot_speed := 1.8 * float(main.settings.get("camera_sensitivity", 1.0))
 	if Input.is_key_pressed(KEY_Q):
-		cam_yaw += delta * 1.8
+		cam_yaw += delta * rot_speed
 	if Input.is_key_pressed(KEY_E):
-		cam_yaw -= delta * 1.8
+		cam_yaw -= delta * rot_speed
 	var off := Vector3(sin(cam_yaw) * cos(cam_pitch), sin(cam_pitch), cos(cam_yaw) * cos(cam_pitch)) * cam_dist
 	camera.position = off
 	camera.look_at(cam_pivot.global_position + Vector3(0, 1, 0), Vector3.UP)
-	# anel de seleção
 	if selected != "" and entities.has(selected):
 		select_ring.visible = true
 		select_ring.position = entities[selected]["node"].position + Vector3(0, 0.05, 0)
@@ -286,14 +339,14 @@ func _process(delta: float) -> void:
 		select_ring.visible = false
 	if dest_marker.visible and focus.distance_to(dest_marker.position) < 0.8:
 		dest_marker.visible = false
-	# coleta pendente: anda até o saque e pede ao servidor
 	if pending_pickup != "" and loots.has(pending_pickup):
 		var lp: Vector3 = loots[pending_pickup]["node"].position
 		if Vector2(lp.x, lp.z).distance_to(Vector2(focus.x, focus.z)) < 4.0:
 			var lid := pending_pickup
 			pending_pickup = ""
 			Net.request("pickup", {"loot": lid}, func(r): _on_pickup(lid, r))
-	# NPC, objeto ou portal pendente: anda até perto e pede ao servidor
+	for l in loots.values():
+		l["node"].get_child(0).rotation.y += delta * 1.5
 	if not pending_action.is_empty():
 		var ap: Vector3 = pending_action["pos"]
 		if Vector2(ap.x, ap.z).distance_to(Vector2(focus.x, focus.z)) <= float(pending_action["range"]):
@@ -310,7 +363,6 @@ func _process(delta: float) -> void:
 							main.hud.system("Feito: %s" % object_nodes.get(pa["id"], {}).get("data", {}).get("name", "")))
 				"portal":
 					Net.request("portal", {"portal": pa["id"]})
-	# habilidade pendente: aproxima e conjura quando estiver no alcance
 	if not pending_cast.is_empty() and entities.has(pending_cast.get("target", "")):
 		var tpos: Vector3 = entities[pending_cast["target"]]["node"].position
 		if tpos.distance_to(focus) <= float(pending_cast["range"]) - 0.3:
@@ -330,7 +382,7 @@ func _on_pickup(lid: String, r: Dictionary) -> void:
 
 # ---------------- entrada ----------------
 func _unhandled_input(event: InputEvent) -> void:
-	if not main.in_world:
+	if not main.in_world or main.menu_open():
 		return
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
@@ -344,8 +396,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			_click(mb.position)
 	elif event is InputEventMouseMotion and _rotating:
 		var mm := event as InputEventMouseMotion
-		cam_yaw -= mm.relative.x * 0.008
-		cam_pitch = clampf(cam_pitch + mm.relative.y * 0.005, 0.45, 1.35)
+		var sens := float(main.settings.get("camera_sensitivity", 1.0))
+		cam_yaw -= mm.relative.x * 0.008 * sens
+		cam_pitch = clampf(cam_pitch + mm.relative.y * 0.005 * sens, 0.45, 1.35)
 
 func ground_point(screen_pos: Vector2) -> Variant:
 	var from := camera.project_ray_origin(screen_pos)
@@ -357,13 +410,11 @@ func _click(screen_pos: Vector2) -> void:
 	if p == null:
 		return
 	var gp: Vector3 = p
-	# saque perto do clique?
 	for lid in loots.keys():
 		if loots[lid]["node"].position.distance_to(gp) < 1.2:
 			pending_pickup = lid
 			Net.request("move", {"x": gp.x, "z": gp.z})
 			return
-	# NPC, objeto ou portal perto do clique?
 	for group in [["npc", npc_nodes, 1.5, 4.5], ["object", object_nodes, 1.2, 2.8], ["portal", portal_nodes, 3.0, 2.5]]:
 		var nodes: Dictionary = group[1]
 		for id in nodes.keys():
@@ -377,15 +428,12 @@ func _click(screen_pos: Vector2) -> void:
 				pending_pickup = ""
 				Net.request("move", {"x": pos.x + 0.8, "z": pos.z + 0.8})
 				return
-	# outro jogador perto do clique: seleciona como aliado (curas e proteções)
 	for eid in entities.keys():
 		var pe: Dictionary = entities[eid]
 		if pe["data"]["k"] == "p" and eid != main.ch.get("eid", "") and pe["node"].position.distance_to(gp) < 1.2:
 			ally_selected = eid
 			main.hud.system("Aliado selecionado: %s" % pe["data"]["n"])
-			main.hud.refresh_target()
 			return
-	# monstro perto do clique?
 	var best := ""
 	var best_d := 1.8
 	for eid in entities.keys():
@@ -404,12 +452,13 @@ func _click(screen_pos: Vector2) -> void:
 		return
 	pending_cast = {}
 	pending_pickup = ""
+	pending_action = {}
 	Net.request("move", {"x": gp.x, "z": gp.z}, func(r):
 		if r["ok"]:
 			dest_marker.position = gp + Vector3(0, 0.05, 0)
 			dest_marker.visible = true)
 
-## Usa a habilidade da barra. Alvo inimigo: aproxima antes. Chão: usa o ponto do mouse.
+## Usa a habilidade da barra conforme o tipo de alvo.
 func use_skill(skill_id: String) -> void:
 	var s: Dictionary = main.defs["skills"].get(skill_id, {})
 	if s.is_empty():
@@ -449,6 +498,15 @@ func use_skill(skill_id: String) -> void:
 		Net.request("cast", {"skill": skill_id})
 
 # ---------------- eventos visuais ----------------
+func _float_text(at: Vector3, text: String, color: Color, size := 46) -> void:
+	var l := _label(text, size, color)
+	l.position = at + Vector3(randf_range(-0.4, 0.4), 2.4, 0)
+	add_child(l)
+	var tw := create_tween()
+	tw.tween_property(l, "position:y", l.position.y + 1.6, 0.9).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(l, "modulate:a", 0.0, 0.9)
+	tw.tween_callback(l.queue_free)
+
 func on_hit(m: Dictionary) -> void:
 	var dst: Dictionary = entities.get(m["dst"], {})
 	if dst.is_empty():
@@ -462,30 +520,28 @@ func on_hit(m: Dictionary) -> void:
 	if m.get("crit", false):
 		text += "!"
 		col = Color("#ffd84a")
-	var l := _label(text, 64 if m.get("crit", false) else 48, col)
-	l.position = dst["node"].position + Vector3(randf_range(-0.4, 0.4), 2.2, 0)
-	add_child(l)
-	var tw := create_tween()
-	tw.tween_property(l, "position:y", l.position.y + 1.6, 0.9)
-	tw.parallel().tween_property(l, "modulate:a", 0.0, 0.9)
-	tw.tween_callback(l.queue_free)
+	_float_text(dst["node"].position, text, col, 62 if m.get("crit", false) else 46)
+	# pequeno "tranco" no atingido
+	if not m.get("miss", false):
+		var body = dst["node"].get_node_or_null("Body")
+		if body:
+			var tw := create_tween()
+			tw.tween_property(body, "scale", Vector3(1.12, 0.9, 1.12), 0.06)
+			tw.tween_property(body, "scale", Vector3.ONE, 0.12)
 
 func on_heal(m: Dictionary) -> void:
 	var dst: Dictionary = entities.get(m["dst"], {})
 	if dst.is_empty() or int(m["amount"]) <= 0:
 		return
-	var l := _label("+%d" % int(m["amount"]), 48, Color("#6fd06a"))
-	l.position = dst["node"].position + Vector3(0, 2.2, 0)
-	add_child(l)
-	var tw := create_tween()
-	tw.tween_property(l, "position:y", l.position.y + 1.6, 0.9)
-	tw.parallel().tween_property(l, "modulate:a", 0.0, 0.9)
-	tw.tween_callback(l.queue_free)
+	_float_text(dst["node"].position, "+%d" % int(m["amount"]), Color("#6fd06a"))
 
 func on_death(eid: String) -> void:
 	if entities.has(eid):
-		entities[eid]["node"].queue_free()
+		var n: Node3D = entities[eid]["node"]
 		entities.erase(eid)
+		var tw := create_tween()
+		tw.tween_property(n, "scale", Vector3(1.2, 0.05, 1.2), 0.25)
+		tw.tween_callback(n.queue_free)
 	if selected == eid:
 		selected = ""
 
@@ -501,24 +557,20 @@ func add_loot(l: Dictionary) -> void:
 		if int(l.get("qty", 1)) > 1:
 			name += " x%d" % int(l["qty"])
 	var root := Node3D.new()
-	var bx := BoxMesh.new()
-	bx.size = Vector3(0.4, 0.4, 0.4)
-	var m := _mesh(bx, color, true)
-	m.position.y = 0.3
-	root.add_child(m)
-	var lab := _label(name, 32, color)
-	lab.position.y = 0.9
+	var gem := Node3D.new()
+	root.add_child(gem)
+	Art.part(gem, Art.sphere(0.22, 6), Art.toon(color, true, color * 0.5), Vector3(0, 0.45, 0), Vector3(1, 1.4, 1))
+	var lab := _label(name, 30, color)
+	lab.position.y = 1.1
 	root.add_child(lab)
 	root.position = Vector3(float(l["x"]), 0, float(l["z"]))
 	add_child(root)
 	loots[l["id"]] = {"node": root, "data": l}
 
 func ground_effect(m: Dictionary) -> void:
-	var c := CylinderMesh.new()
-	c.top_radius = float(m["radius"])
-	c.bottom_radius = float(m["radius"])
-	c.height = 0.08
-	var mi := _mesh(c, Color(1.0, 0.35, 0.1, 0.35), true)
-	mi.position = Vector3(float(m["x"]), 0.06, float(m["z"]))
-	add_child(mi)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(1.0, 0.4, 0.1, 0.35)
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	var mi := Art.part(self, Art.cyl(float(m["radius"]), float(m["radius"]), 0.08, 32), mat, Vector3(float(m["x"]), 0.06, float(m["z"])))
 	get_tree().create_timer(float(m["ms"]) / 1000.0).timeout.connect(mi.queue_free)
