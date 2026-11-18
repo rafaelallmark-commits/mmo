@@ -7,11 +7,14 @@ extends Node
 var main
 var step := "connect"
 var t0 := 0
-var deadline_ms := 90000
+var deadline_ms := 150000
 var target := ""
 var killed := false
 var settle_until := 0
 var fight_started := 0
+var zone_changed := ""
+var rescue_i := 0
+var wait_until := 0
 var log_lines := []
 
 func say(s: String) -> void:
@@ -57,6 +60,11 @@ func _enter(cid: int) -> void:
 func _msg(m: Dictionary) -> void:
 	if m.get("t", "") == "death" and m.get("eid", "") == target and target != "":
 		killed = true
+	if m.get("t", "") == "party_invite":
+		say("convite de grupo recebido de %s; aceitando" % m["from"])
+		Net.request("party_accept", {"from": int(m["fromId"])})
+	if m.get("t", "") == "zone":
+		zone_changed = m["mapId"]
 
 func _process(_d: float) -> void:
 	if Time.get_ticks_msec() - t0 > deadline_ms:
@@ -137,9 +145,98 @@ func _process(_d: float) -> void:
 			Net.request("char", {}, func(r):
 				var gold := int(r["char"]["gold"])
 				say("coleta concluída; nível %d, XP %d, ouro %d, itens na bolsa %d" % [int(r["char"]["level"]), int(r["char"]["xp"]), gold, int(r["char"]["bagUsed"])])
-				say("OK")
-				get_tree().quit(0))
+				main.hud.inv_panel.visible = false
+				main.hud.sheet_panel.visible = false
+				if main.args.has("m2"):
+					step = "m2_talk"
+				else:
+					say("OK")
+					get_tree().quit(0))
 			step = "quitting"
+		# ---------------- M2 ----------------
+		"m2_talk":
+			_act("npc", "mara")
+			step = "m2_wait_npc"
+		"m2_wait_npc":
+			if main.hud.npc_panel.visible:
+				say("diálogo com Mara aberto pela interface")
+				Net.request("quest_accept", {"quest": "tutorial", "npc": "mara"}, func(r):
+					say("missão aceita: %s" % r.get("quest", {}).get("title", r.get("reason", "")))
+					main.hud.npc_panel.visible = false
+					rescue_i = 0
+					step = "m2_rescue")
+				step = "m2_wait"
+		"m2_rescue":
+			if rescue_i >= 3:
+				step = "m2_turnin"
+			elif main.world.pending_action.is_empty() and Time.get_ticks_msec() > wait_until:
+				_act("object", ["rescue_bento", "rescue_ligia", "rescue_caio"][rescue_i])
+				rescue_i += 1
+				wait_until = Time.get_ticks_msec() + 400
+		"m2_turnin":
+			if main.world.pending_action.is_empty() and Time.get_ticks_msec() > wait_until:
+				_act("npc", "mara")
+				step = "m2_wait_turnin"
+		"m2_wait_turnin":
+			if main.hud.npc_panel.visible:
+				_shot("missao")
+				Net.request("quest_turnin", {"quest": "tutorial", "npc": "mara"}, func(r):
+					if not r["ok"]:
+						fail("entrega recusada: " + r["reason"])
+						return
+					say("tutorial entregue: XP agora %d" % int(r["char"]["xp"]))
+					main.hud.npc_panel.visible = false
+					step = "m2_party")
+				step = "m2_wait"
+		"m2_party":
+			if main.args.has("invite"):
+				Net.request("party_invite", {"name": main.args["invite"]}, func(r):
+					if r["ok"]:
+						step = "m2_wait_party"
+					else:
+						wait_until = Time.get_ticks_msec() + 1000
+						step = "m2_party_retry")
+				step = "m2_wait"
+			else:
+				step = "m2_wait_party"
+				wait_until = Time.get_ticks_msec() + 8000
+		"m2_party_retry":
+			if Time.get_ticks_msec() > wait_until:
+				step = "m2_party"
+		"m2_wait_party":
+			var n := 0
+			if main.party != null:
+				n = main.party["members"].size()
+			if n >= 2:
+				say("grupo formado com %d membros" % n)
+				_shot("grupo")
+				step = "m2_portal"
+			elif not main.args.has("invite") and not main.args.has("expect_party") and Time.get_ticks_msec() > wait_until:
+				step = "m2_portal"
+		"m2_portal":
+			var to := "to_pedrambar" if main.ch["classId"] in ["breaker", "bastion", "pikeman", "warden"] else "to_vau"
+			_act("portal", to)
+			step = "m2_wait_zone"
+		"m2_wait_zone":
+			if zone_changed != "" and main.world.npc_nodes.size() > 0:
+				say("troca de zona: agora em %s (%d NPCs)" % [main.map_def().get("name", zone_changed), main.world.npc_nodes.size()])
+				_act("npc", "master_" + main.ch["classId"])
+				step = "m2_wait_master"
+		"m2_wait_master":
+			if main.hud.npc_panel.visible:
+				say("conversa com o mestre de classe aberta")
+				_shot("mestre")
+				main.hud.npc_panel.visible = false
+				main.hud.journal_panel.visible = true
+				main.hud.refresh_quests()
+				wait_until = Time.get_ticks_msec() + 400
+				step = "m2_journal"
+		"m2_journal":
+			if Time.get_ticks_msec() > wait_until:
+				_shot("diario")
+				say("OK")
+				get_tree().quit(0)
+				step = "quitting"
 
 ## Com --shots=pasta, salva capturas de tela (precisa de janela/GL; não funciona em --headless).
 func _shot(name: String) -> void:
@@ -149,3 +246,14 @@ func _shot(name: String) -> void:
 	var img := get_viewport().get_texture().get_image()
 	img.save_png(path)
 	say("captura salva: " + path)
+
+## Simula o clique da interface num NPC, objeto ou portal (mesmo caminho do mouse).
+func _act(kind: String, id: String) -> void:
+	var nodes: Dictionary = {"npc": main.world.npc_nodes, "object": main.world.object_nodes, "portal": main.world.portal_nodes}[kind]
+	if not nodes.has(id):
+		fail("%s %s não encontrado no mapa" % [kind, id])
+		return
+	var pos: Vector3 = nodes[id]["pos"]
+	var rng: float = {"npc": 4.5, "object": 2.8, "portal": 2.5}[kind]
+	main.world.pending_action = {"kind": kind, "id": id, "pos": pos, "range": rng}
+	Net.request("move", {"x": pos.x + 0.8, "z": pos.z + 0.8})

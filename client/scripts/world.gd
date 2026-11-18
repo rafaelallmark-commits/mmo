@@ -15,7 +15,13 @@ var select_ring: MeshInstance3D
 var dest_marker: MeshInstance3D
 var pending_pickup := ""
 var pending_cast := {}
+var pending_action := {} # { kind: npc|object|portal, id, pos, range }
+var npc_nodes := {}
+var object_nodes := {}
+var portal_nodes := {}
+var ally_selected := ""
 var _rotating := false
+const ROLE_NAMES := {"quest": "missões", "master": "mestre de classe", "smith": "ferreiro", "shop": "tônicos", "storage": "depósito"}
 
 const CLASS_COLORS := {"breaker": Color("#c8772f"), "emberweaver": Color("#e0482c"), "bastion": Color("#a07a3a"), "pikeman": Color("#8f6d3a"), "warden": Color("#6d8a3a"), "dawnshield": Color("#e8d27a"), "windwalker": Color("#7ac3c9"), "veilsinger": Color("#c9b8e8")}
 const FAMILY_COLORS := {"beast": Color("#7b5a44"), "machine": Color("#6f7a80"), "spirit": Color("#8fb7c9")}
@@ -83,13 +89,20 @@ func _label(text: String, size := 48, color := Color.WHITE) -> Label3D:
 	return l
 
 func _build_map() -> void:
-	var map: Dictionary = main.defs.get("map", {})
+	var map: Dictionary = main.map_def()
 	var size: Array = map.get("size", [160, 100])
 	var w := float(size[0])
 	var h := float(size[1])
 	var ground := PlaneMesh.new()
 	ground.size = Vector2(w, h)
-	var g := _mesh(ground, Color("#4a4636"))
+	var ground_color := Color("#4a4636")
+	if map.get("city", false):
+		ground_color = Color("#5b5348")
+	elif map.get("id", "") == "brejo_bombas":
+		ground_color = Color("#3c4a3a")
+	elif map.get("id", "") in ["oficina_soterrada", "arena_prova"]:
+		ground_color = Color("#3a3634")
+	var g := _mesh(ground, ground_color)
 	g.position = Vector3(w / 2.0, 0, h / 2.0)
 	add_child(g)
 	# estrada velha: faixa clara de leste a oeste
@@ -128,6 +141,41 @@ func _build_map() -> void:
 		var gl := _label(gp["name"], 56, Color("#e3a548"))
 		gl.position = tm.position + Vector3(0, 3, 0)
 		add_child(gl)
+	for n in map.get("npcs", []):
+		var cap := CapsuleMesh.new()
+		cap.radius = 0.45
+		cap.height = 1.8
+		var nm := _mesh(cap, Color("#d8c48a") if n.get("role", "") != "master" else Color("#e3a548"))
+		nm.position = Vector3(float(n["x"]), 0.9, float(n["z"]))
+		add_child(nm)
+		var nl := _label("%s\n[%s]" % [n["name"], ROLE_NAMES.get(n.get("role", ""), "")], 40, Color("#ffe39a"))
+		nl.position = nm.position + Vector3(0, 1.8, 0)
+		add_child(nl)
+		npc_nodes[n["id"]] = {"pos": Vector3(float(n["x"]), 0, float(n["z"])), "data": n, "label": nl}
+	for o in map.get("objects", []):
+		var bx := BoxMesh.new()
+		bx.size = Vector3(0.7, 0.7, 0.7)
+		var om := _mesh(bx, Color("#9fd3d1"), true)
+		om.position = Vector3(float(o["x"]), 0.35, float(o["z"]))
+		add_child(om)
+		var ol := _label(o["name"], 32, Color("#9fd3d1"))
+		ol.position = om.position + Vector3(0, 1.0, 0)
+		add_child(ol)
+		object_nodes[o["id"]] = {"pos": Vector3(float(o["x"]), 0, float(o["z"])), "data": o}
+	for pt in map.get("portals", []):
+		var ring := CylinderMesh.new()
+		ring.top_radius = float(pt["radius"])
+		ring.bottom_radius = float(pt["radius"])
+		ring.height = 0.06
+		var pm := _mesh(ring, Color(0.89, 0.65, 0.28, 0.45), true)
+		pm.position = Vector3(float(pt["x"]), 0.04, float(pt["z"]))
+		add_child(pm)
+		var dest: Dictionary = main.defs.get("maps", {}).get(pt["to"], {})
+		var lvl := int(pt.get("minLevel", 1))
+		var pl := _label("→ %s%s" % [dest.get("name", pt["to"]), (" (nível %d)" % lvl) if lvl > 1 else ""], 44, Color("#e3a548"))
+		pl.position = pm.position + Vector3(0, 1.5, 0)
+		add_child(pl)
+		portal_nodes[pt["id"]] = {"pos": Vector3(float(pt["x"]), 0, float(pt["z"])), "data": pt}
 	for sp in map.get("spawns", []):
 		var md: Dictionary = main.defs.get("monsters", {}).get(sp["monster"], {})
 		var sl := _label("%s (nv %d)" % [md.get("name", sp["monster"]), int(md.get("level", 1))], 36, Color(1, 1, 1, 0.35))
@@ -245,6 +293,23 @@ func _process(delta: float) -> void:
 			var lid := pending_pickup
 			pending_pickup = ""
 			Net.request("pickup", {"loot": lid}, func(r): _on_pickup(lid, r))
+	# NPC, objeto ou portal pendente: anda até perto e pede ao servidor
+	if not pending_action.is_empty():
+		var ap: Vector3 = pending_action["pos"]
+		if Vector2(ap.x, ap.z).distance_to(Vector2(focus.x, focus.z)) <= float(pending_action["range"]):
+			var pa := pending_action
+			pending_action = {}
+			match pa["kind"]:
+				"npc":
+					Net.request("talk", {"npc": pa["id"]}, func(r):
+						if r["ok"]:
+							main.hud.show_npc(r))
+				"object":
+					Net.request("interact", {"object": pa["id"]}, func(r):
+						if r["ok"]:
+							main.hud.system("Feito: %s" % object_nodes.get(pa["id"], {}).get("data", {}).get("name", "")))
+				"portal":
+					Net.request("portal", {"portal": pa["id"]})
 	# habilidade pendente: aproxima e conjura quando estiver no alcance
 	if not pending_cast.is_empty() and entities.has(pending_cast.get("target", "")):
 		var tpos: Vector3 = entities[pending_cast["target"]]["node"].position
@@ -298,6 +363,28 @@ func _click(screen_pos: Vector2) -> void:
 			pending_pickup = lid
 			Net.request("move", {"x": gp.x, "z": gp.z})
 			return
+	# NPC, objeto ou portal perto do clique?
+	for group in [["npc", npc_nodes, 1.5, 4.5], ["object", object_nodes, 1.2, 2.8], ["portal", portal_nodes, 3.0, 2.5]]:
+		var nodes: Dictionary = group[1]
+		for id in nodes.keys():
+			var pos: Vector3 = nodes[id]["pos"]
+			var pick := float(group[2])
+			if group[0] == "portal":
+				pick = float(nodes[id]["data"]["radius"])
+			if pos.distance_to(gp) < pick:
+				pending_action = {"kind": group[0], "id": id, "pos": pos, "range": group[3]}
+				pending_cast = {}
+				pending_pickup = ""
+				Net.request("move", {"x": pos.x + 0.8, "z": pos.z + 0.8})
+				return
+	# outro jogador perto do clique: seleciona como aliado (curas e proteções)
+	for eid in entities.keys():
+		var pe: Dictionary = entities[eid]
+		if pe["data"]["k"] == "p" and eid != main.ch.get("eid", "") and pe["node"].position.distance_to(gp) < 1.2:
+			ally_selected = eid
+			main.hud.system("Aliado selecionado: %s" % pe["data"]["n"])
+			main.hud.refresh_target()
+			return
 	# monstro perto do clique?
 	var best := ""
 	var best_d := 1.8
@@ -340,6 +427,19 @@ func use_skill(skill_id: String) -> void:
 			Net.request("attack", {"target": selected})
 		else:
 			Net.request("cast", {"skill": skill_id, "target": selected})
+	elif target_type == "ally":
+		var target_ally: String = ally_selected if entities.has(ally_selected) else main.ch.get("eid", "")
+		Net.request("cast", {"skill": skill_id, "ally": target_ally})
+	elif target_type in ["cone", "line"]:
+		var payload := {"skill": skill_id}
+		if selected != "" and entities.has(selected):
+			payload["target"] = selected
+		else:
+			var mp = ground_point(get_viewport().get_mouse_position())
+			if mp != null:
+				payload["x"] = mp.x
+				payload["z"] = mp.z
+		Net.request("cast", payload)
 	elif target_type == "ground":
 		var p = ground_point(get_viewport().get_mouse_position())
 		if p == null:
@@ -364,6 +464,18 @@ func on_hit(m: Dictionary) -> void:
 		col = Color("#ffd84a")
 	var l := _label(text, 64 if m.get("crit", false) else 48, col)
 	l.position = dst["node"].position + Vector3(randf_range(-0.4, 0.4), 2.2, 0)
+	add_child(l)
+	var tw := create_tween()
+	tw.tween_property(l, "position:y", l.position.y + 1.6, 0.9)
+	tw.parallel().tween_property(l, "modulate:a", 0.0, 0.9)
+	tw.tween_callback(l.queue_free)
+
+func on_heal(m: Dictionary) -> void:
+	var dst: Dictionary = entities.get(m["dst"], {})
+	if dst.is_empty() or int(m["amount"]) <= 0:
+		return
+	var l := _label("+%d" % int(m["amount"]), 48, Color("#6fd06a"))
+	l.position = dst["node"].position + Vector3(0, 2.2, 0)
 	add_child(l)
 	var tw := create_tween()
 	tw.tween_property(l, "position:y", l.position.y + 1.6, 0.9)

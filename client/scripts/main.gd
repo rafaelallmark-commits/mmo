@@ -16,6 +16,9 @@ var server_url := "ws://127.0.0.1:7777"
 var args := {}
 var in_world := false
 var reconnecting := false
+var map_id := "estrada_velha"
+var journal := {}
+var party = null
 
 var ui: CanvasLayer
 var screen: Control
@@ -212,23 +215,43 @@ func enter_world(cid: int) -> void:
 			return
 		reconnecting = false
 		_clear_screen()
-		if world == null:
-			world = WorldScript.new()
-			world.main = self
-			add_child(world)
+		map_id = r["char"].get("mapId", "estrada_velha")
+		_rebuild_world()
+		if hud == null:
 			hud = HudScript.new()
 			hud.main = self
 			add_child(hud)
 		set_char(r["char"])
-		world.reset_entities()
 		world.apply_snapshot(r["snapshot"])
 		for l in r["loot"]:
 			world.add_loot(l)
+		journal = r.get("journal", {})
+		hud.refresh_quests()
 		hud.hide_disconnect()
 		if r.get("restoredFromDeath", false):
 			hud.system("Você voltou ao Posto da Ponte depois de cair.")
-		hud.system("Local: %s." % defs.get("map", {}).get("name", "A Estrada Velha"))
+		hud.system("Local: %s." % map_def().get("name", "?"))
 		in_world = true)
+
+func map_def() -> Dictionary:
+	return defs.get("maps", {}).get(map_id, defs.get("map", {}))
+
+func _rebuild_world() -> void:
+	if world != null:
+		world.queue_free()
+	world = WorldScript.new()
+	world.main = self
+	add_child(world)
+
+## Troca de zona (portal, prova de classe): reconstrói o mundo com o novo mapa.
+func _on_zone(m: Dictionary) -> void:
+	map_id = m["mapId"]
+	_rebuild_world()
+	set_char(m["char"])
+	world.apply_snapshot(m["snapshot"])
+	for l in m.get("loot", []):
+		world.add_loot(l)
+	hud.system("Local: %s." % map_def().get("name", map_id))
 
 func set_char(c: Dictionary) -> void:
 	ch = c
@@ -246,6 +269,10 @@ func _on_message(m: Dictionary) -> void:
 		"res":
 			if m.has("char") and in_world:
 				set_char(m["char"])
+			if m.has("journal") and in_world:
+				journal = m["journal"]
+				if hud:
+					hud.refresh_quests()
 			if not m.get("ok", true) and in_world and hud and m.get("req", "") != "pickup":
 				hud.error(m.get("reason", "Recusado."))
 		"snap":
@@ -270,7 +297,51 @@ func _on_message(m: Dictionary) -> void:
 				hud.system("Nível %d! Você ganhou pontos de atributo e de habilidade (C)." % int(m["level"]))
 		"chat":
 			if hud:
-				hud.chat_line("[b]%s:[/b] %s" % [m["from"], m["text"]])
+				var ch_name: String = m.get("channel", "zone")
+				if ch_name == "party":
+					hud.chat_line("[color=#9fd3d1][Grupo] [b]%s:[/b] %s[/color]" % [m["from"], m["text"]])
+				elif ch_name == "whisper":
+					hud.chat_line("[color=#d7a8ff][%s → %s] %s[/color]" % [m["from"], m.get("to", ""), m["text"]])
+				else:
+					hud.chat_line("[b]%s:[/b] %s" % [m["from"], m["text"]])
+		"zone":
+			_on_zone(m)
+		"quest_update":
+			Net.request("quests", {}, func(r):
+				journal = r["journal"]
+				if hud:
+					hud.refresh_quests())
+			for q in m["quests"]:
+				if hud:
+					var done := 0
+					for o in q["objectives"]:
+						if o["done"]:
+							done += 1
+					hud.system("%s: %d/%d objetivos%s" % [q["title"], done, q["objectives"].size(), " — pronto para entregar" if q["ready"] else ""])
+		"party":
+			party = m["party"]
+			if hud:
+				hud.refresh_party()
+		"party_invite":
+			if hud:
+				hud.show_invite(m["from"], int(m["fromId"]))
+		"trial":
+			if hud:
+				match m["state"]:
+					"started":
+						hud.system("Prova de classe: onda 1 de %d. Tempo: %d s." % [int(m["waves"]), int(m["ms"]) / 1000])
+					"wave":
+						hud.system("Onda %d de %d!" % [int(m["wave"]), int(m["waves"])])
+					_:
+						hud.system(m.get("message", ""))
+				if m.has("char"):
+					set_char(m["char"])
+		"heal":
+			if world:
+				world.on_heal(m)
+		"system":
+			if hud:
+				hud.system(m["text"])
 		"joined":
 			if hud:
 				hud.chat_line("[color=#9a927f]%s entrou.[/color]" % m["name"])

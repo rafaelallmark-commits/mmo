@@ -33,6 +33,16 @@ var disc_overlay: Control
 var disc_label: Label
 var pending_alloc := {}
 var cd_until := {}
+var npc_panel: PanelContainer
+var npc_box: VBoxContainer
+var journal_panel: PanelContainer
+var journal_box: VBoxContainer
+var tracker: RichTextLabel
+var party_panel: PanelContainer
+var party_box: VBoxContainer
+var invite_panel: PanelContainer
+var invite_label: Label
+var invite_from := -1
 
 func _ready() -> void:
 	layer = 5
@@ -47,6 +57,7 @@ func _ready() -> void:
 	_build_chat(root)
 	_build_inventory(root)
 	_build_sheet(root)
+	_build_m2(root)
 	_build_overlays(root)
 	refresh_char()
 
@@ -83,7 +94,7 @@ func _build_status(root: Control) -> void:
 	mp_bar = _bar(v, Theme_.MP)
 	mp_text = _overlay_label(mp_bar)
 	var hint := Label.new()
-	hint.text = "I inventário · C ficha · 1-4 atalhos · Q/E ou botão direito gira · roda zoom"
+	hint.text = "I inventário · C ficha · J missões · 1-5 atalhos · Q/E gira · roda zoom"
 	hint.add_theme_font_size_override("font_size", 10)
 	hint.add_theme_color_override("font_color", Theme_.MUTED)
 	v.add_child(hint)
@@ -116,11 +127,11 @@ func _build_hotbar(root: Control) -> void:
 	var p := PanelContainer.new()
 	p.add_theme_stylebox_override("panel", Theme_.panel_style(0.85))
 	p.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	p.position = Vector2(-250, -84)
+	p.position = Vector2(-310, -84)
 	root.add_child(p)
 	hotbar = HBoxContainer.new()
 	p.add_child(hotbar)
-	for i in 4:
+	for i in 5:
 		var b := Button.new()
 		b.custom_minimum_size = Vector2(118, 46)
 		b.focus_mode = Control.FOCUS_NONE
@@ -157,9 +168,9 @@ func _build_chat(root: Control) -> void:
 	chat_input = LineEdit.new()
 	chat_input.placeholder_text = "Enter para conversar"
 	v.add_child(chat_input)
+	chat_input.placeholder_text = "Enter: conversar · /g grupo · /s Nome sussurro · /convidar Nome · /sair"
 	chat_input.text_submitted.connect(func(t: String):
-		if t.strip_edges() != "":
-			Net.request("chat", {"text": t})
+		_chat_command(t.strip_edges())
 		chat_input.text = ""
 		chat_input.release_focus())
 
@@ -291,19 +302,23 @@ func _hot_actions() -> Array:
 	return [
 		{"kind": "skill", "id": skills[0] if skills.size() > 0 else ""},
 		{"kind": "skill", "id": skills[1] if skills.size() > 1 else ""},
+		{"kind": "skill", "id": skills[2] if skills.size() > 2 else ""},
 		{"kind": "potion", "id": "potion_hp_s"},
 		{"kind": "potion", "id": "potion_mp_s"},
 	]
 
 func _refresh_hotbar() -> void:
 	var acts := _hot_actions()
-	for i in 4:
+	for i in 5:
 		var a: Dictionary = acts[i]
 		var b: Button = hot_buttons[i]
 		if a["kind"] == "skill":
 			var s: Dictionary = main.defs["skills"].get(a["id"], {})
 			var rank := int(main.ch.get("skills", {}).get(a["id"], 0))
-			b.text = "%d · %s\n%s" % [i + 1, s.get("name", "—"), ("grau %d · %d mana" % [rank, int(s.get("mp", 0))]) if rank > 0 else ("nível %d" % int(s.get("unlockLevel", 1)))]
+			var locked_text := "nível %d" % int(s.get("unlockLevel", 1))
+			if int(s.get("unlockLevel", 1)) == 10 and int(main.ch.get("level", 1)) >= 10:
+				locked_text = "prova de classe"
+			b.text = "%d · %s\n%s" % [i + 1, s.get("name", "—"), ("grau %d · %d mana" % [rank, int(s.get("mp", 0))]) if rank > 0 else locked_text]
 			b.disabled = rank == 0
 		else:
 			var count := 0
@@ -357,10 +372,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_ESCAPE:
 			inv_panel.visible = false
 			sheet_panel.visible = false
+			npc_panel.visible = false
+			journal_panel.visible = false
 		KEY_ENTER, KEY_KP_ENTER:
 			chat_input.grab_focus()
-		KEY_1, KEY_2, KEY_3, KEY_4:
+		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5:
 			_hotkey(k - KEY_1)
+		KEY_J:
+			journal_panel.visible = not journal_panel.visible
+			if journal_panel.visible:
+				refresh_quests()
 		_:
 			return
 	get_viewport().set_input_as_handled()
@@ -563,3 +584,252 @@ func _refresh_sheet() -> void:
 		var skill_id: String = sid
 		b.pressed.connect(func(): Net.request("learn_skill", {"skill": skill_id}))
 		row.add_child(b)
+
+
+# ---------------- M2: comandos de chat ----------------
+func _chat_command(t: String) -> void:
+	if t == "":
+		return
+	var cb := func(r):
+		if not r["ok"]:
+			error(r["reason"])
+	if t.begins_with("/g "):
+		Net.request("chat", {"channel": "party", "text": t.substr(3)}, cb)
+	elif t.begins_with("/s "):
+		var rest := t.substr(3).strip_edges()
+		var sp := rest.find(" ")
+		if sp <= 0:
+			error("Use: /s Nome mensagem")
+			return
+		Net.request("chat", {"channel": "whisper", "to": rest.substr(0, sp), "text": rest.substr(sp + 1)}, cb)
+	elif t.begins_with("/convidar "):
+		Net.request("party_invite", {"name": t.substr(10).strip_edges()}, func(r):
+			if r["ok"]:
+				system("Convite enviado.")
+			else:
+				error(r["reason"]))
+	elif t == "/sair":
+		Net.request("party_leave", {}, cb)
+	else:
+		Net.request("chat", {"text": t}, cb)
+
+# ---------------- M2: painéis ----------------
+func _panel_at(root: Control, preset: int, pos: Vector2, size: Vector2) -> PanelContainer:
+	var p := PanelContainer.new()
+	p.add_theme_stylebox_override("panel", Theme_.panel_style())
+	p.set_anchors_preset(preset)
+	p.position = pos
+	p.custom_minimum_size = size
+	root.add_child(p)
+	return p
+
+func _build_m2(root: Control) -> void:
+	npc_panel = _panel_at(root, Control.PRESET_CENTER, Vector2(-240, -220), Vector2(480, 0))
+	var sc := ScrollContainer.new()
+	sc.custom_minimum_size = Vector2(460, 380)
+	npc_panel.add_child(sc)
+	npc_box = VBoxContainer.new()
+	npc_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.add_child(npc_box)
+	npc_panel.visible = false
+	journal_panel = _panel_at(root, Control.PRESET_CENTER, Vector2(-260, -240), Vector2(520, 0))
+	var sc2 := ScrollContainer.new()
+	sc2.custom_minimum_size = Vector2(500, 440)
+	journal_panel.add_child(sc2)
+	journal_box = VBoxContainer.new()
+	journal_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc2.add_child(journal_box)
+	journal_panel.visible = false
+	tracker = RichTextLabel.new()
+	tracker.bbcode_enabled = true
+	tracker.fit_content = true
+	tracker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tracker.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	tracker.position = Vector2(-300, 12)
+	tracker.custom_minimum_size = Vector2(288, 0)
+	tracker.add_theme_font_size_override("normal_font_size", 12)
+	root.add_child(tracker)
+	party_panel = _panel_at(root, Control.PRESET_TOP_LEFT, Vector2(12, 128), Vector2(220, 0))
+	party_box = VBoxContainer.new()
+	party_panel.add_child(party_box)
+	party_panel.visible = false
+	invite_panel = _panel_at(root, Control.PRESET_CENTER_TOP, Vector2(-170, 140), Vector2(340, 0))
+	var iv := VBoxContainer.new()
+	invite_panel.add_child(iv)
+	invite_label = Label.new()
+	invite_label.autowrap_mode = TextServer.AUTOWRAP_WORD
+	iv.add_child(invite_label)
+	var row := HBoxContainer.new()
+	iv.add_child(row)
+	var acc := Button.new()
+	acc.text = "Aceitar"
+	acc.pressed.connect(func():
+		Net.request("party_accept", {"from": invite_from}, func(r):
+			if not r["ok"]:
+				error(r["reason"]))
+		invite_panel.visible = false)
+	row.add_child(acc)
+	var dec := Button.new()
+	dec.text = "Recusar"
+	dec.pressed.connect(func():
+		Net.request("party_decline", {})
+		invite_panel.visible = false)
+	row.add_child(dec)
+	invite_panel.visible = false
+
+func _clear(box: Container) -> void:
+	for c in box.get_children():
+		c.queue_free()
+
+func _title(box: Container, text: String, size := 16) -> void:
+	var l := Label.new()
+	l.text = text
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD
+	l.add_theme_color_override("font_color", Theme_.AMBER)
+	l.add_theme_font_size_override("font_size", size)
+	box.add_child(l)
+
+func _text(box: Container, text: String, color := Theme_.TEXT) -> void:
+	var l := Label.new()
+	l.text = text
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD
+	l.custom_minimum_size = Vector2(420, 0)
+	l.add_theme_color_override("font_color", color)
+	box.add_child(l)
+
+func _objectives_text(q: Dictionary) -> String:
+	var lines := []
+	for o in q["objectives"]:
+		lines.append(("✔ " if o["done"] else "• ") + "%s (%d/%d)" % [o["text"], int(o["cur"]), int(o["need"])])
+	return "\n".join(lines)
+
+## Diálogo com NPC: missões a aceitar/entregar, loja e prova de classe.
+func show_npc(r: Dictionary) -> void:
+	_clear(npc_box)
+	var npc: Dictionary = r["npc"]
+	_title(npc_box, npc["name"], 18)
+	var quests: Dictionary = r.get("quests", {})
+	for q in quests.get("active", []):
+		_title(npc_box, "%s (em andamento)" % q["title"], 14)
+		_text(npc_box, "\"%s\"" % (q["dialogue"]["progress"]), Theme_.MUTED)
+		_text(npc_box, _objectives_text(q))
+		if q["ready"] and q["turnIn"] == npc["id"]:
+			var b := Button.new()
+			b.text = "Entregar (+%d XP, +%d ouro)" % [int(q["rewards"]["xp"]), int(q["rewards"].get("gold", 0))]
+			var qid: String = q["id"]
+			b.pressed.connect(func():
+				Net.request("quest_turnin", {"quest": qid, "npc": npc["id"]}, func(res):
+					if res["ok"]:
+						system("Missão concluída: %s" % res["quest"]["title"])
+						if res.has("dialogue"):
+							chat_line("[color=#ffe39a]%s: \"%s\"[/color]" % [npc["name"], res["dialogue"]])
+						npc_panel.visible = false
+					else:
+						error(res["reason"])))
+			npc_box.add_child(b)
+	for q in quests.get("offer", []):
+		_title(npc_box, "Nova missão: %s" % q["title"], 14)
+		_text(npc_box, "\"%s\"" % q["dialogue"]["offer"])
+		_text(npc_box, _objectives_text(q), Theme_.MUTED)
+		_text(npc_box, "Recompensa: %d XP, %d ouro" % [int(q["rewards"]["xp"]), int(q["rewards"].get("gold", 0))], Theme_.MUTED)
+		var b := Button.new()
+		b.text = "Aceitar"
+		var qid: String = q["id"]
+		b.pressed.connect(func():
+			Net.request("quest_accept", {"quest": qid, "npc": npc["id"]}, func(res):
+				if res["ok"]:
+					system("Missão aceita: %s" % res["quest"]["title"])
+					npc_panel.visible = false
+				else:
+					error(res["reason"])))
+		npc_box.add_child(b)
+	if r.get("trialAvailable", false):
+		var tb := Button.new()
+		tb.text = "Iniciar a prova de classe"
+		tb.pressed.connect(func():
+			Net.request("trial_start", {"npc": npc["id"]}, func(res):
+				if not res["ok"]:
+					error(res["reason"]))
+			npc_panel.visible = false)
+		npc_box.add_child(tb)
+	if r.get("shop", null) != null:
+		_title(npc_box, "Loja", 14)
+		for item in r["shop"]:
+			var row := HBoxContainer.new()
+			npc_box.add_child(row)
+			var l := Label.new()
+			l.text = "%s — %d ouro" % [main.defs["items"][item["defId"]]["name"], int(item["price"])]
+			l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			row.add_child(l)
+			for qty in [1, 5]:
+				var b := Button.new()
+				b.text = "Comprar %d" % qty
+				var def_id: String = item["defId"]
+				var q_amount: int = qty
+				b.pressed.connect(func():
+					Net.request("buy", {"npc": npc["id"], "item": def_id, "qty": q_amount}, func(res):
+						if res["ok"]:
+							system("Comprado por %d ouro." % int(res["cost"]))
+						else:
+							error(res["reason"])))
+				row.add_child(b)
+	if quests.get("active", []).is_empty() and quests.get("offer", []).is_empty() and r.get("shop", null) == null and not r.get("trialAvailable", false):
+		_text(npc_box, "Nada para você agora.", Theme_.MUTED)
+	var close := Button.new()
+	close.text = "Fechar"
+	close.pressed.connect(func(): npc_panel.visible = false)
+	npc_box.add_child(close)
+	npc_panel.visible = true
+
+func refresh_quests() -> void:
+	if tracker == null:
+		return
+	var j: Dictionary = main.journal
+	var t := ""
+	for q in j.get("active", []):
+		t += "[b][color=#e3a548]%s[/color][/b]%s\n" % [q["title"], "  [color=#6fd06a](entregar)[/color]" if q["ready"] else ""]
+		for o in q["objectives"]:
+			t += "[color=%s]  %s %d/%d[/color]\n" % ["#6fd06a" if o["done"] else "#cfc8b8", o["text"], int(o["cur"]), int(o["need"])]
+	tracker.text = t
+	if journal_panel.visible:
+		_clear(journal_box)
+		_title(journal_box, "Diário de missões", 18)
+		for q in j.get("active", []):
+			_title(journal_box, "Cap. %d · %s" % [int(q["chapter"]), q["title"]], 14)
+			_text(journal_box, _objectives_text(q))
+		_title(journal_box, "Disponíveis", 14)
+		for q in j.get("available", []):
+			_text(journal_box, "%s — nível %d (fale com %s)" % [q["title"], int(q["level"]), q["npc"]], Theme_.MUTED)
+		_title(journal_box, "Concluídas: %d" % j.get("done", []).size(), 14)
+
+func refresh_party() -> void:
+	_clear(party_box)
+	var party = main.party
+	if party == null:
+		party_panel.visible = false
+		return
+	party_panel.visible = true
+	_title(party_box, "Grupo", 14)
+	for m in party["members"]:
+		var l := Label.new()
+		var lead := " ★" if int(m["charId"]) == int(party["leader"]) else ""
+		if m.get("online", false):
+			l.text = "%s%s nv%d · %d/%d%s" % [m["name"], lead, int(m["level"]), int(m["hp"]), int(m["mhp"]), "" if m["mapId"] == main.map_id else " (outro mapa)"]
+		else:
+			l.text = "%s%s (desconectado)" % [m["name"], lead]
+		l.add_theme_font_size_override("font_size", 12)
+		party_box.add_child(l)
+		if m.get("online", false):
+			var bar := _bar(party_box, Theme_.HP, 196)
+			bar.custom_minimum_size.y = 6
+			bar.max_value = float(m["mhp"])
+			bar.value = float(m["hp"])
+	var leave := Button.new()
+	leave.text = "Sair do grupo"
+	leave.pressed.connect(func(): Net.request("party_leave"))
+	party_box.add_child(leave)
+
+func show_invite(from: String, from_id: int) -> void:
+	invite_from = from_id
+	invite_label.text = "%s convidou você para um grupo." % from
+	invite_panel.visible = true
