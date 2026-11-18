@@ -1,0 +1,31 @@
+{
+  "_doc": "Mapas. Coordenadas em metros no plano XZ. M1 implementa apenas estrada_velha; os demais estão descritos para M2/M3 (ver docs/02 e docs/05).",
+  "maps": {
+    "estrada_velha": {
+      "name": "A Estrada Velha",
+      "levelRange": [1, 5],
+      "implementedIn": "M1",
+      "size": [160, 100],
+      "guardPost": { "name": "Posto da Ponte", "x": 20, "z": 50, "safeRadius": 12 },
+      "spawnPoint": { "x": 20, "z": 50 },
+      "blocked": [
+        { "name": "Ruínas da Estação Norte", "x0": 70, "z0": 40, "x1": 76, "z1": 56 },
+        { "name": "Leito seco do rio", "x0": 60, "z0": 0, "x1": 64, "z1": 22 }
+      ],
+      "spawns": [
+        { "monster": "furrow_rat", "x": 36, "z": 50, "radius": 8, "count": 6 },
+        { "monster": "ember_beetle", "x": 52, "z": 32, "radius": 8, "count": 5 },
+        { "monster": "rust_hound", "x": 88, "z": 68, "radius": 9, "count": 5 },
+        { "monster": "ballast_lizard", "x": 104, "z": 36, "radius": 9, "count": 4 },
+        { "monster": "ash_boar", "x": 134, "z": 58, "radius": 10, "count": 4 },
+        { "monster": "cracked_foreman", "x": 44, "z": 72, "radius": 1, "count": 1 }
+      ],
+      "returnToMapReason": "Capataz Rachado (elite, arma de nível 5 da classe), Sucata de Condutor para o ferreiro, família de armaduras de Bronze de Eclusa."
+    },
+    "brejo_bombas": { "name": "Brejo das Bombas", "levelRange": [5, 9], "implementedIn": "M2", "size": [200, 140] },
+    "oficina_soterrada": { "name": "Oficina Soterrada", "levelRange": [9, 12], "implementedIn": "M2", "size": [180, 180] },
+    "galerias_eco": { "name": "Galerias do Eco", "levelRange": [12, 16], "implementedIn": "M3", "size": [220, 160] },
+    "canais_eclusa": { "name": "Canais da Eclusa", "levelRange": [16, 20], "implementedIn": "M3", "size": [200, 200] },
+    "ultima_eclusa": { "name": "A Última Eclusa (calabouço)", "levelRange": [16, 20], "implementedIn": "M3", "instanced": true, "partySize": [2, 5] }
+  }
+}

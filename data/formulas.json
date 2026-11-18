@@ -1,0 +1,74 @@
+{
+  "_doc": "Fórmulas de combate. Todas as constantes aqui são lidas pelo servidor (server/src/rules.js). Ver docs/04-progressao-e-formulas.md para exemplos calculados.",
+  "physical": {
+    "_doc": "danoBruto = rolagem(armaMin..armaMax) + floor(soma(atributo × coef da família da arma)). Habilidade: danoBruto × pct/100.",
+    "minDamage": 1
+  },
+  "magic": {
+    "_doc": "Magia: (fixo + fixoPorGrau×(grau−1)) + Espírito × coefEsp + poderMágico da arma. Ataque básico com arma mágica: rolagem(armaMin..armaMax) + floor(Espírito × basicSpiCoef).",
+    "basicSpiCoef": 0.2,
+    "minDamage": 1
+  },
+  "mitigation": {
+    "_doc": "dano final = bruto × K / (K + defesa), onde K = base + porNivel × nível do atacante. A mesma curva vale para resistência mágica.",
+    "base": 40,
+    "perAttackerLevel": 8
+  },
+  "defense": {
+    "_doc": "defesa = soma da defesa dos itens × (1 + 0,10 × refino) + floor(Vitalidade × vitCoef) + nível × perLevel",
+    "vitCoef": 0.3,
+    "perLevel": 1,
+    "enhancePct": 10
+  },
+  "magicResist": {
+    "_doc": "resistência mágica = soma dos itens + floor(Espírito × spiCoef) + floor(Vitalidade × vitCoef)",
+    "spiCoef": 0.3,
+    "vitCoef": 0.2
+  },
+  "accuracy": {
+    "_doc": "precisão = attr principal × 1,0 + attr secundário × 0,5 + nível × 2 + precisão da arma. Corpo a corpo: Talento principal, Agilidade secundária. Distância: Agilidade principal, Talento secundário. acerto% = clamp(base + (precisão − evasão) × fator + (nívelAtacante − nívelAlvo) × porNível, mín, máx).",
+    "melee": { "tal": 1.0, "agi": 0.5 },
+    "ranged": { "agi": 1.0, "tal": 0.5 },
+    "perLevel": 2,
+    "baseHit": 80,
+    "diffFactor": 0.4,
+    "levelDiffPct": 2,
+    "minHit": 10,
+    "maxHit": 98,
+    "magicHit": { "_doc": "Magias não usam evasão: acerto% = clamp(100 + (nívelAtacante − nívelAlvo) × 4, 60, 100).", "base": 100, "perLevel": 4, "min": 60, "max": 100 }
+  },
+  "evasion": {
+    "_doc": "evasão = floor(Agilidade × agiCoef) + nível + evasão dos itens",
+    "agiCoef": 0.5
+  },
+  "crit": {
+    "_doc": "crítico% = crítico da arma + Talento × talCoef + Agilidade × agiCoef − 2 × max(0, nívelAlvo − nívelAtacante); teto 40%. Magia: base 3 + Espírito × 0,05 + Talento × 0,1.",
+    "talCoef": 0.15,
+    "agiCoef": 0.1,
+    "levelPenaltyPct": 2,
+    "cap": 40,
+    "physMult": 1.6,
+    "magic": { "base": 3, "spiCoef": 0.05, "talCoef": 0.1, "mult": 1.5 }
+  },
+  "regen": {
+    "_doc": "Regeneração por segundo fora de combate (5 s sem causar ou receber dano). Em combate, um quarto.",
+    "hpPctPerSec": 1.5,
+    "mpPctPerSec": 1.5,
+    "mpPerSpiPerSec": 0.05,
+    "inCombatFactor": 0.25,
+    "outOfCombatAfterMs": 5000
+  },
+  "xp": {
+    "_doc": "XP por abate = xpBase do monstro × modificador de diferença de nível × taxa do servidor. Em grupo improvisado (M1) ou grupo formal (M2+), divide por participação.",
+    "levelDiffMod": { "-6": 0.1, "-5": 0.25, "-4": 0.45, "-3": 0.65, "-2": 0.85, "-1": 0.95, "0": 1.0, "1": 1.1, "2": 1.2, "3": 1.3, "4": 1.35, "5": 1.4 },
+    "levelDiffClampMin": -6,
+    "levelDiffClampMax": 5,
+    "shareRadius": 40,
+    "minShareForLoot": 0.05,
+    "cooperationBonusPerExtra": 0.1,
+    "participation": { "damage": 1.0, "healing": 0.8, "threatAbsorbed": 0.6, "controlSeconds": 6.0 }
+  },
+  "movement": { "playerSpeed": 5.0, "meleeRange": 2.5, "rangeTolerance": 0.75, "pickupRange": 6.0 },
+  "potions": { "sharedCooldownMs": 3000 },
+  "death": { "respawnHpPct": 50, "respawnMpPct": 50, "corpseTimeoutMs": 300000 }
+}

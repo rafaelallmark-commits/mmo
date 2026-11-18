@@ -1,0 +1,20 @@
+{
+  "name": "cinzas-do-meridiano-server",
+  "version": "0.1.0",
+  "description": "Servidor autoritativo de zona de CINZAS DO MERIDIANO (Marco 1).",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/main.js",
+    "dev": "node --disable-warning=ExperimentalWarning src/main.js --dev",
+    "test": "node --disable-warning=ExperimentalWarning --test --test-reporter=spec test/",
+    "test:acceptance": "node --disable-warning=ExperimentalWarning --test --test-reporter=spec test/acceptance.test.js",
+    "validate-data": "node --disable-warning=ExperimentalWarning tools/validate-data.js",
+    "gen-docs": "node --disable-warning=ExperimentalWarning tools/gen-docs.js",
+    "create-character": "node --disable-warning=ExperimentalWarning tools/create-character.js"
+  },
+  "dependencies": {
+    "ws": "8.18.3"
+  }
+}
