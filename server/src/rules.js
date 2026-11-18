@@ -73,10 +73,10 @@ export function derivedStats(char, equipped, data, buffs = {}) {
   defense = Math.floor(defense) + Math.floor(attrs.vit * f.defense.vitCoef) + L * f.defense.perLevel;
   if (buffs.defensePct) defense = Math.floor(defense * (1 + buffs.defensePct / 100));
   mres = Math.floor(mres) + Math.floor(attrs.spi * f.magicResist.spiCoef) + Math.floor(attrs.vit * f.magicResist.vitCoef);
-  evasion = Math.floor(attrs.agi * f.evasion.agiCoef) + L + evasion;
+  evasion = Math.floor(attrs.agi * f.evasion.agiCoef) + L + evasion + (buffs.evasion || 0);
   const accCoef = weapon.ranged && weapon.damageType === 'phys' ? f.accuracy.ranged : f.accuracy.melee;
   accuracy += Object.entries(accCoef).reduce((s, [a, c]) => s + attrs[a] * c, 0) + L * f.accuracy.perLevel + (weapon.accuracy || 0);
-  const crit = clamp((weapon.crit || 0) + critBonus + attrs.tal * f.crit.talCoef + attrs.agi * f.crit.agiCoef, 0, f.crit.cap);
+  const crit = clamp((weapon.crit || 0) + critBonus + (buffs.critPct || 0) + attrs.tal * f.crit.talCoef + attrs.agi * f.crit.agiCoef, 0, f.crit.cap);
   const magicCrit = clamp(f.crit.magic.base + attrs.spi * f.crit.magic.spiCoef + attrs.tal * f.crit.magic.talCoef, 0, f.crit.cap);
   let attackIntervalMs = weapon.attackIntervalMs;
   if (buffs.attackSpeedPct) attackIntervalMs = Math.round(attackIntervalMs / (1 + buffs.attackSpeedPct / 100));
@@ -84,6 +84,9 @@ export function derivedStats(char, equipped, data, buffs = {}) {
     level: L, attrs, permanent: perm, maxHp, maxMp, defense, mres, evasion, accuracy: Math.floor(accuracy),
     crit: round1(crit), magicCrit: round1(magicCrit), magicPower: Math.floor(magicPower), healBonusPct,
     weapon, weaponEnh, attackIntervalMs, range: weapon.range, physDamagePct: buffs.physDamagePct || 0,
+    moveSpeedPct: buffs.moveSpeedPct || 0, regenPctMaxHpPerSec: buffs.regenPctMaxHpPerSec || 0,
+    // Vitalidade: resistência a controle (reduz duração de atordoamento/enraizamento de monstros, M3)
+    ccResistPct: Math.min(50, Math.floor(attrs.vit * 0.5)),
   };
 }
 
@@ -196,16 +199,33 @@ export function levelDiffMod(monsterLevel, playerLevel, data) {
   return x.levelDiffMod[String(d)];
 }
 
-// contributions: [{ charId, level, score }]; retorna [{ charId, share, xp, lootEligible }]
+// contributions: [{ charId, level, score, partyId? }]. Membros de grupo próximos entram
+// mesmo com score 0 (o chamador decide quem está perto). Retorna [{ charId, share, xp, lootEligible }].
+// Sem grupo: xp = base × parte × cooperação × diferença de nível (igual ao M1).
+// Em grupo: o grupo recebe base × (parte do grupo) × cooperação; metade é dividida igualmente
+// entre os membros próximos e metade pela participação de cada um.
 export function splitKillXp(mdef, contributions, data, xpRate = 1) {
   const x = data.formulas.xp;
   const total = contributions.reduce((s, c) => s + c.score, 0);
   if (total <= 0) return [];
-  const n = contributions.filter((c) => c.score > 0).length;
-  const coop = 1 + x.cooperationBonusPerExtra * Math.max(0, n - 1);
-  return contributions.map((c) => {
-    const share = c.score / total;
-    const xp = Math.max(c.score > 0 ? 1 : 0, Math.round(mdef.xp * share * coop * levelDiffMod(mdef.level, c.level, data) * xpRate));
-    return { charId: c.charId, share, xp, lootEligible: share >= x.minShareForLoot };
-  });
+  const coop = 1 + x.cooperationBonusPerExtra * Math.max(0, contributions.length - 1);
+  const groups = new Map();
+  for (const c of contributions) {
+    const key = c.partyId != null ? `party:${c.partyId}` : `solo:${c.charId}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(c);
+  }
+  const out = [];
+  for (const members of groups.values()) {
+    const gs = members.reduce((s, c) => s + c.score, 0);
+    if (gs <= 0) continue;
+    const gShare = gs / total;
+    const n = members.length;
+    for (const c of members) {
+      const weight = n === 1 ? 1 : 0.5 / n + 0.5 * (c.score / gs);
+      const xp = Math.max(1, Math.round(mdef.xp * gShare * weight * coop * levelDiffMod(mdef.level, c.level, data) * xpRate));
+      out.push({ charId: c.charId, share: c.score / total, groupShare: gShare, xp, lootEligible: gShare >= x.minShareForLoot });
+    }
+  }
+  return out;
 }

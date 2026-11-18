@@ -119,7 +119,31 @@ export function validate(data, builds) {
       if (e.type === 'classDrop') for (const [c, id] of Object.entries(e.byClass)) if (items[id]?.classes && !items[id].classes.includes(c)) errors.push(`tabela ${tid}: ${id} não serve para ${c}`);
     }
   }
-  for (const [mid, m] of Object.entries(data.maps)) for (const sp of m.spawns || []) if (!data.monsters[sp.monster]) errors.push(`mapa ${mid}: monstro ${sp.monster}`);
+  const npcIds = new Set(), objIds = new Set();
+  for (const [mid, m] of Object.entries(data.maps)) {
+    for (const sp of m.spawns || []) if (!data.monsters[sp.monster]) errors.push(`mapa ${mid}: monstro ${sp.monster}`);
+    for (const pt of m.portals || []) {
+      const dest = data.maps[pt.to];
+      if (!dest) { errors.push(`mapa ${mid}: portal para ${pt.to} inexistente`); continue; }
+      if (pt.toX < 0 || pt.toZ < 0 || pt.toX > dest.size[0] || pt.toZ > dest.size[1]) errors.push(`mapa ${mid}: portal ${pt.id} cai fora de ${pt.to}`);
+    }
+    for (const n of m.npcs || []) npcIds.add(n.id);
+    for (const o of m.objects || []) objIds.add(o.id);
+    for (const n of m.npcs || []) for (const it of n.shop || []) if (!data.items[it]) errors.push(`loja ${n.id}: item ${it}`);
+  }
+  for (const c of Object.keys(data.classes)) if (!npcIds.has(`master_${c}`)) errors.push(`falta mestre de classe para ${c}`);
+  const npcOk = (ref) => ref === '@master' || npcIds.has(ref);
+  for (const [qid, q] of Object.entries(data.quests || {})) {
+    if (!npcOk(q.npc) || !npcOk(q.turnIn)) errors.push(`missão ${qid}: NPC inexistente`);
+    for (const pr of q.prereq) if (!data.quests[pr]) errors.push(`missão ${qid}: pré-requisito ${pr}`);
+    for (const o of q.objectives) {
+      if ((o.type === 'kill' || o.type === 'questDrop') && !data.monsters[o.monster]) errors.push(`missão ${qid}: monstro ${o.monster}`);
+      if (o.type === 'collect' && !data.items[o.item]) errors.push(`missão ${qid}: item ${o.item}`);
+      if (o.type === 'interact') for (const ob of o.objects) if (!objIds.has(ob)) errors.push(`missão ${qid}: objeto ${ob}`);
+      if (o.type === 'talk' && !npcOk(o.npc)) errors.push(`missão ${qid}: NPC ${o.npc}`);
+    }
+    for (const [it] of q.rewards.items || []) if (!data.items[it]) errors.push(`missão ${qid}: recompensa ${it}`);
+  }
   const cum = data.xp.cumulative;
   if (cum.length !== data.levelCap) errors.push('tabela de XP com tamanho errado');
   for (let i = 1; i < cum.length; i++) if (cum[i] <= cum[i - 1]) errors.push(`XP não crescente no nível ${i + 1}`);

@@ -1,0 +1,95 @@
+{
+ "_doc": "Missões. npc/turnIn '@master' = mestre da classe do personagem. Objetivos: talk (falar com NPC), kill (abates com participação), collect (itens reais na bolsa, consumidos na entrega), questDrop (contador que sobe ao derrotar o monstro, com chance; não ocupa a bolsa), interact (objetos do mapa), level, allocated (sem pontos livres), equipLevel (arma equipada de nível mínimo). O servidor conta e valida tudo. XP somado por capítulo ≈ 30% do XP da faixa (ver docs/04).",
+ "quests": {
+  "tutorial": {
+   "chapter": 0, "title": "Três do Outro Lado", "npc": "mara", "turnIn": "mara", "level": 1, "prereq": [],
+   "objectives": [ { "type": "interact", "objects": ["rescue_bento", "rescue_ligia", "rescue_caio"], "text": "Resgate Bento, Ligia e Caio" } ],
+   "rewards": { "xp": 60, "gold": 0, "items": [["potion_hp_s", 3]] },
+   "dialogue": { "offer": "Três ficaram do outro lado. Vai pela estrada velha. Se ouvir o segundo toque, sai da ponte.", "progress": "Ainda falta gente. Conta de novo.", "complete": "Três de volta. Ninguém mais conta caixa hoje." }
+  },
+  "c1_count": {
+   "chapter": 1, "title": "Contar as Pessoas", "npc": "teodoro", "turnIn": "ruy", "level": 1, "prereq": ["tutorial"],
+   "objectives": [ { "type": "talk", "npc": "ruy", "text": "Entregue o relatório à Sentinela Ruy" } ],
+   "rewards": { "xp": 40, "gold": 0, "items": [["potion_hp_s", 2]] },
+   "dialogue": { "offer": "Leva isso pro Ruy — ele anota quem dorme no posto.", "progress": "O Ruy fica do outro lado do posto.", "complete": "Se você cair lá fora, é aqui que você acorda. Lembra do caminho." }
+  },
+  "c1_rats": {
+   "chapter": 1, "title": "Ratos no Sulco", "npc": "ruy", "turnIn": "ruy", "level": 1, "prereq": ["c1_count"],
+   "objectives": [ { "type": "kill", "monster": "furrow_rat", "count": 8, "text": "Derrote Ratos de Sulco" }, { "type": "collect", "item": "mat_scrap", "count": 3, "text": "Traga Sucata de Condutor" } ],
+   "rewards": { "xp": 80, "gold": 20, "items": [] },
+   "dialogue": { "offer": "Onde tem rato, tem condutor vivo embaixo. Traz uns pedaços de metal que eles roem.", "progress": "Oito ratos e três sucatas. O ferreiro vai querer ver.", "complete": "Metal morno. Isso não esquenta sozinho." }
+  },
+  "c1_master": {
+   "chapter": 1, "title": "O Mestre da Sua Arma", "npc": "ruy", "turnIn": "@master", "level": 2, "prereq": ["c1_rats"],
+   "objectives": [ { "type": "talk", "npc": "@master", "text": "Visite o mestre da sua classe na sua cidade" }, { "type": "allocated", "text": "Distribua todos os pontos de atributo" } ],
+   "rewards": { "xp": 100, "gold": 0, "items": [], "skillRank": 1 },
+   "dialogue": { "offer": "Teu mestre te espera na cidade. Vai aprender a ler o que uma arma exige.", "progress": "O que estiver vermelho, você ainda não tem. Distribua seus pontos.", "complete": "Força vem de treino, não de anel. Cada ponto de hoje é um item que você usa amanhã." }
+  },
+  "c1_route": {
+   "chapter": 1, "title": "A Rota Reaberta", "npc": "mara", "turnIn": "mara", "level": 3, "prereq": ["c1_master"],
+   "objectives": [ { "type": "kill", "monster": "rust_hound", "count": 6, "text": "Afaste a matilha da Curva dos Cães" }, { "type": "interact", "objects": ["marker_1", "marker_2", "marker_3"], "text": "Finque os marcos de rota" } ],
+   "rewards": { "xp": 150, "gold": 30, "items": [] },
+   "dialogue": { "offer": "Se a gente marcar a estrada velha, as caravanas voltam a passar. Cuidado: os cães chamam os outros.", "progress": "Faltam cães ou marcos.", "complete": "Rota marcada. Agora é ver quem tenta cobrar pedágio nela." }
+  },
+  "c1_foreman": {
+   "chapter": 1, "title": "Cobrança Antiga", "npc": "teodoro", "turnIn": "mara", "level": 3, "prereq": ["c1_route"],
+   "objectives": [ { "type": "kill", "monster": "cracked_foreman", "count": 1, "text": "Derrote o Capataz Rachado (recomendado: grupo)" } ],
+   "rewards": { "xp": 200, "gold": 50, "items": [] },
+   "dialogue": { "offer": "Aquela máquina para as carroças e pede recibo que ninguém emite há dezessete anos. Junta alguém.", "progress": "O Capataz ronda a curva ao sul do posto.", "complete": "Ordem de serviço com assinatura da Companhia. Por que uma máquina da Companhia ainda trabalha aqui fora?" }
+  },
+  "c2_water": {
+   "chapter": 2, "title": "Água Que Não Devia Estar Quente", "npc": "mara", "turnIn": "mara", "level": 5, "prereq": ["c1_foreman"],
+   "objectives": [ { "type": "questDrop", "monster": "pump_toad", "chance": 0.6, "count": 5, "text": "Colete amostras de água quente dos Sapos-Bomba" } ],
+   "rewards": { "xp": 500, "gold": 40, "items": [["potion_hp_s", 5]] },
+   "dialogue": { "offer": "O brejo sempre foi frio. Agora sai vapor das poças. Traz amostras.", "progress": "Os sapos da lagoa incham com a água quente.", "complete": "Quente demais. Alguma coisa embaixo voltou a bombear." }
+  },
+  "c2_pressure": {
+   "chapter": 2, "title": "O Teste de Pressão", "npc": "joca", "turnIn": "joca", "level": 6, "prereq": ["c2_water"],
+   "objectives": [ { "type": "kill", "monster": "errant_valve", "count": 6, "text": "Detenha as Válvulas Errantes" }, { "type": "kill", "monster": "silt_eel", "count": 4, "text": "Afaste as Enguias de Lodo do canal" } ],
+   "rewards": { "xp": 900, "gold": 60, "items": [["ring_t5", 1]] },
+   "dialogue": { "offer": "Se eu abrir devagar, ela não estoura. Se alguma coisa morder minha mão, estoura. Combinado?", "progress": "Ainda tem coisa vindo do canal.", "complete": "Pressão estável. Por enquanto." }
+  },
+  "c2_pages": {
+   "chapter": 2, "title": "Registros Molhados", "npc": "joca", "turnIn": "joca", "level": 6, "prereq": ["c2_pressure"],
+   "objectives": [ { "type": "interact", "objects": ["page_heron_1", "page_heron_2", "page_pump_1", "page_pump_2"], "text": "Recupere as 4 páginas do registro" } ],
+   "rewards": { "xp": 800, "gold": 40, "items": [] },
+   "dialogue": { "offer": "Toda estação guarda um livro de turno. Duas páginas nos ninhos das garças, duas no cofre alagado.", "progress": "Faltam páginas.", "complete": "Ainda tem tinta. Dá pra ler." }
+  },
+  "c2_group": {
+   "chapter": 2, "title": "Onde se Caça em Grupo", "npc": "olga", "turnIn": "olga", "level": 7, "prereq": ["c2_pages"],
+   "objectives": [ { "type": "kill", "monster": "boiling_leech", "count": 15, "text": "Limpe o Poço das Sanguessugas (cada abate conta para o grupo)" } ],
+   "rewards": { "xp": 1000, "gold": 80, "items": [["mat_ember", 3]] },
+   "dialogue": { "offer": "O poço junta seis, sete de uma vez. Sozinho você gasta a bolsa de tônico. Em três vocês saem de bolsa cheia.", "progress": "O poço fica no leste do brejo.", "complete": "Viu? Junto rende mais." }
+  },
+  "c2_signature": {
+   "chapter": 2, "title": "A Primeira Assinatura", "npc": "joca", "turnIn": "@master", "level": 7, "prereq": ["c2_group"],
+   "objectives": [ { "type": "talk", "npc": "@master", "text": "Leve o registro ao mestre da sua cidade" } ],
+   "rewards": { "xp": 600, "gold": 0, "items": [] },
+   "dialogue": { "offer": "'Desligamento autorizado pela turma de Âmbar.' E um espaço em branco do lado. Faltou alguém assinar?", "progress": "Leve o registro ao seu mestre.", "complete": "Pedrâmbar diz que foi Nacre. Nacre diz que foi Pedrâmbar. Isso aqui não diz nenhum dos dois." }
+  },
+  "c3_fuses": {
+   "chapter": 3, "title": "Abaixo da Oficina", "npc": "joca", "turnIn": "joca", "level": 9, "prereq": ["c2_signature"],
+   "objectives": [ { "type": "questDrop", "monster": "digger_automaton", "chance": 0.5, "count": 3, "text": "Retire fusíveis dos Autômatos Escavadores" }, { "type": "interact", "objects": ["fuse_box_1", "fuse_box_2", "fuse_box_3"], "text": "Instale os fusíveis nas caixas" } ],
+   "rewards": { "xp": 1500, "gold": 100, "items": [] },
+   "dialogue": { "offer": "Lá embaixo é escuro e as máquinas não precisam de luz. A gente precisa.", "progress": "Três fusíveis, três caixas.", "complete": "Luz. Agora dá pra ver o tamanho disso." }
+  },
+  "c3_rats": {
+   "chapter": 3, "title": "Engrenagens com Fome", "npc": "pina", "turnIn": "pina", "level": 9, "prereq": ["c3_fuses"],
+   "objectives": [ { "type": "kill", "monster": "gear_rat", "count": 20, "text": "Limpe os enxames de Ratos-Engrenagem" } ],
+   "rewards": { "xp": 1500, "gold": 100, "items": [["potion_mp_m", 5]] },
+   "dialogue": { "offer": "Eles comem papel com tinta. Se a gente demorar, não sobra registro nenhum.", "progress": "Ainda ouço as engrenagens.", "complete": "O arquivo está salvo. Quase todo." }
+  },
+  "c3_trial": {
+   "chapter": 3, "title": "Prova de Classe", "npc": "@master", "turnIn": "@master", "level": 10, "prereq": ["c3_rats"],
+   "objectives": [ { "type": "level", "level": 10, "text": "Alcance o nível 10" }, { "type": "trial", "text": "Vença a prova da sua classe" } ],
+   "rewards": { "xp": 1800, "gold": 0, "items": [] },
+   "dialogue": { "offer": "Mostre que entendeu para que serve a sua arma.", "progress": "A prova espera por você.", "complete": "Provado. A partir de hoje, você treina coisas maiores." }
+  },
+  "c3_order": {
+   "chapter": 3, "title": "A Ordem de Desligamento", "npc": "mara", "turnIn": "mara", "level": 10, "prereq": ["c3_trial"],
+   "objectives": [ { "type": "interact", "objects": ["order_vault"], "text": "Abra o cofre de ordens na Sala do Supervisor" } ],
+   "rewards": { "xp": 2700, "gold": 150, "items": [] },
+   "dialogue": { "offer": "O cofre de ordens fica na sala do Supervisor. Se ele estiver lá, alguém segura a atenção dele.", "progress": "A Sala do Supervisor fica no fundo da oficina.", "complete": "Duas assinaturas. Âmbar e Nacre. Na mesma noite, no mesmo papel. Eles desligaram juntos." }
+  }
+ }
+}

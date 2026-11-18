@@ -81,6 +81,9 @@ export class Store {
     this.db = new DatabaseSync(path);
     this.db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
     this.db.exec(SCHEMA);
+    // migrações simples (bancos criados no M1)
+    const cols = this.db.prepare('PRAGMA table_info(characters)').all().map((c) => c.name);
+    if (!cols.includes('flags_json')) this.db.exec("ALTER TABLE characters ADD COLUMN flags_json TEXT NOT NULL DEFAULT '{}'");
     this.st = {};
   }
 
@@ -155,14 +158,15 @@ export class Store {
       id: row.id, accountId: row.account_id, name: row.name, classId: row.class_id, level: row.level, xp: row.xp,
       alloc: JSON.parse(row.alloc_json), unspent: row.unspent, skillPoints: row.skill_points, skills: JSON.parse(row.skills_json),
       hp: row.hp, mp: row.mp, gold: row.gold, mapId: row.map_id, x: row.x, z: row.z, dead: !!row.dead, items,
+      trialDone: !!JSON.parse(row.flags_json || '{}').trialDone,
     };
   }
 
   saveCharacter(c) {
     this.prep(`UPDATE characters SET level=?, xp=?, alloc_json=?, unspent=?, skill_points=?, skills_json=?, hp=?, mp=?, gold=?,
-      map_id=?, x=?, z=?, dead=?, updated_at=? WHERE id=?`).run(
+      map_id=?, x=?, z=?, dead=?, flags_json=?, updated_at=? WHERE id=?`).run(
       c.level, c.xp, JSON.stringify(c.alloc), c.unspent, c.skillPoints, JSON.stringify(c.skills), Math.round(c.hp), Math.round(c.mp),
-      c.gold, c.mapId, c.x, c.z, c.dead ? 1 : 0, Date.now(), c.id);
+      c.gold, c.saveMapId ?? c.mapId, c.saveX ?? c.x, c.saveZ ?? c.z, c.dead ? 1 : 0, JSON.stringify({ trialDone: !!c.trialDone }), Date.now(), c.id);
   }
 
   insertItem({ id, charId, defId, qty, enh, loc, slot, source }) {
@@ -185,6 +189,17 @@ export class Store {
 
   countItems(charId) {
     return this.prep('SELECT COUNT(*) AS n FROM item_instances WHERE char_id=?').get(charId).n;
+  }
+
+  // ---------- missões ----------
+  loadQuests(charId) {
+    return this.prep('SELECT quest_id, state, progress_json FROM quest_progress WHERE char_id=?').all(charId);
+  }
+
+  saveQuest(charId, questId, state, progress) {
+    this.prep(`INSERT INTO quest_progress (char_id, quest_id, state, progress_json, updated_at) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(char_id, quest_id) DO UPDATE SET state=excluded.state, progress_json=excluded.progress_json, updated_at=excluded.updated_at`)
+      .run(charId, questId, state, JSON.stringify(progress), Date.now());
   }
 
   // ---------- saque ----------

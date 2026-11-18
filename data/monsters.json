@@ -728,6 +728,58 @@
    "xp": 9400,
    "lootTable": "lt_lock_custodian",
    "description": "Chefe do calabouço. Interpreta a reativação como emergência e fecha as saídas."
+  },
+  "trial_construct": {
+   "name": "Construto de Prova",
+   "level": 10,
+   "family": "machine",
+   "rank": "normal",
+   "area": "arena_prova",
+   "aggro": "aggressive",
+   "hp": 180,
+   "damage": [
+    8,
+    11
+   ],
+   "attackIntervalMs": 1800,
+   "attackRange": 2.2,
+   "defense": 24,
+   "mres": 16,
+   "evasion": 30,
+   "accuracy": 70,
+   "moveSpeed": 3.4,
+   "aggroRadius": 40,
+   "leashRadius": 0,
+   "respawnSec": 0,
+   "xp": 40,
+   "lootTable": "lt_none",
+   "description": "Boneco de treino dos mestres de classe; só existe dentro da prova."
+  },
+  "trial_sentinel": {
+   "name": "Sentinela de Prova",
+   "level": 10,
+   "family": "machine",
+   "rank": "normal",
+   "area": "arena_prova",
+   "aggro": "aggressive",
+   "hp": 320,
+   "damage": [
+    12,
+    15
+   ],
+   "attackIntervalMs": 2000,
+   "attackRange": 2.4,
+   "defense": 30,
+   "mres": 20,
+   "evasion": 30,
+   "accuracy": 74,
+   "moveSpeed": 3,
+   "aggroRadius": 40,
+   "leashRadius": 0,
+   "respawnSec": 0,
+   "xp": 80,
+   "lootTable": "lt_none",
+   "description": "Guardião final da prova de classe."
   }
  }
 }

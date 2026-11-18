@@ -31,7 +31,10 @@ export function loadGameData(dir = DEFAULT_DATA_DIR) {
     maps: readJson(dir, 'maps.json').maps,
     xp: readJson(dir, 'xp_table.json'),
     formulas: readJson(dir, 'formulas.json'),
+    quests: readJson(dir, 'quests.json').quests,
   };
+  for (const [id, s] of Object.entries(data.skills)) s.id = id;
+  for (const [id, m] of Object.entries(data.monsters)) m.id = id;
   return data;
 }
 

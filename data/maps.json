@@ -1,31 +1,762 @@
 {
-  "_doc": "Mapas. Coordenadas em metros no plano XZ. M1 implementa apenas estrada_velha; os demais estão descritos para M2/M3 (ver docs/02 e docs/05).",
-  "maps": {
-    "estrada_velha": {
-      "name": "A Estrada Velha",
-      "levelRange": [1, 5],
-      "implementedIn": "M1",
-      "size": [160, 100],
-      "guardPost": { "name": "Posto da Ponte", "x": 20, "z": 50, "safeRadius": 12 },
-      "spawnPoint": { "x": 20, "z": 50 },
-      "blocked": [
-        { "name": "Ruínas da Estação Norte", "x0": 70, "z0": 40, "x1": 76, "z1": 56 },
-        { "name": "Leito seco do rio", "x0": 60, "z0": 0, "x1": 64, "z1": 22 }
-      ],
-      "spawns": [
-        { "monster": "furrow_rat", "x": 44, "z": 50, "radius": 8, "count": 6 },
-        { "monster": "ember_beetle", "x": 52, "z": 32, "radius": 8, "count": 5 },
-        { "monster": "rust_hound", "x": 88, "z": 68, "radius": 9, "count": 5 },
-        { "monster": "ballast_lizard", "x": 104, "z": 36, "radius": 9, "count": 4 },
-        { "monster": "ash_boar", "x": 134, "z": 58, "radius": 10, "count": 4 },
-        { "monster": "cracked_foreman", "x": 44, "z": 72, "radius": 1, "count": 1 }
-      ],
-      "returnToMapReason": "Capataz Rachado (elite, arma de nível 5 da classe), Sucata de Condutor para o ferreiro, família de armaduras de Bronze de Eclusa."
+ "_doc": "Mapas. Coordenadas em metros no plano XZ. M2: Estrada Velha, as duas cidades, Brejo das Bombas e Oficina Soterrada. portals levam a outro mapa; npcs e objects são usados pelas missões.",
+ "maps": {
+  "estrada_velha": {
+   "name": "A Estrada Velha",
+   "levelRange": [
+    1,
+    5
+   ],
+   "implementedIn": "M1",
+   "size": [
+    160,
+    100
+   ],
+   "guardPost": {
+    "name": "Posto da Ponte",
+    "x": 20,
+    "z": 50,
+    "safeRadius": 12
+   },
+   "spawnPoint": {
+    "x": 20,
+    "z": 50
+   },
+   "blocked": [
+    {
+     "name": "Ruínas da Estação Norte",
+     "x0": 70,
+     "z0": 40,
+     "x1": 76,
+     "z1": 56
     },
-    "brejo_bombas": { "name": "Brejo das Bombas", "levelRange": [5, 9], "implementedIn": "M2", "size": [200, 140] },
-    "oficina_soterrada": { "name": "Oficina Soterrada", "levelRange": [9, 12], "implementedIn": "M2", "size": [180, 180] },
-    "galerias_eco": { "name": "Galerias do Eco", "levelRange": [12, 16], "implementedIn": "M3", "size": [220, 160] },
-    "canais_eclusa": { "name": "Canais da Eclusa", "levelRange": [16, 20], "implementedIn": "M3", "size": [200, 200] },
-    "ultima_eclusa": { "name": "A Última Eclusa (calabouço)", "levelRange": [16, 20], "implementedIn": "M3", "instanced": true, "partySize": [2, 5] }
+    {
+     "name": "Leito seco do rio",
+     "x0": 60,
+     "z0": 0,
+     "x1": 64,
+     "z1": 22
+    }
+   ],
+   "spawns": [
+    {
+     "monster": "furrow_rat",
+     "x": 44,
+     "z": 50,
+     "radius": 8,
+     "count": 6
+    },
+    {
+     "monster": "ember_beetle",
+     "x": 52,
+     "z": 32,
+     "radius": 8,
+     "count": 5
+    },
+    {
+     "monster": "rust_hound",
+     "x": 88,
+     "z": 68,
+     "radius": 9,
+     "count": 5
+    },
+    {
+     "monster": "ballast_lizard",
+     "x": 104,
+     "z": 36,
+     "radius": 9,
+     "count": 4
+    },
+    {
+     "monster": "ash_boar",
+     "x": 134,
+     "z": 58,
+     "radius": 10,
+     "count": 4
+    },
+    {
+     "monster": "cracked_foreman",
+     "x": 44,
+     "z": 72,
+     "radius": 1,
+     "count": 1
+    }
+   ],
+   "returnToMapReason": "Capataz Rachado (elite, arma de nível 5 da classe), Sucata de Condutor para o ferreiro, família de armaduras de Bronze de Eclusa.",
+   "portals": [
+    {
+     "id": "to_pedrambar",
+     "name": "Portão de Pedrâmbar",
+     "x": 3,
+     "z": 50,
+     "radius": 3,
+     "to": "pedrambar",
+     "toX": 54,
+     "toZ": 30,
+     "minLevel": 1
+    },
+    {
+     "id": "to_vau",
+     "name": "Ponte de Vau de Nácar",
+     "x": 157,
+     "z": 50,
+     "radius": 3,
+     "to": "vau_de_nacar",
+     "toX": 6,
+     "toZ": 30,
+     "minLevel": 1
+    },
+    {
+     "id": "to_brejo",
+     "name": "Trilha do Brejo",
+     "x": 150,
+     "z": 92,
+     "radius": 3,
+     "to": "brejo_bombas",
+     "toX": 10,
+     "toZ": 70,
+     "minLevel": 5
+    }
+   ],
+   "npcs": [
+    {
+     "id": "teodoro",
+     "name": "Teodoro, o Condutor",
+     "x": 16,
+     "z": 46,
+     "role": "quest"
+    },
+    {
+     "id": "ruy",
+     "name": "Sentinela Ruy",
+     "x": 23,
+     "z": 56,
+     "role": "quest"
+    },
+    {
+     "id": "mara",
+     "name": "Mara Quintela",
+     "x": 26,
+     "z": 46,
+     "role": "quest"
+    }
+   ],
+   "objects": [
+    {
+     "id": "rescue_bento",
+     "name": "Bento (preso no entulho)",
+     "x": 34,
+     "z": 44
+    },
+    {
+     "id": "rescue_ligia",
+     "name": "Ligia (ferida)",
+     "x": 40,
+     "z": 58
+    },
+    {
+     "id": "rescue_caio",
+     "name": "Caio (cercado)",
+     "x": 50,
+     "z": 40
+    },
+    {
+     "id": "marker_1",
+     "name": "Marco de rota",
+     "x": 80,
+     "z": 56
+    },
+    {
+     "id": "marker_2",
+     "name": "Marco de rota",
+     "x": 96,
+     "z": 62
+    },
+    {
+     "id": "marker_3",
+     "name": "Marco de rota",
+     "x": 112,
+     "z": 56
+    }
+   ]
+  },
+  "brejo_bombas": {
+   "name": "Brejo das Bombas",
+   "levelRange": [
+    5,
+    9
+   ],
+   "implementedIn": "M2",
+   "size": [
+    200,
+    140
+   ],
+   "guardPost": {
+    "name": "Acampamento da Comporta",
+    "x": 16,
+    "z": 70,
+    "safeRadius": 12
+   },
+   "spawnPoint": {
+    "x": 16,
+    "z": 70
+   },
+   "blocked": [
+    {
+     "name": "Lagoa funda",
+     "x0": 60,
+     "z0": 56,
+     "x1": 84,
+     "z1": 80
+    },
+    {
+     "name": "Casa das Bombas",
+     "x0": 116,
+     "z0": 62,
+     "x1": 126,
+     "z1": 70
+    }
+   ],
+   "spawns": [
+    {
+     "monster": "pump_toad",
+     "x": 44,
+     "z": 36,
+     "radius": 10,
+     "count": 6
+    },
+    {
+     "monster": "silt_eel",
+     "x": 70,
+     "z": 104,
+     "radius": 9,
+     "count": 5
+    },
+    {
+     "monster": "errant_valve",
+     "x": 108,
+     "z": 36,
+     "radius": 9,
+     "count": 5
+    },
+    {
+     "monster": "rust_heron",
+     "x": 146,
+     "z": 112,
+     "radius": 12,
+     "count": 4
+    },
+    {
+     "monster": "boiling_leech",
+     "x": 172,
+     "z": 40,
+     "radius": 6,
+     "count": 7
+    },
+    {
+     "monster": "master_pump",
+     "x": 121,
+     "z": 84,
+     "radius": 1,
+     "count": 1
+    }
+   ],
+   "portals": [
+    {
+     "id": "to_estrada",
+     "name": "Trilha da Estrada Velha",
+     "x": 4,
+     "z": 70,
+     "radius": 3,
+     "to": "estrada_velha",
+     "toX": 146,
+     "toZ": 88,
+     "minLevel": 1
+    },
+    {
+     "id": "to_oficina",
+     "name": "Boca da Oficina",
+     "x": 196,
+     "z": 70,
+     "radius": 3,
+     "to": "oficina_soterrada",
+     "toX": 10,
+     "toZ": 90,
+     "minLevel": 9
+    }
+   ],
+   "npcs": [
+    {
+     "id": "mara",
+     "name": "Mara Quintela",
+     "x": 20,
+     "z": 64,
+     "role": "quest"
+    },
+    {
+     "id": "olga",
+     "name": "Vigia Olga Sal",
+     "x": 22,
+     "z": 76,
+     "role": "quest"
+    },
+    {
+     "id": "joca",
+     "name": "Joca Vedante",
+     "x": 112,
+     "z": 58,
+     "role": "quest"
+    }
+   ],
+   "objects": [
+    {
+     "id": "page_heron_1",
+     "name": "Página do registro (ninho)",
+     "x": 138,
+     "z": 120
+    },
+    {
+     "id": "page_heron_2",
+     "name": "Página do registro (ninho)",
+     "x": 156,
+     "z": 104
+    },
+    {
+     "id": "page_pump_1",
+     "name": "Página do registro (cofre alagado)",
+     "x": 114,
+     "z": 60
+    },
+    {
+     "id": "page_pump_2",
+     "name": "Página do registro (cofre alagado)",
+     "x": 128,
+     "z": 60
+    }
+   ],
+   "returnToMapReason": "Bomba-Mestra Desregulada (elite), Brasa Cristalizada, família Ferro Frio."
+  },
+  "oficina_soterrada": {
+   "name": "Oficina Soterrada",
+   "levelRange": [
+    9,
+    12
+   ],
+   "implementedIn": "M2",
+   "size": [
+    180,
+    180
+   ],
+   "guardPost": {
+    "name": "Boca da Oficina",
+    "x": 14,
+    "z": 90,
+    "safeRadius": 12
+   },
+   "spawnPoint": {
+    "x": 14,
+    "z": 90
+   },
+   "blocked": [
+    {
+     "name": "Esteira principal",
+     "x0": 96,
+     "z0": 100,
+     "x1": 104,
+     "z1": 170
+    }
+   ],
+   "spawns": [
+    {
+     "monster": "digger_automaton",
+     "x": 42,
+     "z": 42,
+     "radius": 10,
+     "count": 6
+    },
+    {
+     "monster": "gear_rat",
+     "x": 88,
+     "z": 62,
+     "radius": 8,
+     "count": 8
+    },
+    {
+     "monster": "blind_welder",
+     "x": 140,
+     "z": 48,
+     "radius": 10,
+     "count": 5
+    },
+    {
+     "monster": "belt_blade",
+     "x": 124,
+     "z": 140,
+     "radius": 10,
+     "count": 5
+    },
+    {
+     "monster": "shift_supervisor",
+     "x": 152,
+     "z": 160,
+     "radius": 1,
+     "count": 1
+    }
+   ],
+   "portals": [
+    {
+     "id": "to_brejo",
+     "name": "Subida para o Brejo",
+     "x": 4,
+     "z": 90,
+     "radius": 3,
+     "to": "brejo_bombas",
+     "toX": 190,
+     "toZ": 70,
+     "minLevel": 1
+    }
+   ],
+   "npcs": [
+    {
+     "id": "joca",
+     "name": "Joca Vedante",
+     "x": 20,
+     "z": 84,
+     "role": "quest"
+    },
+    {
+     "id": "pina",
+     "name": "Pina, aprendiz",
+     "x": 70,
+     "z": 30,
+     "role": "quest"
+    },
+    {
+     "id": "mara",
+     "name": "Mara Quintela",
+     "x": 74,
+     "z": 26,
+     "role": "quest"
+    }
+   ],
+   "objects": [
+    {
+     "id": "fuse_box_1",
+     "name": "Caixa de fusíveis",
+     "x": 30,
+     "z": 60
+    },
+    {
+     "id": "fuse_box_2",
+     "name": "Caixa de fusíveis",
+     "x": 56,
+     "z": 28
+    },
+    {
+     "id": "fuse_box_3",
+     "name": "Caixa de fusíveis",
+     "x": 60,
+     "z": 56
+    },
+    {
+     "id": "order_vault",
+     "name": "Cofre de ordens",
+     "x": 160,
+     "z": 166
+    }
+   ],
+   "returnToMapReason": "Pó de Refino, Supervisor de Turno (elite), família Aço da Vigília."
+  },
+  "galerias_eco": {
+   "name": "Galerias do Eco",
+   "levelRange": [
+    12,
+    16
+   ],
+   "implementedIn": "M3",
+   "size": [
+    220,
+    160
+   ]
+  },
+  "canais_eclusa": {
+   "name": "Canais da Eclusa",
+   "levelRange": [
+    16,
+    20
+   ],
+   "implementedIn": "M3",
+   "size": [
+    200,
+    200
+   ]
+  },
+  "ultima_eclusa": {
+   "name": "A Última Eclusa (calabouço)",
+   "levelRange": [
+    16,
+    20
+   ],
+   "implementedIn": "M3",
+   "instanced": true,
+   "partySize": [
+    2,
+    5
+   ]
+  },
+  "pedrambar": {
+   "name": "Pedrâmbar",
+   "levelRange": [
+    1,
+    20
+   ],
+   "implementedIn": "M2",
+   "city": true,
+   "size": [
+    60,
+    60
+   ],
+   "guardPost": {
+    "name": "Praça das Balanças",
+    "x": 30,
+    "z": 30,
+    "safeRadius": 60
+   },
+   "spawnPoint": {
+    "x": 30,
+    "z": 30
+   },
+   "blocked": [],
+   "spawns": [],
+   "portals": [
+    {
+     "id": "to_estrada",
+     "name": "Estrada Velha",
+     "x": 57,
+     "z": 30,
+     "radius": 3,
+     "to": "estrada_velha",
+     "toX": 7,
+     "toZ": 50,
+     "minLevel": 1
+    }
+   ],
+   "npcs": [
+    {
+     "id": "master_breaker",
+     "name": "Mestre Tarrasco",
+     "x": 14,
+     "z": 14,
+     "role": "master",
+     "classId": "breaker"
+    },
+    {
+     "id": "master_bastion",
+     "name": "Mestra Ione do Bronze",
+     "x": 22,
+     "z": 12,
+     "role": "master",
+     "classId": "bastion"
+    },
+    {
+     "id": "master_pikeman",
+     "name": "Sargento Bel do Fosso",
+     "x": 30,
+     "z": 11,
+     "role": "master",
+     "classId": "pikeman"
+    },
+    {
+     "id": "master_warden",
+     "name": "Vigia-Mor Cássia",
+     "x": 38,
+     "z": 12,
+     "role": "master",
+     "classId": "warden"
+    },
+    {
+     "id": "smith_gusmao",
+     "name": "Gusmão, ferreiro",
+     "x": 12,
+     "z": 44,
+     "role": "smith"
+    },
+    {
+     "id": "potions_resina",
+     "name": "Dona Resina",
+     "x": 22,
+     "z": 48,
+     "role": "shop",
+     "shop": [
+      "potion_hp_s",
+      "potion_mp_s",
+      "potion_hp_m",
+      "potion_mp_m"
+     ]
+    },
+    {
+     "id": "storage_ambar",
+     "name": "Guarda-volumes da Caravana",
+     "x": 40,
+     "z": 46,
+     "role": "storage"
+    }
+   ],
+   "objects": []
+  },
+  "vau_de_nacar": {
+   "name": "Vau de Nácar",
+   "levelRange": [
+    1,
+    20
+   ],
+   "implementedIn": "M2",
+   "city": true,
+   "size": [
+    60,
+    60
+   ],
+   "guardPost": {
+    "name": "Plataforma do Relógio",
+    "x": 30,
+    "z": 30,
+    "safeRadius": 60
+   },
+   "spawnPoint": {
+    "x": 30,
+    "z": 30
+   },
+   "blocked": [],
+   "spawns": [],
+   "portals": [
+    {
+     "id": "to_estrada",
+     "name": "Estrada Velha",
+     "x": 3,
+     "z": 30,
+     "radius": 3,
+     "to": "estrada_velha",
+     "toX": 153,
+     "toZ": 50,
+     "minLevel": 1
+    }
+   ],
+   "npcs": [
+    {
+     "id": "master_dawnshield",
+     "name": "Dama Aurélia",
+     "x": 22,
+     "z": 12,
+     "role": "master",
+     "classId": "dawnshield"
+    },
+    {
+     "id": "master_windwalker",
+     "name": "Sina",
+     "x": 30,
+     "z": 11,
+     "role": "master",
+     "classId": "windwalker"
+    },
+    {
+     "id": "master_veilsinger",
+     "name": "Mãe Nívea",
+     "x": 38,
+     "z": 12,
+     "role": "master",
+     "classId": "veilsinger"
+    },
+    {
+     "id": "master_emberweaver",
+     "name": "Mestre Otan Cinzeiro",
+     "x": 46,
+     "z": 14,
+     "role": "master",
+     "classId": "emberweaver"
+    },
+    {
+     "id": "smith_tiela",
+     "name": "Tiela Martelo-Fino",
+     "x": 48,
+     "z": 44,
+     "role": "smith"
+    },
+    {
+     "id": "potions_lume",
+     "name": "Boticário Lume",
+     "x": 38,
+     "z": 48,
+     "role": "shop",
+     "shop": [
+      "potion_hp_s",
+      "potion_mp_s",
+      "potion_hp_m",
+      "potion_mp_m"
+     ]
+    },
+    {
+     "id": "storage_nacre",
+     "name": "Guarda-volumes da Caravana",
+     "x": 20,
+     "z": 46,
+     "role": "storage"
+    }
+   ],
+   "objects": []
+  },
+  "arena_prova": {
+   "name": "Arena da Prova",
+   "levelRange": [
+    10,
+    10
+   ],
+   "implementedIn": "M2",
+   "instanced": true,
+   "size": [
+    36,
+    36
+   ],
+   "guardPost": {
+    "name": "Entrada da Arena",
+    "x": 18,
+    "z": 2,
+    "safeRadius": 0
+   },
+   "spawnPoint": {
+    "x": 18,
+    "z": 6
+   },
+   "blocked": [],
+   "spawns": [],
+   "portals": [],
+   "npcs": [],
+   "objects": [],
+   "trial": {
+    "durationMs": 180000,
+    "waves": [
+     [
+      [
+       "trial_construct",
+       2
+      ]
+     ],
+     [
+      [
+       "trial_construct",
+       1
+      ],
+      [
+       "trial_sentinel",
+       1
+      ]
+     ]
+    ],
+    "spawnAt": {
+     "x": 18,
+     "z": 26,
+     "radius": 6
+    }
+   }
   }
+ }
 }
