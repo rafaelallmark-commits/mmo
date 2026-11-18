@@ -359,7 +359,7 @@ export class Zone {
     if (!engaged.length) return;
     for (const m of engaged) {
       this.credit(m, p.char.id, (amount * this.f.xp.participation.healing) / engaged.length);
-      m.threat.set(p.char.id, (m.threat.get(p.char.id) || 0) + (amount * 0.5) / engaged.length);
+      m.threat.set(p.char.id, (m.threat.get(p.char.id) || 0) + (amount * this.f.threat.healingPerHp) / engaged.length);
     }
   }
 
@@ -481,10 +481,10 @@ export class Zone {
     m.hp -= real;
     this.credit(m, charId, real * this.f.xp.participation.damage);
     if (p) {
-      this.addThreat(m, p, dmg);
+      this.addThreat(m, p, dmg * (this.f.threat.classMult[p.char.classId] || 1));
       if (m.def.aggro === 'aggressive') {
         for (const o of this.monsters.values()) {
-          if (o !== m && o.defId === m.defId && o.state === 'idle' && dist(o, m) <= 8) { o.state = 'chase'; o.targetId = p.eid; o.threat.set(charId, 1); }
+          if (o !== m && o.defId === m.defId && o.state === 'idle' && dist(o, m) <= 8) { o.state = 'chase'; o.targetId = p.eid; o.threat.set(charId, this.f.threat.proximityAggro); }
         }
       }
     }
@@ -593,12 +593,12 @@ export class Zone {
         if (p && !p.char.dead && t > bestT) { best = p; bestT = t; }
       }
       if (!best) m.threat.clear();
-      else if (!target || (best !== target && bestT > (m.threat.get(target.char.id) || 0) * 1.1)) { target = best; m.targetId = best.eid; }
+      else if (!target || (best !== target && bestT > (m.threat.get(target.char.id) || 0) * this.f.threat.switchMargin)) { target = best; m.targetId = best.eid; }
     }
     if (!target && m.state === 'chase') { m.state = 'return'; return; }
     if (!target && m.def.aggroRadius > 0) {
       for (const p of this.players.values()) {
-        if (!p.char.dead && !this.inSafeZone(p.char) && dist(p.char, m) <= m.def.aggroRadius) { target = p; m.targetId = p.eid; m.state = 'chase'; m.threat.set(p.char.id, 1); break; }
+        if (!p.char.dead && !this.inSafeZone(p.char) && dist(p.char, m) <= m.def.aggroRadius) { target = p; m.targetId = p.eid; m.state = 'chase'; m.threat.set(p.char.id, this.f.threat.proximityAggro); break; }
       }
     }
     if (!target) {

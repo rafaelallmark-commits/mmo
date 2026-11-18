@@ -37,6 +37,9 @@ export class SimClient {
     else if (m.t === 'defs') this.defs = m;
     else if (m.t === 'char') this.char = m.char;
     else if (m.t === 'loot') this.loot.set(m.loot.id, m.loot);
+    else if (m.t === 'zone') { this.snap = m.snapshot; this.char = m.char; this.loot = new Map(m.loot.map((l) => [l.id, l])); }
+    else if (m.t === 'party') this.party = m.party;
+    else if (m.t === 'trial' && m.char) this.char = m.char;
     this.push(m);
   }
 

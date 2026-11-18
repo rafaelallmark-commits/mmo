@@ -1,7 +1,8 @@
 // Cria conta e personagem de teste direto no banco (com o servidor parado ou rodando;
 // o personagem não pode estar conectado).
 // Uso:
-//   npm run create-character -- --account teste1 --password teste123 --name Brakka --class breaker [--level 2] [--give axe_1h_t5 --give ring_furrow] [--db cinzas.db]
+//   npm run create-character -- --account teste1 --password teste123 --name Brakka --class breaker [--level 2] [--trial] [--give axe_1h_t5 --give ring_furrow] [--db cinzas.db]
+// --trial (nível 10+): marca a prova de classe como vencida e libera a habilidade do nível 10.
 import { randomUUID } from 'node:crypto';
 import { loadGameData } from '../src/data.js';
 import { Store } from '../src/store.js';
@@ -15,7 +16,7 @@ const data = loadGameData();
 const account = opt('account'), password = opt('password', 'teste123'), name = opt('name'), classId = opt('class', 'breaker');
 const level = Math.max(1, Math.min(data.levelCap, Number(opt('level', 1))));
 if (!account || !name) {
-  console.log('Uso: npm run create-character -- --account CONTA --password SENHA --name NOME --class breaker|emberweaver [--level N] [--give ITEM ...] [--db cinzas.db]');
+  console.log('Uso: npm run create-character -- --account CONTA --password SENHA --name NOME --class CLASSE [--level N] [--trial] [--give ITEM ...] [--db cinzas.db]');
   process.exit(1);
 }
 const cls = data.classes[classId];
@@ -30,7 +31,8 @@ const charId = store.createCharacter({ accountId: acc.id, name, classId, hp: st.
 const c = store.loadCharacter(charId);
 c.level = level; c.xp = data.xp.cumulative[level - 1];
 c.unspent = totalAttributePoints(level, data); c.skillPoints = totalSkillPoints(level, data);
-for (const sid of cls.skills) if (data.skills[sid].unlockLevel <= level) c.skills[sid] = 1;
+c.trialDone = argv.includes('--trial') && level >= 10;
+for (const sid of cls.skills) if (data.skills[sid].unlockLevel <= level && (data.skills[sid].unlockLevel !== 10 || c.trialDone)) c.skills[sid] = 1;
 store.saveCharacter(c);
 for (const defId of all('give')) {
   if (!data.items[defId]) { console.log(`item inexistente ignorado: ${defId}`); continue; }
