@@ -11,6 +11,9 @@ var url := ""
 var state := "idle" # idle | connecting | open | closed
 var _rid := 0
 var _callbacks := {}
+## Prefixo aleatório por execução: rids nunca se repetem entre sessões (o servidor
+## deduplica pedidos repetidos pelo rid, inclusive depois de uma reconexão).
+var _rid_prefix := "%08x" % (randi() ^ int(Time.get_unix_time_from_system()))
 
 func connect_to(u: String) -> void:
 	url = u
@@ -64,7 +67,7 @@ func _process(_delta: float) -> void:
 ## Envia uma requisição. Retorna o rid usado.
 func request(t: String, payload: Dictionary = {}, cb: Callable = Callable()) -> String:
 	_rid += 1
-	var rid := "c%d" % _rid
+	var rid := "%s-%d" % [_rid_prefix, _rid]
 	var msg := payload.duplicate()
 	msg["t"] = t
 	msg["rid"] = rid

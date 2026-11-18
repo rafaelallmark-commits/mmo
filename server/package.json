@@ -8,7 +8,7 @@
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning src/main.js",
     "dev": "node --disable-warning=ExperimentalWarning src/main.js --dev",
-    "test": "node --disable-warning=ExperimentalWarning --test --test-reporter=spec test/",
+    "test": "node --disable-warning=ExperimentalWarning --test --test-reporter=spec test/*.test.js",
     "test:acceptance": "node --disable-warning=ExperimentalWarning --test --test-reporter=spec test/acceptance.test.js",
     "validate-data": "node --disable-warning=ExperimentalWarning tools/validate-data.js",
     "gen-docs": "node --disable-warning=ExperimentalWarning tools/gen-docs.js",

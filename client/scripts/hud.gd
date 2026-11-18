@@ -280,6 +280,12 @@ func refresh_char() -> void:
 	if sheet_panel.visible:
 		_refresh_sheet()
 
+func _process(_delta: float) -> void:
+	# mantém o inventário inteiro dentro da tela, qualquer que seja a largura do conteúdo
+	if inv_panel and inv_panel.visible:
+		var vw := get_viewport().get_visible_rect().size.x
+		inv_panel.position.x = maxf(8.0, vw - inv_panel.size.x - 8.0)
+
 func _hot_actions() -> Array:
 	var skills: Array = main.class_skills()
 	return [

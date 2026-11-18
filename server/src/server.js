@@ -113,7 +113,7 @@ export class GameServer {
     // Requisições repetidas (mesmo rid, mesmo personagem) devolvem a mesma resposta sem reexecutar.
     if (rid != null && s.charId != null) {
       const cached = this.ridCache.get(s.charId)?.get(rid);
-      if (cached) return this.sendTo(s, { ...cached, duplicate: true });
+      if (cached && cached.req === msg.t) return this.sendTo(s, { ...cached, duplicate: true });
     }
     let res;
     try {

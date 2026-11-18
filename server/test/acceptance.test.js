@@ -136,7 +136,19 @@ test('Marco 1 — dois jogadores do início ao equipamento persistido', { timeou
     const [ga, gb] = await Promise.all([xpA, xpB]);
     log(`Capataz Rachado derrotado: XP A=${ga.gained} (parte ${ga.share}), B=${gb.gained} (parte ${gb.share}); níveis ${ga.level} e ${gb.level}`);
     assert.ok(ga.gained > 0 && gb.gained > 0);
-    assert.equal(ga.level, 2); assert.equal(gb.level, 2);
+    // A parte de cada um varia com as rolagens; quem ficou no nível 1 caça ratos (14 XP cada)
+    // até o nível 2 — impossível passar do 2 assim, o que mantém a recusa do passo 5 exata.
+    for (const [c, g, skill] of [[A, ga, 'deep_cut'], [B, gb, 'glass_spark']]) {
+      let level = g.level;
+      while (level < 2) {
+        const rat = nearestMonster(c, ['furrow_rat']);
+        const xp = c.waitFor((m) => m.t === 'xp', 60000);
+        await kill(c, rat.id, skill);
+        level = (await xp).level;
+        log(`${c.label} ainda no nível 1: caçou um Rato de Sulco (nível ${level})`);
+      }
+    }
+    assert.equal((await A.request('char')).char.level, 2); assert.equal((await B.request('char')).char.level, 2);
 
     // 4) Saque individual: cada um vê só o seu, com IDs únicos
     await sleep(100);
@@ -166,7 +178,9 @@ test('Marco 1 — dois jogadores do início ao equipamento persistido', { timeou
     const pickedA = await collectLoot(A); const pickedB = await collectLoot(B);
     assert.ok(A.char.gold > goldBefore.A && B.char.gold > goldBefore.B, 'ouro coletado');
     const wandId = pickedB.find((l) => l.defId === 'wand_t5').instanceId;
-    const allIds = [axeId, ...pickedA.map((l) => l.instanceId), ...pickedB.map((l) => l.instanceId)].filter(Boolean);
+    // peças não empilháveis têm instância própria; tônicos/materiais somam ao monte existente
+    const unique = (l) => l.defId && !A.defs.items[l.defId].stack;
+    const allIds = [axeId, ...pickedA.filter(unique).map((l) => l.instanceId), ...pickedB.filter(unique).map((l) => l.instanceId)];
     log(`A coletou ${pickedA.length + 1} saques (ouro ${A.char.gold}); B coletou ${pickedB.length} (ouro ${B.char.gold})`);
 
     // 5) Tentativa de equipar cedo demais
@@ -259,6 +273,7 @@ test('Marco 1 — dois jogadores do início ao equipamento persistido', { timeou
     assert.equal(again.ok, true); assert.equal(again.alreadyClaimed, true); assert.equal(again.instanceId, axeId);
     assert.equal(A2.char.items.filter((i) => i.defId === 'axe_1h_t5').length, 1);
     assert.equal(new Set(allIds).size, allIds.length, 'IDs de instância únicos');
+    assert.ok(allIds.length >= 2, 'ao menos machado e varinha');
     log('reconexão: sessão antiga derrubada, machado continua equipado, saque antigo não duplica');
 
     // 9) Reinício completo do servidor com o mesmo banco
