@@ -1,0 +1,151 @@
+extends Node
+## Teste automático do cliente (roda headless): conecta, cria conta/personagem se preciso,
+## entra no mundo pela mesma rotina da interface, anda, ataca um monstro, coleta o saque
+## e sai com código 0 em caso de sucesso. Uso:
+##   godot --headless --path client -- --autotest --server=ws://127.0.0.1:7777 --account=bot --password=bot123 --class=breaker --name=Robo
+
+var main
+var step := "connect"
+var t0 := 0
+var deadline_ms := 90000
+var target := ""
+var killed := false
+var settle_until := 0
+var fight_started := 0
+var log_lines := []
+
+func say(s: String) -> void:
+	print("[autotest] ", s)
+
+func start(m) -> void:
+	main = m
+	t0 = Time.get_ticks_msec()
+	main.account = main.args.get("account", "bot")
+	main.password = main.args.get("password", "bot123")
+	Net.connected.connect(_connected)
+	Net.message.connect(_msg)
+	say("conectando a %s" % main.server_url)
+	Net.connect_to(main.server_url)
+
+func fail(why: String) -> void:
+	say("FALHOU: " + why)
+	get_tree().quit(1)
+
+func _connected() -> void:
+	Net.request("register", {"account": main.account, "password": main.password}, func(_r):
+		Net.request("login", {"account": main.account, "password": main.password}, _logged))
+
+func _logged(r: Dictionary) -> void:
+	if not r["ok"]:
+		fail(r["reason"])
+		return
+	say("login ok; definições recebidas: %d itens, %d classes" % [main.defs["items"].size(), main.defs["classes"].size()])
+	if r["chars"].size() > 0:
+		_enter(int(r["chars"][0]["id"]))
+	else:
+		Net.request("create_char", {"name": main.args.get("name", "Robo"), "classId": main.args.get("class", "breaker")}, func(c):
+			if not c["ok"]:
+				fail(c["reason"])
+				return
+			say("personagem criado: %s" % c["char"]["name"])
+			_enter(int(c["char"]["id"])))
+
+func _enter(cid: int) -> void:
+	main.enter_world(cid)
+	step = "entering"
+
+func _msg(m: Dictionary) -> void:
+	if m.get("t", "") == "death" and m.get("eid", "") == target and target != "":
+		killed = true
+
+func _process(_d: float) -> void:
+	if Time.get_ticks_msec() - t0 > deadline_ms:
+		fail("tempo esgotado no passo " + step)
+		return
+	match step:
+		"entering":
+			if main.in_world and main.world and not main.world.me().is_empty():
+				var c: Dictionary = main.ch
+				say("no mundo: %s (%s) nível %d em (%.1f, %.1f); %d entidades visíveis; arma %s" % [c["name"], c["classId"], int(c["level"]), float(c["x"]), float(c["z"]), main.world.entities.size(), c["stats"]["weapon"]])
+				Net.request("move", {"x": 30.0, "z": 50.0})
+				step = "moving"
+		"moving":
+			var p: Vector3 = main.world.my_pos()
+			if Vector2(p.x, p.z).distance_to(Vector2(30, 50)) < 1.0:
+				say("chegou em (30, 50) — posição confirmada pelo snapshot do servidor")
+				var best := ""
+				var bd := 1e9
+				for eid in main.world.entities.keys():
+					var e: Dictionary = main.world.entities[eid]
+					if e["data"]["k"] == "m" and e["data"]["def"] == "furrow_rat":
+						var d: float = e["node"].position.distance_to(p)
+						if d < bd:
+							bd = d
+							best = eid
+				if best == "":
+					fail("nenhum Rato de Sulco visível")
+					return
+				target = best
+				main.world.selected = best
+				Net.request("attack", {"target": best})
+				say("atacando %s a %.1f m" % [best, bd])
+				fight_started = Time.get_ticks_msec()
+				step = "fighting"
+		"fighting":
+			if fight_started > 0 and Time.get_ticks_msec() - fight_started > 1200:
+				fight_started = 0
+				_shot("combate")
+			if not main.world.selected.is_empty() and main.world.selected == target:
+				main.hud.refresh_target()
+			if killed:
+				killed = false
+				settle_until = Time.get_ticks_msec() + 600
+				step = "settle"
+		"settle":
+			if Time.get_ticks_msec() >= settle_until:
+				say("Rato de Sulco derrotado; saques individuais visíveis: %d" % main.world.loots.size())
+				step = "loot"
+		"loot":
+			if main.world.loots.is_empty():
+				step = "done"
+			elif main.world.pending_pickup == "":
+				var lid: String = main.world.loots.keys()[0]
+				var lp: Vector3 = main.world.loots[lid]["node"].position
+				main.world.pending_pickup = lid
+				Net.request("move", {"x": lp.x, "z": lp.z})
+		"done":
+			step = "wait_gm"
+			# Em servidor --dev, mostra a descrição de um item de nível 5 (requisitos em vermelho).
+			Net.request("gm", {"cmd": "give", "defId": "axe_1h_t5" if main.ch["classId"] == "breaker" else "wand_t5"}, func(r):
+				if r["ok"]:
+					main.set_char(r["char"])
+					for it in main.ch["items"]:
+						if it["id"] == r["instanceId"]:
+							var slot: String = main.defs["items"][it["defId"]]["slot"]
+							main.hud.inv_tip.text = main.hud.ItemText.describe(main.defs, it, main.ch, main.equipped_in(slot))
+				step = "panels")
+		"panels":
+			main.hud.inv_panel.visible = true
+			main.hud.sheet_panel.visible = true
+			main.hud.refresh_char()
+			step = "shot_panels"
+			settle_until = Time.get_ticks_msec() + 500
+		"shot_panels":
+			if Time.get_ticks_msec() < settle_until:
+				return
+			_shot("paineis")
+			Net.request("char", {}, func(r):
+				var gold := int(r["char"]["gold"])
+				say("coleta concluída; nível %d, XP %d, ouro %d, itens na bolsa %d" % [int(r["char"]["level"]), int(r["char"]["xp"]), gold, int(r["char"]["bagUsed"])])
+				say("OK")
+				get_tree().quit(0))
+			step = "quitting"
+
+## Com --shots=pasta, salva capturas de tela (precisa de janela/GL; não funciona em --headless).
+func _shot(name: String) -> void:
+	if not main.args.has("shots") or DisplayServer.get_name() == "headless":
+		return
+	var path := "%s/%s.png" % [main.args["shots"], name]
+	var img := get_viewport().get_texture().get_image()
+	img.save_png(path)
+	say("captura salva: " + path)

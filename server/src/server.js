@@ -70,6 +70,7 @@ export class GameServer {
   async stop() {
     clearInterval(this.timer); clearInterval(this.saveTimer);
     for (const s of [...this.sessions]) this.dropSession(s);
+    for (const ws of this.wss.clients) ws.terminate();
     await new Promise((r) => this.wss.close(() => r()));
     this.store.close();
   }
@@ -186,7 +187,7 @@ export class GameServer {
     return {
       t: 'defs', items: d.items, classes: d.classes, skills: d.skills, attributes: d.attributes, rarities: d.rarities, slots: d.slots,
       families: d.families, monsters, xp: d.xp.cumulative, levelCap: d.levelCap, skillRules: d.skillRules,
-      map: { id: this.zone.mapId, ...this.zone.map },
+      map: { id: this.zone.mapId, ...this.zone.map }, origins: d.origins,
     };
   }
 

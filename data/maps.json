@@ -13,7 +13,7 @@
         { "name": "Leito seco do rio", "x0": 60, "z0": 0, "x1": 64, "z1": 22 }
       ],
       "spawns": [
-        { "monster": "furrow_rat", "x": 36, "z": 50, "radius": 8, "count": 6 },
+        { "monster": "furrow_rat", "x": 44, "z": 50, "radius": 8, "count": 6 },
         { "monster": "ember_beetle", "x": 52, "z": 32, "radius": 8, "count": 5 },
         { "monster": "rust_hound", "x": 88, "z": 68, "radius": 9, "count": 5 },
         { "monster": "ballast_lizard", "x": 104, "z": 36, "radius": 9, "count": 4 },

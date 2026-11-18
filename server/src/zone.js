@@ -408,14 +408,14 @@ export class Zone {
       return;
     }
     let target = m.targetId ? this.entityById(m.targetId) : null;
-    if (target && (target.char.dead || !this.players.has(target.char.id) || this.inSafeZone(target.char))) {
+    if (target && (target.char.dead || !this.players.has(target.char.id))) {
       m.threat.delete(target.char.id); target = null; m.targetId = null;
     }
     if (!target && m.threat.size) {
       let best = null, bestT = -1;
       for (const [cid, t] of m.threat) {
         const p = this.players.get(cid);
-        if (p && !p.char.dead && !this.inSafeZone(p.char) && t > bestT) { best = p; bestT = t; }
+        if (p && !p.char.dead && t > bestT) { best = p; bestT = t; }
       }
       if (best) { target = best; m.targetId = best.eid; } else m.threat.clear();
     }
