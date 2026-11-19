@@ -78,6 +78,9 @@ Fora da tabela vale o extremo (−6 ou menos: ×0,1; +5 ou mais: ×1,4).
 | Escória Pressurizada | Canais da Eclusa | 18 | normal | agressivo (8 m) | 351 | 29–31 | 53 | 405 | 344 |
 | Fragmento do Custódio | Canais da Eclusa | 19 | elite | agressivo (10 m) | 1476 | 47–50 | 73 | 1748 | 1486 |
 | O Custódio da Eclusa | A Última Eclusa (calabouço) | 20 | chefe | agressivo (10 m) | 9675 | 64–68 | 89 | 9400 | 7990 |
+| Construto de Prova | Arena da Prova | 10 | normal | agressivo (40 m) | 180 | 8–11 | 24 | 40 | 34 |
+| Sentinela de Prova | Arena da Prova | 10 | normal | agressivo (40 m) | 320 | 12–15 | 30 | 80 | 68 |
+| Trava da Comporta | A Última Eclusa (calabouço) | 20 | normal | passivo | 900 | 0–0 | 60 | 0 | 0 |
 
 ### Exemplo solo
 

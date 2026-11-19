@@ -364,6 +364,8 @@ const SCENE_SPOTS := [
 	["estrada_velha", 64.0, 60.0, "estrada_ruinas"],
 	["brejo_bombas", 54.0, 64.0, "brejo_lagoa"],
 	["oficina_soterrada", 28.0, 93.0, "oficina"],
+	["galerias_eco", 30.0, 80.0, "galerias"],
+	["canais_eclusa", 100.0, 30.0, "canais"],
 	["pedrambar", 34.0, 25.0, "pedrambar"],
 	["vau_de_nacar", 25.0, 35.0, "vau"],
 ]
@@ -384,6 +386,9 @@ func _scene_tick() -> void:
 	var wait := 1500
 	if main.args.has("trial") and scene_i == 0 and not trial_done:
 		_trial_tick()
+		return
+	if main.args.has("dungeon") and scene_i == 0 and not dungeon_done:
+		_dungeon_tick()
 		return
 	if scene_i >= SCENE_SPOTS.size() or (scene_i >= 1 and main.args.has("scenequick")):
 		say("OK")
@@ -565,3 +570,64 @@ func _trial_tick() -> void:
 			return
 	trial_step += 1
 	trial_until = Time.get_ticks_msec() + wait
+
+
+# ---------------- calabouço visto no cliente (--sceneshots=pasta --dungeon=NomeDoParceiro) ----------------
+# O parceiro é um cliente simulado (tools/partner.mjs) que aceita o convite e vem para a porta.
+var dungeon_step := 0
+var dungeon_done := false
+var dungeon_until := 0
+var dungeon_shots := 0
+
+func _dungeon_tick() -> void:
+	if Time.get_ticks_msec() < dungeon_until:
+		return
+	var wait := 1500
+	match dungeon_step:
+		0:
+			Net.request("gm", {"cmd": "xp", "level": 20}, func(r):
+				if r["ok"]:
+					main.set_char(r["char"]))
+			Net.request("gm", {"cmd": "quest_done", "quests": ["c5_fragment"]})
+			Net.request("party_invite", {"name": main.args["dungeon"]})
+			wait = 2500
+		1:
+			Net.request("gm", {"cmd": "teleport", "mapId": "canais_eclusa", "x": 100.0, "z": 187.0})
+			wait = 4000
+		2:
+			if main.map_def().get("id", "") != "canais_eclusa" or main.world == null or main.world.me().is_empty():
+				return
+			main.world.cam_dist = 20.0
+			_scene_shot("80_porta_eclusa")
+			Net.request("interact", {"object": "eclusa_gate"}, func(r):
+				say("porta da Eclusa: %s" % ("ok" if r["ok"] else r["reason"])))
+			wait = 4000
+		3:
+			if main.map_def().get("id", "") != "ultima_eclusa" or main.world == null or main.world.me().is_empty():
+				return
+			main.world.cam_dist = 24.0
+			main.world.cam_pitch = 0.85
+			wait = 2000
+		4:
+			_scene_shot("81_camara")
+			var boss := ""
+			for eid in main.world.entities.keys():
+				if main.world.entities[eid]["data"].get("def", "") == "lock_custodian":
+					boss = eid
+			if boss != "":
+				main.world.selected = boss
+				Net.request("attack", {"target": boss})
+			wait = 3500
+		5, 6, 7, 8, 9, 10:
+			_scene_shot("8%d_luta" % dungeon_step)
+			var sk: Array = main.class_skills()
+			if not sk.is_empty() and main.world.selected != "":
+				main.world.use_skill(sk[0])
+			wait = 2500
+		11:
+			say("calabouço visto no cliente")
+			dungeon_done = true
+			scene_i = SCENE_SPOTS.size()
+			return
+	dungeon_step += 1
+	dungeon_until = Time.get_ticks_msec() + wait

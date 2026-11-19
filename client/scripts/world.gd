@@ -155,6 +155,21 @@ func _build_map(map: Dictionary) -> void:
 		npc_nodes[n["id"]] = {"pos": npc.position, "data": n, "node": npc, "home": home, "yaw": home}
 	for o in map.get("objects", []):
 		var op := _gpos(float(o["x"]), float(o["z"]))
+		if o.get("kind", "") == "dungeon":
+			# portão da Eclusa: moldura de pedra, folha de ferro e brilho âmbar entre as frestas
+			var gate := Node3D.new()
+			gate.position = op
+			add_child(gate)
+			for k in [-1.0, 1.0]:
+				Art.part(gate, Art.box(Vector3(1.2, 5.0, 1.2)), Art.toon(Color("#6a625c")), Vector3(k * 2.6, 2.5, 0))
+			Art.part(gate, Art.box(Vector3(6.6, 1.0, 1.4)), Art.toon(Color("#5a524c")), Vector3(0, 5.3, 0))
+			Art.part(gate, Art.box(Vector3(4.0, 4.6, 0.3)), Art.toon(Color("#7a4a30")), Vector3(0, 2.3, 0))
+			Art.part(gate, Art.box(Vector3(0.12, 4.6, 0.34)), Art.toon(Color("#ffb347"), false, Color(1.0, 0.55, 0.15)), Vector3(0, 2.3, 0))
+			var ol2 := _label(o["name"], 36, Color("#ffcf7a"))
+			ol2.position = op + Vector3(0, 6.4, 0)
+			add_child(ol2)
+			object_nodes[o["id"]] = {"pos": op, "data": o, "node": gate, "static": true}
+			continue
 		var crate := Art.part(self, Art.box(Vector3(0.7, 0.7, 0.7)), Art.toon(Color("#9fd3d1"), true, Color(0.15, 0.35, 0.35)), op + Vector3(0, 0.35, 0), Vector3.ONE, Vector3(0, 30, 0))
 		crate.set_meta("bob", true)
 		var ol := _label(o["name"], 30, Color("#bfeeee"))
@@ -450,6 +465,8 @@ func _process(delta: float) -> void:
 		gem.rotation.y += delta * 1.5
 		gem.position.y = sin(_t * 2.2 + float(hash(l["data"]["id"]) % 100)) * 0.08
 	for o in object_nodes.values():
+		if o.get("static", false):
+			continue
 		var on: Node3D = o["node"]
 		on.position.y = (o["pos"] as Vector3).y + 0.4 + sin(_t * 1.8 + (o["pos"] as Vector3).x) * 0.06
 		on.rotation.y += delta * 0.4
@@ -782,3 +799,8 @@ func ground_effect(m: Dictionary) -> void:
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	var mi := Art.part(self, Art.cyl(float(m["radius"]), float(m["radius"]), 0.08, 32), mat, _gpos(float(m["x"]), float(m["z"])) + Vector3(0, 0.06, 0))
 	get_tree().create_timer(float(m["ms"]) / 1000.0).timeout.connect(mi.queue_free)
+
+## Estado do encontro com o chefe (comportas, válvulas, alarme).
+func on_boss(m: Dictionary) -> void:
+	if scenery:
+		scenery.on_boss(m)

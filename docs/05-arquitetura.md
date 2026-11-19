@@ -50,6 +50,10 @@ mmo/
 │   │   ├── server.js              WebSocket, sessões, autenticação, roteamento, idempotência por rid
 │   │   ├── zone.js                simulação da zona: jogadores, monstros (IA), combate, XP, saque
 │   │   ├── nav.js                 grade de ocupação, A* + suavização, seguidor com aceleração/frenagem
+│   │   ├── skills.js              execução das 40 habilidades (formas e efeitos)
+│   │   ├── quests.js              motor de missões (falar, matar, coletar, interagir, entrar no mapa...)
+│   │   ├── smith.js               ferreiro: custo, chance, prévia e rolagem do refino
+│   │   ├── dungeon.js             A Última Eclusa: o Custódio em três fases, avisos, comportas
 │   │   ├── rules.js               regras puras: atributos, estatísticas, dano, acerto, crítico, XP
 │   │   ├── equipment.js           validação de nível/classe/atributos/espaço/empunhadura
 │   │   ├── store.js               SQLite: contas, personagens, instâncias de item, saques, missões
@@ -62,11 +66,15 @@ mmo/
 │   │   ├── data.test.js           coerência dos dados e alcançabilidade dos requisitos
 │   │   ├── death.test.js          queda de conexão durante a morte
 │   │   ├── nav.test.js            caminhos, desvios, destinos inalcançáveis, aceleração e mapas reais
+│   │   ├── skills.test.js         as 40 habilidades numa zona real
+│   │   ├── m2.test.js             aceitação do Marco 2 (grupo de 5, prova de classe, missões)
+│   │   ├── m3.test.js             aceitação do Marco 3 (refino, depósito, elite diária, Custódio com bots)
 │   │   └── helpers/client.js      cliente simulado (mesmo protocolo do Godot)
 │   └── tools/
 │       ├── validate-data.js       validador (também usado nos testes)
 │       ├── gen-docs.js            gera docs/03 e docs/04 a partir dos dados
 │       ├── gen-scenery.js         gera estradas, peças e casas de cada mapa (semente fixa)
+│       ├── partner.mjs            parceiro simulado para ver o calabouço no cliente
 │       └── create-character.js    cria contas/personagens de teste no banco
 ├── client/                        projeto Godot 4.3
 │   ├── project.godot              autoload Net; cena principal
@@ -81,6 +89,7 @@ mmo/
 │       ├── terrain.gd             relevo visual, estradas, lagoas/leito escavados, cordilheira
 │       ├── vrm_character.gd       personagens VRM: materiais, animação no esqueleto, expressões
 │       ├── art.gd / gear.gd / rig.gd  monstros e NPCs procedurais, equipamento, animação dos monstros
+│       ├── vfx.gd                 efeitos de combate: cortes, projéteis, áreas, curas, escudos, avisos
 │       ├── hud.gd                 interface em jogo (barras, atalhos, inventário, ficha, chat, avisos)
 │       ├── item_text.gd           descrição de itens com requisitos em vermelho e comparação
 │       ├── ui_theme.gd            paleta
@@ -130,9 +139,15 @@ Todo pedido do cliente leva `rid` (texto único por pedido). A resposta é `{ t:
 | `respawn` | — | volta ao posto de guarda |
 | `chat` | text | canal da zona |
 | `char` | — | ficha atual |
-| `gm` | cmd (give, teleport, xp) | só com servidor `--dev` |
+| `talk`, `interact`, `buy`, `quests`, `quest_accept`, `quest_turnin` | npc / object / item | NPCs, objetos de missão, loja e diário |
+| `trial_start` | npc | prova de classe (instância solo) |
+| `party_invite`, `party_accept`, `party_decline`, `party_leave`, `party_kick` | name / from | grupos de até 5 |
+| `enhance_quote`, `enhance` | npc (ferreiro), instance | custo, chance e prévia; refino com RNG semeado (falha mantém o grau e gasta ouro e materiais) |
+| `storage_list`, `storage_put`, `storage_take` | npc (guarda-volumes), instance | depósito compartilhado pela conta |
+| `interact` na Porta da Última Eclusa (ou `dungeon_enter`) | object | abre/entra na instância do grupo (2–5, Chave de Comporta, nível 16) |
+| `gm` | cmd (give, teleport, xp, gold, quest_done) | só com servidor `--dev` |
 
-Eventos do servidor: `hello`, `defs`, `snap` (10 Hz: `now` = relógio da zona em ms; por entidade id, tipo, posição, velocidade `vx`/`vz`, vida, alvo), `hit` (origem, destino, dano, crítico, errou, habilidade), `death`, `spawn`, `loot` (só para o dono), `xp`, `level_up`, `char`, `buff`, `ground`, `cast`, `player_dead`, `respawn`, `joined`, `left`, `chat`, `kicked`.
+Eventos do servidor: `hello`, `defs`, `snap` (10 Hz: `now` = relógio da zona em ms; por entidade id, tipo, posição, velocidade `vx`/`vz`, vida, alvo), `hit` (origem, destino, dano, crítico, errou, habilidade), `death`, `spawn`, `loot` (só para o dono), `xp`, `level_up`, `char`, `buff`, `ground`, `cast`, `player_dead`, `respawn`, `joined`, `left`, `chat`, `kicked`, `cast` (habilidade usada, para os efeitos), `shield`, `quest_update`, `party`, `trial`, `boss` (fase, vida, proteção, válvula, comportas) e `warn` (aviso de perigo: círculo ou linha, duração).
 
 ## Movimento no cliente
 
@@ -192,7 +207,7 @@ Critérios (todos cobertos por `server/test/acceptance.test.js`, exceto onde ind
 8. Desconectar e reconectar mantém o equipamento; reiniciar o servidor com o mesmo banco também.
 9. Cliente Godot importa sem erros e completa o `--autotest` contra o servidor (verificado manualmente nesta entrega com Godot 4.3 headless; ver README).
 
-### Marco 2 — Oito classes e grupos
+### Marco 2 — Oito classes e grupos (concluído)
 
 - As 8 classes criáveis, com habilidades de nível 1, 5 e 10 implementadas (efeitos `cone_strike`, `line_strike`, `pull`, `party_buff`, `heal`, `shield_ally`, `aoe_spell`, `debuff`, `charge`, `dash`, `guard_ally`).
 - Mestres de classe nas duas cidades; prova de classe do nível 10 em instância solo, com recompensa concedida uma vez mesmo com queda.
@@ -203,7 +218,7 @@ Critérios (todos cobertos por `server/test/acceptance.test.js`, exceto onde ind
 - Equipamento até o nível 10 com armas de cada família (faixas 1, 5, 9).
 - **Aceitação**: teste automatizado com 5 clientes simulados (um de cada papel) formando grupo e caçando no Poço das Sanguessugas: o Bastião mantém a ameaça de ≥ 3 monstros; a Cantora reduz o consumo de tônicos do grupo em ≥ 40% contra o mesmo grupo sem ela; cada membro recebe XP > 0 mesmo sem causar dano; cada classe equipa uma arma de faixa 9 da sua família apenas após cumprir os requisitos; a prova de classe concede a habilidade uma única vez com reconexão no meio.
 
-### Marco 3 — Níveis 11–20, campanha e calabouço
+### Marco 3 — Níveis 11–20, campanha e calabouço (concluído)
 
 - Níveis 11–20, habilidades de nível 15 e 20, faixas 13, 17 e recompensas de 20.
 - Galerias do Eco e Canais da Eclusa; capítulos 4 e 5; missões secundárias.

@@ -791,6 +791,11 @@ func _on_message(m: Dictionary) -> void:
 		"warn":
 			if world and world.vfx:
 				world.vfx.on_warn(m)
+		"boss":
+			if world:
+				world.on_boss(m)
+			if hud:
+				hud.show_boss(m)
 		"kicked":
 			if hud:
 				hud.show_disconnect(m.get("reason", "Desconectado."))

@@ -111,3 +111,13 @@ Da mais baixa para a mais alta. Uma camada de cima bloqueia o clique nas de baix
 - **Combate**: quem apanha recua um pouco e se encolhe; monstros sem arma dão um bote; quem cai tomba e afunda no chão.
 - **NPCs** viram e olham para quem chega perto.
 - **Câmera** segue com mola amortecida, olha um pouco à frente de quem corre, suaviza zoom e giro e não entra nos morros.
+
+## 7.7 Combate e chefes na tela
+
+- Cada habilidade tem efeito próprio: cortes em arco, flechas e bolas de energia (também nos ataques básicos à distância), leques, faixas, áreas no chão, colunas de cura, bolhas de escudo e espirais de enfraquecimento (`client/scripts/vfx.gd`).
+- **Avisos de perigo** vêm do servidor (`warn`): anel âmbar diante da válvula que vai ventilar, linhas vermelhas no piso antes da descarga, círculos que enchem antes de explodir.
+- No calabouço, o painel do chefe (alto da tela) diz a fase, a vida e o que fazer agora; as comportas descem de verdade na câmara e o alarme pisca na fase 3.
+
+| | |
+|---|---|
+| ![Prova de classe](img/21_prova.png) | ![Canais da Eclusa](img/22_canais.png) |

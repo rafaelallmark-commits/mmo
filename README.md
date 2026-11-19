@@ -2,7 +2,7 @@
 
 MMORPG 3D de ação PvE para PC, com câmera elevada, movimento por clique, caça em grupo em mapas compartilhados e equipamento que exige nível, classe e atributos. Cliente em **Godot 4**, servidor autoritativo de zona em **Node.js**, dados do jogo em **JSON editável**.
 
-> Estado atual: **Marco 1 concluído**; **Marco 2 em andamento** — no servidor: as 8 classes, grupos, chat por canais, missões dos capítulos 1–3, cidades, Brejo e Oficina, prova de classe. No cliente: estrutura de navegação completa (título → entrar → personagens/criação → carregando → mundo, menu de pausa e opções) e visual em **3D estilizado com traço de anime** (personagens VRM, cel shading com contorno, cenário com relevo, grama ao vento, água, cidades muradas), com **movimento fluido** (caminhos por A*, aceleração e frenagem, previsão do próprio personagem e interpolação dos outros).
+> Estado atual: **Marcos 1, 2 e 3 concluídos** — as 8 classes com todas as habilidades (níveis 1, 5, 10, 15 e 20), grupos de até 5, chat por canais, campanha dos capítulos 0 a 5 com missões secundárias, sete mapas abertos (Estrada Velha, Brejo das Bombas, Oficina Soterrada, Galerias do Eco, Canais da Eclusa e as duas cidades), prova de classe, ferreiro (+1 a +3), depósito da conta, elites diárias e o calabouço **A Última Eclusa** (Custódio em três fases para grupos de 2 a 5). Cliente em **3D estilizado com traço de anime** (personagens VRM, cenário com relevo, efeitos das habilidades, avisos do chefe), com **movimento fluido** (caminhos por A*, previsão do próprio personagem e interpolação dos outros). Próximo: Marco 4 (carga, ajuste e documentação final).
 
 | | |
 |---|---|
@@ -11,6 +11,7 @@ MMORPG 3D de ação PvE para PC, com câmera elevada, movimento por clique, caç
 | ![Título](docs/img/01_titulo.png) | ![Mundo](docs/img/08_mundo_perto.png) |
 | ![Posto da Ponte](docs/img/14_estrada_posto.png) | ![Correndo](docs/img/15_corrida.png) |
 | ![Pedrâmbar](docs/img/16_pedrambar.png) | ![Brejo das Bombas](docs/img/17_brejo.png) |
+| ![Galerias do Eco](docs/img/19_galerias.png) | ![O Custódio da Eclusa](docs/img/20_custodio.png) |
 
 Personagens: modelos VRM de anime — **Seed-san model by VirtualCast, Inc.** e amostra VRM © 2022 pixiv Inc., ambos sob a VRM Public License 1.0 (detalhes em [docs/CREDITOS.md](docs/CREDITOS.md)).
 
@@ -119,7 +120,13 @@ Dentro de `server/`:
 npm test
 ```
 
-Roda os testes unitários (regras, equipamento, coerência dos dados) e o **teste de aceitação do Marco 1**: sobe um servidor real numa porta aleatória com banco temporário e conecta dois clientes simulados pelo mesmo protocolo do Godot. Só o teste de aceitação, com a narração de cada passo:
+Roda os 37 testes: unitários (regras, equipamento, navegação, coerência dos dados, as 40 habilidades) e os **testes de aceitação dos Marcos 1, 2 e 3**, que sobem um servidor real numa porta aleatória com banco temporário e conectam clientes simulados pelo mesmo protocolo do Godot. O do Marco 3 inclui o refino conferido em 10.000 tentativas, o depósito da conta, a elite diária e **três grupos de bots** (5 com tanque e curadora, 3 sem tanque, 2 jogadores) vencendo o Custódio reagindo aos avisos, com uma queda de conexão no meio. Só um deles, com a narração:
+
+```bash
+node --test --test-reporter=spec test/m3.test.js
+```
+
+Só o do Marco 1:
 
 ```bash
 npm run test:acceptance
@@ -160,6 +167,20 @@ Tour do cenário: teleporta (comando de mestre — servidor iniciado com `npm ru
 ```bash
 /Applications/Godot.app/Contents/MacOS/Godot --path client -- --sceneshots=/tmp/cenario --server=ws://127.0.0.1:7777 --account=cena --password=cena123 --class=warden --name=Cena
 ```
+
+Ver o calabouço no cliente (servidor com `npm run dev`): um parceiro simulado entra no grupo e vai junto até a porta da Última Eclusa. Num terminal, dentro de `server/`:
+
+```bash
+node tools/partner.mjs ws://127.0.0.1:7777 Parceira
+```
+
+E, em outro terminal, da raiz do repositório:
+
+```bash
+/Applications/Godot.app/Contents/MacOS/Godot --path client -- --sceneshots=/tmp/eclusa --dungeon=Parceira --server=ws://127.0.0.1:7777 --account=lider --password=lider123 --class=emberweaver --name=Lider
+```
+
+Com `--trial` no lugar de `--dungeon=...`, o mesmo modo faz a prova de classe na arena.
 
 ## 5. Reproduzir os cenários críticos à mão
 

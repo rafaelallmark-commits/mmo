@@ -28,6 +28,9 @@ const PALETTES := {
 	"brejo_bombas": {"grass_a": Color("#55703f"), "grass_b": Color("#4f6a4a"), "grass_dry": Color("#7a7a4e"), "leaves": [Color("#4f7a4a"), Color("#5f8a52"), Color("#6a7a3e")], "blade_base": Color("#46623c"), "blade_tip": Color("#86a058")},
 	"oficina_soterrada": {"grass_a": Color("#625e5c"), "grass_b": Color("#57534f"), "grass_dry": Color("#6e665e"), "leaves": [Color("#5a6a5a")], "blade_base": Color("#4e4a42"), "blade_tip": Color("#7a7464")},
 	"pedrambar": {"grass_a": Color("#7a8a48"), "grass_b": Color("#8a9a4e"), "grass_dry": Color("#a8925a"), "leaves": [Color("#6f8c3a"), Color("#88a040"), Color("#c58a3c")], "blade_base": Color("#627a3a"), "blade_tip": Color("#b0bc60")},
+	"galerias_eco": {"grass_a": Color("#5a6470"), "grass_b": Color("#4e5864"), "grass_dry": Color("#6a6a74"), "leaves": [Color("#6a8a8a")], "blade_base": Color("#3e4a52"), "blade_tip": Color("#7a9aa0")},
+	"canais_eclusa": {"grass_a": Color("#5e6e52"), "grass_b": Color("#52624a"), "grass_dry": Color("#74705a"), "leaves": [Color("#5f8a52"), Color("#6a7a3e")], "blade_base": Color("#3e5034"), "blade_tip": Color("#8aa060")},
+	"ultima_eclusa": {"grass_a": Color("#5a5654"), "grass_b": Color("#524e4c"), "grass_dry": Color("#625a54"), "leaves": [Color("#5a6a5a")], "blade_base": Color("#3a3a34"), "blade_tip": Color("#6a6a5a")},
 	"arena_prova": {"grass_a": Color("#c8a878"), "grass_b": Color("#bc9c6c"), "grass_dry": Color("#d0b088"), "leaves": [Color("#6f8c3a")], "blade_base": Color("#6a5a3a"), "blade_tip": Color("#a89060")},
 	"vau_de_nacar": {"grass_a": Color("#6a8a58"), "grass_b": Color("#7a9a64"), "grass_dry": Color("#9aa07a"), "leaves": [Color("#7aa070"), Color("#9ab878"), Color("#d8c27a")], "blade_base": Color("#58784e"), "blade_tip": Color("#a8c88a")},
 }
@@ -364,8 +367,12 @@ func _build_ground_cover(pal: Dictionary) -> void:
 	var density := 0.95
 	if id == "oficina_soterrada":
 		density = 0.08
-	elif id == "arena_prova":
+	elif id in ["arena_prova", "ultima_eclusa"]:
 		density = 0.0
+	elif id == "galerias_eco":
+		density = 0.25
+	elif id == "canais_eclusa":
+		density = 0.6
 	elif map.get("city", false):
 		density = 0.4
 	elif id == "brejo_bombas":
@@ -572,6 +579,8 @@ func _build_structures() -> void:
 		_city_walls()
 	if map.get("id", "") == "arena_prova":
 		_arena()
+	if map.get("id", "") == "ultima_eclusa":
+		_eclusa_chamber()
 
 func _ruins(x0: float, z0: float, x1: float, z1: float) -> void:
 	var root := Node3D.new()
@@ -1121,6 +1130,10 @@ func follow(focus: Vector3) -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
+	if _valve_spin >= 0 and _valve_spin < valve_wheels.size():
+		(valve_wheels[_valve_spin] as Node3D).rotate_object_local(Vector3.FORWARD, delta * 6.0)
+	if alarm_light:
+		alarm_light.light_energy = (0.6 + 0.9 * absf(sin(_t * 4.0))) if _alarm else 0.5
 	if fire_light:
 		fire_light.light_energy = 1.4 + sin(_t * 13.0) * 0.15 + sin(_t * 7.3) * 0.2 + randf() * 0.1
 	for i in flames.size():
@@ -1134,6 +1147,9 @@ const SKIES := {
 	"oficina_soterrada": {"sun": Color("#ffd8b4"), "top": Color("#2a2438"), "horizon": Color("#a8603a"), "ground": Color("#3a2e2a"), "fog": Color("#6a5450"), "fog_density": 0.006, "ambient": Color("#8a7090"), "cloud_lit": Color("#e0a078"), "cloud_shade": Color("#5a4050"), "cover": 0.55},
 	"pedrambar": {"sun": Color("#fff6e8"), "top": Color("#4a78c0"), "horizon": Color("#f8d8a8"), "ground": Color("#6a5a48"), "fog": Color("#c8b8a0"), "fog_density": 0.0022, "ambient": Color("#a898a8"), "cloud_lit": Color("#ffffff"), "cloud_shade": Color("#c0b0c8"), "cover": 0.4},
 	"vau_de_nacar": {"sun": Color("#fff8f0"), "top": Color("#5a8ac8"), "horizon": Color("#e0e8f0"), "ground": Color("#5a6068"), "fog": Color("#b0b8c4"), "fog_density": 0.0022, "ambient": Color("#a0a8b8"), "cloud_lit": Color("#ffffff"), "cloud_shade": Color("#b8c0d8"), "cover": 0.42},
+	"galerias_eco": {"sun": Color("#d8e4ff"), "top": Color("#1e2438"), "horizon": Color("#5a6a9a"), "ground": Color("#2a2e3a"), "fog": Color("#4a5478"), "fog_density": 0.007, "ambient": Color("#8a90b8"), "cloud_lit": Color("#8a9ac8"), "cloud_shade": Color("#3a4060"), "cover": 0.6},
+	"canais_eclusa": {"sun": Color("#fff0d8"), "top": Color("#4a5a70"), "horizon": Color("#c8b89a"), "ground": Color("#3a4038"), "fog": Color("#a8a894"), "fog_density": 0.006, "ambient": Color("#9a9aa0"), "cloud_lit": Color("#f0e8dc"), "cloud_shade": Color("#8a8a98"), "cover": 0.65},
+	"ultima_eclusa": {"sun": Color("#ffc8a0"), "top": Color("#1a1418"), "horizon": Color("#6a3020"), "ground": Color("#2a1e1a"), "fog": Color("#4a2a24"), "fog_density": 0.01, "ambient": Color("#9a7a80"), "cloud_lit": Color("#c06040"), "cloud_shade": Color("#3a1a18"), "cover": 0.7},
 	"arena_prova": {"sun": Color("#ffd0a0"), "top": Color("#3a2a48"), "horizon": Color("#e87a4a"), "ground": Color("#4a3a38"), "fog": Color("#a87a64"), "fog_density": 0.003, "ambient": Color("#9a8090"), "cloud_lit": Color("#ffc890"), "cloud_shade": Color("#7a5068"), "cover": 0.5},
 }
 
@@ -1167,3 +1183,131 @@ static func environment(map_id: String) -> Environment:
 	e.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	e.tonemap_white = 1.3
 	return e
+
+
+# ---------------- A Última Eclusa ----------------
+var gate_doors := {}    # id -> Node3D da folha da comporta (sobe/desce com o progresso)
+var valve_wheels := []  # rodas das válvulas (giram no aviso)
+var valve_rings := []
+
+## Câmara do Custódio: paredes de metal, trilhas de descarga no piso (as linhas da fase 2),
+## quatro válvulas e três comportas de saída com contador.
+func _eclusa_chamber() -> void:
+	var w: float = terrain.w
+	var h: float = terrain.h
+	var metal := lit(Color("#6a625c"))
+	var dark := lit(Color("#3e3834"))
+	var rust := lit(Color("#8a5a3a"))
+	var walls := []
+	for sd in [[Vector2(0.4, 0.4), Vector2(w - 0.4, 0.4)], [Vector2(w - 0.4, 0.4), Vector2(w - 0.4, h - 0.4)], [Vector2(w - 0.4, h - 0.4), Vector2(0.4, h - 0.4)], [Vector2(0.4, h - 0.4), Vector2(0.4, 0.4)]]:
+		var a: Vector2 = sd[0]
+		var b: Vector2 = sd[1]
+		var len := a.distance_to(b)
+		var dir := (b - a) / len
+		var horizontal := absf(dir.y) < 0.5
+		var n := int(len / 4.0)
+		for k in n:
+			var c := a + dir * (k + 0.5) * (len / n)
+			var skip := false
+			for g in map.get("gates", []):
+				if c.distance_to(Vector2(float(g["x"]), float(g["z"]))) < 3.0:
+					skip = true
+			if c.y < 1.5 and absf(c.x - w / 2.0) < 3.0:
+				skip = true # entrada
+			if skip:
+				continue
+			var size := Vector3(len / n + 0.02, 6.0, 1.2) if horizontal else Vector3(1.2, 6.0, len / n + 0.02)
+			walls.append([Gear.box(size), xf(Vector3(c.x, 3.0, c.y))])
+			if k % 2 == 0:
+				walls.append([Gear.cyl(0.35, 0.35, 6.4, 10), xf(Vector3(c.x, 3.2, c.y))])
+	var wm := MeshInstance3D.new()
+	wm.mesh = merge(walls)
+	wm.material_override = metal
+	add_child(wm)
+	# trilhas metálicas do piso (onde as descargas passam)
+	var strips := []
+	for v in [8.0, 16.0, 24.0, 32.0, 40.0]:
+		strips.append([Gear.box(Vector3(w - 2.0, 0.05, 0.35)), xf(Vector3(w / 2.0, 0.03, v))])
+		strips.append([Gear.box(Vector3(0.35, 0.05, h - 2.0)), xf(Vector3(v, 0.03, h / 2.0))])
+	var sm := MeshInstance3D.new()
+	sm.mesh = merge(strips)
+	sm.material_override = lit(Color("#b0a090"), false, Color(0.08, 0.06, 0.04))
+	sm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(sm)
+	# válvulas: cano, roda e anel âmbar no chão
+	for v in map.get("valves", []):
+		var p := Vector3(float(v["x"]), 0, float(v["z"]))
+		var to_c := Vector2(w / 2.0 - p.x, h / 2.0 - p.z).normalized()
+		_part(self, Gear.cyl(0.5, 0.5, 4.0, 12), dark, p + Vector3(-to_c.x, 2.0, -to_c.y) * Vector3(1.2, 1, 1.2))
+		var wheel := Node3D.new()
+		wheel.position = p + Vector3(0, 1.6, 0)
+		wheel.rotation.y = atan2(to_c.x, to_c.y)
+		add_child(wheel)
+		_part(wheel, Gear.torus(0.55, 0.7, 18), rust, Vector3.ZERO, Vector3(90, 0, 0))
+		for k in 3:
+			_part(wheel, Gear.box(Vector3(1.2, 0.08, 0.08)), rust, Vector3.ZERO, Vector3(0, 0, k * 60))
+		valve_wheels.append(wheel)
+		var ring := TorusMesh.new()
+		ring.inner_radius = 2.2
+		ring.outer_radius = 2.5
+		ring.rings = 40
+		var rm := StandardMaterial3D.new()
+		rm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		rm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		rm.albedo_color = Color(1.0, 0.7, 0.2, 0.0)
+		var rmi := _part(self, ring, rm, p + Vector3(0, 0.08, 0), Vector3.ZERO, Vector3(1, 0.1, 1))
+		valve_rings.append(rmi)
+	# comportas de saída
+	for g in map.get("gates", []):
+		var gp := Vector3(float(g["x"]), 0, float(g["z"]))
+		var root := Node3D.new()
+		root.position = gp
+		var along_x: bool = absf(gp.z - h) < 2.0 or gp.z < 2.0
+		root.rotation.y = 0.0 if along_x else PI / 2.0
+		add_child(root)
+		for k in [-1.0, 1.0]:
+			_part(root, Gear.box(Vector3(0.8, 6.5, 1.4)), dark, Vector3(k * 2.6, 3.25, 0))
+		_part(root, Gear.box(Vector3(6.0, 0.8, 1.4)), dark, Vector3(0, 6.5, 0))
+		var door := Node3D.new()
+		door.position.y = 10.0
+		root.add_child(door)
+		_part(door, Gear.box(Vector3(4.4, 4.8, 0.4)), rust, Vector3(0, -2.4, 0))
+		for k in 4:
+			_part(door, Gear.box(Vector3(4.5, 0.15, 0.5)), dark, Vector3(0, -0.5 - k * 1.2, 0))
+		gate_doors[g["id"]] = door
+	# luz vermelha de alarme
+	var l := OmniLight3D.new()
+	l.light_color = Color("#ff6a3a")
+	l.light_energy = 1.0
+	l.omni_range = 34.0
+	l.position = Vector3(w / 2.0, 9.0, h / 2.0)
+	add_child(l)
+	alarm_light = l
+
+var alarm_light: OmniLight3D
+var _valve_spin := -1
+var _alarm := false
+
+## Estado do chefe vindo do servidor (evento boss).
+func on_boss(m: Dictionary) -> void:
+	if m.get("gates", null) != null:
+		for g in m["gates"]:
+			var door: Node3D = gate_doors.get(g["id"], null)
+			if door:
+				var tw := create_tween()
+				# aberta: folha recolhida no alto (y 10); fechada: encosta no chão (y 4,8)
+				tw.tween_property(door, "position:y", lerpf(10.0, 4.8, float(g["progress"])), 0.45)
+				door.set_meta("progress", float(g["progress"]))
+	_alarm = m.get("phase", 1) == 3
+	var v = m.get("valve", null)
+	_valve_spin = -1
+	for i in valve_rings.size():
+		var mat: StandardMaterial3D = valve_rings[i].material_override
+		var on: bool = v != null and int(v.get("i", -1)) == i and v.get("state", "") in ["warning", "venting"]
+		mat.albedo_color.a = 0.0 if not on else (0.85 if v["state"] == "venting" else 0.45)
+		if on:
+			_valve_spin = i
+	if m.get("state", "") in ["reset", "victory"]:
+		_alarm = false
+		for door in gate_doors.values():
+			(door as Node3D).position.y = 10.0

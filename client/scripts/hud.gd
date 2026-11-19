@@ -939,3 +939,42 @@ func _storage_refresh(npc: Dictionary, box: VBoxContainer) -> void:
 						error(res["reason"])
 					_storage_refresh(npc, box)))
 			box.add_child(b2))
+
+
+# ---------------- chefe ----------------
+var boss_label: Label
+
+## Painel do chefe no alto da tela: fase, vida e o que fazer agora.
+func show_boss(m: Dictionary) -> void:
+	if boss_label == null:
+		boss_label = Label.new()
+		boss_label.add_theme_font_size_override("font_size", 18)
+		boss_label.add_theme_color_override("font_color", Color("#ffcf9a"))
+		boss_label.add_theme_color_override("font_outline_color", Color("#1a1210"))
+		boss_label.add_theme_constant_override("outline_size", 6)
+		boss_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		boss_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
+		boss_label.position = Vector2(-320, 86)
+		boss_label.size = Vector2(640, 60)
+		add_child(boss_label)
+	var st: String = m.get("state", "")
+	if st == "victory":
+		boss_label.text = "O Custódio parou. A saída está aberta (anel na entrada)."
+		return
+	if st == "reset":
+		boss_label.text = "Falha: %s" % m.get("reason", "")
+		return
+	var pct := int(round(100.0 * float(m.get("hp", 0)) / maxf(1.0, float(m.get("mhp", 1)))))
+	var tip := ""
+	match int(m.get("phase", 1)):
+		1:
+			tip = "PROTEGIDO (−90%) — quando uma válvula ventilar, acerte o Custódio pelo lado dela" if m.get("protected", false) else "Proteção rompida! Bata agora"
+		2:
+			tip = "Saia das linhas do piso que acenderem em vermelho"
+		3:
+			var g: Array = m.get("gates", [])
+			var parts := []
+			for x in g:
+				parts.append("%d%%" % int(round(float(x["progress"]) * 100.0)))
+			tip = "Comportas descendo: %s — destrua as travas, bata no Braço de Comando" % " · ".join(parts)
+	boss_label.text = "O Custódio da Eclusa — fase %d — %d%%\n%s" % [int(m.get("phase", 1)), pct, tip]

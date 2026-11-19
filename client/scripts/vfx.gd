@@ -386,7 +386,8 @@ func on_shield(m: Dictionary) -> void:
 ## Aviso do servidor (chefes): { shape: circle|line, x, z, radius | yaw, length, width, ms }
 func on_warn(m: Dictionary) -> void:
 	var at: Vector3 = world._gpos(float(m["x"]), float(m["z"]))
+	var c: Color = Color(1.0, 0.7, 0.2) if m.get("color", "") == "amber" else COLORS["danger"]
 	if m.get("shape", "circle") == "line":
-		warn_line(at, float(m.get("yaw", 0.0)), float(m.get("length", 10.0)), float(m.get("width", 2.0)), float(m.get("ms", 1500)))
+		warn_line(at, float(m.get("yaw", 0.0)), float(m.get("length", 10.0)), float(m.get("width", 2.0)), float(m.get("ms", 1500)), c)
 	else:
-		warn_circle(at, float(m.get("radius", 3.0)), float(m.get("ms", 1500)))
+		warn_circle(at, float(m.get("radius", 3.0)), float(m.get("ms", 1500)), c)
