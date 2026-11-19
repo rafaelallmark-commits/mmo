@@ -6,8 +6,11 @@ MMORPG 3D de ação PvE para PC, com câmera elevada, movimento por clique, caç
 
 | | |
 |---|---|
-| ![Título](docs/img/01_titulo.png) | ![Criação de personagem](docs/img/04_criacao.png) |
-| ![Personagens](docs/img/05_personagens.png) | ![Mundo](docs/img/08_mundo_perto.png) |
+| ![Classes de Âmbar](docs/img/11_classes_ambar.png) | ![Classes de Nacre](docs/img/12_classes_nacre.png) |
+| ![Personagens](docs/img/05_personagens.png) | ![Rosto](docs/img/13_rosto.png) |
+| ![Título](docs/img/01_titulo.png) | ![Mundo](docs/img/08_mundo_perto.png) |
+
+Personagens: modelos VRM de anime — **Seed-san model by VirtualCast, Inc.** e amostra VRM © 2022 pixiv Inc., ambos sob a VRM Public License 1.0 (detalhes em [docs/CREDITOS.md](docs/CREDITOS.md)).
 
 *Capturas reais do cliente (Godot 4.3, renderização por software em Linux), geradas pelo modo `--navshots`. Fluxo de telas em [docs/07-navegacao.md](docs/07-navegacao.md).*
 
@@ -23,6 +26,7 @@ MMORPG 3D de ação PvE para PC, com câmera elevada, movimento por clique, caç
 | [docs/06-mundo-e-mapas.md](docs/06-mundo-e-mapas.md) | Cidades, cinco áreas, regras de monstros, morte e resgate, combate legível, telas da interface |
 | [docs/07-navegacao.md](docs/07-navegacao.md) | Telas, camadas dentro do jogo, mapa do mundo, controles e direção gráfica |
 | [docs/DECISOES.md](docs/DECISOES.md) | Todas as decisões tomadas por conta própria e o motivo |
+| [docs/CREDITOS.md](docs/CREDITOS.md) | Créditos e licenças dos modelos de personagem |
 
 ## Requisitos
 
@@ -75,7 +79,7 @@ Com o servidor rodando, de dentro da pasta `mmo` (raiz do repositório), abra **
 /Applications/Godot.app/Contents/MacOS/Godot --path client
 ```
 
-(No Linux/Windows, troque pelo caminho do executável do Godot.) Na primeira vez o Godot importa o projeto e cria `client/.godot/` — leva alguns segundos.
+(No Linux/Windows, troque pelo caminho do executável do Godot.) Na primeira vez o Godot importa o projeto e cria `client/.godot/`: leva cerca de meio minuto, porque extrai as texturas dos modelos de personagem (≈ 60 MB a mais em disco).
 
 Para já abrir com a conta preenchida:
 
@@ -136,6 +140,12 @@ Teste automático do **cliente** (headless, contra um servidor rodando), da raiz
 ```
 
 Ele cria a conta/personagem se preciso, entra no mundo pela mesma rotina da interface, anda até (30, 50), ataca um Rato de Sulco, coleta o saque e termina com `[autotest] OK` (código de saída 0). Mensagens `Parameter "m" is null` vêm do renderizador "dummy" do modo headless e são inofensivas.
+
+Vitrine com as 8 classes, monstros e NPCs (salva capturas, inclusive closes do rosto):
+
+```bash
+/Applications/Godot.app/Contents/MacOS/Godot --path client -- --gallery=/tmp/vitrine
+```
 
 Percorrer todas as telas e salvar uma captura de cada (precisa de janela, não use `--headless`):
 

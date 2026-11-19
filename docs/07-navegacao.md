@@ -96,4 +96,4 @@ Da mais baixa para a mais alta. Uma camada de cima bloqueia o clique nas de baix
 - **Cores**: saturadas, mas dentro da paleta de ferrugem e nácar (céu do amanhecer de violeta para pêssego, chão ocre, verde-oliva); vermelho reservado para perigo e requisitos não atendidos.
 - **Cenário**: árvores, pedras e tufos de grama espalhados com semente fixa (o mesmo mapa sempre fica igual), fora da estrada e das áreas de monstros.
 
-Os modelos atuais são montados por código com formas simples já nesse estilo (`client/scripts/art.gd`); a arte definitiva substitui as malhas mantendo os mesmos materiais.
+**Personagens:** modelos VRM de anime (Seed-san e a amostra da pixiv — créditos em `docs/CREDITOS.md`) com rosto pintado, cabelo e expressões (piscar, sorrir, cara brava ao atacar, careta ao apanhar). Cada classe recolore cabelo, olhos e roupa e ganha equipamento próprio preso aos ossos (`client/scripts/vrm_character.gd`, `client/scripts/gear.gd`). Monstros e cenário continuam montados por código no mesmo estilo (`client/scripts/art.gd`).
