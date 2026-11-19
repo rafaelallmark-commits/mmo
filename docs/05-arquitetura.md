@@ -76,6 +76,7 @@ mmo/
 │       ├── gen-scenery.js         gera estradas, peças e casas de cada mapa (semente fixa)
 │       ├── partner.mjs            parceiro simulado para ver o calabouço no cliente
 │       └── create-character.js    cria contas/personagens de teste no banco
+├── tools/poses/                   modelo do braço e gerador da tabela WPOSES (poses guiadas pela arma)
 ├── client/                        projeto Godot 4.3
 │   ├── project.godot              autoload Net; cena principal
 │   ├── scenes/main.tscn
