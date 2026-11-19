@@ -485,6 +485,7 @@ static func monster(def: Dictionary) -> Node3D:
 	var s = 0.85 + float(def.get("level", 1)) * 0.03 + (0.55 if rank == "elite" else 0.0) + (1.2 if rank == "boss" else 0.0)
 	var col: Color = MONSTER_COLORS.get(id, FAMILY_COLORS.get(fam, Color.GRAY))
 	var fierce: bool = def.get("aggro", "passive") == "aggressive"
+	root.cycle_len = (1.6 if fam == "machine" else 1.15) * s
 	if fam == "machine":
 		_robot(root, body, s, col, rank)
 	elif fam == "spirit":
@@ -651,28 +652,6 @@ static func publish_sun(sun: DirectionalLight3D, ambient := Color(0.18, 0.17, 0.
 	RenderingServer.global_shader_parameter_set("sun_color", sun.light_color * minf(sun.light_energy, 1.2))
 	RenderingServer.global_shader_parameter_set("ambient_tint", ambient)
 
-## Céu do amanhecer (violeta → pêssego) e névoa leve.
+## Céu e névoa do mapa (ver scenery.gd).
 static func environment(map_id: String) -> Environment:
-	var e = Environment.new()
-	var sky = Sky.new()
-	var sm = ProceduralSkyMaterial.new()
-	sm.sky_top_color = Color("#5a63a8")
-	sm.sky_horizon_color = Color("#f2b48a")
-	sm.ground_horizon_color = Color("#c99a7a")
-	sm.ground_bottom_color = Color("#3a2e3a")
-	sm.sun_angle_max = 20.0
-	if map_id in ["oficina_soterrada", "arena_prova"]:
-		sm.sky_top_color = Color("#2a2438")
-		sm.sky_horizon_color = Color("#8a5a4a")
-	sky.sky_material = sm
-	e.background_mode = Environment.BG_SKY
-	e.sky = sky
-	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	e.ambient_light_color = Color("#9a8fb0")
-	e.ambient_light_energy = 0.32
-	e.fog_enabled = true
-	e.fog_light_color = Color("#d8b0a0")
-	e.fog_density = 0.004
-	e.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	e.tonemap_white = 1.3
-	return e
+	return preload("res://scripts/scenery.gd").environment(map_id)

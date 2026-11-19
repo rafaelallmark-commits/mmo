@@ -41,3 +41,7 @@ ambient_tint={
 "type": "color",
 "value": Color(0.18, 0.17, 0.2, 1)
 }
+focus_pos={
+"type": "vec3",
+"value": Vector3(0, -100, 0)
+}
