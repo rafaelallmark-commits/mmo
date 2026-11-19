@@ -23,6 +23,7 @@ const STATES := [
 	["correr_a", 5.0, 0.0, false, -1.0, true],
 	["correr_b", 5.0, 0.3, false, -1.0, true],
 	["golpe_preparo", 0.0, 0.0, true, 0.33, false],
+	["golpe_tensao_lado", 0.0, 0.0, true, 0.37, true],
 	["golpe_impacto", 0.0, 0.0, true, 0.5, false],
 	["golpe_impacto_lado", 0.0, 0.0, true, 0.5, true],
 ]

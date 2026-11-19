@@ -172,25 +172,26 @@ static func weapon(family: String, accent := GOLD) -> Node3D:
 		"spear_2h":
 			part(w, cyl(0.02, 0.022, 1.75, 10), mat(WOOD), Vector3(0, 0.45, 0))
 			grip(w, 0.022, -0.05, 0.25, 5)
-			grip(w, 0.022, 0.75, 0.95, 3)
+			grip(w, 0.022, 0.52, 0.74, 3)  # onde a mão da frente pega na guarda e a de trás ao carregar
 			part(w, cyl(0.034, 0.03, 0.06, 10), mat(accent), Vector3(0, 1.34, 0))
 			var leaf := PackedVector2Array([Vector2(-0.025, 0.0), Vector2(0.025, 0.0), Vector2(0.05, 0.1), Vector2(0.03, 0.22), Vector2(0.0, 0.32), Vector2(-0.03, 0.22), Vector2(-0.05, 0.1)])
 			part(w, extrude(leaf, 0.014), mat(STEEL, true, Color(0, 0, 0), 0.004), Vector3(0, 1.37, 0))
 			part(w, box(Vector3(0.14, 0.02, 0.02)), mat(STEEL_DARK), Vector3(0, 1.35, 0))
 			part(w, cyl(0.0, 0.03, 0.12, 6), mat(Color("#c03a2a"), false), Vector3(0, 1.27, 0), Vector3.ONE, Vector3(180, 0, 0))
 		"bow":
-			# arco em arco de círculo com segmentos, punho e corda
+			# arco em arco de círculo com segmentos; o punho fica no meio da madeira (origem) e a
+			# corda passa 11 cm atrás, do lado do arqueiro (−Z); o tiro sai para +Z
 			var limbs := 9
 			for i in limbs:
 				var t := (float(i) / (limbs - 1)) * 2.0 - 1.0
 				var y := t * 0.52
-				var z := (1.0 - t * t) * 0.11
-				var ang := atan2(-t * 0.22, 0.52 / (limbs - 1) * 2.0)
+				var z := (1.0 - t * t) * 0.11 - 0.11
+				var ang := atan2(-t * 0.22, 0.52)  # tangente do arco: dz/dt sobre dy/dt
 				part(w, cyl(0.014, 0.018, 0.13, 8), mat(WOOD), Vector3(0, y, z), Vector3.ONE, Vector3(rad_to_deg(ang), 0, 0))
 			for k in [-1.0, 1.0]:
-				part(w, sphere(0.02), mat(accent), Vector3(0, k * 0.54, 0.0))
+				part(w, sphere(0.02), mat(accent), Vector3(0, k * 0.54, -0.11))
 			grip(w, 0.022, -0.06, 0.06, 3)
-			part(w, cyl(0.003, 0.003, 1.06, 4), mat(Color("#efe6d2"), false), Vector3(0, 0, -0.005))
+			part(w, cyl(0.003, 0.003, 1.06, 4), mat(Color("#efe6d2"), false), Vector3(0, 0, -0.115))
 		"sword_1h", "sword_2h":
 			var big := 1.3 if family == "sword_2h" else 1.0
 			grip(w, 0.02, -0.11 * big, 0.06, 3)
@@ -203,7 +204,7 @@ static func weapon(family: String, accent := GOLD) -> Node3D:
 			part(w, crystal(0.018, 0.04), mat(Color("#5ab0ff"), false, Color(0.2, 0.45, 0.9)), Vector3(0, 0.08, 0.025), Vector3.ONE, Vector3(90, 0, 0))
 		"javelin":
 			part(w, cyl(0.014, 0.016, 1.15, 8), mat(WOOD), Vector3(0, 0.32, 0))
-			grip(w, 0.016, -0.05, 0.12, 3)
+			grip(w, 0.016, 0.22, 0.42, 3)  # ponto de equilíbrio, onde a mão segura
 			var head := PackedVector2Array([Vector2(-0.018, 0.0), Vector2(0.018, 0.0), Vector2(0.04, 0.05), Vector2(0.016, 0.06), Vector2(0.0, 0.2), Vector2(-0.016, 0.06), Vector2(-0.04, 0.05)])
 			part(w, extrude(head, 0.01), mat(STEEL, true, Color(0, 0, 0), 0.004), Vector3(0, 0.89, 0))
 			for k in [-1, 1]:
@@ -223,7 +224,7 @@ static func weapon(family: String, accent := GOLD) -> Node3D:
 			part(w, crystal(0.04, 0.1), mat(Color("#b6e0ff"), false, Color(0.4, 0.6, 0.95)), Vector3(0, 0.45, 0))
 		"staff_2h":
 			part(w, cyl(0.022, 0.028, 1.55, 8), mat(WOOD), Vector3(0, 0.38, 0))
-			grip(w, 0.026, -0.05, 0.2, 4)
+			grip(w, 0.026, 0.42, 0.78, 4)  # altura das mãos: apoiado, em guarda e carregando
 			for i in 3:
 				part(w, cyl(0.03, 0.03, 0.025, 8), mat(accent), Vector3(0, 0.55 + i * 0.25, 0))
 			part(w, torus(0.07, 0.085), mat(accent), Vector3(0, 1.24, 0), Vector3.ONE, Vector3(90, 0, 0))
