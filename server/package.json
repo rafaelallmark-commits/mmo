@@ -4,7 +4,9 @@
   "description": "Servidor autoritativo de zona de CINZAS DO MERIDIANO (Marco 1).",
   "type": "module",
   "private": true,
-  "engines": { "node": ">=22.13" },
+  "engines": {
+    "node": ">=22.13"
+  },
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning src/main.js",
     "dev": "node --disable-warning=ExperimentalWarning src/main.js --dev",
@@ -12,7 +14,8 @@
     "test:acceptance": "node --disable-warning=ExperimentalWarning --test --test-reporter=spec test/acceptance.test.js",
     "validate-data": "node --disable-warning=ExperimentalWarning tools/validate-data.js",
     "gen-docs": "node --disable-warning=ExperimentalWarning tools/gen-docs.js",
-    "create-character": "node --disable-warning=ExperimentalWarning tools/create-character.js"
+    "create-character": "node --disable-warning=ExperimentalWarning tools/create-character.js",
+    "gen-scenery": "node --disable-warning=ExperimentalWarning tools/gen-scenery.js"
   },
   "dependencies": {
     "ws": "8.18.3"

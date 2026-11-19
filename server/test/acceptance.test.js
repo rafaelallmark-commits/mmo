@@ -43,10 +43,11 @@ async function joinAs(url, label, account, { create, classId, name } = {}) {
 async function goTo(c, x, z, timeout = 8000) {
   const r = await c.request('move', { x, z });
   assert.equal(r.ok, true, r.reason);
+  const dest = r.dest ?? { x, z }; // o servidor pode deslocar o destino para fora de um tronco
   const t0 = Date.now();
   while (Date.now() - t0 < timeout) {
     const me = c.me();
-    if (me && d2(me, { x, z }) < 0.6) return me;
+    if (me && d2(me, dest) < 0.6) return me;
     await sleep(40);
   }
   throw new Error(`${c.label}: não chegou em ${x},${z}`);

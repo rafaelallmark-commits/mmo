@@ -8,12 +8,22 @@ import {
 import { equippedList, bagCount, BAG_CAPACITY } from './equipment.js';
 import { executeSkill, IMPLEMENTED_KINDS } from './skills.js';
 import { makeRng } from './rng.js';
+import { NavGrid, followPath, brake } from './nav.js';
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const r2 = (v) => Math.round(v * 100) / 100;
 const LOOT_TTL_MS = 30 * 60 * 1000;
 const NPC_RANGE = 6;
 const OBJECT_RANGE = 3.5;
+
+// Construções (casas) viram retângulos bloqueados; rotação de 90°/270° troca largura e fundo.
+function structureRects(structs) {
+  return structs.map((h) => {
+    const sideways = h.rot === 90 || h.rot === 270;
+    const hw = (sideways ? h.d : h.w) / 2, hd = (sideways ? h.w : h.d) / 2;
+    return { name: h.type, x0: h.x - hw, z0: h.z - hd, x1: h.x + hw, z1: h.z + hd };
+  });
+}
 
 export class Zone {
   // hooks: { send(charId,msg), broadcast(msg) [só esta zona], partyIdOf(charId), onKillCredit(p, monsterDefId), onLevelUp(p) }
@@ -36,6 +46,11 @@ export class Zone {
     this.npcs = this.map.npcs ?? [];
     this.objects = this.map.objects ?? [];
     this.portals = this.map.portals ?? [];
+    // navegação: áreas bloqueadas + construções + peças de cenário com colisão
+    this.rects = [...(this.map.blocked ?? []), ...structureRects(this.map.structures ?? [])];
+    this.nav = new NavGrid({ size: this.map.size, blocked: this.rects, props: this.map.props ?? [] }, { cell: 0.5, radius: 0.4 });
+    this.isFreeFn = (x, z) => this.nav.isFree(x, z);
+    this.mv = { accel: this.f.movement.accel ?? 18, decel: this.f.movement.decel ?? 24 };
     this.monsterSeq = 0;
     for (const sp of this.map.spawns ?? []) for (let i = 0; i < sp.count; i++) this.spawnMonster(sp);
   }
@@ -53,8 +68,11 @@ export class Zone {
   placeMonster(m) {
     const a = this.rng() * Math.PI * 2, d = Math.sqrt(this.rng()) * m.spawn.radius;
     m.x = m.spawn.x + Math.cos(a) * d; m.z = m.spawn.z + Math.sin(a) * d;
+    const free = this.nav.nearestFree(m.x, m.z, 4) ?? this.nav.nearestFree(m.spawn.x, m.spawn.z, 8) ?? { x: m.spawn.x, z: m.spawn.z };
+    m.x = free.x; m.z = free.z;
     m.home = { x: m.x, z: m.z };
     m.hp = m.def.hp; m.state = 'idle'; m.targetId = null; m.threat.clear(); m.score.clear(); m.dots = []; m.fx = []; m.dest = null;
+    m.path = null; m.chase = null; m.speed = 0; m.vx = 0; m.vz = 0; m.slotOffset = (this.rng() - 0.5) * 1.8;
   }
 
   // ---------- jogadores ----------
@@ -62,6 +80,11 @@ export class Zone {
     const p = { eid: `p${char.id}`, char, zone: this, cooldowns: {}, buffs: [], guards: [], shield: null, nextAttackPct: 0, targetId: null, dest: null, nextAttackAt: 0, lastCombatAt: -1e9, potionReadyAt: 0, facing: { x: 1, z: 0 } };
     if (char.dead) this.respawnAtPost(p, false); // caiu (ou desconectou) morto: restaura no posto
     if (!this.inBounds(char.x, char.z) || this.isBlocked(char.x, char.z)) { char.x = this.map.spawnPoint.x; char.z = this.map.spawnPoint.z; }
+    if (!this.nav.isFree(char.x, char.z)) {
+      const f = this.nav.nearestFree(char.x, char.z, 6) ?? this.nav.nearestFree(this.map.spawnPoint.x, this.map.spawnPoint.z, 10);
+      if (f) { char.x = f.x; char.z = f.z; }
+    }
+    char.speed = 0; char.vx = 0; char.vz = 0;
     char.mapId = this.mapId;
     this.grantUnlockedSkills(char);
     this.players.set(char.id, p);
@@ -125,7 +148,7 @@ export class Zone {
   }
 
   isBlocked(x, z) {
-    return (this.map.blocked ?? []).some((b) => x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1);
+    return this.rects.some((b) => x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1);
   }
 
   inSafeZone(pos) {
@@ -155,19 +178,23 @@ export class Zone {
     if (typeof x !== 'number' || typeof z !== 'number' || !Number.isFinite(x) || !Number.isFinite(z)) return { ok: false, code: 'bad_request', reason: 'Destino inválido.' };
     if (!this.inBounds(x, z)) return { ok: false, code: 'out_of_bounds', reason: 'Destino fora do mapa.' };
     if (this.isBlocked(x, z)) return { ok: false, code: 'blocked', reason: 'Não dá para chegar ali.' };
-    p.dest = { x, z }; p.targetId = null;
-    return { ok: true };
+    const c = p.char;
+    const path = this.nav.findPath(c.x, c.z, x, z);
+    if (!path || !path.length) return { ok: false, code: 'blocked', reason: 'Não dá para chegar ali.' };
+    p.path = path; p.dest = path[path.length - 1]; p.targetId = null; p.chase = null;
+    // o cliente usa o caminho para prever o movimento sem esperar os snapshots
+    return { ok: true, dest: { x: r2(p.dest.x), z: r2(p.dest.z) }, path: path.map((q) => [r2(q.x), r2(q.z)]) };
   }
 
   cmdAttack(p, targetId) {
     if (p.char.dead) return { ok: false, code: 'dead', reason: 'Você está caído.' };
     const m = this.monsters.get(targetId);
     if (!m || m.state === 'dead') return { ok: false, code: 'bad_target', reason: 'Alvo inválido.' };
-    p.targetId = targetId; p.dest = null;
+    p.targetId = targetId; p.dest = null; p.path = null;
     return { ok: true };
   }
 
-  cmdStop(p) { p.targetId = null; p.dest = null; return { ok: true }; }
+  cmdStop(p) { p.targetId = null; p.dest = null; p.path = null; p.chase = null; return { ok: true }; }
 
   cmdPortal(p, portalId) {
     const pt = this.portals.find((x) => x.id === portalId);
@@ -296,21 +323,21 @@ export class Zone {
   teleportSafe(p, x, z) {
     const [w, h] = this.map.size;
     x = Math.max(0, Math.min(w, x)); z = Math.max(0, Math.min(h, z));
-    if (!this.isBlocked(x, z)) { p.char.x = x; p.char.z = z; p.dest = null; }
+    if (!this.isBlocked(x, z) && this.nav.isFree(x, z)) { p.char.x = x; p.char.z = z; p.dest = null; p.path = null; p.char.speed = 0; }
   }
 
   pullMonster(m, p, keep) {
     const dx = m.x - p.char.x, dz = m.z - p.char.z;
     const d = Math.hypot(dx, dz) || 1;
     const nx = p.char.x + (dx / d) * keep, nz = p.char.z + (dz / d) * keep;
-    if (!this.isBlocked(nx, nz)) { m.x = nx; m.z = nz; }
+    if (!this.isBlocked(nx, nz) && this.nav.isFree(nx, nz)) { m.x = nx; m.z = nz; m.path = null; m.chase = null; }
   }
 
   pushMonster(m, from, meters) {
     const dx = m.x - from.x, dz = m.z - from.z;
     const d = Math.hypot(dx, dz) || 1;
     const nx = m.x + (dx / d) * meters, nz = m.z + (dz / d) * meters;
-    if (this.inBounds(nx, nz) && !this.isBlocked(nx, nz)) { m.x = nx; m.z = nz; }
+    if (this.inBounds(nx, nz) && !this.isBlocked(nx, nz) && this.nav.isFree(nx, nz)) { m.x = nx; m.z = nz; m.path = null; m.chase = null; }
   }
 
   addBuff(p, buff) {
@@ -388,6 +415,34 @@ export class Zone {
     this.tickGround();
   }
 
+  // Persegue um ponto: direto se houver linha de visão; senão por caminho A* recalculado
+  // a cada 0,4 s ou quando o alvo andar mais de 1,5 m.
+  chase(e, goal, stopAt, speed, dt, opts) {
+    if (this.nav.lineOfSight(e.x, e.z, goal.x, goal.z)) e.chase = { path: [{ x: goal.x, z: goal.z }], at: this.now, goal };
+    else if (!e.chase || !e.chase.path.length || this.now >= e.chase.at + 400 || Math.hypot(e.chase.goal.x - goal.x, e.chase.goal.z - goal.z) > 1.5) {
+      e.chase = { path: this.nav.findPath(e.x, e.z, goal.x, goal.z) ?? [{ x: goal.x, z: goal.z }], at: this.now, goal };
+    }
+    followPath(e, e.chase.path, dt, speed, { ...opts, stopAt, isFree: this.isFreeFn });
+  }
+
+  // Ponto em volta do alvo onde este monstro prefere ficar (espalha o grupo) + separação.
+  attackSlot(m, tc, reach) {
+    let dx = m.x - tc.x, dz = m.z - tc.z;
+    const len = Math.hypot(dx, dz) || 1;
+    dx /= len; dz /= len;
+    const ca = Math.cos(m.slotOffset), sa = Math.sin(m.slotOffset);
+    let gx = tc.x + (dx * ca - dz * sa) * reach * 0.75;
+    let gz = tc.z + (dx * sa + dz * ca) * reach * 0.75;
+    for (const o of this.monsters.values()) {
+      if (o === m || o.state === 'dead') continue;
+      const ox = m.x - o.x, oz = m.z - o.z;
+      const od = Math.hypot(ox, oz);
+      if (od > 1e-3 && od < 1.3) { gx += (ox / od) * (1.3 - od) * 0.8; gz += (oz / od) * (1.3 - od) * 0.8; }
+    }
+    if (this.nav.isFree(gx, gz)) return { x: gx, z: gz };
+    return this.nav.nearestFree(gx, gz, 2) ?? { x: tc.x, z: tc.z };
+  }
+
   moveToward(e, tx, tz, speed, dt, stopAt = 0) {
     const dx = tx - e.x, dz = tz - e.z;
     const d = Math.hypot(dx, dz);
@@ -411,22 +466,28 @@ export class Zone {
     if (p.shield && p.shield.until <= this.now) p.shield = null;
     const speed = this.f.movement.playerSpeed * (1 + (p.stats.moveSpeedPct || 0) / 100);
     const ox = c.x, oz = c.z;
+    const opts = { accel: this.mv.accel, decel: this.mv.decel };
     if (p.targetId) {
       const t = this.monsters.get(p.targetId);
-      if (!t || t.state === 'dead') { p.targetId = null; }
+      if (!t || t.state === 'dead') { p.targetId = null; c.chase = null; brake(c, dt, this.mv.decel); }
       else {
         const range = p.stats.range;
         const d = dist(c, t);
-        if (d > range) this.moveToward(c, t.x, t.z, speed, dt, Math.max(0.5, range - 0.3));
-        else if (this.now >= p.nextAttackAt) {
-          p.nextAttackAt = this.now + p.stats.attackIntervalMs;
-          p.lastCombatAt = this.now;
-          this.hitMonster(p, t, null, null);
+        if (d > range) this.chase(c, t, Math.max(0.5, range - 0.3), speed, dt, opts);
+        else {
+          brake(c, dt, this.mv.decel * 1.5);
+          if (this.now >= p.nextAttackAt) {
+            p.nextAttackAt = this.now + p.stats.attackIntervalMs;
+            p.lastCombatAt = this.now;
+            this.hitMonster(p, t, null, null);
+          }
         }
         p.facing = { x: (t.x - c.x) / (d || 1), z: (t.z - c.z) / (d || 1) };
       }
-    } else if (p.dest) {
-      if (this.moveToward(c, p.dest.x, p.dest.z, speed, dt)) p.dest = null;
+    } else if (p.path && p.path.length) {
+      if (followPath(c, p.path, dt, speed, { ...opts, isFree: this.isFreeFn })) { p.path = null; p.dest = null; }
+    } else {
+      brake(c, dt, this.mv.decel);
     }
     if (c.x !== ox || c.z !== oz) {
       const md = Math.hypot(c.x - ox, c.z - oz);
@@ -523,7 +584,8 @@ export class Zone {
         this.store.saveCharacter(c);
         const drops = s.lootEligible ? this.rollLoot(m, c) : [];
         for (const d of drops) {
-          const row = { id: randomUUID(), charId: c.id, defId: d.defId, qty: d.qty, gold: d.gold, mapId: this.mapId, x: r2(m.x + (this.rng() - 0.5) * 2), z: r2(m.z + (this.rng() - 0.5) * 2), monsterDef: m.defId, killId, createdAt: nowWall, expiresAt: nowWall + LOOT_TTL_MS };
+          const lp = this.nav.nearestFree(m.x + (this.rng() - 0.5) * 2, m.z + (this.rng() - 0.5) * 2, 3) ?? { x: m.x, z: m.z };
+          const row = { id: randomUUID(), charId: c.id, defId: d.defId, qty: d.qty, gold: d.gold, mapId: this.mapId, x: r2(lp.x), z: r2(lp.z), monsterDef: m.defId, killId, createdAt: nowWall, expiresAt: nowWall + LOOT_TTL_MS };
           this.store.insertLoot(row);
           d.row = row;
         }
@@ -577,8 +639,10 @@ export class Zone {
     const rooted = !!this.monsterFx(m, 'root');
     const slow = this.monsterFx(m, 'slow');
     const speed = rooted ? 0 : m.def.moveSpeed * (slow ? 1 - slow.pct / 100 : 1);
+    const mopts = { accel: 14, decel: 20 };
     if (m.state === 'return') {
-      if (this.moveToward(m, m.home.x, m.home.z, m.def.moveSpeed * 1.5, dt)) { m.state = 'idle'; m.hp = m.def.hp; m.score.clear(); }
+      if (!m.path) m.path = this.nav.findPath(m.x, m.z, m.home.x, m.home.z) ?? [{ x: m.home.x, z: m.home.z }];
+      if (followPath(m, m.path, dt, m.def.moveSpeed * 1.5, { ...mopts, isFree: this.isFreeFn })) { m.state = 'idle'; m.hp = m.def.hp; m.score.clear(); m.path = null; }
       return;
     }
     let target = m.targetId ? this.entityById(m.targetId) : null;
@@ -595,7 +659,7 @@ export class Zone {
       if (!best) m.threat.clear();
       else if (!target || (best !== target && bestT > (m.threat.get(target.char.id) || 0) * this.f.threat.switchMargin)) { target = best; m.targetId = best.eid; }
     }
-    if (!target && m.state === 'chase') { m.state = 'return'; return; }
+    if (!target && m.state === 'chase') { m.state = 'return'; m.path = null; m.chase = null; return; }
     if (!target && m.def.aggroRadius > 0) {
       for (const p of this.players.values()) {
         if (!p.char.dead && !this.inSafeZone(p.char) && dist(p.char, m) <= m.def.aggroRadius) { target = p; m.targetId = p.eid; m.state = 'chase'; m.threat.set(p.char.id, this.f.threat.proximityAggro); break; }
@@ -604,18 +668,36 @@ export class Zone {
     if (!target) {
       if (this.now >= m.wanderAt) {
         m.wanderAt = this.now + 4000 + this.rng() * 6000;
-        const a = this.rng() * Math.PI * 2, d = this.rng() * Math.min(4, m.spawn.radius);
-        m.dest = { x: m.home.x + Math.cos(a) * d, z: m.home.z + Math.sin(a) * d };
+        const a = this.rng() * Math.PI * 2, d = 1 + this.rng() * Math.min(4, m.spawn.radius);
+        const tx = m.home.x + Math.cos(a) * d, tz = m.home.z + Math.sin(a) * d;
+        m.path = this.nav.isFree(tx, tz) ? this.nav.findPath(m.x, m.z, tx, tz) : null;
       }
-      if (m.dest && speed > 0 && this.moveToward(m, m.dest.x, m.dest.z, speed * 0.4, dt)) m.dest = null;
+      // passeio calmo: acelera e para devagar
+      if (m.path && m.path.length) { if (followPath(m, m.path, dt, speed * 0.4, { accel: 4, decel: 6, isFree: this.isFreeFn })) m.path = null; }
+      else brake(m, dt, 8);
       return;
     }
     if (m.def.leashRadius > 0 && dist(m, m.home) > m.def.leashRadius) {
-      m.state = 'return'; m.targetId = null; m.threat.clear(); return;
+      m.state = 'return'; m.targetId = null; m.threat.clear(); m.path = null; m.chase = null; return;
     }
     const tc = target.char;
     const d = dist(m, tc);
-    if (d > m.def.attackRange) { if (speed > 0) this.moveToward(m, tc.x, tc.z, speed, dt, m.def.attackRange * 0.8); return; }
+    m.path = null;
+    if (d > m.def.attackRange) {
+      this.chase(m, this.attackSlot(m, tc, m.def.attackRange), 0, speed, dt, mopts);
+      return;
+    }
+    brake(m, dt, mopts.decel * 1.5);
+    // em alcance: se encostou em outro monstro, abre espaço devagar
+    for (const o of this.monsters.values()) {
+      if (o === m || o.state === 'dead') continue;
+      const ox = m.x - o.x, oz = m.z - o.z;
+      const od = Math.hypot(ox, oz);
+      if (od > 1e-3 && od < 0.9) {
+        const nx = m.x + (ox / od) * 0.6 * dt, nz = m.z + (oz / od) * 0.6 * dt;
+        if (this.nav.isFree(nx, nz)) { m.x = nx; m.z = nz; }
+      }
+    }
     if (this.now >= m.nextAttackAt) {
       m.nextAttackAt = this.now + m.def.attackIntervalMs;
       const res = monsterAttack(m.def, target.stats, this.data, this.rng);
@@ -688,12 +770,12 @@ export class Zone {
     for (const p of this.players.values()) {
       const c = p.char;
       const w = equippedList(c, this.data).find((e) => e.def.slot === 'weapon');
-      ents.push({ id: p.eid, k: 'p', n: c.name, cls: c.classId, lvl: c.level, x: r2(c.x), z: r2(c.z), hp: Math.ceil(c.hp), mhp: p.stats.maxHp, dead: c.dead, tgt: p.targetId, w: w?.def.id ?? null, party: this.hooks.partyIdOf?.(c.id) ?? null, sh: p.shield ? Math.round(p.shield.amount) : 0 });
+      ents.push({ id: p.eid, k: 'p', n: c.name, cls: c.classId, lvl: c.level, x: r2(c.x), z: r2(c.z), vx: r2(c.vx || 0), vz: r2(c.vz || 0), hp: Math.ceil(c.hp), mhp: p.stats.maxHp, dead: c.dead, tgt: p.targetId, w: w?.def.id ?? null, party: this.hooks.partyIdOf?.(c.id) ?? null, sh: p.shield ? Math.round(p.shield.amount) : 0 });
     }
     for (const m of this.monsters.values()) {
       if (m.state === 'dead') continue;
       const fx = m.fx.filter((f) => f.until > this.now).map((f) => f.kind);
-      ents.push({ id: m.eid, k: 'm', def: m.defId, lvl: m.def.level, x: r2(m.x), z: r2(m.z), hp: Math.ceil(m.hp), mhp: m.def.hp, st: m.state, tgt: m.targetId, fx: fx.length ? fx : undefined });
+      ents.push({ id: m.eid, k: 'm', def: m.defId, lvl: m.def.level, x: r2(m.x), z: r2(m.z), vx: r2(m.vx || 0), vz: r2(m.vz || 0), hp: Math.ceil(m.hp), mhp: m.def.hp, st: m.state, tgt: m.targetId, fx: fx.length ? fx : undefined });
     }
     return { t: 'snap', now: Math.round(this.now), map: this.mapId, ents };
   }
@@ -707,7 +789,8 @@ export class Zone {
       unspent: c.unspent, skillPoints: c.skillPoints, skills: c.skills, alloc: c.alloc, trialDone: !!c.trialDone,
       permanent: s.permanent, attrs: s.attrs, hp: Math.ceil(c.hp), mp: Math.floor(c.mp), gold: c.gold, dead: c.dead,
       x: r2(c.x), z: r2(c.z), mapId: this.mapId, instance: this.instanceId,
-      stats: { maxHp: s.maxHp, maxMp: s.maxMp, defense: s.defense, mres: s.mres, evasion: s.evasion, accuracy: s.accuracy, crit: s.crit, magicCrit: s.magicCrit, magicPower: s.magicPower, attackIntervalMs: s.attackIntervalMs, range: s.range, weapon: s.weapon.id, ccResistPct: s.ccResistPct },
+      stats: { maxHp: s.maxHp, maxMp: s.maxMp, defense: s.defense, mres: s.mres, evasion: s.evasion, accuracy: s.accuracy, crit: s.crit, magicCrit: s.magicCrit, magicPower: s.magicPower, attackIntervalMs: s.attackIntervalMs, range: s.range, weapon: s.weapon.id, ccResistPct: s.ccResistPct,
+        moveSpeed: r2(this.f.movement.playerSpeed * (1 + (s.moveSpeedPct || 0) / 100)), accel: this.mv.accel, decel: this.mv.decel },
       items: [...c.items.values()].map((it) => ({ id: it.id, defId: it.defId, qty: it.qty, enh: it.enh || 0, loc: it.loc, slot: it.slot })),
       bagCapacity: BAG_CAPACITY, bagUsed: bagCount(c),
       cooldowns: Object.fromEntries(Object.entries(p.cooldowns).map(([k, v]) => [k, Math.max(0, Math.round(v - this.now))])),

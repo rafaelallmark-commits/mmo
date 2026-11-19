@@ -45,10 +45,11 @@ async function goTo(c, x, z, timeout = 20000) {
     console.log('DEBUG', c.label, 'em', c.me(), 'indo para', x, z, 'últimos golpes', hits);
   }
   assert.equal(r.ok, true, r.reason);
+  const dest = r.dest ?? { x, z }; // o servidor pode deslocar o destino para fora de um tronco
   const t0 = Date.now();
   while (Date.now() - t0 < timeout) {
     const me = c.me();
-    if (me && d2(me, { x, z }) < 0.8) return me;
+    if (me && d2(me, dest) < 0.8) return me;
     await sleep(40);
   }
   throw new Error(`${c.label}: não chegou em ${x},${z}`);

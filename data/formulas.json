@@ -107,7 +107,10 @@
     "playerSpeed": 5,
     "meleeRange": 2.5,
     "rangeTolerance": 0.75,
-    "pickupRange": 6
+    "pickupRange": 6,
+    "accel": 18,
+    "decel": 24,
+    "_doc": "Velocidade do jogador (m/s), aceleração e frenagem (m/s²): o personagem ganha velocidade em ~0,3 s e freia suave ao chegar. Caminhos por A* em grade de 0,5 m (server/src/nav.js)."
   },
   "potions": {
     "sharedCooldownMs": 3000
