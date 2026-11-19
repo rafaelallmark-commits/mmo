@@ -145,6 +145,7 @@ func setup(p_model: String, p_look: Dictionary, p_weapon: String, p_accessories:
 		var head_y: float = (t * skel.get_bone_global_rest(bones["head"]["idx"])).origin.y
 		if head_y > 0.1:
 			model.scale = Vector3.ONE * (1.38 / head_y)
+	_base_basis = model.transform.basis
 	_apply_materials()
 	for a in cfg.get("aims", []):
 		var ai := _find_bone(a[0])
@@ -459,8 +460,38 @@ func _sphere(r: float) -> SphereMesh:
 	return s
 
 # ---------------- animação ----------------
+## Movimento dirigido pela velocidade real (m/s no mundo): a passada avança pela distância
+## percorrida (sem "patinar"), mistura andar e correr, inclina o corpo ao acelerar/frear e nas
+## curvas, dá passinhos ao girar parado e olha para o alvo.
+var speed := 0.0
+var accel := 0.0
+var turn := 0.0
+var _base_basis := Basis()
+var _speed_s := 0.0
+var _run := 0.0
+var _lean_f := 0.0
+var _lean_s := 0.0
+var _turn_amp := 0.0
+var _hurt := -1.0
+var _look_pos := Vector3.ZERO
+var _look_w := 0.0
+var _look_yaw := 0.0
+var _look_pitch := 0.0
+
 func set_moving(m: bool) -> void:
 	moving = m
+	speed = 3.6 if m else 0.0
+
+func set_motion(p_speed: float, p_accel: float, p_turn: float) -> void:
+	speed = p_speed
+	accel = p_accel
+	turn = p_turn
+	moving = p_speed > 0.15
+
+## Olhar para um ponto do mundo (peso 0 = olhar livre).
+func set_look_target(pos: Vector3, weight: float) -> void:
+	_look_pos = pos
+	_look_w = weight
 
 func play_attack() -> void:
 	_attack = 0.0
@@ -468,6 +499,7 @@ func play_attack() -> void:
 
 func play_hurt() -> void:
 	express("hurt", 0.8, 0.45)
+	_hurt = 0.0
 
 ## Ativa uma expressão facial por alguns segundos (peso 0–1).
 func express(name: String, weight: float, seconds: float) -> void:
@@ -482,9 +514,31 @@ func express(name: String, weight: float, seconds: float) -> void:
 func _process(delta: float) -> void:
 	if skel == null:
 		return
-	_amp = lerpf(_amp, 1.0 if moving else 0.0, clampf(delta * 7.0, 0.0, 1.0))
 	_t += delta
-	_phase += delta * lerpf(1.0, 11.0, _amp)
+	var sc := maxf(0.2, scale.x)
+	var v := speed / sc
+	_speed_s = lerpf(_speed_s, v, clampf(delta * 10.0, 0.0, 1.0))
+	_amp = lerpf(_amp, smoothstep(0.04, 0.55, _speed_s), clampf(delta * 9.0, 0.0, 1.0))
+	_run = lerpf(_run, smoothstep(1.7, 3.2, _speed_s), clampf(delta * 5.0, 0.0, 1.0))
+	# passinhos ao girar parado
+	_turn_amp = lerpf(_turn_amp, clampf(absf(turn) * 0.22, 0.0, 0.55) * (1.0 - _amp), clampf(delta * 6.0, 0.0, 1.0))
+	var cycle := lerpf(1.25, 2.9, smoothstep(0.8, 3.6, _speed_s))
+	_phase += TAU * _speed_s * delta / cycle + absf(turn) * delta * 1.4 * (1.0 - _amp)
+	# corpo inteiro: inclina ao acelerar/frear e para dentro das curvas
+	_lean_f = lerpf(_lean_f, clampf(accel * 0.012, -0.13, 0.11), clampf(delta * 6.0, 0.0, 1.0))
+	_lean_s = lerpf(_lean_s, clampf(-turn * speed * 0.018, -0.26, 0.26), clampf(delta * 6.0, 0.0, 1.0))
+	model.transform.basis = Basis.from_euler(Vector3(_lean_f, 0.0, _lean_s)) * _base_basis
+	# olhar
+	var yaw_t := 0.0
+	var pitch_t := 0.0
+	if _look_w > 0.01:
+		var local := global_transform.affine_inverse() * _look_pos
+		var yy := atan2(local.x, local.z)
+		if absf(yy) < 1.9:
+			yaw_t = clampf(yy, -1.05, 1.05) * _look_w
+			pitch_t = clampf(atan2(local.y - 1.35, maxf(0.3, Vector2(local.x, local.z).length())), -0.5, 0.45) * _look_w
+	_look_yaw = lerpf(_look_yaw, yaw_t, clampf(delta * 5.0, 0.0, 1.0))
+	_look_pitch = lerpf(_look_pitch, pitch_t, clampf(delta * 5.0, 0.0, 1.0))
 	_pose(delta)
 	# piscar
 	_blink_in -= delta
@@ -533,49 +587,76 @@ func _solve_aims() -> void:
 		var lq: Quaternion = pg.basis.get_rotation_quaternion().inverse() * gq
 		skel.set_bone_pose_rotation(a["idx"], lq.normalized())
 
-func _pose(_delta: float) -> void:
-	var a := _amp
+## Flexão do joelho ao longo do ciclo (pico no meio do balanço da perna).
+static func _knee(ph: float, wk: float, rn: float) -> float:
+	var bump := pow(maxf(0.0, -cos(ph + 0.35)), 1.3)
+	return wk * (0.08 + 0.95 * bump) + rn * (0.3 + 1.7 * bump)
+
+func _pose(delta: float) -> void:
+	var a := clampf(_amp + _turn_amp, 0.0, 1.0)
+	var wk := a * (1.0 - _run)
+	var rn := a * _run
 	var ph := _phase
 	var breath := sin(_t * 1.7)
-	var swing := sin(ph) * 0.6 * a
-	# pernas: coxa balança, joelho dobra na fase de recuo, pé acompanha
-	_bone("l_upper_leg", _rx(swing - 0.03 * a))
-	_bone("r_upper_leg", _rx(-swing - 0.03 * a))
-	var kl := maxf(0.0, sin(ph + 1.25)) * 1.05 * a
-	var kr := maxf(0.0, sin(ph + PI + 1.25)) * 1.05 * a
+	var idle := 1.0 - a
+	# pernas: coxa (mais à frente ao correr), joelho dobra no balanço, pé acompanha
+	var thigh_amp := 0.4 * wk + 0.7 * rn
+	var thigh_bias := -0.02 * wk - 0.22 * rn
+	var lth := sin(ph) * thigh_amp + thigh_bias
+	var rth := sin(ph + PI) * thigh_amp + thigh_bias
+	_bone("l_upper_leg", _rx(lth - 0.015 * idle) * _rz(0.02 * idle))
+	_bone("r_upper_leg", _rx(rth - 0.015 * idle) * _rz(-0.02 * idle))
+	var kl := _knee(ph, wk, rn)
+	var kr := _knee(ph + PI, wk, rn)
 	_bone("l_lower_leg", _rx(kl + 0.04))
 	_bone("r_lower_leg", _rx(kr + 0.04))
-	_bone("l_foot", _rx(-kl * 0.35 - 0.04))
-	_bone("r_foot", _rx(-kr * 0.35 - 0.04))
-	# quadril sobe e desce, gira um pouco; tronco inclina ao andar e respira parado
-	_set_offset("hips", Vector3(0, absf(sin(ph)) * 0.035 * a - 0.02 * a, 0))
-	_bone("hips", _ry(sin(ph) * 0.1 * a))
-	var twist := 0.0
+	_bone("l_foot", _rx(0.2 * sin(ph) * a - kl * 0.3 - 0.04))
+	_bone("r_foot", _rx(0.2 * sin(ph + PI) * a - kr * 0.3 - 0.04))
+	# quadril: sobe e desce (andar: alto no apoio; correr: alto no voo), gira com as pernas,
+	# e parado troca o peso de uma perna para a outra
+	var bob := wk * (0.022 * absf(cos(ph)) - 0.015) + rn * (0.05 * absf(sin(ph)) - 0.055)
+	var shift := sin(_t * 0.55) * 0.012 * idle
+	_set_offset("hips", Vector3(shift, bob, 0))
+	_bone("hips", _ry(sin(ph) * (0.09 * wk + 0.12 * rn)) * _rz(cos(ph) * 0.035 * wk + shift * 1.6))
+	# golpe
 	var k := -1.0
 	if _attack >= 0.0:
-		_attack += _delta
+		_attack += delta
 		k = clampf(_attack / 0.42, 0.0, 1.0)
 		if k >= 1.0:
 			_attack = -1.0
 	var lift := smoothstep(0.0, 0.35, k) if k >= 0.0 else 0.0
 	var strike := smoothstep(0.35, 0.8, k) if k >= 0.0 else 0.0
-	twist = (0.4 * lift - 0.75 * strike * lift)
-	_bone("spine", _rx(0.07 * a + 0.03 * breath * (1.0 - a)) * _ry(-sin(ph) * 0.12 * a + twist))
-	_bone("chest", _rx(0.02 * breath))
-	_bone("neck", _rx(-0.03 * a))
-	_bone("head", _rx(sin(_t * 0.6) * 0.035 * (1.0 - a)) * _ry(sin(_t * 0.37) * 0.08 * (1.0 - a)))
-	# braços: pose relaxada + balanço oposto às pernas; braço da arma golpeia
+	var twist := 0.4 * lift - 0.75 * strike * lift
+	# susto ao levar golpe
+	var hurt := 0.0
+	if _hurt >= 0.0:
+		_hurt += delta
+		hurt = smoothstep(0.0, 0.08, _hurt) * (1.0 - smoothstep(0.08, 0.4, _hurt))
+		if _hurt > 0.4:
+			_hurt = -1.0
+	# tronco: inclina ao correr, gira contra o quadril, respira parado
+	var lean := 0.06 * wk + 0.2 * rn + 0.03 * breath * idle - 0.22 * hurt
+	_bone("spine", _rx(lean) * _ry(-sin(ph) * (0.12 * wk + 0.2 * rn) + twist))
+	_bone("chest", _rx(0.02 * breath - 0.04 * rn) * _ry(-sin(ph) * 0.06 * rn))
+	_bone("neck", _rx(-0.04 * a - 0.1 * rn) * _ry(_look_yaw * 0.4))
+	var look_idle := sin(_t * 0.37) * 0.08 * idle * (1.0 - absf(_look_yaw))
+	_bone("head", _rx(sin(_t * 0.6) * 0.035 * idle - _look_pitch * 0.6 - 0.12 * hurt) * _ry(look_idle + _look_yaw * 0.6))
+	# braços: balanço oposto às pernas; correndo, cotovelos dobrados; braço da arma golpeia
 	var down: float = cfg["arm_down"]
-	var arm_l := -swing * 0.75 + breath * 0.015
-	var arm_r := swing * 0.75 + breath * 0.015
-	_bone("l_upper_arm", _rx(-0.1 + arm_l) * _rz(-down))
-	_bone("l_lower_arm", _ry(-0.35 - 0.25 * a))
+	var arm_amp := 0.36 * wk + 0.6 * rn
+	var arm_l := -sin(ph) * arm_amp + breath * 0.015 * idle
+	var arm_r := -sin(ph + PI) * arm_amp * (0.65 if weapon_family != "" else 1.0) + breath * 0.015 * idle
+	var spread := 0.1 * rn + 0.12 * hurt
+	_bone("l_upper_arm", _rx(-0.1 + arm_l) * _rz(-down + spread))
+	_bone("l_lower_arm", _ry(-0.35 - 0.25 * wk - 1.05 * rn - 0.2 * maxf(0.0, -arm_l)))
 	if k >= 0.0:
 		var raise := -2.5 * lift + 2.9 * strike * lift
 		_bone("r_upper_arm", _rx(-0.22 + raise) * _rz(down * (1.0 - 0.35 * lift)))
 		_bone("r_lower_arm", _ry(0.75 - 0.6 * lift * (1.0 - strike)))
 	else:
-		_bone("r_upper_arm", _rx(-0.22 + arm_r) * _rz(down))
-		_bone("r_lower_arm", _ry((0.75 if weapon_family != "" else 0.35) + 0.15 * a))
+		_bone("r_upper_arm", _rx(-0.22 + arm_r) * _rz(down - spread))
+		var base_r := 0.75 if weapon_family != "" else 0.35
+		_bone("r_lower_arm", _ry(base_r + 0.15 * wk + maxf(0.0, 1.2 - base_r) * rn))
 	if not aims.is_empty():
 		_solve_aims()

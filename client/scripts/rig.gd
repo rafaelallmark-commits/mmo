@@ -1,6 +1,7 @@
 extends Node3D
-## Animação procedural de personagens e monstros: andar (pernas e braços alternados,
-## joelhos dobrando, corpo subindo e descendo), respiração parado e golpe do braço da arma.
+## Animação procedural de personagens e monstros: andar/correr com a passada sincronizada à
+## velocidade real (sem patinar), joelhos dobrando, corpo subindo e descendo e inclinando nas
+## curvas, respiração parado, susto ao apanhar e golpe do braço da arma.
 ## As articulações são registradas por art.gd ao montar o modelo.
 
 var legs: Array = []     # [pivô, fase]
@@ -11,44 +12,80 @@ var body: Node3D = null
 var head: Node3D = null
 var weapon_arm: Node3D = null
 var weapon_elbow: Node3D = null
-var stride := 0.65
-var step_speed := 9.0
+var stride := 0.65       # amplitude das pernas (rad)
+var step_speed := 9.0    # compatibilidade: ritmo quando só se sabe "andando/parado"
+var cycle_len := 1.6     # metros (no tamanho do modelo) por ciclo completo de passos
 var moving := false
+var speed := 0.0
+var accel := 0.0
+var turn := 0.0
 var _amp := 0.0
 var _t := 0.0
+var _phase := 0.0
 var _attack := -1.0
+var _hurt := -1.0
 var _idle_arm := 0.0
+var _lean_s := 0.0
+var _lean_f := 0.0
+var _body_y := 0.0
 
 func _ready() -> void:
 	_t = randf() * TAU
 	if weapon_arm:
 		_idle_arm = weapon_arm.rotation.x
+	if body:
+		_body_y = body.position.y
 
 func set_moving(m: bool) -> void:
 	moving = m
+	speed = 3.0 if m else 0.0
+
+func set_motion(p_speed: float, p_accel: float, p_turn: float) -> void:
+	speed = p_speed
+	accel = p_accel
+	turn = p_turn
+	moving = p_speed > 0.15
 
 func play_attack() -> void:
 	_attack = 0.0
 
+func play_hurt() -> void:
+	_hurt = 0.0
+
 func _process(delta: float) -> void:
-	_amp = lerpf(_amp, 1.0 if moving else 0.0, clampf(delta * 8.0, 0.0, 1.0))
-	_t += delta * (step_speed if moving else 2.0)
+	var sc := maxf(0.2, scale.x)
+	var v := speed / sc
+	_amp = lerpf(_amp, smoothstep(0.04, 0.6, v) + clampf(absf(turn) * 0.15, 0.0, 0.4) * (1.0 - _amp), clampf(delta * 8.0, 0.0, 1.0))
+	_t += delta
+	_phase += TAU * v * delta / cycle_len + absf(turn) * delta * 1.2
+	var run := smoothstep(1.5, 3.5, v)
+	var amp := stride * (1.0 + 0.25 * run)
 	for l in legs:
-		l[0].rotation.x = sin(_t + l[1]) * stride * _amp
+		l[0].rotation.x = sin(_phase + l[1]) * amp * _amp
 	for k in knees:
-		k[0].rotation.x = maxf(0.0, sin(_t + k[1] + 1.2)) * 1.1 * _amp
+		k[0].rotation.x = maxf(0.0, sin(_phase + k[1] + 1.2)) * (1.1 + 0.5 * run) * _amp
 	for a in arms:
 		if a[0] == weapon_arm and _attack >= 0.0:
 			continue
 		var base := _idle_arm if a[0] == weapon_arm else 0.0
-		a[0].rotation.x = base - sin(_t + a[1]) * 0.55 * _amp + sin(_t * 0.5) * 0.03 * (1.0 - _amp)
+		a[0].rotation.x = base - sin(_phase + a[1]) * 0.55 * _amp + sin(_t * 1.2) * 0.03 * (1.0 - _amp)
+	_lean_s = lerpf(_lean_s, clampf(-turn * speed * 0.02, -0.25, 0.25), clampf(delta * 6.0, 0.0, 1.0))
+	_lean_f = lerpf(_lean_f, clampf(accel * 0.01, -0.1, 0.1), clampf(delta * 6.0, 0.0, 1.0))
+	var hurt := 0.0
+	if _hurt >= 0.0:
+		_hurt += delta
+		hurt = smoothstep(0.0, 0.07, _hurt) * (1.0 - smoothstep(0.07, 0.35, _hurt))
+		if _hurt > 0.35:
+			_hurt = -1.0
 	if body:
-		body.position.y = absf(sin(_t)) * 0.05 * _amp + sin(_t * 0.5) * 0.012 * (1.0 - _amp)
-		body.rotation.x = 0.08 * _amp
+		body.position.y = _body_y + absf(sin(_phase)) * (0.05 + 0.03 * run) * _amp + sin(_t * 1.6) * 0.012 * (1.0 - _amp)
+		body.rotation.x = (0.08 + 0.1 * run) * _amp + _lean_f - 0.25 * hurt
+		body.rotation.z = _lean_s
+		body.scale = Vector3(1.0 + 0.1 * hurt, 1.0 - 0.12 * hurt, 1.0 + 0.1 * hurt)
 	if head:
-		head.rotation.x = -0.06 * _amp + sin(_t * 0.5) * 0.02 * (1.0 - _amp)
+		head.rotation.x = -0.06 * _amp + sin(_t * 0.8) * 0.02 * (1.0 - _amp) + 0.2 * hurt
 	if tail:
-		tail.rotation.y = sin(_t * 1.5) * (0.5 if moving else 0.2)
+		tail.rotation.y = sin(_t * (3.0 if moving else 1.5)) * (0.5 if moving else 0.2)
 	if _attack >= 0.0 and weapon_arm:
 		_attack += delta
 		var k := clampf(_attack / 0.38, 0.0, 1.0)
@@ -66,3 +103,14 @@ func _process(delta: float) -> void:
 				body.rotation.y = 0.0
 			if weapon_elbow:
 				weapon_elbow.rotation.x = 0.0
+	elif _attack >= 0.0:
+		# monstros sem braço de arma: dão um bote para a frente
+		_attack += delta
+		var k2 := clampf(_attack / 0.35, 0.0, 1.0)
+		if body:
+			body.rotation.x += sin(k2 * PI) * 0.35
+			body.position.z = sin(k2 * PI) * 0.18
+		if k2 >= 1.0:
+			_attack = -1.0
+			if body:
+				body.position.z = 0.0
