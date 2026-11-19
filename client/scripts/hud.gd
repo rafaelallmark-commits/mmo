@@ -777,7 +777,12 @@ func show_npc(r: Dictionary) -> void:
 						else:
 							error(res["reason"])))
 				row.add_child(b)
-	if quests.get("active", []).is_empty() and quests.get("offer", []).is_empty() and r.get("shop", null) == null and not r.get("trialAvailable", false):
+	var role: String = npc.get("role", "")
+	if role == "smith":
+		_smith_ui(npc)
+	elif role == "storage":
+		_storage_ui(npc)
+	if quests.get("active", []).is_empty() and quests.get("offer", []).is_empty() and r.get("shop", null) == null and not r.get("trialAvailable", false) and not role in ["smith", "storage"]:
 		_text(npc_box, "Nada para você agora.", Theme_.MUTED)
 	var close := Button.new()
 	close.text = "Fechar"
@@ -837,3 +842,100 @@ func show_invite(from: String, from_id: int) -> void:
 	invite_from = from_id
 	invite_label.text = "%s convidou você para um grupo." % from
 	invite_panel.visible = true
+
+
+# ---------------- ferreiro e depósito ----------------
+const ENHANCEABLE_KINDS := ["weapon", "armor", "offhand", "jewel"]
+
+## Ferreiro: lista as peças (equipadas e na bolsa); cada uma mostra custo, chance e prévia.
+func _smith_ui(npc: Dictionary) -> void:
+	_title(npc_box, "Refino (até +3)", 14)
+	_text(npc_box, "Na falha o grau não cai, mas o ouro e o Pó de Refino são gastos.", Theme_.MUTED)
+	var quote_box := VBoxContainer.new()
+	for it in main.ch.get("items", []):
+		if not it["loc"] in ["bag", "equip"]:
+			continue
+		var d: Dictionary = main.defs["items"].get(it["defId"], {})
+		if not d.get("kind", "") in ENHANCEABLE_KINDS:
+			continue
+		var b := Button.new()
+		b.text = "%s%s" % [ItemText.item_name(main.defs, it), "  (equipado)" if it["loc"] == "equip" else ""]
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		var iid: String = it["id"]
+		b.pressed.connect(func(): _smith_quote(npc, iid, quote_box))
+		npc_box.add_child(b)
+	npc_box.add_child(quote_box)
+
+func _smith_quote(npc: Dictionary, iid: String, box: VBoxContainer) -> void:
+	Net.request("enhance_quote", {"npc": npc["id"], "instance": iid}, func(r):
+		_clear(box)
+		if not r["ok"]:
+			_text(box, r["reason"], Theme_.RED)
+			return
+		var mat: String = main.defs["items"][r["material"]]["name"]
+		_text(box, "+%d → +%d: chance %d%%, %d ouro (você tem %d), %d × %s (você tem %d)" % [int(r["from"]), int(r["to"]), int(r["chancePct"]), int(r["gold"]), int(r["goldHave"]), int(r["materialQty"]), mat, int(r["materialHave"])])
+		var pv: Dictionary = r["preview"]
+		var lines := []
+		for k in pv["before"].keys():
+			lines.append("%s: %s → %s" % [{"damage": "dano", "defense": "defesa", "magicPower": "poder mágico"}.get(k, k), str(pv["before"][k]), str(pv["after"][k])])
+		if not lines.is_empty():
+			_text(box, "Prévia: " + ", ".join(lines), Theme_.GREEN)
+		var go := Button.new()
+		go.text = "Refinar"
+		go.pressed.connect(func():
+			Net.request("enhance", {"npc": npc["id"], "instance": iid}, func(res):
+				if res.has("char"):
+					main.set_char(res["char"])
+				if res["ok"]:
+					if res["success"]:
+						system(res["message"])
+					else:
+						error(res["message"])
+					_smith_quote(npc, iid, box)
+				else:
+					error(res["reason"])))
+		box.add_child(go))
+
+## Depósito da conta: o que está guardado (de qualquer personagem) e o que dá para guardar.
+func _storage_ui(npc: Dictionary) -> void:
+	var box := VBoxContainer.new()
+	npc_box.add_child(box)
+	_storage_refresh(npc, box)
+
+func _storage_refresh(npc: Dictionary, box: VBoxContainer) -> void:
+	Net.request("storage_list", {"npc": npc["id"]}, func(r):
+		_clear(box)
+		if not r["ok"]:
+			_text(box, r["reason"], Theme_.RED)
+			return
+		var st: Dictionary = r["storage"]
+		_title(box, "Depósito da conta (%d/%d)" % [st["items"].size(), int(st["capacity"])], 14)
+		for it in st["items"]:
+			var b := Button.new()
+			b.text = "Pegar: %s%s  (guardado por %s)" % [ItemText.item_name(main.defs, it), (" ×%d" % int(it["qty"])) if int(it["qty"]) > 1 else "", it["owner"]]
+			b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			var iid: String = it["id"]
+			b.pressed.connect(func():
+				Net.request("storage_take", {"npc": npc["id"], "instance": iid}, func(res):
+					if res.has("char"):
+						main.set_char(res["char"])
+					if not res["ok"]:
+						error(res["reason"])
+					_storage_refresh(npc, box)))
+			box.add_child(b)
+		_title(box, "Da bolsa", 13)
+		for it in main.ch.get("items", []):
+			if it["loc"] != "bag":
+				continue
+			var b2 := Button.new()
+			b2.text = "Guardar: %s%s" % [ItemText.item_name(main.defs, it), (" ×%d" % int(it["qty"])) if int(it["qty"]) > 1 else ""]
+			b2.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			var iid2: String = it["id"]
+			b2.pressed.connect(func():
+				Net.request("storage_put", {"npc": npc["id"], "instance": iid2}, func(res):
+					if res.has("char"):
+						main.set_char(res["char"])
+					if not res["ok"]:
+						error(res["reason"])
+					_storage_refresh(npc, box)))
+			box.add_child(b2))

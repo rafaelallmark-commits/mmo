@@ -100,3 +100,56 @@ test('XP de grupo: membros próximos recebem mesmo sem dano; metade igual, metad
   const solo = splitKillXp(data.monsters.cracked_foreman, [{ charId: 1, level: 4, score: 300 }, { charId: 2, level: 4, score: 100 }], data);
   assert.equal(solo[0].xp, Math.round(212 * 0.75 * 1.1));
 });
+
+test('as 16 habilidades dos níveis 15 e 20 executam com o efeito esperado', () => {
+  for (const [classId, cls] of Object.entries(data.classes)) {
+    const party = new Map();
+    const { zone, mk, sent } = setup((id) => party.get(id) ?? null);
+    const p = mk(classId, `Q${classId.slice(0, 10)}`, 40, 36);
+    const ally = mk('breaker', `B${classId.slice(0, 10)}`, 41, 37);
+    party.set(p.char.id, 'g'); party.set(ally.char.id, 'g');
+    p.char.level = 20; zone.recalc(p);
+    for (const sid of cls.skills.slice(3, 5)) {
+      const s = data.skills[sid];
+      p.char.skills[sid] = 1;
+      const ms = toad(zone).filter((m) => m.state !== 'dead');
+      ms.forEach((m, i) => { m.x = p.char.x + 1.5 + i * 0.3; m.z = p.char.z + (i % 2 ? 0.4 : -0.4); m.hp = m.def.hp * 20; m.fx = []; });
+      const t = ms[0];
+      p.cooldowns = {}; p.char.mp = p.stats.maxMp; p.shield = null;
+      const k = s.effect.kind;
+      if (k === 'resurrect') { ally.char.dead = true; ally.char.hp = 0; }
+      if (s.effect.guaranteedCritIfMarked) zone.addMonsterFx(t, { kind: 'mark', until: zone.now + 5000, physDamageTakenPct: 0, by: p.char.id });
+      const hpBefore = t.hp;
+      const res = zone.cmdCast(p, sid, t.eid, t.x, t.z, ally.eid);
+      assert.equal(res.ok, true, `${cls.name} / ${s.name}: ${res.reason}`);
+      if (['strike', 'spell', 'cone_strike', 'line_strike', 'aoe_strike'].includes(k)) assert.ok(res.hits.length >= 1, `${s.name} atingiu alguém`);
+      if (s.effect.hits) assert.ok(res.hits.filter((e) => e === t.eid).length >= 2, `${s.name} golpeia ${s.effect.hits} vezes`);
+      if (s.effect.stunMs || s.effect.knockdownMs) assert.ok(zone.monsterFx(t, 'stun') || t.hp === hpBefore, `${s.name} atordoa`);
+      if (k === 'shield_self') assert.ok(p.shield?.amount > 0, `${s.name} deu escudo`);
+      if (k === 'taunt_area') { assert.ok(ms.slice(0, 3).every((m) => m.targetId === p.eid), `${s.name} provoca todos`); assert.ok(zone.buffMod(p, 'damageTakenDownPct') > 0, 'reduz dano recebido'); }
+      if (k === 'buff_self') assert.ok(p.buffs.some((b) => b.id === sid), `${s.name} aplicou reforço`);
+      if (k === 'dash') assert.ok(zone.buffMod(p, 'evasion') > 0, `${s.name} dá esquiva`);
+      if (k === 'party_heal') assert.ok(ally.char.hp > 0);
+      if (k === 'resurrect') assert.equal(ally.char.dead, false, `${s.name} levanta o aliado`);
+      if (k === 'aura_damage' || k === 'delayed_aoe') {
+        const before = t.hp;
+        for (let i = 0; i < 40; i++) zone.tick(100);
+        assert.ok(t.hp < before, `${s.name} causou dano na área`);
+        zone.groundEffects = [];
+      }
+      if (s.effect.guaranteedCritIfMarked) {
+        // com marca, o golpe sempre é crítico (pode errar, então repete)
+        let landed = 0, crits = 0;
+        for (let i = 0; i < 12; i++) {
+          p.cooldowns = {}; p.char.mp = p.stats.maxMp; t.hp = t.def.hp * 20;
+          zone.addMonsterFx(t, { kind: 'mark', until: zone.now + 5000, physDamageTakenPct: 0, by: p.char.id });
+          sent.length = 0;
+          zone.cmdCast(p, sid, t.eid);
+          const h = sent.find((m) => m.t === 'hit' && m.dst === t.eid && m.skill === sid);
+          if (h && !h.miss) { landed++; if (h.crit) crits++; }
+        }
+        assert.ok(landed > 0 && crits === landed, `${s.name}: ${crits}/${landed} críticos em alvo marcado`);
+      }
+    }
+  }
+});

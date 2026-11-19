@@ -597,7 +597,8 @@
    "respawnSec": 120,
    "xp": 1248,
    "lootTable": "lt_echo_mother",
-   "description": "Elite das galerias. Cada grito gera um Ecoante."
+   "description": "Elite das galerias. Cada grito gera um Ecoante.",
+   "daily": true
   },
   "gate_watcher": {
    "name": "Vigia de Comporta",
@@ -701,7 +702,8 @@
    "respawnSec": 120,
    "xp": 1748,
    "lootTable": "lt_custodian_shard",
-   "description": "Pedaço autônomo do Custódio; patrulha os canais."
+   "description": "Pedaço autônomo do Custódio; patrulha os canais.",
+   "daily": true
   },
   "lock_custodian": {
    "name": "O Custódio da Eclusa",
@@ -780,6 +782,32 @@
    "xp": 80,
    "lootTable": "lt_none",
    "description": "Guardião final da prova de classe."
+  },
+  "gate_lock": {
+   "name": "Trava da Comporta",
+   "level": 20,
+   "family": "machine",
+   "rank": "normal",
+   "area": "ultima_eclusa",
+   "aggro": "passive",
+   "hp": 900,
+   "damage": [
+    0,
+    0
+   ],
+   "attackIntervalMs": 99999,
+   "attackRange": 0,
+   "defense": 60,
+   "mres": 40,
+   "evasion": 0,
+   "accuracy": 0,
+   "moveSpeed": 0,
+   "aggroRadius": 0,
+   "leashRadius": 0,
+   "respawnSec": 0,
+   "xp": 0,
+   "lootTable": "lt_none",
+   "description": "Trava de uma comporta de saída. Destruí-la devolve a comporta ao alto."
   }
  }
 }

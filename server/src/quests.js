@@ -59,6 +59,7 @@ export class QuestEngine {
       case 'level': return { done: char.level >= o.level, cur: Math.min(char.level, o.level), need: o.level };
       case 'allocated': return { done: char.unspent === 0, cur: char.unspent === 0 ? 1 : 0, need: 1 };
       case 'equipLevel': { const w = equippedIn(char, 'weapon'); const ok = !!w && this.data.items[w.defId].level >= o.minLevel; return { done: ok, cur: ok ? 1 : 0, need: 1 }; }
+      case 'enterMap': return { done: !!pr, cur: pr ? 1 : 0, need: 1 };
       case 'trial': return { done: !!pr || !!char.trialDone, cur: pr || char.trialDone ? 1 : 0, need: 1 };
       default: return { done: false, cur: 0, need: 1 };
     }
@@ -113,6 +114,10 @@ export class QuestEngine {
       if (o.type === 'questDrop' && rng() >= o.chance) return null;
       return (pr || 0) + 1;
     });
+  }
+
+  onEnterMap(char, mapId) {
+    return this.bump(char, (o) => o.type === 'enterMap' && o.map === mapId, (o, pr) => (pr ? null : true));
   }
 
   onInteract(char, objectId) {

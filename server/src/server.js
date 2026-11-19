@@ -2,12 +2,14 @@
 // (mapas abertos e instâncias), grupos, chat e missões, e responde cada requisição
 // { rid } com { t:'res', rid, ok, ... }.
 import { WebSocketServer } from 'ws';
+import { enhanceable, enhanceQuote, enhancePreview, rollEnhance } from './smith.js';
 import { randomUUID } from 'node:crypto';
 import { loadGameData, ATTRS } from './data.js';
 import { Store } from './store.js';
 import { Zone, lootView } from './zone.js';
 import { makeRng } from './rng.js';
 import { QuestEngine } from './quests.js';
+import { Dungeon } from './dungeon.js';
 import { checkEquip, applyEquip, checkUnequip, revalidateEquipment, bagCount, BAG_CAPACITY, EQUIP_SLOTS } from './equipment.js';
 import { totalAttributePoints, derivedStats } from './rules.js';
 
@@ -37,7 +39,9 @@ export class GameServer {
     this.parties = new Map(); // partyId -> { id, leader, members:Set }
     this.charParty = new Map(); // charId -> partyId
     this.invites = new Map(); // charId convidado -> { from, at }
-    this.trials = new Map(); // chave da instância -> estado da prova
+    this.trials = new Map();
+    this.dungeons = new Map();      // chave da instância -> Dungeon
+    this.partyDungeon = new Map();  // grupo -> chave da instância // chave da instância -> estado da prova
     for (const [mapId, m] of Object.entries(this.data.maps)) {
       if (m.implementedIn && !m.instanced && (m.spawns || m.city)) this.createZone(mapId);
     }
@@ -96,6 +100,7 @@ export class GameServer {
       if (z.players.size) this.broadcastZone(key, z.snapshot());
     }
     this.tickTrials();
+    this.tickDungeons();
     this.tickCount++;
     if (this.tickCount % this.opts.tickHz === 0) for (const pid of this.parties.keys()) this.sendPartyUpdate(pid);
   }
@@ -134,6 +139,11 @@ export class GameServer {
     const charId = s.charId;
     const key = this.charZone.get(charId);
     if (this.trials.has(key)) this.endTrial(key, false, 'Conexão perdida durante a prova.', true);
+    const dg = this.dungeons.get(key);
+    if (dg) {
+      const c = this.zones.get(key)?.players.get(charId)?.char;
+      if (c) dg.away.set(charId, { x: c.x, z: c.z, hp: c.hp, mp: c.mp, dead: c.dead, until: Date.now() + dg.f.reconnectWaitMs });
+    }
     const p = this.zones.get(this.charZone.get(charId))?.removePlayer(charId);
     this.charZone.delete(charId);
     if (this.byChar.get(charId) === s) this.byChar.delete(charId);
@@ -241,6 +251,12 @@ export class GameServer {
       case 'party_decline': return this.hPartyDecline(p, msg);
       case 'party_leave': return this.hPartyLeave(p);
       case 'party_kick': return this.hPartyKick(p, msg);
+      case 'enhance_quote': return this.hEnhance(p, msg, false);
+      case 'enhance': return this.hEnhance(p, msg, true);
+      case 'storage_list': return this.hStorageList(p, msg);
+      case 'storage_put': return this.hStoragePut(p, msg);
+      case 'storage_take': return this.hStorageTake(p, msg);
+      case 'dungeon_enter': return this.hDungeonEnter(s, p, msg);
       case 'gm': return this.hGm(p, msg);
       default: return { ok: false, code: 'unknown', reason: `Comando desconhecido: ${msg.t}` };
     }
@@ -321,8 +337,21 @@ export class GameServer {
     const char = this.store.loadCharacter(charId);
     this.quests.load(char);
     const wasDead = char.dead;
-    const zone = this.zones.get(char.mapId) ?? this.zones.get(DEFAULT_MAP);
+    let zone = this.zones.get(char.mapId) ?? this.zones.get(DEFAULT_MAP);
+    // voltou dentro do prazo: reentra no calabouço do grupo como estava (morto continua morto)
+    let back = null;
+    for (const [key, dg] of this.dungeons) {
+      const a = dg.away.get(charId);
+      if (a && a.until > Date.now() && this.zones.has(key)) { back = { key, a, dg }; break; }
+    }
+    if (back) { zone = this.zones.get(back.key); char.x = back.a.x; char.z = back.a.z; char.dead = false; }
     const p = zone.addPlayer(char);
+    if (back) {
+      back.dg.away.delete(charId);
+      char.hp = Math.min(back.a.hp, p.stats.maxHp); char.mp = back.a.mp;
+      if (back.a.dead) { char.dead = true; char.hp = 0; }
+      char.saveMapId = 'canais_eclusa'; char.saveX = 100; char.saveZ = 184;
+    }
     this.store.saveCharacter(char);
     s.charId = charId;
     this.byChar.set(charId, s);
@@ -332,7 +361,7 @@ export class GameServer {
     this.broadcastZone(zone.key, { t: 'joined', eid: p.eid, name: char.name });
     const pid = this.charParty.get(charId);
     if (pid) this.sendPartyUpdate(pid);
-    return { ok: true, char: zone.charView(p), snapshot: zone.snapshot(), loot: this.lootFor(charId, zone.mapId), journal: this.quests.journal(char), restoredFromDeath: wasDead, cache: false };
+    return { ok: true, char: zone.charView(p), snapshot: zone.snapshot(), loot: this.lootFor(charId, zone.mapId), journal: this.quests.journal(char), restoredFromDeath: wasDead && !back, rejoinedDungeon: !!back, cache: false };
   }
 
   lootFor(charId, mapId) {
@@ -355,6 +384,7 @@ export class GameServer {
     this.store.saveCharacter(p.char);
     this.broadcastZone(destKey, { t: 'joined', eid: np.eid, name: p.char.name });
     this.sendTo(this.byChar.get(charId), { t: 'zone', mapId: dest.mapId, instance: dest.instanceId, char: dest.charView(np), snapshot: dest.snapshot(), loot: this.lootFor(charId, dest.mapId) });
+    this.notifyQuests(np, this.quests.onEnterMap(p.char, dest.mapId));
     return np;
   }
 
@@ -379,10 +409,88 @@ export class GameServer {
   hInteract(p, { object }) {
     const o = p.zone.objectNear(p, object);
     if (!o) return { ok: false, code: 'too_far', reason: 'Chegue mais perto.' };
+    if (o.kind === 'dungeon') return this.hDungeonEnter(null, p, { object: o.id });
     const changed = this.quests.onInteract(p.char, o.id);
     if (!changed.length) return { ok: false, code: 'nothing', reason: 'Nada a fazer aqui agora.' };
     this.notifyQuests(p, changed);
     return { ok: true, object: o.id, quests: changed, cache: false };
+  }
+
+  // ---------- ferreiro ----------
+  hEnhance(p, { npc, instance }, apply) {
+    const n = p.zone.npcNear(p, npc);
+    if (!n || n.role !== 'smith') return { ok: false, code: 'too_far', reason: 'Chegue mais perto do ferreiro.' };
+    const c = p.char;
+    const it = c.items.get(instance);
+    if (!it || (it.loc !== 'bag' && it.loc !== 'equip')) return { ok: false, code: 'not_found', reason: 'Item não encontrado com você.' };
+    const def = this.data.items[it.defId];
+    if (!enhanceable(def)) return { ok: false, code: 'not_enhanceable', reason: `${def.name} não pode ser refinado.` };
+    const q = enhanceQuote(def, it.enh || 0, this.data);
+    if (!q) return { ok: false, code: 'max', reason: `${def.name} já está em +${it.enh}, o máximo deste ferreiro.` };
+    const preview = enhancePreview(def, it.enh || 0, this.data);
+    const have = [...c.items.values()].filter((x) => x.loc === 'bag' && x.defId === q.material).reduce((s, x) => s + x.qty, 0);
+    const quote = { ...q, preview, materialHave: have, goldHave: c.gold, cache: false };
+    if (!apply) return { ok: true, ...quote };
+    if (c.gold < q.gold) return { ok: false, code: 'no_gold', reason: `Ouro insuficiente: ${q.gold} necessário, você tem ${c.gold}.`, ...quote };
+    const matName = this.data.items[q.material].name;
+    if (have < q.materialQty) return { ok: false, code: 'no_material', reason: `${matName} insuficiente: ${q.materialQty} necessário, você tem ${have}.`, ...quote };
+    const r = rollEnhance(p.zone.rng, q.chancePct);
+    this.store.tx(() => {
+      c.gold -= q.gold;
+      let left = q.materialQty;
+      for (const x of [...c.items.values()]) {
+        if (left <= 0 || x.loc !== 'bag' || x.defId !== q.material) continue;
+        const take = Math.min(left, x.qty);
+        x.qty -= take; left -= take;
+        if (x.qty <= 0) { c.items.delete(x.id); this.store.deleteItem(c.id, x.id); } else this.store.saveItems(c.id, [x]);
+      }
+      if (r.success) { it.enh = (it.enh || 0) + 1; this.store.saveItems(c.id, [it]); }
+      this.store.saveCharacter(c);
+    });
+    if (it.loc === 'equip') p.zone.recalc(p);
+    return { ok: true, success: r.success, roll: r.roll, chancePct: q.chancePct, enh: it.enh || 0, instanceId: it.id,
+      message: r.success ? `${def.name} agora é +${it.enh}.` : `O refino falhou (rolagem ${r.roll} ≥ ${q.chancePct}%). ${def.name} continua em +${it.enh || 0}; ouro e materiais foram gastos.`,
+      char: p.zone.charView(p), cache: false };
+  }
+
+  // ---------- depósito da conta ----------
+  storageNpc(p, npc) {
+    const n = p.zone.npcNear(p, npc);
+    return n && n.role === 'storage' ? n : null;
+  }
+
+  storageView(p) {
+    const items = this.store.listAccountStorage(p.char.accountId).map((r) => ({ id: r.id, defId: r.def_id, qty: r.qty, enh: r.enh, owner: r.owner }));
+    return { items, capacity: this.data.formulas.storage.capacity };
+  }
+
+  hStorageList(p, { npc }) {
+    if (!this.storageNpc(p, npc)) return { ok: false, code: 'too_far', reason: 'Chegue mais perto do guarda-volumes.' };
+    return { ok: true, storage: this.storageView(p), cache: false };
+  }
+
+  hStoragePut(p, { npc, instance }) {
+    if (!this.storageNpc(p, npc)) return { ok: false, code: 'too_far', reason: 'Chegue mais perto do guarda-volumes.' };
+    const c = p.char;
+    const it = c.items.get(instance);
+    if (!it || it.loc !== 'bag') return { ok: false, code: 'not_in_bag', reason: 'Só itens da bolsa podem ir para o depósito.' };
+    const view = this.storageView(p);
+    if (view.items.length >= view.capacity) return { ok: false, code: 'storage_full', reason: `Depósito cheio (${view.capacity} espaços).` };
+    it.loc = 'storage'; it.slot = null;
+    this.store.tx(() => this.store.saveItems(c.id, [it]));
+    c.items.delete(it.id);
+    return { ok: true, storage: this.storageView(p), char: p.zone.charView(p), cache: false };
+  }
+
+  hStorageTake(p, { npc, instance }) {
+    if (!this.storageNpc(p, npc)) return { ok: false, code: 'too_far', reason: 'Chegue mais perto do guarda-volumes.' };
+    const c = p.char;
+    if (bagCount(c) >= BAG_CAPACITY) return { ok: false, code: 'bag_full', reason: 'Inventário cheio.' };
+    // transação: só um personagem pega a mesma peça (troca de dono condicionada a loc='storage')
+    const row = this.store.takeFromStorage(c.accountId, instance, c.id);
+    if (!row) return { ok: false, code: 'not_found', reason: 'Este item não está mais no depósito.' };
+    c.items.set(row.id, { id: row.id, defId: row.def_id, qty: row.qty, enh: row.enh, loc: 'bag', slot: null });
+    return { ok: true, storage: this.storageView(p), char: p.zone.charView(p), cache: false };
   }
 
   priceOf(defId) { return Math.max(1, (this.data.items[defId].value || 1) * 2); }
@@ -489,6 +597,60 @@ export class GameServer {
       return;
     }
     this.endTrial(key, true, 'Prova vencida!');
+  }
+
+  // ---------- calabouço ----------
+  hDungeonEnter(s, p, { object }) {
+    const o = p.zone.objectNear(p, object);
+    if (!o || o.kind !== 'dungeon') return { ok: false, code: 'too_far', reason: 'Chegue mais perto da porta da Eclusa.' };
+    const c = p.char;
+    const pid = this.charParty.get(c.id);
+    const party = pid ? this.parties.get(pid) : null;
+    if (!party || party.members.size < 2) return { ok: false, code: 'party', reason: 'A Última Eclusa exige um grupo de 2 a 5 jogadores.' };
+    const members = [...party.members];
+    const keyOk = members.some((id) => {
+      const m = this.playerOf(id)?.char;
+      return m && (this.quests.isDone(m, 'c5_fragment') || m.quests.get('c5_eclusa')?.state === 'active');
+    });
+    if (!keyOk) return { ok: false, code: 'key', reason: 'Alguém do grupo precisa da Chave de Comporta (missão "O Fragmento").' };
+    if (c.level < 16) return { ok: false, code: 'level', reason: `Nível 16 exigido. Seu nível atual é ${c.level}.` };
+    let key = this.partyDungeon.get(pid);
+    let dg = key ? this.dungeons.get(key) : null;
+    if (!dg || dg.done) {
+      key = `dungeon:${pid}:${randomUUID().slice(0, 8)}`;
+      const zone = this.createZone('ultima_eclusa', key);
+      dg = new Dungeon({ key, zone, partyId: pid, members, data: this.data });
+      this.dungeons.set(key, dg);
+      this.partyDungeon.set(pid, key);
+      this.log(`calabouço aberto: ${key} (${members.length} jogadores)`);
+    }
+    // entra quem pediu e quem do grupo estiver perto da porta
+    const sp = this.data.maps.ultima_eclusa.spawnPoint;
+    const entering = [p, ...members.map((id) => this.playerOf(id)).filter((q) => q && q !== p && q.zone === p.zone && Math.hypot(q.char.x - o.x, q.char.z - o.z) < 20 && !q.char.dead)];
+    const k = key;
+    return { ok: true, dungeon: key, entering: entering.length, cache: false, after: () => {
+      entering.forEach((q, i) => {
+        q.char.saveMapId = 'canais_eclusa'; q.char.saveX = 100; q.char.saveZ = 184;
+        const np = this.moveToZone(q, k, sp.x - 2 + i, sp.z);
+        np.char.saveMapId = 'canais_eclusa'; np.char.saveX = 100; np.char.saveZ = 184;
+      });
+      this.zones.get(k)?.broadcast({ t: 'system', text: 'O Custódio: "Pressão acima do limite. Equipe não autorizada. Iniciando contenção."' });
+    } };
+  }
+
+  tickDungeons() {
+    const now = Date.now();
+    for (const [key, dg] of this.dungeons) {
+      const zone = this.zones.get(key);
+      if (!zone) { this.dungeons.delete(key); continue; }
+      if (zone.players.size) { dg.emptySince = null; dg.tick(); continue; }
+      for (const [cid, a] of dg.away) if (a.until <= now) dg.away.delete(cid);
+      dg.emptySince ??= now;
+      if (!dg.away.size && now - dg.emptySince > 5000) {
+        this.zones.delete(key); this.dungeons.delete(key);
+        if (this.partyDungeon.get(dg.partyId) === key) this.partyDungeon.delete(dg.partyId);
+      }
+    }
   }
 
   tickTrials() {
@@ -778,6 +940,11 @@ export class GameServer {
       const need = cum[target - 1] - c.xp;
       if (need <= 0) return { ok: false, code: 'bad_request', reason: 'Já está nesse nível.' };
       p.zone.grantXp(p, need);
+      this.store.saveCharacter(c);
+      return { ok: true, char: p.zone.charView(p) };
+    }
+    if (msg.cmd === 'gold') {
+      c.gold += Math.max(0, Math.floor(msg.amount || 0));
       this.store.saveCharacter(c);
       return { ok: true, char: p.zone.charView(p) };
     }

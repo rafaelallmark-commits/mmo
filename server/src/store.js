@@ -62,6 +62,12 @@ CREATE TABLE IF NOT EXISTS loot_drops (
   claimed_instance_id TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_loot_char ON loot_drops(char_id, claimed_at);
+CREATE TABLE IF NOT EXISTS daily_claims (
+  char_id INTEGER NOT NULL REFERENCES characters(id),
+  claim_key TEXT NOT NULL,
+  day TEXT NOT NULL,
+  PRIMARY KEY (char_id, claim_key, day)
+);
 CREATE TABLE IF NOT EXISTS quest_progress (
   char_id INTEGER NOT NULL REFERENCES characters(id),
   quest_id TEXT NOT NULL,
@@ -152,6 +158,7 @@ export class Store {
     if (!row) return null;
     const items = new Map();
     for (const it of this.prep('SELECT * FROM item_instances WHERE char_id = ? ORDER BY created_at, id').all(charId)) {
+      if (it.loc === 'storage') continue; // fica no depósito da conta
       items.set(it.id, { id: it.id, defId: it.def_id, qty: it.qty, enh: it.enh, loc: it.loc, slot: it.slot });
     }
     return {
@@ -218,5 +225,27 @@ export class Store {
 
   markLootClaimed(id, instanceId) {
     this.prep('UPDATE loot_drops SET claimed_at=?, claimed_instance_id=? WHERE id=? AND claimed_at IS NULL').run(Date.now(), instanceId ?? null, id);
+  }
+
+  // Recompensa diária: true só na primeira vez do dia (idempotente por chave primária).
+  claimDaily(charId, key, day) {
+    const r = this.prep('INSERT OR IGNORE INTO daily_claims (char_id, claim_key, day) VALUES (?, ?, ?)').run(charId, key, day);
+    return r.changes > 0;
+  }
+
+  // ---------- depósito da conta ----------
+  listAccountStorage(accountId) {
+    return this.prep(`SELECT i.id, i.def_id, i.qty, i.enh, c.name AS owner FROM item_instances i JOIN characters c ON c.id = i.char_id
+      WHERE c.account_id = ? AND i.loc = 'storage' ORDER BY i.created_at, i.id`).all(accountId);
+  }
+
+  takeFromStorage(accountId, itemId, charId) {
+    return this.tx(() => {
+      const row = this.prep(`SELECT i.* FROM item_instances i JOIN characters c ON c.id = i.char_id
+        WHERE i.id = ? AND i.loc = 'storage' AND c.account_id = ?`).get(itemId, accountId);
+      if (!row) return null;
+      this.prep("UPDATE item_instances SET char_id = ?, loc = 'bag', slot = NULL WHERE id = ? AND loc = 'storage'").run(charId, itemId);
+      return row;
+    });
   }
 }

@@ -653,6 +653,11 @@ func use_skill(skill_id: String) -> void:
 			Net.request("attack", {"target": selected})
 		else:
 			Net.request("cast", {"skill": skill_id, "target": selected})
+	elif target_type == "ally_dead":
+		if ally_selected == "" or not entities.has(ally_selected):
+			main.hud.error("Selecione um aliado caído (clique nele).")
+			return
+		Net.request("cast", {"skill": skill_id, "ally": ally_selected})
 	elif target_type == "ally":
 		var target_ally: String = ally_selected if entities.has(ally_selected) else main.ch.get("eid", "")
 		Net.request("cast", {"skill": skill_id, "ally": target_ally})

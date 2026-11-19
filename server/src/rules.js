@@ -151,6 +151,7 @@ export function playerAttack(stats, target, data, rng, skill) {
     steps.raw = steps.roll + steps.attrPart;
   } else {
     steps.roll = rollInt(rng, w.damage[0], w.damage[1]);
+    if (stats.weaponEnh) steps.roll = Math.floor(steps.roll * (1 + ((f.enhance?.weaponDamagePct ?? 0) * stats.weaponEnh) / 100));
     steps.attrPart = Math.floor(Object.entries(w.scaling || {}).reduce((s, [a, c]) => s + stats.attrs[a] * c, 0));
     steps.raw = steps.roll + steps.attrPart;
     if (eff && eff.pct) {
@@ -166,7 +167,7 @@ export function playerAttack(stats, target, data, rng, skill) {
   const baseCrit = magic ? stats.magicCrit : stats.crit;
   steps.critChance = critChanceVs(baseCrit, stats.level, target.level, data);
   steps.critRoll = round1(rng() * 100);
-  steps.crit = steps.critRoll < steps.critChance;
+  steps.crit = steps.critRoll < steps.critChance || !!skill?.forceCrit;
   steps.afterCrit = steps.crit ? Math.floor(steps.raw * (magic ? f.crit.magic.mult : f.crit.physMult)) : steps.raw;
   // mitigação
   steps.mitigationK = mitigationK(stats.level, data);

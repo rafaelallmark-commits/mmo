@@ -22,7 +22,9 @@ const ROADS = {
   pedrambar: [{ w: 8, pts: [[0, 30], [60, 30]] }, { w: 6, pts: [[30, 4], [30, 56]] }],
   vau_de_nacar: [{ w: 8, pts: [[0, 30], [60, 30]] }, { w: 6, pts: [[30, 4], [30, 56]] }],
   brejo_bombas: [{ w: 3.5, pts: [[0, 70], [40, 70], [54, 50], [96, 48], [140, 52], [168, 62], [200, 70]] }, { w: 3, pts: [[108, 50], [112, 58]] }],
-  oficina_soterrada: [{ w: 4, pts: [[0, 90], [60, 90], [88, 70], [140, 58]] }, { w: 3.5, pts: [[60, 90], [110, 130], [150, 156]] }],
+  oficina_soterrada: [{ w: 4, pts: [[0, 90], [60, 90], [88, 70], [140, 58]] }, { w: 3.5, pts: [[60, 90], [110, 130], [150, 156]] }, { w: 3.5, pts: [[140, 58], [160, 80], [180, 90]] }],
+  galerias_eco: [{ w: 4, pts: [[0, 80], [70, 80], [100, 74], [140, 80], [150, 80], [190, 80], [220, 80]] }, { w: 3, pts: [[40, 82], [50, 104], [84, 140], [118, 118]] }, { w: 3, pts: [[100, 74], [106, 40]] }],
+  canais_eclusa: [{ w: 5, pts: [[100, 0], [100, 120], [76, 128], [76, 176], [100, 192]] }, { w: 3.5, pts: [[100, 60], [30, 60], [30, 108], [58, 108]] }, { w: 3.5, pts: [[100, 60], [160, 60], [176, 100], [142, 136], [176, 176]] }],
 };
 
 // tipo → [raio de colisão base, escala mín, escala máx]
@@ -37,6 +39,8 @@ const MIX = {
   estrada_velha: { count: 260, mix: { tree_round: 22, tree_birch: 9, tree_pine: 7, rock_l: 6, rock_m: 10, rock_s: 14, bush: 20, stump: 4, log: 3, mushroom: 5 } },
   brejo_bombas: { count: 300, mix: { tree_willow: 14, tree_dead: 9, tree_round: 6, reeds: 26, rock_m: 8, rock_s: 12, bush: 14, log: 6, mushroom: 5 } },
   oficina_soterrada: { count: 240, mix: { pillar: 10, crystal: 16, rock_l: 8, rock_m: 14, rock_s: 16, gear: 12, rubble: 16, mushroom: 8 } },
+  galerias_eco: { count: 300, mix: { pillar: 12, crystal: 22, rock_l: 10, rock_m: 14, rock_s: 16, mushroom: 14, rubble: 10, tree_dead: 4 } },
+  canais_eclusa: { count: 260, mix: { reeds: 18, rock_m: 12, rock_s: 14, pillar: 8, gear: 10, crate: 8, barrel: 8, rubble: 10, tree_dead: 4, tree_willow: 4 } },
   pedrambar: { count: 46, mix: { tree_round: 30, tree_birch: 10, bush: 30, crate: 12, barrel: 12, rock_s: 6 } },
   vau_de_nacar: { count: 46, mix: { tree_birch: 22, tree_round: 18, bush: 30, crate: 12, barrel: 12, rock_s: 6 } },
 };

@@ -112,6 +112,40 @@
     "decel": 16,
     "_doc": "Velocidade do jogador (m/s), aceleração e frenagem (m/s²): o personagem ganha velocidade em ~0,35 s e freia em ~0,8 m ao chegar. Caminhos por A* em grade de 0,5 m (server/src/nav.js)."
   },
+  "enhance": {
+    "_doc": "Ferreiro (refino +1 a +3). chancePct[g] = chance de ir do grau g para g+1; ouro = goldBase × (g+1) × nível do item; materiais = Pó de Refino × materials[g]. Falha: grau mantido, ouro e materiais consumidos. Cada grau soma weaponDamagePct ao dano da arma e defense.enhancePct à defesa/poder mágico da peça.",
+    "maxLevel": 3,
+    "chancePct": [90, 70, 45],
+    "goldBase": 12,
+    "material": "mat_refine",
+    "materials": [1, 2, 3],
+    "weaponDamagePct": 8
+  },
+  "dungeon": {
+    "_doc": "A Última Eclusa. Vida do Custódio = vida × (hpScaleMin + (jogadores − 2) × hpScaleStep), 60% com 2 e 100% com 5; dano do Custódio × √escala. Fase 1 (100–70%): Proteção de Pressão (dano −90%) rompida por 12 s ao acertar a junta exposta durante a ventilação de uma válvula (aviso 3 s, janela 5 s). Fase 2 (70–35%): linhas do piso acendem 2 s e descarregam (30% da vida máxima + atordoamento 1 s). Fase 3 (35–0%): três comportas descem em 25 s ÷ escala (≈42 s com 2 jogadores); destruir a trava devolve a comporta ao alto; bater no Braço de Comando atrasa todas 1,5 s (no máximo a cada 3 s, ou seja, desce na metade da velocidade enquanto alguém bate). Três fechadas = falha (volta ao início). Desconexão: a instância espera 3 min.",
+    "hpScaleMin": 0.6,
+    "hpScaleStep": 0.1333,
+    "protectionPct": 90,
+    "breakMs": 12000,
+    "valveWarnMs": 3000,
+    "valveVentMs": 5000,
+    "valveCycleMs": 11000,
+    "exposedAngleDeg": 70,
+    "lineWarnMs": 2000,
+    "lineCycleMs": 6500,
+    "lineWidth": 2.2,
+    "lineDamagePctMaxHp": 30,
+    "lineStunMs": 1000,
+    "gateCloseMs": 25000,
+    "gateLockRespawnMs": 6000,
+    "armDelayMs": 1500,
+    "armCooldownMs": 3000,
+    "reconnectWaitMs": 180000
+  },
+  "storage": {
+    "_doc": "Depósito compartilhado pelos personagens da mesma conta (guarda-volumes das cidades).",
+    "capacity": 60
+  },
   "potions": {
     "sharedCooldownMs": 3000
   },

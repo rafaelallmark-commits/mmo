@@ -6,6 +6,8 @@ const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 export const IMPLEMENTED_KINDS = new Set([
   'strike', 'spell', 'buff_self', 'ground_aoe', 'cone_strike', 'line_strike', 'charge', 'pull',
   'party_buff', 'debuff', 'dash', 'guard_ally', 'heal', 'party_heal', 'shield_ally', 'aoe_spell',
+  // nível 15 e 20 (M3)
+  'shield_self', 'taunt_area', 'aoe_strike', 'aura_damage', 'resurrect', 'delayed_aoe',
 ]);
 
 const perRank = (eff, key, rank) => (eff[key] || 0) + (eff[`${key}PerRank`] || 0) * (rank - 1);
@@ -54,7 +56,13 @@ export function executeSkill(zone, p, s, rank, { target, x, z, ally }) {
   switch (eff.kind) {
     case 'strike':
     case 'spell': {
-      const res = zone.hitMonster(p, target, skill, s.id);
+      let sk = skill;
+      // bônus contra uma família (ex.: sagrado contra máquinas)
+      const fam = eff.bonusVsFamily?.[target.def.family];
+      if (fam) sk = { def: { ...s, effect: { ...eff, flat: (eff.flat || 0) * (1 + fam / 100), flatPerRank: (eff.flatPerRank || 0) * (1 + fam / 100), spiCoef: (eff.spiCoef || 0) * (1 + fam / 100), pct: eff.pct ? eff.pct * (1 + fam / 100) : eff.pct } }, rank };
+      // crítico garantido em alvo marcado
+      if (eff.guaranteedCritIfMarked && zone.monsterFx(target, 'mark')) sk = { ...sk, forceCrit: true };
+      const res = zone.hitMonster(p, target, sk, s.id);
       hits.push(target.eid);
       if (res.hit) {
         applyOnHit(zone, p, target, eff, rank);
@@ -67,7 +75,46 @@ export function executeSkill(zone, p, s, rank, { target, x, z, ally }) {
     }
     case 'cone_strike': {
       const dir = facing(p, target, x, z);
-      hitAll(zone.monstersInCircle(c.x, c.z, range).filter((m) => inCone(c, dir, m, range, eff.angleDeg || 90)));
+      // "hits": golpes seguidos na mesma área (ex.: Tempestade de Lanças)
+      for (let i = 0; i < (eff.hits || 1); i++) hitAll(zone.monstersInCircle(c.x, c.z, range).filter((m) => m.state !== 'dead' && inCone(c, dir, m, range, eff.angleDeg || 90)));
+      break;
+    }
+    case 'aoe_strike': {
+      hitAll(zone.monstersInCircle(c.x, c.z, eff.radius || 3));
+      break;
+    }
+    case 'shield_self': {
+      const amount = eff.absorbPctMaxHp ? Math.round(p.stats.maxHp * perRank(eff, 'absorbPctMaxHp', rank) / 100) : Math.round(healAmount(p, eff, rank));
+      p.shield = { amount, until: zone.now + eff.durationMs, by: c.id, thornsMagic: eff.thornsMagic || 0 };
+      if (eff.ccImmune) p.ccImmuneUntil = zone.now + eff.durationMs;
+      zone.broadcast({ t: 'shield', eid: p.eid, amount, ms: eff.durationMs });
+      break;
+    }
+    case 'taunt_area': {
+      // provoca todos em volta: viram para o Bastião com a maior ameaça + uma margem
+      for (const m of zone.monstersInCircle(c.x, c.z, eff.radius || 8)) {
+        let top = 0;
+        for (const t of m.threat.values()) top = Math.max(top, t);
+        m.threat.set(c.id, top * 1.25 + 100);
+        m.targetId = p.eid; m.state = 'chase';
+        zone.creditControl(m, p, 1.0);
+        hits.push(m.eid);
+      }
+      zone.addBuff(p, { id: s.id, until: zone.now + eff.durationMs, mods: { damageTakenDownPct: perRank(eff, 'damageTakenDownPct', rank) } });
+      break;
+    }
+    case 'aura_damage': {
+      zone.addGroundEffect(p, s, rank, c.x, c.z, { follow: true });
+      if (eff.evasion) zone.addBuff(p, { id: s.id, until: zone.now + eff.pulses * eff.intervalMs, mods: { evasion: perRank(eff, 'evasion', rank) } });
+      break;
+    }
+    case 'delayed_aoe': {
+      zone.addGroundEffect(p, s, rank, x, z, { delayMs: eff.delayMs, pulses: 1 });
+      break;
+    }
+    case 'resurrect': {
+      if (!ally || !ally.char.dead) return { ok: false, code: 'bad_target', reason: 'Escolha um aliado caído.' };
+      zone.revivePlayer(ally, perRank(eff, 'hpPct', rank), p);
       break;
     }
     case 'line_strike': {
@@ -124,7 +171,7 @@ export function executeSkill(zone, p, s, rank, { target, x, z, ally }) {
     }
     case 'buff_self': {
       const mods = {};
-      for (const k of ['physDamagePct', 'attackSpeedPct', 'defensePct', 'critPct', 'moveSpeedPct']) if (eff[k] !== undefined) mods[k] = perRank(eff, k, rank);
+      for (const k of ['physDamagePct', 'attackSpeedPct', 'defensePct', 'critPct', 'moveSpeedPct', 'basicPierce']) if (eff[k] !== undefined) mods[k] = perRank(eff, k, rank);
       zone.addBuff(p, { id: s.id, until: zone.now + eff.durationMs, mods });
       break;
     }
@@ -194,5 +241,11 @@ function applyOnHit(zone, p, m, eff, rank) {
     zone.creditControl(m, p, ms / 1000);
   }
   if (eff.knockbackM) zone.pushMonster(m, c, eff.knockbackM);
+  // atordoar / derrubar: o monstro não anda nem ataca
+  const stunMs = eff.stunMs ? perRank(eff, 'stunMs', rank) : (eff.knockdownMs || 0);
+  if (stunMs > 0 && m.def.rank !== 'boss') {
+    zone.addMonsterFx(m, { kind: 'stun', until: zone.now + stunMs, by: c.id });
+    zone.creditControl(m, p, stunMs / 1000);
+  }
   if (eff.bonusSacred) zone.sacredDamage(p, m, perRank(eff, 'bonusSacred', rank));
 }

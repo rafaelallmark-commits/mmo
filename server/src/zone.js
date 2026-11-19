@@ -25,6 +25,9 @@ function structureRects(structs) {
   });
 }
 
+// dia (UTC) para recompensas diárias
+export const dayKey = (ms) => new Date(ms).toISOString().slice(0, 10);
+
 export class Zone {
   // hooks: { send(charId,msg), broadcast(msg) [só esta zona], partyIdOf(charId), onKillCredit(p, monsterDefId), onLevelUp(p) }
   constructor({ mapId, data, store, rng = makeRng(1), xpRate = 1, send, broadcast, hooks = {}, instanceId = null, mapOverride = null }) {
@@ -235,6 +238,10 @@ export class Zone {
     } else if (s.target === 'ground') {
       if (typeof x !== 'number' || typeof z !== 'number') return { ok: false, code: 'bad_request', reason: 'Escolha um ponto no chão.' };
       if (Math.hypot(x - c.x, z - c.z) > range + tol) return { ok: false, code: 'out_of_range', reason: `Ponto fora de alcance (alcance ${range} m).` };
+    } else if (s.target === 'ally_dead') {
+      ally = allyId ? this.entityById(allyId) : null;
+      if (!ally || !ally.char || !ally.char.dead) return { ok: false, code: 'bad_target', reason: 'Escolha um aliado caído.' };
+      if (dist(c, ally.char) > range + tol) return { ok: false, code: 'out_of_range', reason: `Aliado fora de alcance (alcance ${range} m).` };
     } else if (s.target === 'ally') {
       ally = allyId ? this.entityById(allyId) : p;
       if (!ally || !ally.char || ally.char.dead) return { ok: false, code: 'bad_target', reason: 'Aliado inválido.' };
@@ -365,10 +372,38 @@ export class Zone {
     m.dots.push({ ownerId, dps, until: this.now + durationMs, nextAt: this.now + 1000 });
   }
 
-  addGroundEffect(p, s, rank, x, z) {
+  // opts: { follow (acompanha o dono), delayMs (primeiro pulso atrasado), pulses }
+  addGroundEffect(p, s, rank, x, z, opts = {}) {
     const eff = s.effect;
-    this.groundEffects.push({ ownerId: p.char.id, skillId: s.id, rank, x, z, radius: eff.radius, pulses: eff.pulses, intervalMs: eff.intervalMs, nextAt: this.now });
-    this.broadcast({ t: 'ground', skill: s.id, x: r2(x), z: r2(z), radius: eff.radius, ms: eff.pulses * eff.intervalMs, by: p.eid });
+    const pulses = opts.pulses ?? eff.pulses ?? 1;
+    const intervalMs = eff.intervalMs ?? 1000;
+    const delay = opts.delayMs ?? 0;
+    this.groundEffects.push({ ownerId: p.char.id, skillId: s.id, rank, x, z, radius: eff.radius, pulses, intervalMs, nextAt: this.now + delay, follow: !!opts.follow });
+    const ms = delay + (pulses - (delay ? 1 : 0)) * intervalMs;
+    this.broadcast({ t: 'ground', skill: s.id, x: r2(x), z: r2(z), radius: eff.radius, ms: Math.max(ms, delay || 300), by: p.eid, follow: opts.follow ? p.eid : undefined });
+  }
+
+  // Volta à vida (Canção da Aurora etc.) sem voltar ao posto.
+  revivePlayer(ally, hpPct, by) {
+    const c = ally.char;
+    c.dead = false;
+    c.hp = Math.max(1, Math.round(ally.stats.maxHp * hpPct / 100));
+    ally.lastCombatAt = this.now;
+    this.broadcast({ t: 'respawn', eid: ally.eid, x: r2(c.x), z: r2(c.z), revived: true });
+  }
+
+  // Dano mágico fixo (espinhos do escudo etc.), mitigado pela resistência mágica.
+  magicFlat(p, m, flat, skillId = 'thorns') {
+    if (!m || m.state === 'dead') return;
+    const dmg = mitigate(flat, m.def.mres, p.char.level, this.data);
+    this.broadcast({ t: 'hit', src: p.eid, dst: m.eid, dmg, crit: false, miss: false, skill: skillId, magic: true });
+    this.damageMonster(m, p.char.id, dmg);
+  }
+
+  buffMod(p, key) {
+    let v = 0;
+    for (const b of p.buffs) if (b.until > this.now && b.mods[key]) v += b.mods[key];
+    return v;
   }
 
   // participação: soma ao placar do monstro (usado para XP e saque)
@@ -409,6 +444,7 @@ export class Zone {
   // ---------- simulação ----------
   tick(dtMs) {
     this.now += dtMs;
+    this.lastDt = dtMs;
     const dt = dtMs / 1000;
     for (const p of this.players.values()) this.tickPlayer(p, dt);
     for (const m of this.monsters.values()) this.tickMonster(m, dt);
@@ -466,6 +502,7 @@ export class Zone {
     if (p.shield && p.shield.until <= this.now) p.shield = null;
     const speed = this.f.movement.playerSpeed * (1 + (p.stats.moveSpeedPct || 0) / 100);
     const ox = c.x, oz = c.z;
+    if (p.stunUntil > this.now) { brake(c, dt, this.mv.decel * 2); return; } // atordoado (descarga do chefe)
     const opts = { accel: this.mv.accel, decel: this.mv.decel };
     if (p.targetId) {
       const t = this.monsters.get(p.targetId);
@@ -480,6 +517,13 @@ export class Zone {
             p.nextAttackAt = this.now + p.stats.attackIntervalMs;
             p.lastCombatAt = this.now;
             this.hitMonster(p, t, null, null);
+            const pierce = this.buffMod(p, 'basicPierce');
+            if (pierce > 0) {
+              // a estocada atravessa: atinge até N monstros logo atrás do alvo
+              const dx = (t.x - c.x) / (d || 1), dz = (t.z - c.z) / (d || 1);
+              const behind = this.monstersInCircle(t.x, t.z, 3.5).filter((o) => o !== t && ((o.x - t.x) * dx + (o.z - t.z) * dz) > 0).slice(0, pierce);
+              for (const o of behind) this.hitMonster(p, o, null, null);
+            }
           }
         }
         p.facing = { x: (t.x - c.x) / (d || 1), z: (t.z - c.z) / (d || 1) };
@@ -537,6 +581,7 @@ export class Zone {
 
   damageMonster(m, charId, dmg) {
     if (m.state === 'dead') return;
+    if (m.damageFilter) dmg = m.damageFilter(dmg, charId);
     const p = this.players.get(charId);
     const real = Math.min(dmg, m.hp);
     m.hp -= real;
@@ -580,9 +625,14 @@ export class Zone {
         const p = this.players.get(s.charId);
         const c = p.char;
         const lvlBefore = c.level;
-        this.grantXp(p, s.xp);
+        // elite diária (pontos de caça do M3, monstros com daily): o primeiro abate do dia dá XP em dobro e
+        // uma rolagem extra de saque
+        let daily = false;
+        if (m.def.daily && s.lootEligible && this.store.claimDaily(c.id, `elite:${m.defId}`, dayKey(nowWall))) daily = true;
+        this.grantXp(p, daily ? s.xp * 2 : s.xp);
         this.store.saveCharacter(c);
-        const drops = s.lootEligible ? this.rollLoot(m, c) : [];
+        const drops = s.lootEligible ? [...this.rollLoot(m, c), ...(daily ? this.rollLoot(m, c) : [])] : [];
+        if (daily) this.send(c.id, { t: 'system', text: `Elite diária: ${m.def.name} — XP em dobro e saque extra hoje.` });
         for (const d of drops) {
           const lp = this.nav.nearestFree(m.x + (this.rng() - 0.5) * 2, m.z + (this.rng() - 0.5) * 2, 3) ?? { x: m.x, z: m.z };
           const row = { id: randomUUID(), charId: c.id, defId: d.defId, qty: d.qty, gold: d.gold, mapId: this.mapId, x: r2(lp.x), z: r2(lp.z), monsterDef: m.defId, killId, createdAt: nowWall, expiresAt: nowWall + LOOT_TTL_MS };
@@ -608,7 +658,10 @@ export class Zone {
     const table = this.data.lootTables[m.def.lootTable];
     if (!table) return [];
     const out = [];
+    // chefe: a arma e a joia únicas saem uma única vez por personagem
+    const uniqueOk = m.def.rank !== 'boss' || this.store.claimDaily(char.id, `unique:${m.defId}`, 'sempre');
     for (const e of table.entries) {
+      if (!uniqueOk && (e.type === 'classDrop' || e.type === 'pool')) continue;
       if (this.rng() >= e.chance) continue;
       if (e.type === 'gold') out.push({ defId: null, qty: 0, gold: rollInt(this.rng, e.min, e.max) });
       else if (e.type === 'item') out.push({ defId: e.defId, qty: rollInt(this.rng, e.min, e.max), gold: 0 });
@@ -636,6 +689,7 @@ export class Zone {
       if (m.state === 'dead') return;
     }
     if (m.fx.length) m.fx = m.fx.filter((f) => f.until > this.now);
+    if (this.monsterFx(m, 'stun')) { brake(m, dt, 30); return; }
     const rooted = !!this.monsterFx(m, 'root');
     const slow = this.monsterFx(m, 'slow');
     const speed = rooted ? 0 : m.def.moveSpeed * (slow ? 1 - slow.pct / 100 : 1);
@@ -710,6 +764,9 @@ export class Zone {
   // Dano em jogador: guardiões (redirecionamento) → escudo → vida. Proteção conta como participação.
   damagePlayer(p, amount, m) {
     const prot = this.f.xp.participation.threatAbsorbed;
+    const down = this.buffMod(p, 'damageTakenDownPct');
+    if (down) amount = Math.max(1, Math.round(amount * (1 - Math.min(down, 80) / 100)));
+    if (p.shield?.thornsMagic && m) this.magicFlat(p, m, p.shield.thornsMagic + Math.floor(p.stats.attrs.spi * 0.2));
     for (const g of p.guards) {
       const gp = this.players.get(g.guardianId);
       if (!gp || gp.char.dead || g.until <= this.now) continue;
@@ -753,7 +810,8 @@ export class Zone {
       while (g.pulses > 0 && g.nextAt <= this.now) {
         g.pulses--; g.nextAt += g.intervalMs;
         const p = this.players.get(g.ownerId);
-        if (!p) { g.pulses = 0; break; }
+        if (!p || (g.follow && p.char.dead)) { g.pulses = 0; break; }
+        if (g.follow) { g.x = p.char.x; g.z = p.char.z; }
         const s = this.data.skills[g.skillId];
         for (const m of this.monstersInCircle(g.x, g.z, g.radius)) {
           if (s.effect.slowPct) { this.addMonsterFx(m, { kind: 'slow', until: this.now + g.intervalMs + 200, pct: s.effect.slowPct, by: g.ownerId }); this.creditControl(m, p, g.intervalMs / 2000); }

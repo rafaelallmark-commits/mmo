@@ -44,6 +44,7 @@ export class SimClient {
   }
 
   push(m) {
+    m._at = Date.now();
     if (m.t !== 'snap') this.events.push(m);
     for (const w of [...this.waiters]) {
       if (w.pred(m)) { this.waiters.splice(this.waiters.indexOf(w), 1); clearTimeout(w.timer); w.resolve(m); }
