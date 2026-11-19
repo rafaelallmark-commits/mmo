@@ -26,3 +26,18 @@ window/stretch/aspect="expand"
 
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+
+[shader_globals]
+
+sun_direction={
+"type": "vec3",
+"value": Vector3(0.45, 0.74, 0.5)
+}
+sun_color={
+"type": "color",
+"value": Color(1, 0.96, 0.9, 1)
+}
+ambient_tint={
+"type": "color",
+"value": Color(0.18, 0.17, 0.2, 1)
+}

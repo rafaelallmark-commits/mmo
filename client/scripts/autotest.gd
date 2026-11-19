@@ -331,7 +331,7 @@ func _nav_tick() -> void:
 			next_wait = 3500
 		8:
 			_nav_shot("07_mundo")
-			main.world.cam_dist = 13.0
+			main.world.cam_dist = 11.0
 			next_wait = 1200
 		9:
 			_nav_shot("08_mundo_perto")

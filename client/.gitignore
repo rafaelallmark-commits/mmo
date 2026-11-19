@@ -1,3 +1,6 @@
 .godot/
 *.import
 export_presets.cfg
+# texturas extraídas pelo importador do Godot a partir dos .glb (recriadas na importação)
+assets/characters/*.png
+assets/characters/*.png.import

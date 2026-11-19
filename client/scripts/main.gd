@@ -62,6 +62,26 @@ func _ready() -> void:
 	ui = CanvasLayer.new()
 	ui.layer = 10
 	add_child(ui)
+	if args.has("faceprobe"):
+		var fp = preload("res://scripts/face_probe.gd").new()
+		add_child(fp)
+		fp.start(args["faceprobe"])
+		return
+	if args.has("lightprobe"):
+		var lp = preload("res://scripts/light_probe.gd").new()
+		add_child(lp)
+		lp.start()
+		return
+	if args.has("vrmprobe"):
+		var vp = preload("res://scripts/vrm_probe.gd").new()
+		add_child(vp)
+		vp.start(args["vrmprobe"])
+		return
+	if args.has("gallery"):
+		var g = preload("res://scripts/gallery.gd").new()
+		add_child(g)
+		g.start(args["gallery"])
+		return
 	if args.has("autotest") and not args.has("navshots"):
 		autotest = preload("res://scripts/autotest.gd").new()
 		add_child(autotest)
@@ -225,6 +245,13 @@ func show_title() -> void:
 	_button(btns, "Jogar", show_login, true)
 	_button(btns, "Opções", show_options)
 	_button(btns, "Sair", func(): get_tree().quit())
+	var cred := Label.new()
+	cred.text = "Personagens: Seed-san © VirtualCast, Inc. · amostra VRM © 2022 pixiv Inc. (VRM Public License 1.0)"
+	cred.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	cred.position = Vector2(20, -34)
+	cred.add_theme_font_size_override("font_size", 12)
+	cred.add_theme_color_override("font_color", Color(1, 1, 1, 0.65))
+	root.add_child(cred)
 	var ver := Label.new()
 	ver.text = "Marco 2 · protótipo"
 	ver.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)

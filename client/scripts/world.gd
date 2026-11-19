@@ -9,8 +9,8 @@ var main # main.gd
 var cam_pivot: Node3D
 var camera: Camera3D
 var cam_yaw := -0.6
-var cam_pitch := 0.95
-var cam_dist := 24.0
+var cam_pitch := 0.8
+var cam_dist := 18.0
 var entities := {} # eid -> { node, label, target_pos, data, w }
 var loots := {} # loot id -> { node, data }
 var selected := ""
@@ -49,6 +49,7 @@ func _ready() -> void:
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 80.0
 	add_child(sun)
+	Art.publish_sun(sun)
 	_build_map(map)
 	cam_pivot = Node3D.new()
 	add_child(cam_pivot)
@@ -131,12 +132,18 @@ func _build_map(map: Dictionary) -> void:
 		gl.position = gpos + Vector3(0, 3.6, -3)
 		add_child(gl)
 	for n in map.get("npcs", []):
-		var npc := Art.character("", "", true, Color("#e3a548") if n.get("role", "") == "master" else Color("#c9b07a"))
+		var npc_col := Color("#e3a548") if n.get("role", "") == "master" else Color.from_hsv(float(hash(n["id"]) % 360) / 360.0, 0.35, 0.75)
+		var npc: Node3D
+		if n.get("role", "") == "master" and n.has("classId"):
+			npc = Art.character(n["classId"], _kit_family(n["classId"]))
+		else:
+			npc = Art.character("", "", true, npc_col, hash(n["id"]))
 		npc.position = Vector3(float(n["x"]), 0, float(n["z"]))
-		npc.rotation.y = PI
+		npc.scale = Vector3.ONE * 1.3
+		npc.rotation.y = -0.6
 		add_child(npc)
 		var nl := _label("%s\n‹%s›" % [n["name"], ROLE_NAMES.get(n.get("role", ""), "")], 36, Color("#ffe39a"))
-		nl.position = npc.position + Vector3(0, 2.3, 0)
+		nl.position = npc.position + Vector3(0, 2.9, 0)
 		add_child(nl)
 		npc_nodes[n["id"]] = {"pos": npc.position, "data": n, "node": npc}
 	for o in map.get("objects", []):
@@ -224,6 +231,13 @@ func _scatter_props(map: Dictionary, w: float, h: float) -> void:
 		add_child(prop)
 		placed += 1
 
+func _kit_family(class_id: String) -> String:
+	for id in main.defs.get("classes", {}).get(class_id, {}).get("startingKit", {}).get("equip", []):
+		var d: Dictionary = main.defs["items"].get(id, {})
+		if d.get("slot", "") == "weapon":
+			return d.get("family", "")
+	return ""
+
 func reset_entities() -> void:
 	for e in entities.values():
 		e["node"].queue_free()
@@ -279,10 +293,13 @@ func _spawn_entity(d: Dictionary) -> Dictionary:
 	if d["k"] == "p":
 		root = Art.character(d.get("cls", ""), _weapon_family(d.get("w")))
 	else:
-		root = Art.monster(main.defs["monsters"].get(d["def"], {}))
+		var md: Dictionary = main.defs["monsters"].get(d["def"], {}).duplicate()
+		md["id"] = d["def"]
+		root = Art.monster(md)
+	root.scale = Vector3.ONE * (1.3 if d["k"] == "p" else 1.15)
 	add_child(root)
 	var label := _label("", 34, Color("#f2ead8") if d["k"] == "p" else Color("#ffcf9a"))
-	label.position.y = 2.5 if d["k"] == "p" else 2.0
+	label.position.y = 2.1 if d["k"] == "p" else 1.8
 	root.add_child(label)
 	root.position = Vector3(float(d["x"]), 0, float(d["z"]))
 	return {"node": root, "label": label, "target_pos": root.position, "data": d, "w": d.get("w"), "phase": randf() * TAU}
@@ -316,12 +333,9 @@ func _process(delta: float) -> void:
 		if face_dir.length() > 0.001:
 			var want := atan2(face_dir.x, face_dir.z)
 			n.rotation.y = lerp_angle(n.rotation.y, want, clampf(delta * 10.0, 0.0, 1.0))
-		var body := n.get_node_or_null("Body")
-		if body:
-			var moving := mv.length() > 0.004
-			var speed := 11.0 if moving else 2.2
-			var amp := 0.06 if moving else 0.025
-			body.position.y = absf(sin(_t * speed + float(e["phase"]))) * amp
+		var moving := mv.length() > 0.004
+		if n.has_method("set_moving"):
+			n.set_moving(moving)
 	var focus := my_pos()
 	cam_pivot.position = cam_pivot.position.lerp(focus, clampf(delta * 8.0, 0.0, 1.0))
 	var rot_speed := 1.8 * float(main.settings.get("camera_sensitivity", 1.0))
@@ -521,6 +535,11 @@ func on_hit(m: Dictionary) -> void:
 		text += "!"
 		col = Color("#ffd84a")
 	_float_text(dst["node"].position, text, col, 62 if m.get("crit", false) else 46)
+	var src: Dictionary = entities.get(m.get("src", ""), {})
+	if not src.is_empty() and m.get("skill", null) != "dot" and src["node"].has_method("play_attack"):
+		src["node"].play_attack()
+	if not m.get("miss", false) and dst["node"].has_method("play_hurt"):
+		dst["node"].play_hurt()
 	# pequeno "tranco" no atingido
 	if not m.get("miss", false):
 		var body = dst["node"].get_node_or_null("Body")

@@ -11,8 +11,8 @@ var _t := 0.0
 const VIEWS := {
 	"title": [Vector3(9, 4.5, 13), Vector3(0, 1.6, -4)],
 	"login": [Vector3(-7, 3.5, 9), Vector3(1, 1.4, 0)],
-	"chars": [Vector3(1.4, 1.7, 4.4), Vector3(0, 1.05, 0)],
-	"create": [Vector3(1.4, 1.7, 4.4), Vector3(0, 1.05, 0)],
+	"chars": [Vector3(-0.35, 1.3, 4.1), Vector3(-0.85, 0.95, 0)],
+	"create": [Vector3(-0.35, 1.3, 4.1), Vector3(-0.85, 0.95, 0)],
 }
 
 func _ready() -> void:
@@ -25,6 +25,7 @@ func _ready() -> void:
 	sun.light_energy = 1.05
 	sun.shadow_enabled = true
 	add_child(sun)
+	Art.publish_sun(sun)
 	var ground := PlaneMesh.new()
 	ground.size = Vector2(120, 120)
 	Art.part(self, ground, Art.ground(Color("#857549"), Color("#677a44")), Vector3.ZERO)
@@ -80,10 +81,7 @@ func _process(delta: float) -> void:
 	var pos: Vector3 = target[0]
 	if view == "title":
 		pos = Vector3(cos(_t * 0.05) * 14.0, 4.5, sin(_t * 0.05) * 14.0 + 2.0)
-	camera.position = camera.position.lerp(pos, clampf(delta * 2.5, 0.0, 1.0))
+	camera.position = camera.position.lerp(pos, clampf(delta * 5.0, 0.0, 1.0))
 	camera.look_at(target[1], Vector3.UP)
 	if preview:
-		preview.rotation.y += delta * 0.6
-		var body = preview.get_node_or_null("Body")
-		if body:
-			body.position.y = absf(sin(_t * 2.2)) * 0.025
+		preview.rotation.y = sin(_t * 0.4) * 0.6
