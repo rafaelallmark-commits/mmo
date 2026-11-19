@@ -382,6 +382,9 @@ func _scene_tick() -> void:
 	if Time.get_ticks_msec() < scene_until:
 		return
 	var wait := 1500
+	if main.args.has("trial") and scene_i == 0 and not trial_done:
+		_trial_tick()
+		return
 	if scene_i >= SCENE_SPOTS.size() or (scene_i >= 1 and main.args.has("scenequick")):
 		say("OK")
 		get_tree().quit(0)
@@ -479,3 +482,86 @@ func _motion_report(log: Array) -> void:
 				max_jump = maxf(max_jump, absf(cruise[i] - cruise[i - 1]))
 		dev = sqrt(dev / maxf(1.0, cruise.size()))
 		say("fluidez %s: %d quadros, corrida a %.2f m/s (desvio %.2f, maior salto %.2f), recuos %d" % [series[1], speeds.size(), mean, dev, max_jump, reversals])
+
+
+# ---------------- prova de classe vista no cliente (--sceneshots=pasta --trial) ----------------
+var trial_step := 0
+var trial_done := false
+var trial_until := 0
+var trial_casts := 0
+
+func _trial_tick() -> void:
+	if Time.get_ticks_msec() < trial_until:
+		return
+	var master := "master_" + str(main.ch["classId"])
+	var wait := 1500
+	match trial_step:
+		0:
+			Net.request("gm", {"cmd": "xp", "level": 10}, func(r):
+				if r["ok"]:
+					main.set_char(r["char"]))
+			var done := []
+			for q in ["tutorial", "c1_count", "c1_rats", "c1_master", "c1_route", "c1_foreman", "c2_water", "c2_pressure", "c2_pages", "c2_group", "c2_signature", "c3_fuses", "c3_rats"]:
+				done.append(q)
+			Net.request("gm", {"cmd": "quest_done", "quests": done})
+			var city := "pedrambar" if main.ch["classId"] in ["breaker", "bastion", "pikeman", "warden"] else "vau_de_nacar"
+			var mp: Dictionary = main.defs["maps"][city]
+			var mx := 30.0
+			var mz := 14.0
+			for n in mp["npcs"]:
+				if n["id"] == master:
+					mx = float(n["x"])
+					mz = float(n["z"]) + 2.0
+			Net.request("gm", {"cmd": "teleport", "mapId": city, "x": mx, "z": mz})
+			wait = 3500
+		1:
+			if not main.in_world or main.world == null or not main.world.npc_nodes.has(master):
+				return
+			Net.request("quest_accept", {"quest": "c3_trial", "npc": master}, func(r):
+				say("prova aceita: %s" % str(r.get("ok")) + ("" if r.get("ok") else " " + str(r.get("reason")))))
+			wait = 1200
+		2:
+			Net.request("trial_start", {"npc": master}, func(r):
+				say("prova iniciada: %s" % str(r.get("ok")) + ("" if r.get("ok") else " " + str(r.get("reason")))))
+			wait = 4000
+		3:
+			if main.map_def().get("id", "") != "arena_prova" or main.world == null or main.world.me().is_empty():
+				return
+			main.world.cam_dist = 16.0
+			main.world.cam_pitch = 0.75
+			_scene_shot("90_arena_entrada")
+			wait = 2500
+		4, 5, 6, 7, 8, 9, 10, 11:
+			# ataca o monstro mais próximo e usa as habilidades disponíveis
+			var best := ""
+			var bd := 1e9
+			for eid in main.world.entities.keys():
+				var e: Dictionary = main.world.entities[eid]
+				if e["data"]["k"] == "m":
+					var d: float = e["node"].position.distance_to(main.world.my_pos())
+					if d < bd:
+						bd = d
+						best = eid
+			if best != "":
+				main.world.selected = best
+				if trial_step == 4 or main.world.entities[best]["data"].get("tgt", null) == null:
+					Net.request("attack", {"target": best})
+				var sk: Array = main.class_skills()
+				var learned: Dictionary = main.ch.get("skills", {})
+				var usable := []
+				for sid in sk:
+					if int(learned.get(sid, 0)) > 0:
+						usable.append(sid)
+				if not usable.is_empty():
+					main.world.use_skill(usable[trial_casts % usable.size()])
+					trial_casts += 1
+			wait = 900
+			if trial_step in [6, 8, 10]:
+				get_tree().create_timer(0.25).timeout.connect(func(): _scene_shot("9%d_arena_combate" % trial_step))
+		12:
+			say("prova vista no cliente: %d habilidades usadas, mapa %s" % [trial_casts, main.map_def().get("id", "")])
+			trial_done = true
+			scene_i = SCENE_SPOTS.size()
+			return
+	trial_step += 1
+	trial_until = Time.get_ticks_msec() + wait

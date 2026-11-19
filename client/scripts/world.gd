@@ -7,9 +7,11 @@ extends Node3D
 const Art = preload("res://scripts/art.gd")
 const Scenery = preload("res://scripts/scenery.gd")
 const Motion = preload("res://scripts/motion.gd")
+const Vfx = preload("res://scripts/vfx.gd")
 
 var main # main.gd
 var scenery: Scenery
+var vfx: Vfx
 var cam_pivot: Node3D
 var camera: Camera3D
 var cam_yaw := -0.6        # alvo da rotação (teclas Q/E e botão direito)
@@ -60,6 +62,9 @@ func _ready() -> void:
 	scenery = Scenery.new()
 	add_child(scenery)
 	scenery.build(map)
+	vfx = Vfx.new()
+	vfx.world = self
+	add_child(vfx)
 	_build_map(map)
 	cam_pivot = Node3D.new()
 	add_child(cam_pivot)
@@ -694,6 +699,10 @@ func on_hit(m: Dictionary) -> void:
 		col = Color("#ffd84a")
 	_float_text(dst["node"].position, text, col, 62 if m.get("crit", false) else 46)
 	var src: Dictionary = entities.get(m.get("src", ""), {})
+	var fam := ""
+	if not src.is_empty() and src["data"]["k"] == "p":
+		fam = _weapon_family(src["data"].get("w"))
+	vfx.on_hit(m, fam)
 	if not src.is_empty() and m.get("skill", null) != "dot" and src["node"].has_method("play_attack"):
 		src["node"].play_attack()
 	if not m.get("miss", false):
@@ -711,6 +720,7 @@ func on_heal(m: Dictionary) -> void:
 	if dst.is_empty() or int(m["amount"]) <= 0:
 		return
 	_float_text(dst["node"].position, "+%d" % int(m["amount"]), Color("#6fd06a"))
+	vfx.on_heal(m)
 
 func on_death(eid: String) -> void:
 	if entities.has(eid):

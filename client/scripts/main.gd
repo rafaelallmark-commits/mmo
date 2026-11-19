@@ -779,6 +779,18 @@ func _on_message(m: Dictionary) -> void:
 		"ground":
 			if world:
 				world.ground_effect(m)
+		"cast":
+			if world and world.vfx:
+				world.vfx.on_cast(m)
+		"buff":
+			if world and world.vfx:
+				world.vfx.on_buff(m)
+		"shield":
+			if world and world.vfx:
+				world.vfx.on_shield(m)
+		"warn":
+			if world and world.vfx:
+				world.vfx.on_warn(m)
 		"kicked":
 			if hud:
 				hud.show_disconnect(m.get("reason", "Desconectado."))
