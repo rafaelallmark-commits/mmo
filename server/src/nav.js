@@ -199,7 +199,8 @@ export function followPath(e, path, dt, maxSpeed, { accel = 18, decel = 24, stop
     if (d < 1e-6 || avail <= 1e-6) { if (!last) { path.shift(); continue; } break; }
     const s = Math.min(step, avail);
     const nx = e.x + (dx / d) * s, nz = e.z + (dz / d) * s;
-    if (isFree && !isFree(nx, nz)) { e.speed = 0; break; }
+    // bloqueia só a entrada num obstáculo (quem já está dentro de um pode sair)
+    if (isFree && !isFree(nx, nz) && isFree(e.x, e.z)) { e.speed = 0; break; }
     e.x = nx; e.z = nz; dirx = dx / d; dirz = dz / d;
     step -= s;
     if (s >= avail - 1e-6) { if (last) { path.length = 0; break; } path.shift(); }

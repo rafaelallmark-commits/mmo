@@ -41,6 +41,12 @@ const MIX = {
   vau_de_nacar: { count: 46, mix: { tree_birch: 22, tree_round: 18, bush: 30, crate: 12, barrel: 12, rock_s: 6 } },
 };
 
+// monumento da praça de cada cidade (tem colisão, como uma peça grande)
+const MONUMENTS = {
+  pedrambar: { t: 'monument', x: 40, z: 21, s: 1, rot: 0, r: 1.7, style: 'balance' },
+  vau_de_nacar: { t: 'monument', x: 21, z: 39, s: 1, rot: 0, r: 1.9, style: 'clock' },
+};
+
 const distToSeg = (px, pz, a, b) => {
   const vx = b[0] - a[0], vz = b[1] - a[1];
   const t = Math.max(0, Math.min(1, ((px - a[0]) * vx + (pz - a[1]) * vz) / (vx * vx + vz * vz || 1)));
@@ -94,6 +100,8 @@ for (const [id, map] of Object.entries(doc.maps)) {
   for (const n of map.npcs ?? []) avoid.push([n.x, n.z, 3.5]);
   for (const o of map.objects ?? []) avoid.push([o.x, o.z, 3.2]);
   if (map.guardPost && map.guardPost.safeRadius < 30) avoid.push([map.guardPost.x, map.guardPost.z, Math.min(map.guardPost.safeRadius, 14) + 2]);
+  const mon = MONUMENTS[id];
+  if (mon) avoid.push([mon.x, mon.z, mon.r + 2]);
   const props = [];
   let tries = 0;
   while (props.length < cfg.count && tries < cfg.count * 40) {
@@ -115,6 +123,7 @@ for (const [id, map] of Object.entries(doc.maps)) {
     if (r > 0 && props.some((p) => p.r > 0 && Math.hypot(p.x - x, p.z - z) < p.r + r + 1.4)) continue;
     props.push({ t: type, x: +x.toFixed(2), z: +z.toFixed(2), s: +s.toFixed(2), rot: Math.round(rng() * 360), r });
   }
+  if (mon) props.push({ ...mon });
   map.props = props;
   console.log(`${id}: ${props.length} peças (${props.filter((p) => p.r > 0).length} com colisão), ${roads.length} estradas, ${map.structures.length} construções`);
 }
