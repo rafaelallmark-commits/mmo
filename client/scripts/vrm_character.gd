@@ -46,6 +46,9 @@ const MODELS := {
 		"head_top": 0.235,
 		"waist_r": 0.118,
 		"expr": {"happy": ["Face_Blendshape.Fcl_ALL_Joy"], "angry": ["Face_Blendshape.Fcl_ALL_Angry"], "hurt": ["Face_Blendshape.Fcl_ALL_Sorrow"]},
+		# dedos: formato do nome (dedo, segmento 1..3, lado L/R)
+		"finger_fmt": "J_Bip_{s}_{f}{n}",
+		"finger_names": {"thumb": "Thumb", "index": "Index", "middle": "Middle", "ring": "Ring", "little": "Little"},
 	},
 	"boy": {
 		"path": "res://assets/characters/seed_san.glb",
@@ -71,6 +74,8 @@ const MODELS := {
 		"head_top": 0.24,
 		"waist_r": 0.13,
 		"expr": {"happy": ["face_happy"], "angry": ["face_angry"], "hurt": ["face_sad", "eye_close"]},
+		"finger_fmt": "{f}.0{n}.{s}",
+		"finger_names": {"thumb": "thumb", "index": "f_index", "middle": "f_middle", "ring": "f_ring", "little": "f_pinky"},
 	},
 }
 
@@ -168,12 +173,10 @@ func setup(p_model: String, p_look: Dictionary, p_weapon: String, p_accessories:
 			expr_targets[ename] = lst
 			expr_weight[ename] = 0.0
 			expr_until[ename] = -1.0
+	_setup_fingers()
+	_measure_limbs()
 	if weapon_family != "" and weapon_node != null:
-		var w: Node3D = weapon_node
-		var holder := _attach("r_hand", Vector3(-0.065, -0.012, 0.015), _idle_chain(["r_upper_arm", "r_lower_arm"]), Quaternion(Vector3.RIGHT, deg_to_rad(28)))
-		if holder:
-			holder.add_child(w)
-			weapon_holder = holder
+		_attach_weapon(weapon_node)
 	_build_accessories()
 	_pose(0.0)
 	_t = randf() * 10.0
@@ -358,13 +361,16 @@ func _build_accessories() -> void:
 				if cp:
 					cp.add_child(Gear.cape(look.get("cape", trim), trim))
 			"shield", "small_shield":
+				# preso ao antebraço esquerdo pelas correias: o eixo do disco é o dorso do antebraço
+				# (+Y na pose T), então fica de lado com o braço caído e de frente na guarda
 				var r: float = 0.21 if acc == "shield" else 0.15
-				var sh := _attach("l_hand", Vector3(0.04, -0.01, 0.06), _idle_chain(["l_upper_arm", "l_lower_arm"]), Quaternion(Vector3.UP, deg_to_rad(25)))
+				var sh := _attach("l_lower_arm", Vector3(forearm * 0.6, 0.06, 0.0), Quaternion.IDENTITY, Quaternion.IDENTITY)
 				if sh:
-					Gear.part(sh, Gear.cyl(r, r, 0.035, 26), Gear.mat(trim.darkened(0.35)), Vector3.ZERO, Vector3.ONE, Vector3(90, 0, 0))
-					Gear.part(sh, Gear.cyl(r * 0.8, r * 0.8, 0.04, 26), Gear.mat(outfit), Vector3(0, 0, 0.004), Vector3.ONE, Vector3(90, 0, 0))
-					Gear.part(sh, Gear.torus(r * 0.36, r * 0.44, 20), Gear.mat(trim), Vector3(0, 0, 0.024), Vector3.ONE, Vector3(90, 0, 0))
-					Gear.part(sh, Gear.sphere(0.035), Gear.mat(trim), Vector3(0, 0, 0.03))
+					Gear.part(sh, Gear.cyl(r, r, 0.035, 26), Gear.mat(trim.darkened(0.35)), Vector3.ZERO)
+					Gear.part(sh, Gear.cyl(r * 0.8, r * 0.8, 0.04, 26), Gear.mat(outfit), Vector3(0, 0.004, 0))
+					Gear.part(sh, Gear.torus(r * 0.36, r * 0.44, 20), Gear.mat(trim), Vector3(0, 0.024, 0))
+					Gear.part(sh, Gear.sphere(0.035), Gear.mat(trim), Vector3(0, 0.03, 0))
+					has_shield = true
 			"quiver":
 				var q := _attach("chest", Vector3(0.08, 0.05, -0.13), Quaternion.IDENTITY, Quaternion(Vector3.BACK, deg_to_rad(-25)))
 				if q:
@@ -460,15 +466,27 @@ func _sphere(r: float) -> SphereMesh:
 	return s
 
 # ---------------- animação ----------------
-## Movimento dirigido pela velocidade real (m/s no mundo): a passada avança pela distância
-## percorrida (sem "patinar"), mistura andar e correr, inclina o corpo ao acelerar/frear e nas
-## curvas, dá passinhos ao girar parado e olha para o alvo.
+## Animação procedural sobre o esqueleto (docs/07-navegacao.md §7.6):
+## - empunhadura por família de arma (GRIPS): em que mão, que ponto do cabo fica no punho, como a
+##   arma assenta na palma e onde vai a segunda mão (IK de dois ossos no braço livre);
+## - posturas de braço (STANCES) por estado: relaxado, guarda (com alvo), corrida e golpe;
+## - marcha e corrida por curvas de ângulos articulares (biomecânica humana), com o quadril na
+##   altura que mantém o pé de apoio no chão;
+## - parado com o peso numa perna (contrapposto), respirando e trocando o apoio de vez em quando.
+##
+## Braço: [direção do braço (eixos do personagem: frente +Z, esquerda +X), torção, cotovelo,
+## flexão do punho, desvio do punho (+ para o polegar), supinação]. Ângulos em radianos.
 var speed := 0.0
 var accel := 0.0
 var turn := 0.0
+var combat := false
+var has_shield := false
+var npc_variant := 0
+var debug_freeze := false
 var _base_basis := Basis()
 var _speed_s := 0.0
 var _run := 0.0
+var _combat_w := 0.0
 var _lean_f := 0.0
 var _lean_s := 0.0
 var _turn_amp := 0.0
@@ -477,7 +495,227 @@ var _look_pos := Vector3.ZERO
 var _look_w := 0.0
 var _look_yaw := 0.0
 var _look_pitch := 0.0
+var _stand := 1.0
+var _stand_target := 1.0
+var _stand_in := 9.0
+var _attack_variant := 0
+var _attack_dur := 0.5
+var _cast := -1.0
+var _slide := 0.0
+var _two_w := 0.0
+var _arrow_on := false
+var fingers := {}          # "l"/"r" -> { dedo: [idx1, idx2, idx3] }
+var grip_node: Node3D      # segura a arma; desliza ao longo do cabo
+var weapon_mesh: Node3D
+var arrow_node: Node3D
+var grip := {}
+var _grip_x := 0.07
+var _palm_y := 0.024
+var _thigh_len := 0.4
+var _shin_len := 0.4
+var _hand_curl := {"l": 0.2, "r": 0.2}
+var _thumb_curl := {"l": 0.2, "r": 0.2}
 
+## Empunhadura por família. hand: mão da arma. slide: ponto do cabo (metros da arma, ao longo do
+## eixo da arma a partir da origem do punho) que fica na mão: [relaxado, guarda, corrida].
+## two: ponto da segunda mão por postura (−1 = só uma mão). tilt: quanto a ponta foge do polegar
+## para o lado dos dedos (o cabo atravessa a palma na diagonal); roll: gira o gume no eixo da arma.
+const GRIPS := {
+	"": {"hand": "r", "slide": [0.0, 0.0, 0.0], "two": [-1.0, -1.0, -1.0], "tilt": 0.0, "roll": 0.0},
+	"sword_1h": {"hand": "r", "slide": [0.0, 0.0, 0.0], "two": [-1.0, -1.0, -1.0], "tilt": 0.3, "roll": 0.0},
+	"axe_1h": {"hand": "r", "slide": [-0.04, -0.02, -0.04], "two": [-1.0, -1.0, -1.0], "tilt": 0.3, "roll": 0.0},
+	"hammer_1h": {"hand": "r", "slide": [-0.04, -0.02, -0.04], "two": [-1.0, -1.0, -1.0], "tilt": 0.3, "roll": 0.0},
+	"claw": {"hand": "r", "slide": [0.0, 0.0, 0.0], "two": [-1.0, -1.0, -1.0], "tilt": 0.0, "roll": 0.0, "fist": true},
+	"sword_2h": {"hand": "r", "slide": [0.0, 0.0, 0.0], "two": [-1.0, -0.11, -1.0], "tilt": 0.15, "roll": 0.0},
+	"axe_2h": {"hand": "r", "slide": [-0.08, -0.1, -0.08], "two": [-1.0, 0.3, -1.0], "tilt": 0.15, "roll": 0.0},
+	"spear_2h": {"hand": "r", "slide": [0.5, 0.12, 0.55], "two": [-1.0, 0.8, -1.0], "tilt": 0.0, "roll": 0.0},
+	"bow": {"hand": "l", "slide": [0.0, 0.0, 0.0], "two": [-1.0, -1.0, -1.0], "tilt": 0.0, "roll": 0.0},
+	"javelin": {"hand": "r", "slide": [0.3, 0.3, 0.3], "two": [-1.0, -1.0, -1.0], "tilt": 0.0, "roll": 0.0},
+	"staff_2h": {"hand": "r", "slide": [0.8, 0.45, 0.6], "two": [-1.0, 0.9, -1.0], "tilt": 0.0, "roll": 0.0},
+	"wand": {"hand": "r", "slide": [0.0, 0.0, 0.0], "two": [-1.0, -1.0, -1.0], "tilt": 0.2, "roll": 0.0},
+	"scepter": {"hand": "r", "slide": [0.02, 0.02, 0.02], "two": [-1.0, -1.0, -1.0], "tilt": 0.0, "roll": 0.0},
+}
+
+# braço relaxado (sem arma)
+const ARM_RELAX_R := [Vector3(-0.3, -0.95, 0.06), 0.0, 0.3, 0.12, 0.0, 0.0]
+const ARM_RELAX_L := [Vector3(0.3, -0.95, 0.06), 0.0, 0.3, 0.12, 0.0, 0.0]
+const ARM_RUN_R := [Vector3(-0.22, -0.97, 0.0), 0.0, 1.45, 0.1, 0.0, 0.0]
+const ARM_RUN_L := [Vector3(0.22, -0.97, 0.0), 0.0, 1.45, 0.1, 0.0, 0.0]
+const ARM_GUARD_FIST_R := [Vector3(-0.35, -0.72, 0.6), 0.2, 2.0, 0.1, 0.0, 0.0]
+const ARM_GUARD_FIST_L := [Vector3(0.35, -0.72, 0.6), 0.2, 2.0, 0.1, 0.0, 0.0]
+const ARM_SHIELD_GUARD := [Vector3(0.3, -0.62, 0.72), 0.5, 1.7, 0.0, 0.0, 0.3]
+
+## Posturas por família: braço da arma ("w") e braço livre ("o") em cada estado, e os golpes como
+## sequência de chaves [tempo 0..1, braço da arma, braço livre (ou null), giro do tronco, inclinação].
+const STANCES := {
+	"": {
+		"relaxed": {"w": ARM_RELAX_R, "o": ARM_RELAX_L},
+		"guard": {"w": ARM_GUARD_FIST_R, "o": ARM_GUARD_FIST_L},
+		"run": {"w": ARM_RUN_R, "o": ARM_RUN_L},
+		"attack": [[0.35, [Vector3(-0.3, -0.8, -0.5), 0.2, 2.1, 0.1, 0.0, 0.0], null, 0.35, 0.0], [0.5, [Vector3(-0.08, -0.05, 1.0), 0.0, 0.1, 0.0, 0.0, 0.0], null, -0.35, 0.12], [0.7, [Vector3(-0.1, -0.15, 0.98), 0.0, 0.3, 0.0, 0.0, 0.0], null, -0.3, 0.1]],
+	},
+	"sword_1h": {
+		"relaxed": {"w": [Vector3(-0.28, -0.95, 0.12), 0.0, 0.3, 0.0, -0.55, 0.15], "o": ARM_RELAX_L},
+		"guard": {"w": [Vector3(-0.38, -0.62, 0.68), 0.25, 1.3, 0.0, 0.45, 0.0], "o": ARM_GUARD_FIST_L},
+		"run": {"w": [Vector3(-0.24, -0.96, -0.05), 0.0, 1.15, 0.0, -0.45, 0.0], "o": ARM_RUN_L},
+		"attack": [[0.35, [Vector3(-0.35, 0.85, -0.4), 0.3, 1.7, 0.0, 0.6, 0.0], null, 0.35, -0.08], [0.52, [Vector3(-0.15, -0.35, 0.92), 0.0, 0.25, 0.0, -0.3, 0.0], null, -0.35, 0.18], [0.7, [Vector3(0.12, -0.75, 0.65), 0.0, 0.4, 0.0, -0.4, 0.0], null, -0.45, 0.15]],
+		"attack_b": [[0.32, [Vector3(-0.9, 0.15, -0.4), 0.0, 0.9, 0.0, 0.2, -0.6], null, 0.5, 0.0], [0.5, [Vector3(-0.1, 0.0, 1.0), 0.0, 0.2, 0.0, 0.0, -1.2], null, -0.2, 0.1], [0.68, [Vector3(0.6, -0.1, 0.75), 0.0, 0.6, 0.0, 0.0, -1.2], null, -0.55, 0.08]],
+	},
+	"axe_2h": {
+		"relaxed": {"w": [Vector3(-0.25, -0.6, 0.76), -0.4, 2.2, 0.0, 0.7, 0.0], "o": ARM_RELAX_L},
+		"guard": {"w": [Vector3(-0.3, -0.85, 0.42), 0.0, 1.0, 0.0, 0.6, 0.0], "o": ARM_RELAX_L},
+		"run": {"w": [Vector3(-0.25, -0.6, 0.76), -0.4, 2.2, 0.0, 0.7, 0.0], "o": ARM_RUN_L},
+		"attack": [[0.35, [Vector3(-0.4, 0.8, -0.45), 0.2, 1.9, 0.0, 0.7, 0.0], null, 0.3, -0.1], [0.52, [Vector3(-0.1, -0.4, 0.9), 0.0, 0.3, 0.0, -0.2, 0.0], null, -0.3, 0.22], [0.7, [Vector3(0.05, -0.85, 0.5), 0.0, 0.4, 0.0, -0.3, 0.0], null, -0.35, 0.2]],
+	},
+	"spear_2h": {
+		"relaxed": {"w": [Vector3(-0.3, -0.93, 0.2), 0.0, 1.25, 0.0, 0.0, 0.0], "o": ARM_RELAX_L},
+		"guard": {"w": [Vector3(-0.35, -0.88, -0.3), 0.0, 0.6, 0.0, -0.7, 0.0], "o": ARM_RELAX_L},
+		"run": {"w": [Vector3(-0.25, -0.96, 0.1), 0.0, 0.9, 0.0, -0.2, 0.0], "o": ARM_RUN_L},
+		"attack": [[0.38, [Vector3(-0.4, -0.75, -0.55), 0.0, 1.4, 0.0, -0.6, 0.0], null, 0.3, -0.05], [0.52, [Vector3(-0.15, -0.35, 0.92), 0.0, 0.15, 0.0, -1.0, 0.0], null, -0.25, 0.2], [0.72, [Vector3(-0.15, -0.35, 0.92), 0.0, 0.2, 0.0, -1.0, 0.0], null, -0.25, 0.18]],
+	},
+	"bow": {
+		"relaxed": {"w": [Vector3(0.3, -0.94, 0.15), 0.0, 0.9, 0.0, 0.5, 0.0], "o": ARM_RELAX_R},
+		"guard": {"w": [Vector3(0.25, -0.4, 0.88), -0.9, 0.5, 0.0, 0.0, 0.0], "o": [Vector3(-0.35, -0.6, 0.72), 0.0, 1.9, 0.2, 0.0, 0.0]},
+		"run": {"w": [Vector3(0.25, -0.96, 0.05), 0.0, 1.0, 0.0, 0.4, 0.0], "o": ARM_RUN_R},
+		"attack": [[0.35, [Vector3(0.05, 0.05, 1.0), -1.57, 0.05, 0.0, 0.0, 0.0], [Vector3(-0.92, 0.12, -0.38), 0.0, 2.6, 0.2, 0.0, 0.0], 0.45, 0.0], [0.5, [Vector3(0.05, 0.05, 1.0), -1.57, 0.05, 0.0, 0.0, 0.0], [Vector3(-0.95, 0.15, -0.3), 0.0, 2.2, 0.0, 0.0, 0.0], 0.45, 0.0], [0.72, [Vector3(0.05, 0.0, 1.0), -1.57, 0.08, 0.0, 0.0, 0.0], [Vector3(-0.95, 0.1, -0.3), 0.0, 2.2, 0.0, 0.0, 0.0], 0.4, 0.0]],
+	},
+	"javelin": {
+		"relaxed": {"w": [Vector3(-0.28, -0.94, 0.18), 0.0, 1.2, 0.0, 0.0, 0.0], "o": ARM_RELAX_L},
+		"guard": {"w": [Vector3(-0.6, 0.55, -0.58), 0.0, 1.5, 0.0, 0.0, 0.0], "o": ARM_SHIELD_GUARD},
+		"run": {"w": [Vector3(-0.25, -0.96, 0.1), 0.0, 1.0, 0.0, -0.2, 0.0], "o": ARM_RUN_L},
+		"attack": [[0.38, [Vector3(-0.55, 0.45, -0.7), 0.0, 1.4, 0.0, 0.0, 0.0], null, 0.5, -0.05], [0.5, [Vector3(-0.2, 0.75, 0.62), 0.0, 0.2, 0.0, 0.0, 0.0], null, -0.2, 0.15], [0.68, [Vector3(0.1, -0.5, 0.85), 0.0, 0.5, 0.0, 0.0, 0.0], null, -0.4, 0.18]],
+	},
+	"staff_2h": {
+		"relaxed": {"w": [Vector3(-0.35, -0.9, 0.25), 0.0, 1.35, 0.0, 0.0, 0.0], "o": ARM_RELAX_L},
+		"guard": {"w": [Vector3(-0.3, -0.85, 0.42), 0.0, 1.1, 0.0, 0.5, 0.0], "o": ARM_RELAX_L},
+		"run": {"w": [Vector3(-0.25, -0.96, 0.1), 0.0, 1.1, 0.0, -0.3, 0.0], "o": ARM_RUN_L},
+		"attack": [[0.38, [Vector3(-0.3, 0.2, 0.93), 0.0, 1.0, 0.0, 0.8, 0.0], null, 0.15, -0.05], [0.52, [Vector3(-0.15, 0.1, 0.98), 0.0, 0.2, 0.0, -0.4, 0.0], null, -0.1, 0.1], [0.72, [Vector3(-0.15, 0.05, 0.98), 0.0, 0.25, 0.0, -0.35, 0.0], null, -0.1, 0.08]],
+	},
+	"wand": {
+		"relaxed": {"w": [Vector3(-0.28, -0.95, 0.12), 0.0, 0.4, 0.0, -0.4, 0.0], "o": ARM_RELAX_L},
+		"guard": {"w": [Vector3(-0.35, -0.55, 0.76), 0.0, 1.2, 0.0, 0.2, 0.0], "o": ARM_RELAX_L},
+		"run": {"w": [Vector3(-0.24, -0.96, 0.0), 0.0, 1.3, 0.0, -0.3, 0.0], "o": ARM_RUN_L},
+		"attack": [[0.38, [Vector3(-0.5, 0.5, -0.3), 0.0, 1.6, 0.0, 0.4, 0.0], null, 0.3, -0.05], [0.5, [Vector3(-0.1, 0.05, 0.99), 0.0, 0.1, 0.0, -0.1, 0.0], null, -0.2, 0.08], [0.7, [Vector3(-0.1, 0.0, 0.99), 0.0, 0.15, 0.0, -0.1, 0.0], null, -0.2, 0.06]],
+	},
+	"scepter": {
+		"relaxed": {"w": [Vector3(-0.25, -0.94, 0.25), 0.0, 1.45, 0.0, 0.0, 0.0], "o": ARM_RELAX_L},
+		"guard": {"w": [Vector3(-0.3, -0.7, 0.65), 0.0, 1.4, 0.0, 0.0, 0.0], "o": ARM_RELAX_L},
+		"run": {"w": [Vector3(-0.22, -0.97, 0.05), 0.0, 1.4, 0.0, 0.0, 0.0], "o": ARM_RUN_L},
+		"attack": [[0.38, [Vector3(-0.25, 0.95, 0.15), 0.0, 0.3, 0.0, 0.0, 0.0], null, 0.1, -0.08], [0.55, [Vector3(-0.1, 0.2, 0.97), 0.0, 0.15, 0.0, -0.2, 0.0], null, -0.1, 0.06], [0.75, [Vector3(-0.1, 0.15, 0.97), 0.0, 0.2, 0.0, -0.2, 0.0], null, -0.1, 0.05]],
+	},
+	"claw": {
+		"relaxed": {"w": [Vector3(-0.3, -0.95, 0.06), 0.0, 0.35, 0.1, 0.0, 0.0], "o": ARM_RELAX_L},
+		"guard": {"w": ARM_GUARD_FIST_R, "o": ARM_GUARD_FIST_L},
+		"run": {"w": ARM_RUN_R, "o": ARM_RUN_L},
+		"attack": [[0.35, [Vector3(-0.3, -0.85, -0.4), 0.2, 2.0, 0.0, 0.0, 0.0], null, 0.35, 0.0], [0.5, [Vector3(-0.1, -0.1, 0.99), 0.0, 0.05, 0.0, 0.0, 0.0], null, -0.35, 0.12], [0.7, [Vector3(-0.1, -0.2, 0.97), 0.0, 0.2, 0.0, 0.0, 0.0], null, -0.3, 0.1]],
+	},
+}
+
+## Famílias que compartilham a postura de outra.
+const STANCE_ALIAS := {"axe_1h": "sword_1h", "hammer_1h": "sword_1h", "sword_2h": "axe_2h"}
+
+## Curvas da marcha (graus, ciclo de uma perna: 0 = contato do calcanhar). Fonte: médias da
+## literatura de análise de marcha (flexão de quadril, joelho e dorsiflexão do tornozelo).
+const WALK_HIP := [[0.0, 25.0], [0.1, 21.0], [0.3, 5.0], [0.5, -10.0], [0.62, -4.0], [0.75, 18.0], [0.87, 27.0]]
+const WALK_KNEE := [[0.0, 4.0], [0.15, 18.0], [0.4, 5.0], [0.6, 38.0], [0.72, 62.0], [0.86, 30.0], [0.96, 5.0]]
+const WALK_ANKLE := [[0.0, 0.0], [0.08, -6.0], [0.42, 10.0], [0.6, -16.0], [0.7, -6.0], [0.85, 3.0]]
+const RUN_HIP := [[0.0, 32.0], [0.2, 8.0], [0.4, -12.0], [0.55, 4.0], [0.8, 50.0], [0.92, 40.0]]
+const RUN_KNEE := [[0.0, 18.0], [0.14, 42.0], [0.4, 18.0], [0.62, 115.0], [0.82, 70.0], [0.95, 22.0]]
+const RUN_ANKLE := [[0.0, 2.0], [0.15, 16.0], [0.4, -22.0], [0.6, 0.0], [0.85, 4.0]]
+
+static func _curve(keys: Array, u: float) -> float:
+	u = fposmod(u, 1.0)
+	var n := keys.size()
+	var i := n - 1
+	for k in n:
+		if float(keys[k][0]) <= u:
+			i = k
+	var i0 := (i - 1 + n) % n
+	var i2 := (i + 1) % n
+	var i3 := (i + 2) % n
+	var u1 := float(keys[i][0])
+	var u2 := float(keys[i2][0])
+	if u2 <= u1:
+		u2 += 1.0
+	var uu := u if u >= u1 else u + 1.0
+	var t := clampf((uu - u1) / maxf(u2 - u1, 1e-4), 0.0, 1.0)
+	var p0 := float(keys[i0][1])
+	var p1 := float(keys[i][1])
+	var p2 := float(keys[i2][1])
+	var p3 := float(keys[i3][1])
+	var t2 := t * t
+	var t3 := t2 * t
+	return 0.5 * (2.0 * p1 + (-p0 + p2) * t + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2 + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3)
+
+# ---------------- montagem: dedos, medidas e arma ----------------
+func _setup_fingers() -> void:
+	var fmt: String = cfg.get("finger_fmt", "")
+	var names: Dictionary = cfg.get("finger_names", {})
+	for side in ["l", "r"]:
+		var S := "L" if side == "l" else "R"
+		var d := {}
+		for f in names.keys():
+			var lst := []
+			for n in [1, 2, 3]:
+				var bn := fmt.replace("{s}", S).replace("{f}", names[f]).replace("{n}", str(n))
+				var idx := _find_bone(bn)
+				if idx >= 0:
+					var parent := skel.get_bone_parent(idx)
+					lst.append({"idx": idx, "pg": skel.get_bone_global_rest(parent).basis.get_rotation_quaternion() if parent >= 0 else Quaternion.IDENTITY, "bg": skel.get_bone_global_rest(idx).basis.get_rotation_quaternion()})
+			d[f] = lst
+		fingers[side] = d
+
+func _measure_limbs() -> void:
+	_thigh_len = _bone_len("l_upper_leg", "l_lower_leg")
+	_shin_len = _bone_len("l_lower_leg", "l_foot")
+	# a empunhadura fica sobre as falanges proximais (um pouco antes da base dos dedos)
+	var mid: Array = fingers.get("r", {}).get("middle", [])
+	if bones.has("r_hand") and not mid.is_empty():
+		var hp: Vector3 = skel.get_bone_global_rest(bones["r_hand"]["idx"]).origin
+		var fp: Vector3 = skel.get_bone_global_rest(mid[0]["idx"]).origin
+		_grip_x = hp.distance_to(fp) * 1.05
+		_palm_y = _grip_x * 0.36
+
+## Base da arma na mão, na pose T: ponta para o lado do polegar (+Z), gume para a palma (−Y).
+## O arco vai na mão esquerda, com o tiro saindo na direção dos dedos (o braço aponta o alvo).
+func _grip_basis(fam: String, side: String) -> Basis:
+	var g: Dictionary = GRIPS.get(fam, GRIPS[""])
+	var sgn := 1.0 if side == "l" else -1.0
+	var b: Basis
+	if fam == "bow":
+		b = Basis(Vector3(0, 1, 0), Vector3(0, 0, 1), Vector3(1, 0, 0))
+	elif fam == "claw":
+		# garra: lâminas seguindo os dedos, gume para baixo
+		b = Basis(Vector3(0, 0, -sgn), Vector3(sgn, 0, 0), Vector3(0, -1, 0))
+	else:
+		b = Basis(Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(0, -1, 0))
+	var tilt := Basis(Vector3.UP, float(g["tilt"]) * sgn)
+	return (tilt * b * Basis(Vector3.UP, float(g["roll"]))).orthonormalized()
+
+func _attach_weapon(w: Node3D) -> void:
+	grip = GRIPS.get(weapon_family, GRIPS[""])
+	var side: String = grip["hand"]
+	var sgn := 1.0 if side == "l" else -1.0
+	var holder := _attach(side + "_hand", Vector3(_grip_x * sgn, -_palm_y, 0.0), Quaternion.IDENTITY, _grip_basis(weapon_family, side).get_rotation_quaternion())
+	if holder == null:
+		return
+	grip_node = Node3D.new()
+	holder.add_child(grip_node)
+	grip_node.add_child(w)
+	weapon_mesh = w
+	weapon_holder = holder
+	_slide = float(grip["slide"][0])
+	grip_node.position = Vector3(0, -_slide, 0)
+	if weapon_family == "bow":
+		# flecha na corda durante o disparo: vai da mão da corda até o punho do arco (eixo −Z)
+		arrow_node = Node3D.new()
+		add_child(arrow_node)
+		Gear.part(arrow_node, Gear.cyl(0.005, 0.005, 0.72, 5), Gear.mat(Color("#8a6a4a"), false), Vector3(0, 0, -0.36), Vector3.ONE, Vector3(90, 0, 0))
+		Gear.part(arrow_node, Gear.cyl(0.0, 0.014, 0.05, 5), Gear.mat(Gear.STEEL, false), Vector3(0, 0, -0.74), Vector3.ONE, Vector3(-90, 0, 0))
+		Gear.part(arrow_node, Gear.box(Vector3(0.002, 0.03, 0.07)), Gear.mat(Color("#c03a2a"), false), Vector3(0, 0, -0.03))
+		arrow_node.visible = false
+
+# ---------------- controle externo ----------------
 func set_moving(m: bool) -> void:
 	moving = m
 	speed = 3.6 if m else 0.0
@@ -488,6 +726,10 @@ func set_motion(p_speed: float, p_accel: float, p_turn: float) -> void:
 	turn = p_turn
 	moving = p_speed > 0.15
 
+## Em combate (com alvo): postura de guarda.
+func set_combat(c: bool) -> void:
+	combat = c
+
 ## Olhar para um ponto do mundo (peso 0 = olhar livre).
 func set_look_target(pos: Vector3, weight: float) -> void:
 	_look_pos = pos
@@ -495,7 +737,16 @@ func set_look_target(pos: Vector3, weight: float) -> void:
 
 func play_attack() -> void:
 	_attack = 0.0
+	_attack_variant += 1
+	var ranged := weapon_family in ["bow", "javelin", "wand", "scepter", "staff_2h"]
+	_attack_dur = 0.55 if ranged else 0.5
 	express("angry", 0.85, 0.7)
+
+## Conjuração (habilidades de cura, reforço, área): ergue a arma/foco e aponta.
+func play_cast() -> void:
+	if _attack < 0.0:
+		_attack = 0.0
+		_attack_dur = 0.6
 
 func play_hurt() -> void:
 	express("hurt", 0.8, 0.45)
@@ -511,23 +762,63 @@ func express(name: String, weight: float, seconds: float) -> void:
 	expr_until[name] = _t + seconds
 	expr_weight[name + "_target"] = weight
 
+## Para capturas de teste: congela num estado conhecido (velocidade em m/s do mundo, fase da
+## passada 0..1, combate, instante do golpe 0..1 ou −1).
+func debug_pose(p_speed: float, phase01: float, p_combat: bool, attack_t := -1.0, variant := 0) -> void:
+	debug_freeze = true
+	speed = p_speed
+	combat = p_combat
+	var v := p_speed / maxf(0.2, scale.x)
+	_speed_s = v
+	_amp = smoothstep(0.04, 0.55, v)
+	_run = smoothstep(1.7, 3.2, v)
+	_combat_w = 1.0 if p_combat else 0.0
+	_phase = phase01 * TAU
+	_turn_amp = 0.0
+	_lean_f = 0.0
+	_lean_s = 0.0
+	_attack_variant = variant
+	_attack = attack_t * _attack_dur if attack_t >= 0.0 else -1.0
+	_stand = 1.0
+	_two_w = 1.0 if (p_combat or attack_t >= 0.0) and _two_point(1) >= -0.5 else 0.0
+	_slide = _target_slide()
+	if grip_node:
+		grip_node.position = Vector3(0, -_slide, 0)
+	_pose(0.0)
+
+# ---------------- quadro a quadro ----------------
 func _process(delta: float) -> void:
 	if skel == null:
 		return
 	_t += delta
+	if debug_freeze:
+		_pose(0.0)
+		return
 	var sc := maxf(0.2, scale.x)
 	var v := speed / sc
 	_speed_s = lerpf(_speed_s, v, clampf(delta * 10.0, 0.0, 1.0))
 	_amp = lerpf(_amp, smoothstep(0.04, 0.55, _speed_s), clampf(delta * 9.0, 0.0, 1.0))
 	_run = lerpf(_run, smoothstep(1.7, 3.2, _speed_s), clampf(delta * 5.0, 0.0, 1.0))
-	# passinhos ao girar parado
+	_combat_w = lerpf(_combat_w, 1.0 if combat or _attack >= 0.0 else 0.0, clampf(delta * 4.0, 0.0, 1.0))
 	_turn_amp = lerpf(_turn_amp, clampf(absf(turn) * 0.22, 0.0, 0.55) * (1.0 - _amp), clampf(delta * 6.0, 0.0, 1.0))
 	var cycle := lerpf(1.25, 2.9, smoothstep(0.8, 3.6, _speed_s))
 	_phase += TAU * _speed_s * delta / cycle + absf(turn) * delta * 1.4 * (1.0 - _amp)
+	# troca do pé de apoio parado (a cada 8–14 s), suave
+	_stand_in -= delta
+	if _stand_in <= 0.0:
+		_stand_in = randf_range(8.0, 14.0)
+		_stand_target = -_stand_target
+	_stand = lerpf(_stand, _stand_target, clampf(delta * 1.6, 0.0, 1.0))
 	# corpo inteiro: inclina ao acelerar/frear e para dentro das curvas
 	_lean_f = lerpf(_lean_f, clampf(accel * 0.012, -0.13, 0.11), clampf(delta * 6.0, 0.0, 1.0))
 	_lean_s = lerpf(_lean_s, clampf(-turn * speed * 0.018, -0.26, 0.26), clampf(delta * 6.0, 0.0, 1.0))
 	model.transform.basis = Basis.from_euler(Vector3(_lean_f, 0.0, _lean_s)) * _base_basis
+	# ponto do cabo na mão e segunda mão
+	_slide = lerpf(_slide, _target_slide(), clampf(delta * 6.0, 0.0, 1.0))
+	if grip_node:
+		grip_node.position = Vector3(0, -_slide, 0)
+	var want_two := 1.0 if _two_point(1) >= -0.5 and (_combat_w > 0.5 or _attack >= 0.0) and _run < 0.6 else 0.0
+	_two_w = lerpf(_two_w, want_two, clampf(delta * 8.0, 0.0, 1.0))
 	# olhar
 	var yaw_t := 0.0
 	var pitch_t := 0.0
@@ -540,7 +831,9 @@ func _process(delta: float) -> void:
 	_look_yaw = lerpf(_look_yaw, yaw_t, clampf(delta * 5.0, 0.0, 1.0))
 	_look_pitch = lerpf(_look_pitch, pitch_t, clampf(delta * 5.0, 0.0, 1.0))
 	_pose(delta)
-	# piscar
+	_face(delta)
+
+func _face(delta: float) -> void:
 	_blink_in -= delta
 	if _blink_in <= 0.0 and _blink_t < 0.0:
 		_blink_t = 0.0
@@ -561,7 +854,6 @@ func _process(delta: float) -> void:
 			face_busy = true
 		for t in expr_targets[ename]:
 			(t[0] as MeshInstance3D).set_blend_shape_value(t[1], w)
-	# sorriso de vez em quando, parado
 	if not moving and _attack < 0.0:
 		_smile_in -= delta
 		if _smile_in <= 0.0:
@@ -569,6 +861,359 @@ func _process(delta: float) -> void:
 			express("happy", 0.65, 1.6)
 	for b in blink_meshes:
 		(b[0] as MeshInstance3D).set_blend_shape_value(b[1], 0.0 if face_busy else clampf(bv, 0.0, 1.0))
+
+func _stance_family() -> String:
+	var f := weapon_family
+	if STANCE_ALIAS.has(f):
+		f = STANCE_ALIAS[f]
+	return f if STANCES.has(f) else ""
+
+func _target_slide() -> float:
+	if grip.is_empty():
+		return 0.0
+	var s: Array = grip["slide"]
+	var base := lerpf(float(s[0]), float(s[1]), _combat_w)
+	return lerpf(base, float(s[2]), _run * _amp)
+
+## Ponto do cabo da segunda mão (estado 0 relaxado, 1 guarda, 2 corrida); −1 = uma mão só.
+func _two_point(state: int) -> float:
+	if grip.is_empty():
+		return -1.0
+	return float(grip["two"][state])
+
+# ---------------- ossos auxiliares ----------------
+static func _arc(a: Vector3, b: Vector3) -> Quaternion:
+	var an := a.normalized()
+	var bn := b.normalized()
+	var d := an.dot(bn)
+	if d > 0.99999:
+		return Quaternion.IDENTITY
+	if d < -0.99999:
+		var axis := an.cross(Vector3.UP)
+		if axis.length() < 1e-3:
+			axis = an.cross(Vector3.RIGHT)
+		return Quaternion(axis.normalized(), PI)
+	return Quaternion(an.cross(bn).normalized(), acos(clampf(d, -1.0, 1.0)))
+
+## Rotação do braço (D no espaço do personagem) a partir do vetor de postura.
+func _arm_d(side: String, a: Array) -> Array:
+	var sgn := 1.0 if side == "l" else -1.0
+	var dir: Vector3 = (a[0] as Vector3).normalized()
+	var q_u := Quaternion(dir, float(a[1]) * sgn) * _arc(Vector3(sgn, 0, 0), dir)
+	var q_l := Quaternion(Vector3.UP, -float(a[2]) * sgn)
+	# punho: supinação (eixo do antebraço), desvio (+ polegar) e flexão (palma)
+	var q_h := Quaternion(Vector3.BACK, -float(a[3]) * sgn) * Quaternion(Vector3.UP, -float(a[4]) * sgn) * Quaternion(Vector3.RIGHT, -float(a[5]) * sgn)
+	return [q_u, q_l, q_h]
+
+static func _mix_arm(a: Array, b: Array, t: float) -> Array:
+	if t <= 0.0:
+		return a
+	if t >= 1.0:
+		return b
+	return [(a[0] as Vector3).lerp(b[0], t).normalized(), lerpf(a[1], b[1], t), lerpf(a[2], b[2], t), lerpf(a[3], b[3], t), lerpf(a[4], b[4], t), lerpf(a[5], b[5], t)]
+
+## Balanço do braço na marcha: gira a direção em torno do eixo esquerda-direita.
+static func _swing_arm(a: Array, swing: float, elbow_add: float) -> Array:
+	var dir := (a[0] as Vector3).rotated(Vector3.RIGHT, -swing)
+	return [dir, a[1], float(a[2]) + elbow_add, a[3], a[4], a[5]]
+
+func _finger_pose(side: String, curl: float, thumb: float) -> void:
+	var d: Dictionary = fingers.get(side, {})
+	if d.is_empty():
+		return
+	var sgn := 1.0 if side == "l" else -1.0
+	var per := {"index": [1.15, 1.35, 0.9], "middle": [1.25, 1.4, 0.9], "ring": [1.3, 1.4, 0.95], "little": [1.35, 1.35, 1.0]}
+	for f in ["index", "middle", "ring", "little"]:
+		var segs: Array = d.get(f, [])
+		for i in segs.size():
+			var a: float = float(per[f][i]) * curl + (0.06 * i if curl < 0.3 else 0.0)
+			_bone_raw(segs[i], Quaternion(Vector3.BACK, -a * sgn))
+	var th: Array = d.get("thumb", [])
+	for i in th.size():
+		var ta: float = [0.35, 0.5, 0.45][i] * thumb
+		_bone_raw(th[i], Quaternion(Vector3.UP, 0.35 * thumb * sgn * (1.0 if i == 0 else 0.0)) * Quaternion(Vector3.RIGHT, ta))
+
+func _bone_raw(b: Dictionary, d_model: Quaternion) -> void:
+	var d: Quaternion = s_rot.inverse() * d_model * s_rot
+	skel.set_bone_pose_rotation(b["idx"], ((b["pg"] as Quaternion).inverse() * d * (b["bg"] as Quaternion)).normalized())
+
+## Define a rotação global de um osso (espaço do esqueleto), misturando com a atual.
+func _set_global_rot(idx: int, basis_g: Basis, weight: float) -> void:
+	var parent := skel.get_bone_parent(idx)
+	var pg: Basis = skel.get_bone_global_pose(parent).basis.orthonormalized() if parent >= 0 else Basis()
+	var local := (pg.inverse() * basis_g.orthonormalized()).get_rotation_quaternion()
+	var cur := skel.get_bone_pose_rotation(idx)
+	skel.set_bone_pose_rotation(idx, cur.slerp(local, weight).normalized())
+
+## Quadro anatômico da mão na pose T (colunas: dedos, polegar×dedos, polegar), no esqueleto.
+func _hand_frame_t(side: String) -> Basis:
+	var f := Basis(Vector3(1, 0, 0), Vector3(0, 1, 0), Vector3(0, 0, 1)) if side == "l" else Basis(Vector3(-1, 0, 0), Vector3(0, -1, 0), Vector3(0, 0, 1))
+	return Basis(s_rot.inverse()) * f
+
+## IK de dois ossos: leva a mão a segurar o cabo no ponto dado (mundo), com o polegar apontando
+## para a ponta da arma e o cotovelo para o lado do polo (eixos do personagem).
+func _ik_grip(side: String, point_w: Vector3, axis_w: Vector3, pole_m: Vector3, weight: float) -> void:
+	var ku := side + "_upper_arm"
+	var kl := side + "_lower_arm"
+	var kh := side + "_hand"
+	if weight <= 0.001 or not (bones.has(ku) and bones.has(kl) and bones.has(kh)):
+		return
+	var iu: int = bones[ku]["idx"]
+	var il: int = bones[kl]["idx"]
+	var ih: int = bones[kh]["idx"]
+	var inv := skel.global_transform.affine_inverse()
+	var point := inv * point_w
+	var axis := (skel.global_transform.basis.inverse() * axis_w).normalized()
+	var pole := (skel.global_transform.basis.inverse() * (global_transform.basis * pole_m)).normalized()
+	var ft := _hand_frame_t(side)
+	var palm_sgn := -1.0 if side == "l" else 1.0
+	for pass_i in 2:
+		var gu := skel.get_bone_global_pose(iu)
+		var gl := skel.get_bone_global_pose(il)
+		var gh := skel.get_bone_global_pose(ih)
+		# quadro desejado da mão: polegar no eixo do cabo, dedos continuando o antebraço
+		var fore := (gh.origin - gl.origin).normalized()
+		var fing := (fore - axis * axis.dot(fore))
+		if fing.length() < 1e-3:
+			fing = pole.cross(axis)
+		fing = fing.normalized()
+		var fd := Basis(fing, axis.cross(fing), axis)
+		var wrist := point - fd * Vector3(_grip_x, palm_sgn * _palm_y, 0.0)
+		var S := gu.origin
+		var E := gl.origin
+		var L1 := S.distance_to(E)
+		var L2 := E.distance_to(gh.origin)
+		var to_t := wrist - S
+		var dd := clampf(to_t.length(), 0.01, (L1 + L2) * 0.999)
+		var n := to_t.normalized()
+		var p := pole - n * n.dot(pole)
+		if p.length() < 1e-3:
+			p = Vector3.DOWN
+		p = p.normalized()
+		var a := (L1 * L1 - L2 * L2 + dd * dd) / (2.0 * dd)
+		var hgt := sqrt(maxf(0.0, L1 * L1 - a * a))
+		var e2 := S + n * a + p * hgt
+		_set_global_rot(iu, Basis(_arc(E - S, e2 - S)) * gu.basis, weight)
+		gl = skel.get_bone_global_pose(il)
+		gh = skel.get_bone_global_pose(ih)
+		_set_global_rot(il, Basis(_arc(gh.origin - gl.origin, S + n * dd - gl.origin)) * gl.basis, weight)
+		if pass_i == 1:
+			var rest_h: Basis = skel.get_bone_global_rest(ih).basis
+			_set_global_rot(ih, (fd * ft.inverse()) * rest_h, weight)
+
+## Posição e eixo atuais da arma (mundo), calculados direto do esqueleto (sem esperar o anexo).
+func _weapon_point_w(y: float) -> Array:
+	if weapon_holder == null or grip_node == null:
+		return []
+	var side: String = grip["hand"]
+	var ih: int = bones[side + "_hand"]["idx"]
+	var t: Transform3D = skel.global_transform * skel.get_bone_global_pose(ih) * weapon_holder.transform * grip_node.transform * weapon_mesh.transform
+	return [t * Vector3(0, y, 0), (t.basis * Vector3.UP).normalized()]
+
+# ---------------- pose ----------------
+func _pose(delta: float) -> void:
+	var a := clampf(_amp + _turn_amp, 0.0, 1.0)
+	var wk := a * (1.0 - _run)
+	var rn := a * _run
+	var idle := 1.0 - a
+	var cw := _combat_w
+	var ph := _phase / TAU
+	var breath := sin(_t * 1.7)
+	var stand := _stand * idle * (1.0 - cw * 0.7)
+	# ---- pernas: marcha/corrida por curvas + parado (contrapposto) + guarda ----
+	var leg := {}
+	var drop := {}
+	for side in ["l", "r"]:
+		var u := ph if side == "l" else ph + 0.5
+		var hip := deg_to_rad(_curve(WALK_HIP, u)) * wk + deg_to_rad(_curve(RUN_HIP, u)) * rn
+		var knee := deg_to_rad(_curve(WALK_KNEE, u)) * wk + deg_to_rad(_curve(RUN_KNEE, u)) * rn
+		var ankle := deg_to_rad(_curve(WALK_ANKLE, u)) * wk + deg_to_rad(_curve(RUN_ANKLE, u)) * rn
+		var sgn := 1.0 if side == "l" else -1.0
+		# parado: perna de apoio esticada, a outra solta (joelho levemente dobrado, à frente)
+		var free := clampf(-stand * sgn, 0.0, 1.0)
+		var hip_s := idle * (0.03 + free * 0.06)
+		var knee_s := idle * (0.05 + free * 0.17)
+		# guarda: pé esquerdo à frente, direito atrás, joelhos flexionados
+		hip_s += cw * idle * (0.32 if side == "l" else -0.12)
+		knee_s += cw * idle * (0.42 if side == "l" else 0.36)
+		hip += hip_s
+		knee += knee_s
+		leg[side] = [hip, knee, ankle, hip_s - knee_s]
+		drop[side] = _thigh_len + _shin_len - (_thigh_len * cos(hip) + _shin_len * cos(hip - knee))
+	for side in ["l", "r"]:
+		var sgn := 1.0 if side == "l" else -1.0
+		var hip: float = leg[side][0]
+		var knee: float = leg[side][1]
+		var ankle: float = leg[side][2]
+		# pé: ângulo do tornozelo da marcha + compensação da parte estática (pé paralelo ao chão)
+		var flat: float = leg[side][3]
+		var splay := 0.1 + 0.08 * idle
+		var abduct := (0.035 + 0.03 * cw) * idle + 0.015
+		_bone(side + "_upper_leg", Quaternion(Vector3.RIGHT, -hip) * Quaternion(Vector3.BACK, abduct * sgn - _stand * idle * 0.05) * Quaternion(Vector3.UP, splay * sgn))
+		_bone(side + "_lower_leg", Quaternion(Vector3.RIGHT, knee))
+		_bone(side + "_foot", Quaternion(Vector3.RIGHT, -ankle + flat) * Quaternion(Vector3.BACK, -abduct * sgn))
+	# ---- quadril: altura pelo pé de apoio (o mais baixo encosta no chão) + voo da corrida ----
+	var support := minf(float(drop["l"]), float(drop["r"]))
+	var flight := rn * 0.03 * absf(sin(_phase))
+	var sway := wk * 0.018 * sin(_phase) + 0.022 * stand
+	_set_offset("hips", Vector3(sway, -support + flight - 0.02 * cw * idle, 0.0))
+	var hip_l: float = leg["l"][0]
+	var hip_r: float = leg["r"][0]
+	var pelvis_yaw := -(hip_l - hip_r) * (0.12 * wk + 0.16 * rn) - 0.22 * cw * idle
+	var pelvis_roll := 0.05 * stand + wk * 0.04 * cos(_phase)
+	_bone("hips", Quaternion(Vector3.UP, pelvis_yaw) * Quaternion(Vector3.BACK, pelvis_roll) * Quaternion(Vector3.RIGHT, 0.04 * rn))
+	# ---- golpe ----
+	var atk := -1.0
+	if _attack >= 0.0:
+		if not debug_freeze:
+			_attack += delta
+		atk = clampf(_attack / maxf(0.1, _attack_dur), 0.0, 1.0)
+		if atk >= 1.0 and not debug_freeze:
+			_attack = -1.0
+			atk = -1.0
+	# susto ao levar golpe
+	var hurt := 0.0
+	if _hurt >= 0.0:
+		_hurt += delta
+		hurt = smoothstep(0.0, 0.08, _hurt) * (1.0 - smoothstep(0.08, 0.4, _hurt))
+		if _hurt > 0.4:
+			_hurt = -1.0
+	# ---- braços: postura da família (relaxado ↔ guarda ↔ corrida) + balanço da marcha ----
+	var fam := _stance_family()
+	var st: Dictionary = STANCES[fam]
+	var wside: String = grip.get("hand", "r") if not grip.is_empty() else "r"
+	var oside := "l" if wside == "r" else "r"
+	var w_arm: Array = _mix_arm(_mix_arm(st["relaxed"]["w"], st["guard"]["w"], cw), st["run"]["w"], rn)
+	var o_arm: Array = _mix_arm(_mix_arm(st["relaxed"]["o"], st["guard"]["o"], cw), st["run"]["o"], rn)
+	if has_shield and oside == "l":
+		o_arm = _mix_arm(o_arm, ARM_SHIELD_GUARD, cw)
+	# balanço oposto à perna do mesmo lado (menor no braço que carrega peso)
+	var swing_amp := 0.3 * wk + 0.55 * rn
+	var swing_l := -(hip_l - 0.15) * 0.0 + (-sin(_phase)) * swing_amp
+	var swing_r := sin(_phase) * swing_amp
+	var heavy := 0.35 if weapon_family in ["spear_2h", "staff_2h", "axe_2h", "sword_2h"] else 0.6
+	if wside == "r":
+		w_arm = _swing_arm(w_arm, swing_r * (heavy if weapon_family != "" else 1.0) * (1.0 - cw * 0.8), 0.0)
+		o_arm = _swing_arm(o_arm, swing_l * (1.0 - cw * 0.8) * (0.4 if has_shield else 1.0), 0.15 * maxf(0.0, -swing_l) * rn)
+	else:
+		w_arm = _swing_arm(w_arm, swing_l * 0.5 * (1.0 - cw * 0.8), 0.0)
+		o_arm = _swing_arm(o_arm, swing_r * (1.0 - cw * 0.8), 0.15 * maxf(0.0, -swing_r) * rn)
+	# respiração e soltura dos braços parado
+	w_arm[2] = float(w_arm[2]) + breath * 0.02 * idle
+	o_arm[2] = float(o_arm[2]) + breath * 0.025 * idle
+	var spine_yaw := 0.0
+	var spine_lean := 0.0
+	if atk >= 0.0:
+		var keys: Array = st.get("attack_b", st["attack"]) if (_attack_variant % 2 == 1 and st.has("attack_b")) else st["attack"]
+		var r := _attack_pose(keys, atk, w_arm, o_arm)
+		w_arm = r[0]
+		o_arm = r[1]
+		spine_yaw = r[2]
+		spine_lean = r[3]
+		# flecha na corda durante o disparo
+		if arrow_node:
+			arrow_node.visible = atk > 0.12 and atk < 0.5
+	elif arrow_node:
+		arrow_node.visible = false
+	# ---- tronco, pescoço e cabeça ----
+	var lean := 0.04 * wk + 0.2 * rn + 0.025 * breath * idle - 0.22 * hurt + 0.06 * cw * idle + spine_lean
+	var counter := -pelvis_yaw * 0.85 + spine_yaw
+	_bone("spine", Quaternion(Vector3.RIGHT, lean) * Quaternion(Vector3.UP, counter * 0.6) * Quaternion(Vector3.BACK, -pelvis_roll * 0.7))
+	_bone("chest", Quaternion(Vector3.RIGHT, 0.02 * breath - 0.04 * rn) * Quaternion(Vector3.UP, counter * 0.4) * Quaternion(Vector3.BACK, -pelvis_roll * 0.3))
+	_bone("neck", Quaternion(Vector3.RIGHT, -0.04 * a - 0.1 * rn - lean * 0.3) * Quaternion(Vector3.UP, _look_yaw * 0.4 - counter * 0.3))
+	var look_idle := sin(_t * 0.37) * 0.08 * idle * (1.0 - absf(_look_yaw)) * (1.0 - cw)
+	_bone("head", Quaternion(Vector3.RIGHT, sin(_t * 0.6) * 0.03 * idle - _look_pitch * 0.6 - 0.12 * hurt - lean * 0.2) * Quaternion(Vector3.UP, look_idle + _look_yaw * 0.6 - counter * 0.2) * Quaternion(Vector3.BACK, 0.04 * stand))
+	# ---- aplica braços ----
+	var qw := _arm_d(wside, w_arm)
+	var qo := _arm_d(oside, o_arm)
+	_bone(wside + "_upper_arm", qw[0])
+	_bone(wside + "_lower_arm", qw[1])
+	_bone(wside + "_hand", qw[2])
+	_bone(oside + "_upper_arm", qo[0])
+	_bone(oside + "_lower_arm", qo[1])
+	_bone(oside + "_hand", qo[2])
+	# ---- dedos ----
+	var w_curl := 1.0 if weapon_family != "" else (0.95 * cw + 0.22 * (1.0 - cw))
+	var w_thumb := 1.0 if weapon_family != "" else (0.8 * cw + 0.25 * (1.0 - cw))
+	var o_curl := 0.22 * (1.0 - cw) + 0.9 * cw if not has_shield else 0.9
+	if weapon_family == "bow" and atk >= 0.0:
+		# mão da corda: dois dedos em gancho na corda; abre ao soltar
+		o_curl = 0.55 if atk < 0.5 else 0.15
+	_finger_pose(wside, w_curl, w_thumb)
+	_finger_pose(oside, lerpf(o_curl, 1.0, _two_w), lerpf(0.25, 1.0, _two_w))
+	# ---- segunda mão no cabo (IK) ----
+	var two := _two_point(1)
+	if _two_w > 0.01 and two >= -0.5:
+		var wp := _weapon_point_w(two)
+		if not wp.is_empty():
+			var pole := Vector3(0.6 if oside == "l" else -0.6, -1.0, -0.4)
+			_ik_grip(oside, wp[0], wp[1], pole, _two_w)
+	elif npc_variant > 0 and weapon_family == "":
+		_npc_hands(idle)
+	if not aims.is_empty():
+		_solve_aims()
+	if arrow_node and arrow_node.visible:
+		_place_arrow()
+
+## Põe a flecha entre a mão da corda e o punho do arco.
+func _place_arrow() -> void:
+	if not bones.has("r_hand"):
+		return
+	var rh: Transform3D = skel.global_transform * skel.get_bone_global_pose(bones["r_hand"]["idx"])
+	var fr := (rh.basis * (Basis(s_rot.inverse()) * Vector3(-_grip_x, 0, 0)))
+	var nock := rh.origin + fr
+	var bp := _weapon_point_w(0.0)
+	if bp.is_empty():
+		return
+	var tip: Vector3 = bp[0]
+	if nock.distance_to(tip) < 0.05:
+		return
+	arrow_node.global_position = nock
+	arrow_node.look_at(tip, Vector3.UP)
+	arrow_node.scale = Vector3.ONE
+
+## Interpola as chaves do golpe a partir da postura atual (início e fim = postura base).
+func _attack_pose(keys: Array, t: float, w_base: Array, o_base: Array) -> Array:
+	var prev_t := 0.0
+	var prev_w: Array = w_base
+	var prev_o: Array = o_base
+	var prev_yaw := 0.0
+	var prev_lean := 0.0
+	for k in keys.size() + 1:
+		var kt: float = 1.0 if k == keys.size() else float(keys[k][0])
+		var kw: Array = w_base if k == keys.size() else keys[k][1]
+		var ko: Array = o_base
+		if k < keys.size() and keys[k][2] != null:
+			ko = keys[k][2]
+		var kyaw: float = 0.0 if k == keys.size() else float(keys[k][3])
+		var klean: float = 0.0 if k == keys.size() else float(keys[k][4])
+		if t <= kt:
+			var f := smoothstep(0.0, 1.0, (t - prev_t) / maxf(kt - prev_t, 1e-3))
+			return [_mix_arm(prev_w, kw, f), _mix_arm(prev_o, ko, f), lerpf(prev_yaw, kyaw, f), lerpf(prev_lean, klean, f)]
+		prev_t = kt
+		prev_w = kw
+		prev_o = ko
+		prev_yaw = kyaw
+		prev_lean = klean
+	return [w_base, o_base, 0.0, 0.0]
+
+## Moradores: mãos juntas à frente (1) ou para trás (2), por IK em relação ao quadril.
+func _npc_hands(idle: float) -> void:
+	if not bones.has("hips"):
+		return
+	var hips_g: Transform3D = skel.global_transform * skel.get_bone_global_pose(bones["hips"]["idx"])
+	var fwd := (global_transform.basis * Vector3.BACK).normalized()
+	var left := (global_transform.basis * Vector3.RIGHT).normalized()
+	var up := (global_transform.basis * Vector3.UP).normalized()
+	var sc := scale.x * model.scale.x
+	var front := 0.17 if npc_variant == 1 else -0.14
+	var center := hips_g.origin + fwd * front * sc + up * (-0.02 if npc_variant == 1 else 0.02) * sc
+	for side in ["l", "r"]:
+		var sgn := 1.0 if side == "l" else -1.0
+		var p := center + left * sgn * 0.035 * sc
+		var axis := (left * -sgn * 0.6 + up * 0.8).normalized()
+		_ik_grip(side, p, axis, Vector3(sgn * 0.8, -0.6, -0.3 if npc_variant == 1 else 0.4), idle)
+		_finger_pose(side, 0.55, 0.45)
 
 ## Restrição de mira: gira o osso para que seu eixo aponte para o osso de origem.
 func _solve_aims() -> void:
@@ -586,77 +1231,3 @@ func _solve_aims() -> void:
 			gq = Quaternion(v0, v1) * gq
 		var lq: Quaternion = pg.basis.get_rotation_quaternion().inverse() * gq
 		skel.set_bone_pose_rotation(a["idx"], lq.normalized())
-
-## Flexão do joelho ao longo do ciclo (pico no meio do balanço da perna).
-static func _knee(ph: float, wk: float, rn: float) -> float:
-	var bump := pow(maxf(0.0, -cos(ph + 0.35)), 1.3)
-	return wk * (0.08 + 0.95 * bump) + rn * (0.3 + 1.7 * bump)
-
-func _pose(delta: float) -> void:
-	var a := clampf(_amp + _turn_amp, 0.0, 1.0)
-	var wk := a * (1.0 - _run)
-	var rn := a * _run
-	var ph := _phase
-	var breath := sin(_t * 1.7)
-	var idle := 1.0 - a
-	# pernas: coxa (mais à frente ao correr), joelho dobra no balanço, pé acompanha
-	var thigh_amp := 0.4 * wk + 0.7 * rn
-	var thigh_bias := -0.02 * wk - 0.22 * rn
-	var lth := sin(ph) * thigh_amp + thigh_bias
-	var rth := sin(ph + PI) * thigh_amp + thigh_bias
-	_bone("l_upper_leg", _rx(lth - 0.015 * idle) * _rz(0.02 * idle))
-	_bone("r_upper_leg", _rx(rth - 0.015 * idle) * _rz(-0.02 * idle))
-	var kl := _knee(ph, wk, rn)
-	var kr := _knee(ph + PI, wk, rn)
-	_bone("l_lower_leg", _rx(kl + 0.04))
-	_bone("r_lower_leg", _rx(kr + 0.04))
-	_bone("l_foot", _rx(0.2 * sin(ph) * a - kl * 0.3 - 0.04))
-	_bone("r_foot", _rx(0.2 * sin(ph + PI) * a - kr * 0.3 - 0.04))
-	# quadril: sobe e desce (andar: alto no apoio; correr: alto no voo), gira com as pernas,
-	# e parado troca o peso de uma perna para a outra
-	var bob := wk * (0.022 * absf(cos(ph)) - 0.015) + rn * (0.05 * absf(sin(ph)) - 0.055)
-	var shift := sin(_t * 0.55) * 0.012 * idle
-	_set_offset("hips", Vector3(shift, bob, 0))
-	_bone("hips", _ry(sin(ph) * (0.09 * wk + 0.12 * rn)) * _rz(cos(ph) * 0.035 * wk + shift * 1.6))
-	# golpe
-	var k := -1.0
-	if _attack >= 0.0:
-		_attack += delta
-		k = clampf(_attack / 0.42, 0.0, 1.0)
-		if k >= 1.0:
-			_attack = -1.0
-	var lift := smoothstep(0.0, 0.35, k) if k >= 0.0 else 0.0
-	var strike := smoothstep(0.35, 0.8, k) if k >= 0.0 else 0.0
-	var twist := 0.4 * lift - 0.75 * strike * lift
-	# susto ao levar golpe
-	var hurt := 0.0
-	if _hurt >= 0.0:
-		_hurt += delta
-		hurt = smoothstep(0.0, 0.08, _hurt) * (1.0 - smoothstep(0.08, 0.4, _hurt))
-		if _hurt > 0.4:
-			_hurt = -1.0
-	# tronco: inclina ao correr, gira contra o quadril, respira parado
-	var lean := 0.06 * wk + 0.2 * rn + 0.03 * breath * idle - 0.22 * hurt
-	_bone("spine", _rx(lean) * _ry(-sin(ph) * (0.12 * wk + 0.2 * rn) + twist))
-	_bone("chest", _rx(0.02 * breath - 0.04 * rn) * _ry(-sin(ph) * 0.06 * rn))
-	_bone("neck", _rx(-0.04 * a - 0.1 * rn) * _ry(_look_yaw * 0.4))
-	var look_idle := sin(_t * 0.37) * 0.08 * idle * (1.0 - absf(_look_yaw))
-	_bone("head", _rx(sin(_t * 0.6) * 0.035 * idle - _look_pitch * 0.6 - 0.12 * hurt) * _ry(look_idle + _look_yaw * 0.6))
-	# braços: balanço oposto às pernas; correndo, cotovelos dobrados; braço da arma golpeia
-	var down: float = cfg["arm_down"]
-	var arm_amp := 0.36 * wk + 0.6 * rn
-	var arm_l := -sin(ph) * arm_amp + breath * 0.015 * idle
-	var arm_r := -sin(ph + PI) * arm_amp * (0.65 if weapon_family != "" else 1.0) + breath * 0.015 * idle
-	var spread := 0.1 * rn + 0.12 * hurt
-	_bone("l_upper_arm", _rx(-0.1 + arm_l) * _rz(-down + spread))
-	_bone("l_lower_arm", _ry(-0.35 - 0.25 * wk - 1.05 * rn - 0.2 * maxf(0.0, -arm_l)))
-	if k >= 0.0:
-		var raise := -2.5 * lift + 2.9 * strike * lift
-		_bone("r_upper_arm", _rx(-0.22 + raise) * _rz(down * (1.0 - 0.35 * lift)))
-		_bone("r_lower_arm", _ry(0.75 - 0.6 * lift * (1.0 - strike)))
-	else:
-		_bone("r_upper_arm", _rx(-0.22 + arm_r) * _rz(down - spread))
-		var base_r := 0.75 if weapon_family != "" else 0.35
-		_bone("r_lower_arm", _ry(base_r + 0.15 * wk + maxf(0.0, 1.2 - base_r) * rn))
-	if not aims.is_empty():
-		_solve_aims()

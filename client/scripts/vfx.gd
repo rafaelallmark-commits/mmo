@@ -295,8 +295,10 @@ func on_cast(m: Dictionary) -> void:
 	if aim != null:
 		yaw = _yaw_to(src, aim)
 	var node: Node3D = world.entities[m["eid"]]["node"]
-	if node.has_method("play_attack") and kind in ["strike", "cone_strike", "line_strike", "charge", "aoe_strike", "pull"]:
+	if node.has_method("play_attack") and kind in ["strike", "cone_strike", "line_strike", "charge", "aoe_strike", "pull", "spell", "debuff"]:
 		node.play_attack()
+	elif node.has_method("play_cast"):
+		node.play_cast()
 	var rng = s.get("range", 3.0)
 	var reach: float = 3.0 if str(rng) == "weapon" else float(rng)
 	match kind:

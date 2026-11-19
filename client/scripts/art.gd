@@ -252,6 +252,9 @@ static func vrm_character(class_id: String, weapon_family := "", is_npc := false
 		look["scarf"] = Color("#8a2a2a")
 	var c = VrmChar.new()
 	c.setup(model_id, look, weapon_family, acc, Gear.weapon(weapon_family, look.get("trim", Gear.GOLD)) if weapon_family != "" else null)
+	if is_npc:
+		# moradores variam a pose parada: braços soltos, mãos juntas à frente ou para trás
+		c.npc_variant = int(abs(seed)) % 3
 	return c
 
 ## Personagem procedural (reserva, se os modelos VRM não estiverem disponíveis).

@@ -82,6 +82,11 @@ func _ready() -> void:
 		add_child(g)
 		g.start(args["gallery"])
 		return
+	if args.has("poseprobe"):
+		var pp = preload("res://scripts/pose_probe.gd").new()
+		add_child(pp)
+		pp.start(args["poseprobe"], args.get("only", ""))
+		return
 	if args.has("sceneshots"):
 		autotest = preload("res://scripts/autotest.gd").new()
 		add_child(autotest)

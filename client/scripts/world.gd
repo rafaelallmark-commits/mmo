@@ -430,6 +430,8 @@ func _process(delta: float) -> void:
 		n.rotation.y = yaw
 		if n.has_method("set_motion"):
 			n.set_motion(speed, float(e["accel"]), float(e["turn"]))
+		if n.has_method("set_combat"):
+			n.set_combat(e["data"].get("tgt", null) != null and not e["data"].get("dead", false))
 		elif n.has_method("set_moving"):
 			n.set_moving(speed > 0.3)
 		if n.has_method("set_look_target"):
