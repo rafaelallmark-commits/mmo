@@ -94,6 +94,20 @@ Da mais baixa para a mais alta. Uma camada de cima bloqueia o clique nas de baix
 - **Luz de borda** clara no lado oposto à câmera, para destacar silhuetas vistas de cima.
 - **Proporções levemente estilizadas**: cabeça maior, olhos grandes e marcados, cabelo em volume colorido por classe; monstros com formas simples e olhos expressivos.
 - **Cores**: saturadas, mas dentro da paleta de ferrugem e nácar (céu do amanhecer de violeta para pêssego, chão ocre, verde-oliva); vermelho reservado para perigo e requisitos não atendidos.
-- **Cenário**: árvores, pedras e tufos de grama espalhados com semente fixa (o mesmo mapa sempre fica igual), fora da estrada e das áreas de monstros.
+- **Cenário**: relevo suave com colinas além da borda e cordilheira no horizonte; estradas de terra (ruas calçadas nas cidades, trilhos na Oficina); grama que balança ao vento, flores e pedrinhas; árvores, pedras, arbustos, juncos, cristais e engrenagens desenhados exatamente onde o servidor tem colisão (`data/maps.json`, gerado por `npm run gen-scenery`); lagoa com vitórias-régias, leito seco escavado, ruínas da estação com o sino rachado, casa das bombas com chaminé fumegando, esteira da oficina; acampamento com fogueira (luz tremulante e brasas), barraca e bandeira em cada posto de guarda; cidades com muralha, casas e monumento na praça; portais em arco com véu de luz; pólen no ar. Céu com nuvens e névoa por mapa (amanhecer na Estrada, neblina esverdeada no Brejo, fumaça alaranjada na Oficina).
+- **Nada esconde o personagem**: copas, casas e torres entre a câmera e quem joga ficam vazadas.
+
+| | |
+|---|---|
+| ![Oficina Soterrada](img/18_oficina.png) | ![Brejo das Bombas](img/17_brejo.png) |
 
 **Personagens:** modelos VRM de anime (Seed-san e a amostra da pixiv — créditos em `docs/CREDITOS.md`) com rosto pintado, cabelo e expressões (piscar, sorrir, cara brava ao atacar, careta ao apanhar). Cada classe recolore cabelo, olhos e roupa e ganha equipamento próprio preso aos ossos (`client/scripts/vrm_character.gd`, `client/scripts/gear.gd`). Monstros e cenário continuam montados por código no mesmo estilo (`client/scripts/art.gd`).
+
+## 7.6 Movimento fluido
+
+- **Clique e anda na hora**: o servidor devolve o caminho (A* desviando de árvores, pedras e casas) e o personagem segue imediatamente, acelerando em ~0,35 s e freando suave ao chegar; o marcador mostra o ponto livre mais próximo do clique.
+- **Os outros** (jogadores e monstros) são desenhados 150 ms no passado, interpolados entre snapshots com as velocidades que o servidor envia: sem trancos, curvas redondas.
+- **Corpo**: a passada acompanha a distância percorrida (sem pés deslizando), troca de andar para correr com a velocidade, inclina para a frente ao arrancar, para trás ao frear e para dentro das curvas; parado, respira, troca o peso e olha em volta; vira devagar (até ~10 rad/s) para onde anda ou para o alvo.
+- **Combate**: quem apanha recua um pouco e se encolhe; monstros sem arma dão um bote; quem cai tomba e afunda no chão.
+- **NPCs** viram e olham para quem chega perto.
+- **Câmera** segue com mola amortecida, olha um pouco à frente de quem corre, suaviza zoom e giro e não entra nos morros.

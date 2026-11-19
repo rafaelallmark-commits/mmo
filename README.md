@@ -2,17 +2,19 @@
 
 MMORPG 3D de ação PvE para PC, com câmera elevada, movimento por clique, caça em grupo em mapas compartilhados e equipamento que exige nível, classe e atributos. Cliente em **Godot 4**, servidor autoritativo de zona em **Node.js**, dados do jogo em **JSON editável**.
 
-> Estado atual: **Marco 1 concluído**; **Marco 2 em andamento** — no servidor: as 8 classes, grupos, chat por canais, missões dos capítulos 1–3, cidades, Brejo e Oficina, prova de classe. No cliente: estrutura de navegação completa (título → entrar → personagens/criação → carregando → mundo, menu de pausa e opções) e visual em **3D estilizado com traço de anime** (cel shading, contorno, personagens de cabeça grande).
+> Estado atual: **Marco 1 concluído**; **Marco 2 em andamento** — no servidor: as 8 classes, grupos, chat por canais, missões dos capítulos 1–3, cidades, Brejo e Oficina, prova de classe. No cliente: estrutura de navegação completa (título → entrar → personagens/criação → carregando → mundo, menu de pausa e opções) e visual em **3D estilizado com traço de anime** (personagens VRM, cel shading com contorno, cenário com relevo, grama ao vento, água, cidades muradas), com **movimento fluido** (caminhos por A*, aceleração e frenagem, previsão do próprio personagem e interpolação dos outros).
 
 | | |
 |---|---|
 | ![Classes de Âmbar](docs/img/11_classes_ambar.png) | ![Classes de Nacre](docs/img/12_classes_nacre.png) |
 | ![Personagens](docs/img/05_personagens.png) | ![Rosto](docs/img/13_rosto.png) |
 | ![Título](docs/img/01_titulo.png) | ![Mundo](docs/img/08_mundo_perto.png) |
+| ![Posto da Ponte](docs/img/14_estrada_posto.png) | ![Correndo](docs/img/15_corrida.png) |
+| ![Pedrâmbar](docs/img/16_pedrambar.png) | ![Brejo das Bombas](docs/img/17_brejo.png) |
 
 Personagens: modelos VRM de anime — **Seed-san model by VirtualCast, Inc.** e amostra VRM © 2022 pixiv Inc., ambos sob a VRM Public License 1.0 (detalhes em [docs/CREDITOS.md](docs/CREDITOS.md)).
 
-*Capturas reais do cliente (Godot 4.3, renderização por software em Linux), geradas pelo modo `--navshots`. Fluxo de telas em [docs/07-navegacao.md](docs/07-navegacao.md).*
+*Capturas reais do cliente (Godot 4.3, renderização por software em Linux), geradas pelos modos `--navshots` e `--sceneshots`. Fluxo de telas em [docs/07-navegacao.md](docs/07-navegacao.md).*
 
 ## Documentação
 
@@ -151,6 +153,12 @@ Percorrer todas as telas e salvar uma captura de cada (precisa de janela, não u
 
 ```bash
 /Applications/Godot.app/Contents/MacOS/Godot --path client -- --navshots=/tmp/telas --server=ws://127.0.0.1:7777 --account=vitrine --password=vitrine123 --class=breaker --name=Brakka
+```
+
+Tour do cenário: teleporta (comando de mestre — servidor iniciado com `npm run dev`) por pontos de cada mapa, salva visão de jogo, ampla, de perto e uma sequência correndo, e mede a fluidez (velocidade quadro a quadro):
+
+```bash
+/Applications/Godot.app/Contents/MacOS/Godot --path client -- --sceneshots=/tmp/cenario --server=ws://127.0.0.1:7777 --account=cena --password=cena123 --class=warden --name=Cena
 ```
 
 ## 5. Reproduzir os cenários críticos à mão

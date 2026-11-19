@@ -6,7 +6,8 @@
 ┌──────────────────────┐   WebSocket (JSON, 1 msg/quadro)   ┌───────────────────────────────┐
 │ Cliente Godot 4      │ ─────── pedidos { t, rid, ... } ──► │ Servidor de zona (Node.js 22+) │
 │ (client/)            │ ◄── respostas { t:"res", rid } ──── │ (server/)                      │
-│ - interpolação       │ ◄── eventos e snapshots 10 Hz ───── │ - laço de simulação 10 Hz      │
+│ - interpolação e     │ ◄── eventos e snapshots 10 Hz ───── │ - laço de simulação 10 Hz      │
+│   previsão           │                                     │ - navegação (A*, nav.js)       │
 │ - interface          │                                     │ - regras puras (rules.js)      │
 │ - nunca decide       │                                     │ - validação de equipamento     │
 └──────────────────────┘                                     │ - persistência SQLite          │
@@ -25,7 +26,7 @@
 
 ## O que o servidor controla
 
-Movimento válido (destino dentro do mapa e fora de áreas bloqueadas; velocidade fixa aplicada pelo servidor; o cliente nunca envia posição), alcance (ataques e habilidades revalidados com tolerância de 0,75 m), dano (todas as rolagens no servidor), recargas, mana, inventário, ouro, XP, saque, equipamento, pontos de atributo e habilidade, morte e retorno. Missões (M2) seguem o mesmo princípio: o servidor conta abates, interações e entregas.
+Movimento válido (destino dentro do mapa e fora de áreas bloqueadas e de peças de cenário com colisão; caminho por A*, velocidade, aceleração e frenagem aplicadas pelo servidor; o cliente nunca envia posição), alcance (ataques e habilidades revalidados com tolerância de 0,75 m), dano (todas as rolagens no servidor), recargas, mana, inventário, ouro, XP, saque, equipamento, pontos de atributo e habilidade, morte e retorno. Missões (M2) seguem o mesmo princípio: o servidor conta abates, interações e entregas.
 
 ## Estrutura de arquivos
 
@@ -38,7 +39,7 @@ mmo/
 │   ├── items.json                 190 definições de item (raridades, espaços, famílias)
 │   ├── monsters.json              28 monstros (5 áreas + chefe)
 │   ├── loot_tables.json           tabelas de saque (normal, elite, chefe, por classe)
-│   ├── maps.json                  mapas; estrada_velha completa
+│   ├── maps.json                  mapas (+ estradas, peças com colisão e casas geradas por gen-scenery)
 │   ├── xp_table.json              XP acumulada 1–20 e metas de tempo
 │   ├── formulas.json              constantes de dano, defesa, precisão, crítico, XP
 │   └── example_builds.json        builds usadas nos exemplos e validadas
@@ -48,6 +49,7 @@ mmo/
 │   │   ├── main.js                entrada (argumentos --port --db --dev ...)
 │   │   ├── server.js              WebSocket, sessões, autenticação, roteamento, idempotência por rid
 │   │   ├── zone.js                simulação da zona: jogadores, monstros (IA), combate, XP, saque
+│   │   ├── nav.js                 grade de ocupação, A* + suavização, seguidor com aceleração/frenagem
 │   │   ├── rules.js               regras puras: atributos, estatísticas, dano, acerto, crítico, XP
 │   │   ├── equipment.js           validação de nível/classe/atributos/espaço/empunhadura
 │   │   ├── store.js               SQLite: contas, personagens, instâncias de item, saques, missões
@@ -59,22 +61,30 @@ mmo/
 │   │   ├── equipment.test.js      todas as recusas e trocas de equipamento
 │   │   ├── data.test.js           coerência dos dados e alcançabilidade dos requisitos
 │   │   ├── death.test.js          queda de conexão durante a morte
+│   │   ├── nav.test.js            caminhos, desvios, destinos inalcançáveis, aceleração e mapas reais
 │   │   └── helpers/client.js      cliente simulado (mesmo protocolo do Godot)
 │   └── tools/
 │       ├── validate-data.js       validador (também usado nos testes)
 │       ├── gen-docs.js            gera docs/03 e docs/04 a partir dos dados
+│       ├── gen-scenery.js         gera estradas, peças e casas de cada mapa (semente fixa)
 │       └── create-character.js    cria contas/personagens de teste no banco
 ├── client/                        projeto Godot 4.3
 │   ├── project.godot              autoload Net; cena principal
 │   ├── scenes/main.tscn
+│   ├── shaders/                   cel shading, contorno, terreno, grama, folhagem, água, céu, "vazado"
 │   └── scripts/
 │       ├── net.gd                 WebSocketPeer, pedidos com rid e callbacks
 │       ├── main.gd                fluxo login → personagens → mundo; estado recebido
-│       ├── world.gd               mundo 3D, câmera, entidades interpoladas, clique
+│       ├── world.gd               mundo 3D, câmera suave, entidades interpoladas/previstas, clique
+│       ├── motion.gd              relógio da zona, interpolação de Hermite, previsão do próprio personagem
+│       ├── scenery.gd             cenário: terreno, grama, peças (MultiMesh), estruturas, céu, partículas
+│       ├── terrain.gd             relevo visual, estradas, lagoas/leito escavados, cordilheira
+│       ├── vrm_character.gd       personagens VRM: materiais, animação no esqueleto, expressões
+│       ├── art.gd / gear.gd / rig.gd  monstros e NPCs procedurais, equipamento, animação dos monstros
 │       ├── hud.gd                 interface em jogo (barras, atalhos, inventário, ficha, chat, avisos)
 │       ├── item_text.gd           descrição de itens com requisitos em vermelho e comparação
 │       ├── ui_theme.gd            paleta
-│       └── autotest.gd            modo --autotest (headless) para testar o cliente
+│       └── autotest.gd            modos --autotest (headless), --navshots e --sceneshots (capturas)
 └── docs/                          este conjunto de documentos
 ```
 
@@ -105,7 +115,7 @@ Todo pedido do cliente leva `rid` (texto único por pedido). A resposta é `{ t:
 | `login` | account, password | envia `defs` (dados do jogo), devolve personagens e classes criáveis; derruba sessão antiga da mesma conta |
 | `list_chars`, `create_char` | name, classId | personagem com kit inicial (M1: Quebraferro e Tecelão) |
 | `enter` | charId | ficha, snapshot, saques não reivindicados do personagem |
-| `move` | x, z | define destino (validado) |
+| `move` | x, z | calcula o caminho (A*); devolve `dest` (ponto livre mais próximo) e `path` ([[x,z],…]) para o cliente prever o movimento; recusa destino bloqueado ou inalcançável |
 | `attack` | target | define alvo; servidor aproxima e ataca |
 | `stop` | — | para |
 | `cast` | skill, target ou x/z | valida grau, recarga, mana, alcance; aplica efeito |
@@ -122,7 +132,16 @@ Todo pedido do cliente leva `rid` (texto único por pedido). A resposta é `{ t:
 | `char` | — | ficha atual |
 | `gm` | cmd (give, teleport, xp) | só com servidor `--dev` |
 
-Eventos do servidor: `hello`, `defs`, `snap` (10 Hz: id, tipo, posição, vida, alvo), `hit` (origem, destino, dano, crítico, errou, habilidade), `death`, `spawn`, `loot` (só para o dono), `xp`, `level_up`, `char`, `buff`, `ground`, `cast`, `player_dead`, `respawn`, `joined`, `left`, `chat`, `kicked`.
+Eventos do servidor: `hello`, `defs`, `snap` (10 Hz: `now` = relógio da zona em ms; por entidade id, tipo, posição, velocidade `vx`/`vz`, vida, alvo), `hit` (origem, destino, dano, crítico, errou, habilidade), `death`, `spawn`, `loot` (só para o dono), `xp`, `level_up`, `char`, `buff`, `ground`, `cast`, `player_dead`, `respawn`, `joined`, `left`, `chat`, `kicked`.
+
+## Movimento no cliente
+
+O servidor decide; o cliente só desenha bem (`client/scripts/motion.gd`, docs/07 §7.6):
+
+- **Relógio da zona**: cada snapshot traz `now`. O cliente mede a escala de tempo do servidor (`--time-scale`) e desenha o mundo 150 ms no passado, sempre entre dois snapshots.
+- **Interpolação de Hermite** com as velocidades do snapshot: curvas e frenagens saem redondas; teleporte (mais de 8 m entre amostras) não desliza pelo mapa.
+- **Previsão do próprio personagem**: a resposta do `move` traz o caminho; o personagem sai andando na hora com a mesma aceleração/frenagem do servidor (`stats.moveSpeed`, `accel`, `decel` na ficha). Se o servidor divergir (bloqueio, ataque, morte), a previsão para e o erro some em ~0,1 s, sem salto.
+- O movimento usa o relógio real do sistema, não o `delta` do quadro (ver DECISOES D49).
 
 ## Saque individual e idempotência
 
