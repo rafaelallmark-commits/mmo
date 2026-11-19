@@ -78,8 +78,14 @@ func _process(_d: float) -> void:
 			if main.in_world and main.world and not main.world.me().is_empty():
 				var c: Dictionary = main.ch
 				say("no mundo: %s (%s) nível %d em (%.1f, %.1f); %d entidades visíveis; arma %s" % [c["name"], c["classId"], int(c["level"]), float(c["x"]), float(c["z"]), main.world.entities.size(), c["stats"]["weapon"]])
+				if scene_mode:
+					step = "scene"
+					scene_until = Time.get_ticks_msec() + 2500
+					return
 				Net.request("move", {"x": 30.0, "z": 50.0})
 				step = "moving"
+		"scene":
+			_scene_tick()
 		"moving":
 			var p: Vector3 = main.world.my_pos()
 			if Vector2(p.x, p.z).distance_to(Vector2(30, 50)) < 1.0:
@@ -344,3 +350,132 @@ func _nav_tick() -> void:
 			return
 	nav_step += 1
 	nav_until = Time.get_ticks_msec() + next_wait
+
+
+# ---------------- tour do cenário (--sceneshots=pasta, servidor com --dev) ----------------
+# Teleporta (comando de mestre) por pontos de cada mapa e salva capturas: visão de jogo, ampla,
+# de perto e uma sequência durante a corrida (para conferir a passada e a fluidez).
+var scene_mode := false
+var scene_step := 0
+var scene_until := 0
+var scene_i := 0
+const SCENE_SPOTS := [
+	["estrada_velha", 27.0, 53.5, "estrada_posto"],
+	["estrada_velha", 64.0, 60.0, "estrada_ruinas"],
+	["brejo_bombas", 54.0, 64.0, "brejo_lagoa"],
+	["oficina_soterrada", 28.0, 93.0, "oficina"],
+	["pedrambar", 34.0, 25.0, "pedrambar"],
+	["vau_de_nacar", 25.0, 35.0, "vau"],
+]
+
+func start_scene(m) -> void:
+	scene_mode = true
+	deadline_ms = 600000
+	start(m)
+
+func _scene_shot(name: String) -> void:
+	var path := "%s/%s.png" % [main.args["sceneshots"], name]
+	get_viewport().get_texture().get_image().save_png(path)
+	say("captura: " + path)
+
+func _scene_tick() -> void:
+	if Time.get_ticks_msec() < scene_until:
+		return
+	var wait := 1500
+	if scene_i >= SCENE_SPOTS.size() or (scene_i >= 1 and main.args.has("scenequick")):
+		say("OK")
+		get_tree().quit(0)
+		return
+	var sp: Array = SCENE_SPOTS[scene_i]
+	var tag := "%02d_%s" % [scene_i, sp[3]]
+	match scene_step:
+		0:
+			if main.map_def().get("id", "") != sp[0]:
+				Net.request("gm", {"cmd": "teleport", "mapId": sp[0], "x": sp[1], "z": sp[2]})
+				wait = 3000
+			else:
+				Net.request("gm", {"cmd": "teleport", "x": sp[1], "z": sp[2]})
+				wait = 1200
+		1:
+			if not main.in_world or main.world == null or main.map_def().get("id", "") != sp[0] or main.world.me().is_empty():
+				return
+			main.world.cam_dist = 18.0
+			main.world.cam_pitch = 0.8
+			wait = 3000
+		2:
+			_scene_shot(tag + "_jogo")
+			main.world.cam_dist = 36.0
+			main.world.cam_pitch = 0.6
+			wait = 2200
+		3:
+			_scene_shot(tag + "_amplo")
+			main.world.cam_dist = 9.0
+			main.world.cam_pitch = 0.42
+			main.world.cam_yaw += 1.3
+			wait = 2200
+		4:
+			_scene_shot(tag + "_perto")
+			main.world.cam_dist = 13.0
+			main.world.cam_pitch = 0.62
+			if scene_i != 0:
+				main.world.cam_yaw -= 1.3
+				scene_i += 1
+				scene_step = 0
+				scene_until = Time.get_ticks_msec() + 300
+				return
+			main.world.request_move(float(sp[1]) + 16.0, float(sp[2]) - 1.0)
+			main.world.motion_log.clear()
+			main.world.log_motion = true
+			wait = 450
+		5, 6, 7, 8, 9:
+			_scene_shot("%s_movimento_%d" % [tag, scene_step - 4])
+			wait = 260
+			if scene_step == 9:
+				main.world.log_motion = false
+				_motion_report(main.world.motion_log)
+				main.world.cam_yaw -= 1.3
+				scene_i += 1
+				scene_step = 0
+				scene_until = Time.get_ticks_msec() + 1500
+				return
+	scene_step += 1
+	scene_until = Time.get_ticks_msec() + wait
+
+
+## Fluidez medida no próprio quadro do mundo: velocidade = deslocamento / delta do quadro.
+func _motion_report(log: Array) -> void:
+	if main.args.has("motiondump"):
+		for row in log:
+			say("  dt=%.3f relogio=%.1f rate=%.3f desenhado=(%.2f, %.2f) interp=(%.2f, %.2f)" % [float(row[0]), float(row[4]), float(row[3]), row[1].x, row[1].y, row[2].x, row[2].y])
+	for series in [[1, "desenhado (previsão)"], [2, "interpolado (snapshots)"]]:
+		var idx: int = series[0]
+		var speeds := []
+		var reversals := 0
+		var prev_dir := Vector2.ZERO
+		for i in range(1, log.size()):
+			var dt: float = float(log[i][0]) * float(log[i][3])
+			if dt <= 0.0:
+				continue
+			var dp: Vector2 = (log[i][idx] as Vector2) - (log[i - 1][idx] as Vector2)
+			speeds.append(dp.length() / dt)
+			if dp.length() > 0.001:
+				var dir := dp.normalized()
+				if prev_dir != Vector2.ZERO and dir.dot(prev_dir) < 0.0:
+					reversals += 1
+				prev_dir = dir
+		var cruise := []
+		for v in speeds:
+			if v > 3.5:
+				cruise.append(v)
+		var mean := 0.0
+		for v in cruise:
+			mean += v
+		mean /= maxf(1.0, cruise.size())
+		var dev := 0.0
+		var max_jump := 0.0
+		for i in cruise.size():
+			dev += pow(cruise[i] - mean, 2.0)
+			if i > 0:
+				max_jump = maxf(max_jump, absf(cruise[i] - cruise[i - 1]))
+		dev = sqrt(dev / maxf(1.0, cruise.size()))
+		say("fluidez %s: %d quadros, corrida a %.2f m/s (desvio %.2f, maior salto %.2f), recuos %d" % [series[1], speeds.size(), mean, dev, max_jump, reversals])

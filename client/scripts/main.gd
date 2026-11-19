@@ -2,7 +2,7 @@ extends Node
 ## Navegação do cliente (docs/07-navegacao.md):
 ## Título → Entrar → Personagens ⇄ Criação → Carregando → Mundo (+ menu de pausa e opções).
 ## Guarda o estado recebido do servidor (definições, ficha, diário, grupo).
-## Argumentos (após "--"): --server=ws://host:7777 --account=x --password=y --autotest --navshots=pasta ...
+## Argumentos (após "--"): --server=ws://host:7777 --account=x --password=y --autotest --navshots=pasta --sceneshots=pasta ...
 
 const WorldScript = preload("res://scripts/world.gd")
 const HudScript = preload("res://scripts/hud.gd")
@@ -81,6 +81,11 @@ func _ready() -> void:
 		var g = preload("res://scripts/gallery.gd").new()
 		add_child(g)
 		g.start(args["gallery"])
+		return
+	if args.has("sceneshots"):
+		autotest = preload("res://scripts/autotest.gd").new()
+		add_child(autotest)
+		autotest.start_scene(self)
 		return
 	if args.has("autotest") and not args.has("navshots"):
 		autotest = preload("res://scripts/autotest.gd").new()
