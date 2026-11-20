@@ -2,6 +2,12 @@
 // (mapas abertos e instâncias), grupos, chat e missões, e responde cada requisição
 // { rid } com { t:'res', rid, ok, ... }.
 import { WebSocketServer } from 'ws';
+import https from 'node:https';
+import { readFileSync, readdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { join as pathJoin, dirname as pathDirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { verifyToken, ReplayGuard } from './token.js';
 import { enhanceable, enhanceQuote, enhancePreview, rollEnhance } from './smith.js';
 import { randomUUID } from 'node:crypto';
 import { loadGameData, ATTRS } from './data.js';
@@ -15,7 +21,8 @@ import { totalAttributePoints, derivedStats } from './rules.js';
 
 import { Metrics, startMetricsServer } from './metrics.js';
 
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3; // 3: snapshots por diferença, login por token, escolta, canalização
+const SERVER_VERSION = JSON.parse(readFileSync(pathJoin(pathDirname(fileURLToPath(import.meta.url)), '../package.json'), 'utf8')).version;
 const NAME_RE = /^[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9 _-]{2,15}$/;
 const RID_CACHE = 128;
 const PARTY_MAX = 5;
@@ -28,6 +35,9 @@ export class GameServer {
     this.opts = {
       port: 7777, host: '0.0.0.0', dbPath: 'cinzas.db', tickHz: 10, timeScale: 1, xpRate: 1, seed: Date.now() & 0xffffffff, dev: false, log: true,
       metricsPort: null, metricsHost: '127.0.0.1', lagMs: 0, jitterMs: 0,
+      // teste público: limites, autenticação, TLS, logs, desligamento e retenção
+      rateLimit: 20, rateBurst: 40, chatPer5s: 6, maxConnPerIp: 0, trustProxy: false,
+      auth: 'both', tokenSecret: null, tlsCert: null, tlsKey: null, logFormat: 'text', shutdownGraceS: 30, auditDays: 90,
       ...Object.fromEntries(Object.entries(opts).filter(([, v]) => v !== undefined)),
     };
     this.data = opts.data ?? loadGameData(opts.dataDir);
@@ -36,6 +46,10 @@ export class GameServer {
     this.quests = new QuestEngine({ data: this.data, store: this.store });
     this.sessions = new Set();
     this.metrics = new Metrics();
+    this.ipConns = new Map(); // ip -> conexões abertas
+    this.replay = new ReplayGuard();
+    this.closing = false;
+    this.dataVersion = dataVersionOf(this.data);
     this.byChar = new Map(); // charId -> session
     this.byAccount = new Map(); // accountId -> session
     this.byName = new Map(); // nome minúsculo -> charId (online)
@@ -80,17 +94,31 @@ export class GameServer {
   zoneOfChar(charId) { return this.zones.get(this.charZone.get(charId)); }
   playerOf(charId) { return this.zoneOfChar(charId)?.players.get(charId) ?? null; }
 
-  log(...a) { if (this.opts.log) console.log(new Date().toISOString().slice(11, 19), ...a); }
+  log(...a) {
+    if (!this.opts.log) return;
+    if (this.opts.logFormat === 'json') console.log(JSON.stringify({ ts: new Date().toISOString(), msg: a.map((x) => (typeof x === 'string' ? x : String(x))).join(' ') }));
+    else console.log(new Date().toISOString().slice(11, 19), ...a);
+  }
+
+  audit(kind, fields) { try { this.store.audit(kind, fields); } catch (e) { this.log('auditoria falhou', kind, e.message); } }
 
   start() {
     return new Promise((resolve) => {
-      this.wss = new WebSocketServer({ port: this.opts.port, host: this.opts.host, maxPayload: 64 * 1024 });
-      this.wss.on('connection', (ws, req) => this.onConnection(ws, req));
-      this.wss.on('listening', () => {
-        this.port = this.wss.address().port;
-        this.log(`CINZAS DO MERIDIANO — servidor ouvindo em ws://${this.opts.host}:${this.port} (${this.zones.size} zonas, tick ${this.opts.tickHz} Hz, escala ${this.opts.timeScale}x, XP ${this.opts.xpRate}x${this.opts.dev ? ', modo dev' : ''})`);
+      const onListening = (addr) => {
+        this.port = addr.port;
+        this.log(`CINZAS DO MERIDIANO ${SERVER_VERSION} — servidor ouvindo em ${this.tls ? 'wss' : 'ws'}://${this.opts.host}:${this.port} (${this.zones.size} zonas, tick ${this.opts.tickHz} Hz, escala ${this.opts.timeScale}x, XP ${this.opts.xpRate}x, protocolo ${PROTOCOL_VERSION}, dados ${this.dataVersion}${this.opts.dev ? ', modo dev' : ''}, login: ${this.opts.auth})`);
         resolve(this.port);
-      });
+      };
+      if (this.opts.tlsCert && this.opts.tlsKey) {
+        // TLS direto (wss://). Em produção também dá para terminar o TLS num proxy (deploy/Caddyfile).
+        this.tls = https.createServer({ cert: readFileSync(this.opts.tlsCert), key: readFileSync(this.opts.tlsKey) });
+        this.wss = new WebSocketServer({ server: this.tls, maxPayload: 64 * 1024 });
+        this.tls.listen(this.opts.port, this.opts.host, () => onListening(this.tls.address()));
+      } else {
+        this.wss = new WebSocketServer({ port: this.opts.port, host: this.opts.host, maxPayload: 64 * 1024 });
+        this.wss.on('listening', () => onListening(this.wss.address()));
+      }
+      this.wss.on('connection', (ws, req) => this.onConnection(ws, req));
       const tickMs = 1000 / this.opts.tickHz;
       let last = performance.now();
       this.timer = setInterval(() => {
@@ -100,6 +128,8 @@ export class GameServer {
         this.step(dt);
       }, tickMs);
       this.saveTimer = setInterval(() => this.saveAll(), 10_000);
+      // retenção (privacidade): auditoria mais velha que auditDays e códigos vencidos, de hora em hora
+      this.purgeTimer = setInterval(() => { try { this.store.purgeOld(this.opts.auditDays); } catch { /* banco ocupado: tenta depois */ } }, 3600_000);
     }).then(async (port) => {
       if (this.opts.metricsPort != null && this.opts.metricsPort !== false) {
         this.metricsSrv = await startMetricsServer({
@@ -199,18 +229,49 @@ export class GameServer {
     for (const z of this.zones.values()) for (const p of z.players.values()) this.store.saveCharacter(p.char);
   }
 
+  // Desligamento gracioso: avisa todos, recusa novos logins, espera o prazo, salva e fecha.
+  async shutdown(graceS = this.opts.shutdownGraceS) {
+    if (this.closing) return;
+    this.closing = true;
+    const note = (text) => { for (const s of this.sessions) this.sendTo(s, { t: 'notice', kind: 'shutdown', text, inS: graceS }); };
+    if (graceS > 0) {
+      note(`O servidor vai reiniciar em ${graceS} s. Seu progresso está salvo.`);
+      this.log(`desligando em ${graceS} s`);
+      const step = Math.max(0, graceS - 5);
+      await new Promise((r) => setTimeout(r, step * 1000));
+      if (graceS > 5) note('O servidor reinicia em 5 s.');
+      await new Promise((r) => setTimeout(r, Math.min(5, graceS) * 1000));
+    }
+    this.saveAll();
+    await this.stop();
+  }
+
   async stop() {
-    clearInterval(this.timer); clearInterval(this.saveTimer);
+    clearInterval(this.timer); clearInterval(this.saveTimer); clearInterval(this.purgeTimer);
     for (const s of [...this.sessions]) this.dropSession(s);
     for (const ws of this.wss.clients) ws.terminate();
     await new Promise((r) => this.wss.close(() => r()));
+    if (this.tls) await new Promise((r) => this.tls.close(() => r()));
     if (this.metricsSrv) await new Promise((r) => this.metricsSrv.close(() => r()));
     this.store.close();
   }
 
   // ---------- conexões ----------
-  onConnection(ws) {
-    const s = { id: randomUUID(), ws, accountId: null, charId: null };
+  onConnection(ws, req) {
+    let ip = req?.socket?.remoteAddress ?? '?';
+    if (this.opts.trustProxy) {
+      const fwd = req?.headers?.['x-forwarded-for'];
+      if (typeof fwd === 'string' && fwd.trim()) ip = fwd.split(',')[0].trim();
+    }
+    const n = this.ipConns.get(ip) ?? 0;
+    if (this.opts.maxConnPerIp > 0 && n >= this.opts.maxConnPerIp) {
+      ws.send(JSON.stringify({ t: 'kicked', reason: 'Conexões demais deste endereço.' }));
+      ws.close(1008, 'conexoes demais');
+      this.audit('conn_limit', { ip });
+      return;
+    }
+    this.ipConns.set(ip, n + 1);
+    const s = { id: randomUUID(), ws, ip, accountId: null, charId: null, role: 'player', bucket: { tokens: this.opts.rateBurst, at: performance.now(), over: 0, overAt: 0 }, chat: [] };
     this.sessions.add(s);
     ws.on('message', (buf) => {
       const lag = this.lagDelay();
@@ -219,12 +280,14 @@ export class GameServer {
     });
     ws.on('close', () => this.dropSession(s));
     ws.on('error', () => {});
-    this.sendTo(s, { t: 'hello', protocol: PROTOCOL_VERSION, server: 'cinzas-zone', dev: !!this.opts.dev });
+    this.sendTo(s, { t: 'hello', protocol: PROTOCOL_VERSION, server: 'cinzas-zone', version: SERVER_VERSION, dataVersion: this.dataVersion, auth: this.opts.auth, dev: !!this.opts.dev });
   }
 
   dropSession(s) {
     if (!this.sessions.has(s)) return;
     this.sessions.delete(s);
+    const n = (this.ipConns.get(s.ip) ?? 1) - 1;
+    if (n <= 0) this.ipConns.delete(s.ip); else this.ipConns.set(s.ip, n);
     if (s.charId != null) this.leaveWorld(s);
     if (s.accountId != null && this.byAccount.get(s.accountId) === s) this.byAccount.delete(s.accountId);
     try { s.ws.close(); } catch { /* já fechado */ }
@@ -300,11 +363,32 @@ export class GameServer {
     for (const charId of z.players.keys()) this.rawSend(this.byChar.get(charId), raw, snap);
   }
 
+  // Limite de comandos por conexão (balde de fichas): rateLimit por segundo, rajada de rateBurst.
+  // Quem passa muito do limite por 10 s seguidos é desconectado (auditado).
+  allowMessage(s) {
+    const b = s.bucket;
+    const now = performance.now();
+    b.tokens = Math.min(this.opts.rateBurst, b.tokens + ((now - b.at) / 1000) * this.opts.rateLimit);
+    b.at = now;
+    if (b.tokens >= 1) { b.tokens -= 1; return true; }
+    if (now - b.overAt > 10_000) { b.over = 0; b.overAt = now; }
+    b.over++;
+    if (b.over > this.opts.rateLimit * 10) {
+      this.audit('kick_flood', { accountId: s.accountId, charId: s.charId, ip: s.ip });
+      this.sendTo(s, { t: 'kicked', reason: 'Comandos demais em pouco tempo.' });
+      this.dropSession(s);
+    }
+    return false;
+  }
+
   onMessage(s, buf) {
     this.metrics.in(buf.length);
+    if (!this.sessions.has(s)) return;
     let msg;
     try { msg = JSON.parse(buf.toString()); } catch { return this.sendTo(s, { t: 'res', rid: null, ok: false, code: 'bad_json', reason: 'Mensagem inválida.' }); }
     const rid = typeof msg.rid === 'string' || typeof msg.rid === 'number' ? msg.rid : null;
+    // acima do limite: responde ao próprio pedido (o cliente não fica esperando) sem executar
+    if (!this.allowMessage(s)) return this.sendTo(s, { t: 'res', rid, req: msg.t, ok: false, code: 'rate_limited', reason: 'Muitos comandos; espere um pouco.' });
     // Pedido repetido (mesmo rid e mesmo tipo, mesmo personagem): mesma resposta, sem reexecutar.
     if (rid != null && s.charId != null) {
       const cached = this.ridCache.get(s.charId)?.get(rid);
@@ -335,14 +419,16 @@ export class GameServer {
   handle(s, msg) {
     switch (msg.t) {
       case 'ping': return { ok: true, now: Date.now(), cache: false };
-      case 'register': return this.hRegister(s, msg);
-      case 'login': return this.hLogin(s, msg);
+      case 'register': return this.opts.auth === 'token' ? { ok: false, code: 'use_accounts', reason: 'Crie sua conta pelo site/serviço de contas.' } : this.hRegister(s, msg);
+      case 'login': return this.opts.auth === 'token' ? { ok: false, code: 'use_accounts', reason: 'Entre pelo serviço de contas (token).' } : this.hLogin(s, msg);
+      case 'login_token': return this.hLoginToken(s, msg);
     }
     if (s.accountId == null) return { ok: false, code: 'not_logged', reason: 'Faça login primeiro.' };
     switch (msg.t) {
       case 'list_chars': return { ok: true, chars: this.store.listCharacters(s.accountId).map(charRow), classes: this.creatableClasses() };
       case 'create_char': return this.hCreateChar(s, msg);
       case 'enter': return this.hEnter(s, msg);
+      case 'delete_account': return this.hDeleteAccount(s, msg);
     }
     if (s.charId == null) return { ok: false, code: 'not_in_world', reason: 'Entre no mundo com um personagem primeiro.' };
     const zone = this.zoneOfChar(s.charId);
@@ -413,6 +499,17 @@ export class GameServer {
   }
 
   // ---------- autenticação e personagens ----------
+  // Exclusão da própria conta (privacidade), confirmada com a senha; fora do mundo.
+  hDeleteAccount(s, { password }) {
+    if (s.charId != null) return { ok: false, code: 'in_world', reason: 'Saia do mundo antes de excluir a conta.' };
+    const acc = this.store.findAccountById(s.accountId);
+    if (!acc || typeof password !== 'string' || !this.store.checkPassword(acc, password)) return { ok: false, code: 'bad_password', reason: 'Senha incorreta.' };
+    const n = this.store.deleteAccount(acc.id);
+    this.audit('account_deleted', { accountId: acc.id, ip: s.ip, characters: n });
+    this.log(`conta excluída: ${acc.id} (${n} personagens)`);
+    return { ok: true, after: () => this.dropSession(s) };
+  }
+
   hRegister(s, { account, password }) {
     if (typeof account !== 'string' || !/^[a-zA-Z0-9_]{3,20}$/.test(account)) return { ok: false, code: 'bad_account', reason: 'Conta: 3 a 20 letras, números ou _.' };
     if (typeof password !== 'string' || password.length < 4) return { ok: false, code: 'bad_password', reason: 'Senha precisa de pelo menos 4 caracteres.' };
@@ -424,8 +521,26 @@ export class GameServer {
   hLogin(s, msg) {
     const { account, password } = msg;
     if (s.accountId != null) return { ok: false, code: 'already', reason: 'Sessão já autenticada.' };
+    if (this.closing) return { ok: false, code: 'closing', reason: 'O servidor está reiniciando. Tente em instantes.' };
     const acc = typeof account === 'string' && typeof password === 'string' ? this.store.verifyAccount(account, password) : null;
-    if (!acc) return { ok: false, code: 'bad_login', reason: 'Conta ou senha incorretas.' };
+    if (!acc) { this.audit('login_fail', { ip: s.ip, account: typeof account === 'string' ? account.slice(0, 24) : null }); return { ok: false, code: 'bad_login', reason: 'Conta ou senha incorretas.' }; }
+    if (!acc.verified) return { ok: false, code: 'unverified', reason: 'Confirme seu e-mail antes de entrar.' };
+    return this.completeLogin(s, msg, acc, 'senha');
+  }
+
+  // Login com token do serviço de contas (teste público): assinatura, validade e uso único.
+  hLoginToken(s, msg) {
+    if (s.accountId != null) return { ok: false, code: 'already', reason: 'Sessão já autenticada.' };
+    if (this.closing) return { ok: false, code: 'closing', reason: 'O servidor está reiniciando. Tente em instantes.' };
+    if (this.opts.auth === 'password') return { ok: false, code: 'no_tokens', reason: 'Este servidor não aceita login por token.' };
+    const p = verifyToken(msg.token, this.opts.tokenSecret);
+    if (!p || !this.replay.use(p)) { this.audit('login_fail', { ip: s.ip, via: 'token' }); return { ok: false, code: 'bad_token', reason: 'Sessão inválida ou vencida. Entre de novo.' }; }
+    const acc = this.store.findAccountById(p.sub);
+    if (!acc || !acc.verified) return { ok: false, code: 'bad_token', reason: 'Conta indisponível.' };
+    return this.completeLogin(s, msg, acc, 'token');
+  }
+
+  completeLogin(s, msg, acc, via) {
     const old = this.byAccount.get(acc.id);
     if (old) {
       // Reconexão: a sessão antiga (talvez "pendurada") é encerrada e salva antes de continuar.
@@ -433,7 +548,9 @@ export class GameServer {
       this.dropSession(old);
     }
     s.accountId = acc.id;
+    s.role = acc.role ?? 'player';
     s.delta = msg.delta === true; // cliente entende snapshots por diferença
+    this.audit('login', { accountId: acc.id, ip: s.ip, via });
     this.byAccount.set(acc.id, s);
     this.sendTo(s, this.defsPayload());
     return { ok: true, account: acc.name, chars: this.store.listCharacters(acc.id).map(charRow), classes: this.creatableClasses() };
@@ -602,6 +719,7 @@ export class GameServer {
       this.store.saveCharacter(c);
     });
     if (it.loc === 'equip') p.zone.recalc(p);
+    this.audit('enhance', { charId: c.id, instance: it.id, item: it.defId, success: r.success, enh: it.enh || 0, gold: q.gold, goldAfter: c.gold });
     return { ok: true, success: r.success, roll: r.roll, chancePct: q.chancePct, enh: it.enh || 0, instanceId: it.id,
       message: r.success ? `${def.name} agora é +${it.enh}.` : `O refino falhou (rolagem ${r.roll} ≥ ${q.chancePct}%). ${def.name} continua em +${it.enh || 0}; ouro e materiais foram gastos.`,
       char: p.zone.charView(p), cache: false };
@@ -670,6 +788,7 @@ export class GameServer {
       }
       this.store.saveCharacter(c);
     });
+    this.audit('buy', { charId: p.char.id, item, qty, cost, goldAfter: p.char.gold });
     return { ok: true, cost, char: p.zone.charView(p) };
   }
 
@@ -687,6 +806,7 @@ export class GameServer {
     const lvl = p.char.level;
     const r = this.quests.turnIn(p.char, quest, n.id, (xp) => p.zone.grantXp(p, xp));
     if (r.ok && !r.alreadyDone) {
+      this.audit('quest_reward', { charId: p.char.id, quest, gold: r.rewards?.gold ?? 0, xp: r.rewards?.xp ?? 0, items: r.rewards?.items ?? [] });
       if (p.char.level > lvl) p.zone.broadcast({ t: 'level_up', eid: p.eid, level: p.char.level });
       r.char = p.zone.charView(p);
       r.journal = this.quests.journal(p.char);
@@ -982,6 +1102,7 @@ export class GameServer {
       if (row.gold) { c.gold += row.gold; this.store.saveCharacter(c); }
       this.store.markLootClaimed(row.id, instanceId);
       result = { ok: true, alreadyClaimed: false, loot: lootId, instanceId, gold: row.gold, defId: row.def_id };
+      this.audit('loot', { charId: c.id, loot: lootId, gold: row.gold || 0, item: row.def_id ?? null, qty: row.qty, instance: instanceId ?? null });
     });
     if (result.ok) result.char = p.zone.charView(p); // objetivos "collect" são contados ao vivo na bolsa
     return result;
@@ -1049,6 +1170,13 @@ export class GameServer {
 
   // ---------- chat: zona, grupo, sussurro ----------
   hChat(p, { text, channel = 'zone', to }) {
+    const sess = this.byChar.get(p.char.id);
+    if (sess) {
+      const now = Date.now();
+      sess.chat = sess.chat.filter((t) => now - t < 5000);
+      if (sess.chat.length >= this.opts.chatPer5s) return { ok: false, code: 'chat_flood', reason: 'Calma: mensagens demais em pouco tempo.' };
+      sess.chat.push(now);
+    }
     if (typeof text !== 'string') return { ok: false, code: 'bad_request', reason: 'Mensagem inválida.' };
     const clean = text.replace(/[\u0000-\u001f]/g, '').trim().slice(0, 200);
     if (!clean) return { ok: false, code: 'empty', reason: 'Mensagem vazia.' };
@@ -1069,7 +1197,9 @@ export class GameServer {
 
   // Comandos de mestre: só com --dev. Usados para reproduzir cenários (README) e nos testes.
   hGm(p, msg) {
-    if (!this.opts.dev) return { ok: false, code: 'forbidden', reason: 'Comandos de mestre desativados.' };
+    const s = this.byChar.get(p.char.id);
+    if (!this.opts.dev && !['gm', 'admin'].includes(s?.role)) return { ok: false, code: 'forbidden', reason: 'Comandos de mestre desativados.' };
+    this.audit('gm', { accountId: s?.accountId ?? null, charId: p.char.id, ip: s?.ip ?? null, cmd: msg.cmd, args: Object.fromEntries(Object.entries(msg).filter(([k]) => !['t', 'rid', 'cmd'].includes(k))) });
     const c = p.char;
     if (msg.cmd === 'give') {
       const def = this.data.items[msg.defId];
@@ -1118,6 +1248,16 @@ export class GameServer {
     }
     return { ok: false, code: 'unknown', reason: 'Comando de mestre desconhecido.' };
   }
+}
+
+// Versão dos dados do jogo: hash dos JSON de data/ (vai no hello e no log de início).
+function dataVersionOf(data) {
+  const h = createHash('sha256');
+  for (const k of Object.keys(data).sort()) {
+    const v = data[k];
+    if (v && typeof v === 'object') h.update(k).update(JSON.stringify(v));
+  }
+  return h.digest('hex').slice(0, 12);
 }
 
 function charRow(r) {

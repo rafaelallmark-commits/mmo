@@ -115,3 +115,14 @@ Decisões tomadas por conta própria durante a sessão que criou o Marco 1. Cada
 | D72 | **Capítulo 4 como desenhado**: recalibração com canalização de 4 s (mover, agir ou ser atingido interrompe); escolta da carroça com emboscadas nos três marcos, quebra ou queda geral volta ao último marco com a mesma emboscada, chegada conta para o grupo por perto; resposta escolhida em "Duas Razões" grava a escolha, dá um título (Voz de Vargem Funda / Guarda do Inverno) e troca falas de missões seguintes (`dialogueByChoice`). | Fecha as simplificações da D55 com os sistemas que faltavam (canalização, entidade de escolta mirada pelos monstros, escolhas persistentes). A escolha muda falas e título, não a progressão (docs/02). |
 | D73 | Emboscados **miram a carroça até alguém do grupo gerar ameaça**; a carroça para enquanto há monstro encostado nela. | Dá o que fazer a quem protege (puxar os monstros) e impede a carroça de "fugir" da luta. |
 
+## Teste público
+
+| # | Decisão | Motivo |
+|---|---|---|
+| D74 | **Serviço de contas separado** do servidor de zona, no mesmo banco: cadastro com e-mail e código de 6 dígitos (só o hash fica no banco, 30 min, 5 tentativas), troca de senha por código, exportação e exclusão de conta; emite **token de sessão HMAC-SHA256 de 5 minutos e uso único** que a zona aceita em `login_token`. | Senha e e-mail ficam fora do processo do jogo; a zona só precisa do segredo compartilhado. Uso único (jti) impede reaproveitar um token capturado. |
+| D75 | **Limite de comandos por conexão** (balde: 20/s, rajada de 40; chat 6 a cada 5 s) respondendo ao próprio pedido com `rate_limited`, e expulsão de quem insiste; limite opcional de conexões por IP (com `X-Forwarded-For` atrás de proxy confiável). | O servidor já é autoritativo no movimento; o que resta é inundação. Responder com o `rid` evita o cliente esperar para sempre (achado pelo teste do ferreiro). |
+| D76 | **Auditoria** em tabela própria (entradas com IP, mestres, saque, compras, refino, recompensas, contas) com **retenção de 90 dias**; mestres por **papel da conta** (`gm`/`admin`), não mais por `--dev`. | Investigar fraude e duplicação; LGPD pede retenção limitada. |
+| D77 | **Exclusão de conta anonimiza** (nome trocado, e-mail e senha apagados, itens e missões removidos) em vez de apagar as linhas. | Mantém a integridade das referências (saque, auditoria) sem guardar dados pessoais. |
+| D78 | **Desligamento gracioso** no `SIGTERM` (aviso com contagem, recusa de novos logins, salvar, sair) e `hello` com protocolo 3, versão do servidor e hash dos dados. | Reinícios sem perda e sem surpresa para quem joga; cliente desatualizado recebe mensagem clara. |
+| D79 | **TLS direto opcional** (`--tls-cert/--tls-key`) além do proxy. | Permite `wss://` sem proxy em instalações pequenas; em produção o proxy (Caddy) renova certificados sozinho. |
+

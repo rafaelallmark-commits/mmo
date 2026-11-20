@@ -19,7 +19,9 @@
     "carga": "node --disable-warning=ExperimentalWarning tools/carga.mjs",
     "cenarios": "node --disable-warning=ExperimentalWarning tools/cenarios.mjs",
     "telemetria": "node --disable-warning=ExperimentalWarning tools/telemetria.mjs",
-    "backup": "node --disable-warning=ExperimentalWarning tools/backup.mjs"
+    "backup": "node --disable-warning=ExperimentalWarning tools/backup.mjs",
+    "contas": "node --disable-warning=ExperimentalWarning src/contas-main.js",
+    "conta": "node --disable-warning=ExperimentalWarning tools/conta.mjs"
   },
   "dependencies": {
     "ws": "8.18.3"

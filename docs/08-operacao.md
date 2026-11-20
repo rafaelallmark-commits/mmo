@@ -82,3 +82,43 @@ nenhum acima de 50 ms; CPU do processo ~7% de um núcleo; 144 MB de memória.
   simulando monstros.
 - **Banco travado** (`database is locked`): só um processo de servidor pode usar o arquivo.
 - **Godot headless** imprime `Parameter "m" is null` (renderizador dummy): inofensivo.
+
+## 8.9 Contas, segurança e privacidade (teste público)
+
+**Serviço de contas** (processo separado, mesmo banco): `npm run contas -- --port 7780 --db cinzas.db
+--token-secret "$CINZAS_TOKEN_SECRET" --email smtp --smtp-host smtp.exemplo.com --smtp-user ... --smtp-pass ...
+--smtp-from "Cinzas <nao-responda@exemplo.com>"`. Rotas: criar conta (e-mail com código de 6 dígitos),
+confirmar, reenviar código, sessão (token de 5 min, uso único), esqueci/redefinir senha, exportar dados
+(portabilidade) e excluir conta. `--email arquivo --email-dir emails` grava os e-mails em vez de enviar.
+
+**Servidor de zona no teste público**:
+
+```bash
+npm start -- --auth token --token-secret "$CINZAS_TOKEN_SECRET" --tls-cert cert.pem --tls-key key.pem \
+  --max-conn-per-ip 8 --trust-proxy --log-format json --shutdown-grace 30 --audit-days 90
+```
+
+| Opção | Efeito |
+|---|---|
+| `--auth token\|password\|both` | `token`: só entra com token do serviço de contas (cadastro e senha direto no servidor de zona ficam desligados). `both` (padrão) aceita os dois. |
+| `--token-secret` | Segredo compartilhado com o serviço de contas (HMAC-SHA256). |
+| `--tls-cert`, `--tls-key` | `wss://` direto. Alternativa: terminar o TLS no proxy (veja a seção de implantação). |
+| `--rate-limit 20 --rate-burst 40` | Comandos por segundo por conexão (balde de fichas). Acima disso o pedido volta com `rate_limited`; quem insiste por 10 s é desconectado (auditado). Chat: 6 mensagens a cada 5 s. |
+| `--max-conn-per-ip` | Conexões simultâneas por endereço (0 = sem limite). Com `--trust-proxy` o endereço vem de `X-Forwarded-For`. |
+| `--log-format json` | Uma linha JSON por evento (para coletores de log). |
+| `--shutdown-grace 30` | No `SIGTERM`: avisa os jogadores ("o servidor vai reiniciar em 30 s"), recusa novos logins, salva e sai. `Ctrl+C` sai na hora (salvando). |
+| `--audit-days 90` | Retenção da auditoria; códigos vencidos também são apagados (de hora em hora). |
+
+**Auditoria** (`audit_log`): entradas e falhas (com IP), comandos de mestre, saque, compras, refino,
+recompensas de missão, criação/confirmação/exclusão de conta, troca de senha, expulsões. Consulta:
+`npm run conta -- --db cinzas.db --auditoria --tipo gm --n 50`.
+
+**Mestres**: comandos `/gm` só para contas com papel `gm` ou `admin` (ou com `--dev`, em desenvolvimento):
+`npm run conta -- --db cinzas.db --conta nome --papel gm`. Todo comando de mestre fica na auditoria.
+
+**Versões**: o `hello` traz `protocol` (3), `version` do servidor e `dataVersion` (hash dos dados); o cliente
+recusa servidor de protocolo diferente com uma mensagem clara.
+
+**Privacidade**: política em [PRIVACIDADE.md](PRIVACIDADE.md). Exclusão de conta pelo jogo (tela de
+personagens) ou pelo serviço de contas apaga e-mail, senha, itens e missões na hora e anonimiza os nomes.
+

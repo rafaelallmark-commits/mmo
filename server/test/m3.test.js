@@ -80,7 +80,9 @@ test('refino: taxas conferem em 10.000 tentativas com RNG semeado', () => {
 });
 
 test('ferreiro: sucesso sobe o grau; falha mantém o grau e consome ouro e materiais; depósito é da conta', async () => {
+  // robô de teste faz ~150 pedidos em poucos segundos: limite de comandos folgado só aqui
   await withServer(async (server, url) => {
+    server.opts.rateLimit = 1000; server.opts.rateBurst = 1000;
     const a = await newChar(url, 'smithA', 'breaker', 'Ferreira', 'conta_ferro');
     await teleport(a, 'pedrambar', 14, 44);
     await a.request('gm', { cmd: 'gold', amount: 100000 });

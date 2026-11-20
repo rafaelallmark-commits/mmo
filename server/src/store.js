@@ -1,7 +1,7 @@
 // Persistência simples em SQLite (node:sqlite, síncrono). Um arquivo por servidor de zona.
 // Cada operação que muda inventário, XP ou saque roda numa transação única.
 import { DatabaseSync } from 'node:sqlite';
-import { randomUUID, scryptSync, randomBytes, timingSafeEqual } from 'node:crypto';
+import { randomUUID, scryptSync, randomBytes, timingSafeEqual, createHash, randomInt } from 'node:crypto';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS accounts (
@@ -97,6 +97,34 @@ export const MIGRATIONS = [
       PRIMARY KEY (char_id, level)
     )`);
   } },
+  { v: 3, name: 'contas para o teste público: e-mail, papel, exclusão, códigos e auditoria', up: (db) => {
+    db.exec("ALTER TABLE accounts ADD COLUMN email TEXT");
+    db.exec('ALTER TABLE accounts ADD COLUMN verified INTEGER NOT NULL DEFAULT 1');
+    db.exec("ALTER TABLE accounts ADD COLUMN role TEXT NOT NULL DEFAULT 'player'");
+    db.exec('ALTER TABLE accounts ADD COLUMN deleted_at INTEGER');
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_email ON accounts(email COLLATE NOCASE) WHERE email IS NOT NULL');
+    db.exec(`CREATE TABLE IF NOT EXISTS account_codes (
+      account_id INTEGER NOT NULL REFERENCES accounts(id),
+      kind TEXT NOT NULL CHECK (kind IN ('verify','reset')),
+      code_hash TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      used_at INTEGER,
+      created_at INTEGER NOT NULL
+    )`);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_codes_account ON account_codes(account_id, kind)');
+    db.exec(`CREATE TABLE IF NOT EXISTS audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      at INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      account_id INTEGER,
+      char_id INTEGER,
+      ip TEXT,
+      data_json TEXT NOT NULL DEFAULT '{}'
+    )`);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_audit_at ON audit_log(at)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_audit_char ON audit_log(char_id, at)');
+  } },
 ];
 
 export function migrate(db) {
@@ -131,7 +159,7 @@ function hashPassword(password, salt) {
 export class Store {
   constructor(path = ':memory:') {
     this.db = new DatabaseSync(path);
-    this.db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+    this.db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 3000;');
     this.migrated = migrate(this.db);
     this.st = {};
   }
@@ -155,28 +183,119 @@ export class Store {
   }
 
   // ---------- contas ----------
-  createAccount(name, password) {
+  // email/verified: contas criadas pelo serviço de contas (teste público) começam sem verificação.
+  createAccount(name, password, { email = null, verified = true } = {}) {
     const salt = randomBytes(16).toString('hex');
-    const r = this.prep('INSERT INTO accounts (name, pass_hash, salt, created_at) VALUES (?, ?, ?, ?)')
-      .run(name, hashPassword(password, salt), salt, Date.now());
+    const r = this.prep('INSERT INTO accounts (name, pass_hash, salt, created_at, email, verified) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(name, hashPassword(password, salt), salt, Date.now(), email, verified ? 1 : 0);
     return Number(r.lastInsertRowid);
   }
 
   findAccount(name) {
-    return this.prep('SELECT * FROM accounts WHERE name = ?').get(name);
+    return this.prep('SELECT * FROM accounts WHERE name = ? AND deleted_at IS NULL').get(name);
+  }
+
+  findAccountById(id) {
+    return this.prep('SELECT * FROM accounts WHERE id = ? AND deleted_at IS NULL').get(id);
+  }
+
+  findAccountByEmail(email) {
+    return this.prep('SELECT * FROM accounts WHERE email = ? COLLATE NOCASE AND deleted_at IS NULL').get(email);
   }
 
   verifyAccount(name, password) {
     const acc = this.findAccount(name);
     if (!acc) return null;
+    return this.checkPassword(acc, password) ? acc : null;
+  }
+
+  checkPassword(acc, password) {
     const a = Buffer.from(hashPassword(password, acc.salt), 'hex');
     const b = Buffer.from(acc.pass_hash, 'hex');
-    return a.length === b.length && timingSafeEqual(a, b) ? acc : null;
+    return a.length === b.length && timingSafeEqual(a, b);
+  }
+
+  setPassword(accountId, password) {
+    const salt = randomBytes(16).toString('hex');
+    this.prep('UPDATE accounts SET pass_hash = ?, salt = ? WHERE id = ?').run(hashPassword(password, salt), salt, accountId);
+  }
+
+  setVerified(accountId) { this.prep('UPDATE accounts SET verified = 1 WHERE id = ?').run(accountId); }
+  setRole(accountId, role) { this.prep('UPDATE accounts SET role = ? WHERE id = ?').run(role, accountId); }
+
+  // Código de 6 dígitos (verificação de e-mail ou troca de senha). Guarda só o hash; vale 30 min.
+  issueCode(accountId, kind, ttlMs = 30 * 60 * 1000) {
+    const code = String(randomInt(0, 1000000)).padStart(6, '0');
+    this.prep('UPDATE account_codes SET used_at = ? WHERE account_id = ? AND kind = ? AND used_at IS NULL').run(Date.now(), accountId, kind);
+    this.prep('INSERT INTO account_codes (account_id, kind, code_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)')
+      .run(accountId, kind, createHash('sha256').update(`${accountId}:${code}`).digest('hex'), Date.now() + ttlMs, Date.now());
+    return code;
+  }
+
+  // true se o código confere (usa uma vez; 5 tentativas erradas invalidam)
+  consumeCode(accountId, kind, code) {
+    const row = this.prep('SELECT rowid AS rid, * FROM account_codes WHERE account_id = ? AND kind = ? AND used_at IS NULL AND expires_at > ? ORDER BY created_at DESC LIMIT 1').get(accountId, kind, Date.now());
+    if (!row) return false;
+    const ok = row.code_hash === createHash('sha256').update(`${accountId}:${String(code)}`).digest('hex');
+    if (ok) this.prep('UPDATE account_codes SET used_at = ? WHERE rowid = ?').run(Date.now(), row.rid);
+    else this.prep('UPDATE account_codes SET attempts = attempts + 1, used_at = CASE WHEN attempts + 1 >= 5 THEN ? ELSE NULL END WHERE rowid = ?').run(Date.now(), row.rid);
+    return ok;
+  }
+
+  // Exclusão de conta (privacidade): apaga dados pessoais e itens, mantém linhas anônimas para a
+  // integridade das referências (saque, auditoria).
+  deleteAccount(accountId) {
+    return this.tx(() => {
+      const chars = this.prep('SELECT id FROM characters WHERE account_id = ?').all(accountId);
+      for (const c of chars) {
+        this.prep('DELETE FROM item_instances WHERE char_id = ?').run(c.id);
+        this.prep('DELETE FROM quest_progress WHERE char_id = ?').run(c.id);
+        this.prep('DELETE FROM loot_drops WHERE char_id = ? AND claimed_at IS NULL').run(c.id);
+        this.prep("UPDATE characters SET name = ?, account_id = account_id, gold = 0, flags_json = '{}' WHERE id = ?").run(`excluido_${c.id}`, c.id);
+      }
+      this.prep('DELETE FROM account_codes WHERE account_id = ?').run(accountId);
+      this.prep("UPDATE accounts SET name = ?, email = NULL, pass_hash = '', salt = '', deleted_at = ? WHERE id = ?").run(`excluida_${accountId}`, Date.now(), accountId);
+      return chars.length;
+    });
+  }
+
+  // Portabilidade (LGPD): tudo o que guardamos da conta, em JSON.
+  exportAccount(accountId) {
+    const acc = this.prep('SELECT id, name, email, verified, role, created_at FROM accounts WHERE id = ?').get(accountId);
+    const chars = this.prep('SELECT id, name, class_id, level, xp, gold, map_id, played_s, created_at, updated_at FROM characters WHERE account_id = ?').all(accountId);
+    const ids = chars.map((c) => c.id);
+    const inChars = (sql) => ids.flatMap((id) => this.prep(sql).all(id));
+    return {
+      conta: acc,
+      personagens: chars,
+      itens: inChars('SELECT char_id, def_id, qty, enh, loc, slot, source, created_at FROM item_instances WHERE char_id = ?'),
+      missoes: inChars('SELECT char_id, quest_id, state, updated_at FROM quest_progress WHERE char_id = ?'),
+      auditoria: this.prep('SELECT at, kind, char_id, ip, data_json FROM audit_log WHERE account_id = ? ORDER BY at').all(accountId),
+    };
+  }
+
+  // ---------- auditoria ----------
+  audit(kind, { accountId = null, charId = null, ip = null, ...data } = {}) {
+    this.prep('INSERT INTO audit_log (at, kind, account_id, char_id, ip, data_json) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(Date.now(), kind, accountId, charId, ip, JSON.stringify(data));
+  }
+
+  auditTail(limit = 50, kind = null) {
+    return kind ? this.prep('SELECT * FROM audit_log WHERE kind = ? ORDER BY id DESC LIMIT ?').all(kind, limit)
+      : this.prep('SELECT * FROM audit_log ORDER BY id DESC LIMIT ?').all(limit);
+  }
+
+  // retenção: apaga auditoria mais velha que N dias e códigos vencidos
+  purgeOld(auditDays) {
+    const cut = Date.now() - auditDays * 86400000;
+    const a = this.prep('DELETE FROM audit_log WHERE at < ?').run(cut).changes;
+    const c = this.prep('DELETE FROM account_codes WHERE expires_at < ?').run(Date.now() - 86400000).changes;
+    return { audit: Number(a), codes: Number(c) };
   }
 
   // ---------- personagens ----------
   listCharacters(accountId) {
-    return this.prep('SELECT id, name, class_id, level, map_id FROM characters WHERE account_id = ? ORDER BY id').all(accountId);
+    return this.prep("SELECT id, name, class_id, level, map_id FROM characters WHERE account_id = ? AND name NOT LIKE 'excluido\\_%' ESCAPE '\\' ORDER BY id").all(accountId);
   }
 
   characterNameTaken(name) {
