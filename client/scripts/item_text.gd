@@ -67,6 +67,8 @@ static func describe(defs: Dictionary, inst: Dictionary, ch: Dictionary, compare
 		t += "Poder mágico: %d\n" % int(d["magicPower"])
 	if d.has("defense"):
 		t += "Defesa: %d\n" % int(d["defense"])
+	if d.has("blockPct"):
+		t += "Bloqueio: %d%% dos golpes de monstro\n" % int(d["blockPct"])
 	if d.has("mres"):
 		t += "Resistência mágica: %d\n" % int(d["mres"])
 	if d.has("evasion"):
@@ -105,6 +107,7 @@ static func describe(defs: Dictionary, inst: Dictionary, ch: Dictionary, compare
 		t += "\n[color=#9a927f]Comparado a %s:[/color]\n" % e.get("name", "?")
 		t += _delta("Dano médio", avg_damage(d), avg_damage(e))
 		t += _delta("Defesa", float(d.get("defense", 0)), float(e.get("defense", 0)))
+		t += _delta("Bloqueio (%)", float(d.get("blockPct", 0)), float(e.get("blockPct", 0)))
 		t += _delta("Poder mágico", float(d.get("magicPower", 0)), float(e.get("magicPower", 0)))
 	return t
 

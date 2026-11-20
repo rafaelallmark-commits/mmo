@@ -144,8 +144,9 @@ export function playerAttack(stats, target, data, rng, skill) {
   if (isSpell) {
     steps.flat = eff.flat + (eff.flatPerRank || 0) * (rank - 1);
     steps.spiPart = Math.floor(stats.attrs.spi * eff.spiCoef);
-    // fração do poder mágico da arma e do foco que a magia soma (padrão 100%): áreas de vários pulsos
-    // dividem o poder mágico entre os pulsos em vez de somá-lo inteiro a cada pulso em cada alvo
+    // fração do poder mágico da arma e do foco que a magia soma (effect.magicPowerPct, padrão 100%):
+    // magias de recarga curta e áreas de vários pulsos somam só uma parte, para o bônus da arma e do
+    // foco não se multiplicar pelas conjurações, pulsos e alvos (D129)
     steps.magicPower = Math.floor((stats.magicPower * (eff.magicPowerPct ?? 100)) / 100);
     steps.raw = steps.flat + steps.spiPart + steps.magicPower;
   } else if (magic) {

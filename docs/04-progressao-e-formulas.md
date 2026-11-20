@@ -520,7 +520,7 @@ Começa com Força 7, Espírito 20, Talento 12, Agilidade 9, Vitalidade 12. Cada
 
 - **Dano físico bruto** = rolagem(dano mín..máx da arma) + ⌊Σ atributo × coeficiente da família⌋. Ex.: machados For×0,30 + Tal×0,10 (duas mãos: For×0,35), lanças For×0,30 + Tal×0,15, arcos e azagaias Agi×0,30 + Tal×0,10, espadas For×0,30 + Esp×0,10, garras For×0,25 + Tal×0,15.
 - **Habilidade física** = ⌊bruto × (pct + pctPorGrau × (grau − 1)) / 100⌋; efeitos de reforço (ex.: Ímpeto) multiplicam depois.
-- **Dano mágico bruto (magia)** = fixo + fixoPorGrau × (grau − 1) + ⌊Espírito × coefEsp⌋ + poder mágico (arma + foco). **Ataque básico mágico** = rolagem da arma + ⌊Espírito × 0.2⌋.
+- **Dano mágico bruto (magia)** = fixo + fixoPorGrau × (grau − 1) + ⌊Espírito × coefEsp⌋ + ⌊poder mágico (arma + foco) × fração / 100⌋, com a fração do poder mágico em 100% salvo onde a habilidade diz outra (Nota Clara 50%, Faísca de Vidro 30%, Chão em Brasa 25%, Círculo de Fuligem 60%). **Ataque básico mágico** = rolagem da arma + ⌊Espírito × 0.2⌋.
 - **Crítico**: chance física = crítico da arma (+ aljava) + Talento × 0.15 + Agilidade × 0.1 − 2 por nível que o alvo tiver acima, teto 40%; dano ×1,6. Mágica = 3 + Espírito × 0.05 + Talento × 0.1; dano ×1,5.
 - **Defesa** = Σ defesa dos itens × (1 + 10% por refino) + ⌊Vitalidade × 0.3⌋ + nível. **Resistência mágica** = Σ itens + ⌊Espírito × 0.3⌋ + ⌊Vitalidade × 0.2⌋.
 - **Mitigação** (vale para defesa e resistência): final = round(bruto × K / (K + defesa)), K = 40 + 8 × nível do atacante; mínimo 1. Defesa nunca zera o dano e perde força contra atacantes de nível alto.
@@ -553,9 +553,9 @@ Mesmo atacante e alvo. Rolagens: acerto 0,30; dano 0,50; crítico 0,02.
 Tecelão da Brasa nível 5 (Esp 25, Tal 14) com **Varinha de Vidro Fosco** (poder mágico 10) e **Foco de Lente de Bomba** (poder mágico 6) contra o mesmo Javali de Cinza (resistência mágica 9). Rolagens: acerto 0,40; crítico 0,90.
 
 1. Magia não usa evasão: acerto = clamp(100 + 4 × (5 − 5), 60, 100) = **100%** → acerta.
-2. Fixo do grau 2 = 14 + 7 × 1 = **20**. Espírito: ⌊25 × 0,9⌋ = **8**. Poder mágico (arma + foco) = **4**. Bruto = **32**.
+2. Fixo do grau 2 = 14 + 6 × 1 = **20**. Espírito: ⌊25 × 0,35⌋ = **8**. Poder mágico: 30% de (arma + foco) = ⌊16 × 30 / 100⌋ = **4**. Bruto = **32**.
 3. Crítico mágico = 3 + 25 × 0,05 + 14 × 0,1 = **5,7%**; rolagem 90 → sem crítico.
-4. Final = round(32 × 80 / (80 + 9)) = **29** (custa 13 de mana; recarga 2 s).
+4. Final = round(32 × 80 / (80 + 9)) = **29** (custa 13 de mana no grau 2; recarga 4 s).
 
 ### Exemplo 4 — defesa e precisão do lado do monstro
 

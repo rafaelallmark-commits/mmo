@@ -131,6 +131,14 @@ export class Zone {
     let changed = false;
     for (const sid of cls.skills) {
       const s = this.data.skills[sid];
+      // ficha gravada antes de os dados passarem a habilidade para um nível acima do personagem (ex.:
+      // Luz Compartilhada, do 5 para o 15): ela sai da ficha e os graus comprados voltam como pontos
+      if (char.skills[sid] && s.unlockLevel > char.level) {
+        char.skillPoints += Math.max(0, char.skills[sid] - this.data.skillRules.unlockGivesRank);
+        delete char.skills[sid];
+        changed = true;
+        continue;
+      }
       // a habilidade do nível 10 é liberada pela prova de classe, não pelo nível
       if (s.unlockLevel === 10 && !char.trialDone) continue;
       if (s.unlockLevel <= char.level && !char.skills[sid]) { char.skills[sid] = this.data.skillRules.unlockGivesRank; changed = true; }

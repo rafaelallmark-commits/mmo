@@ -1113,7 +1113,7 @@ export class BotProgressao {
     const porCompra = this.conjurador ? orcamento / 2 : orcamento;
     const vida = this.level >= 9 && porCompra >= this.preco('potion_hp_m') * 40 ? 'potion_hp_m' : 'potion_hp_s';
     const mana = this.level >= 9 && porCompra >= this.preco('potion_mp_m') * 40 ? 'potion_mp_m' : 'potion_mp_s';
-    // estoque: o padrão ou o dobro do que gastou no nível anterior (o que for maior), até 200
+    // estoque: o padrão ou 2,5 × o que gastou no nível anterior (o que for maior), até 300 (alvosPocoes)
     const { vida: alvoVida, mana: alvoMana } = this.alvosPocoes();
     const pedidos = [
       [vida, alvoVida - (this.bolsa(POCOES_VIDA) - this.bolsa([vida]))],

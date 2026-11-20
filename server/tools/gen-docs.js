@@ -151,10 +151,12 @@ function progressionDoc() {
   // fórmulas
   out.push('\n## 4.7 Fórmulas de combate (dados em data/formulas.json)\n');
   const f = data.formulas;
+  // magias que somam só uma fração do poder mágico (effect.magicPowerPct; sem o campo, 100%)
+  const fracoes = Object.values(data.skills).filter((s) => s.effect.magicPowerPct !== undefined).map((s) => `${s.name} ${s.effect.magicPowerPct}%`);
   out.push([
     `- **Dano físico bruto** = rolagem(dano mín..máx da arma) + ⌊Σ atributo × coeficiente da família⌋. Ex.: machados ${'For×0,30 + Tal×0,10'} (duas mãos: For×0,35), lanças For×0,30 + Tal×0,15, arcos e azagaias Agi×0,30 + Tal×0,10, espadas For×0,30 + Esp×0,10, garras For×0,25 + Tal×0,15.`,
     '- **Habilidade física** = ⌊bruto × (pct + pctPorGrau × (grau − 1)) / 100⌋; efeitos de reforço (ex.: Ímpeto) multiplicam depois.',
-    `- **Dano mágico bruto (magia)** = fixo + fixoPorGrau × (grau − 1) + ⌊Espírito × coefEsp⌋ + poder mágico (arma + foco). **Ataque básico mágico** = rolagem da arma + ⌊Espírito × ${f.magic.basicSpiCoef}⌋.`,
+    `- **Dano mágico bruto (magia)** = fixo + fixoPorGrau × (grau − 1) + ⌊Espírito × coefEsp⌋ + ⌊poder mágico (arma + foco) × fração / 100⌋, com a fração do poder mágico em 100% salvo onde a habilidade diz outra (${fracoes.join(', ')}). **Ataque básico mágico** = rolagem da arma + ⌊Espírito × ${f.magic.basicSpiCoef}⌋.`,
     `- **Crítico**: chance física = crítico da arma (+ aljava) + Talento × ${f.crit.talCoef} + Agilidade × ${f.crit.agiCoef} − ${f.crit.levelPenaltyPct} por nível que o alvo tiver acima, teto ${f.crit.cap}%; dano ×${n1(f.crit.physMult)}. Mágica = ${f.crit.magic.base} + Espírito × ${f.crit.magic.spiCoef} + Talento × ${f.crit.magic.talCoef}; dano ×${n1(f.crit.magic.mult)}.`,
     `- **Defesa** = Σ defesa dos itens × (1 + ${f.defense.enhancePct}% por refino) + ⌊Vitalidade × ${f.defense.vitCoef}⌋ + nível. **Resistência mágica** = Σ itens + ⌊Espírito × ${f.magicResist.spiCoef}⌋ + ⌊Vitalidade × ${f.magicResist.vitCoef}⌋.`,
     `- **Mitigação** (vale para defesa e resistência): final = round(bruto × K / (K + defesa)), K = ${f.mitigation.base} + ${f.mitigation.perAttackerLevel} × nível do atacante; mínimo 1. Defesa nunca zera o dano e perde força contra atacantes de nível alto.`,
@@ -188,14 +190,17 @@ function progressionDoc() {
   ].join('\n'));
   const tc = { classId: 'emberweaver', level: 5, alloc: { spi: 5, tal: 2, vit: 6, agi: 1, str: 0 } };
   const tcStats = derivedStats(tc, ['wand_t5', 'focus_t5', 'robe_t5'].map((id) => ({ def: data.items[id] })), data);
-  const spark = { def: data.skills.glass_spark, rank: 2 };
+  const sparkDef = data.skills.glass_spark;
+  const se = sparkDef.effect;
+  const spark = { def: sparkDef, rank: 2 };
   const r3 = playerAttack(tcStats, target, data, seq(0.40, 0.90), spark);
+  const coef = (v) => String(v).replace('.', ',');
   out.push(`\n### Exemplo 3 — magia (Faísca de Vidro, grau 2)\n\nTecelão da Brasa nível 5 (Esp ${tcStats.attrs.spi}, Tal ${tcStats.attrs.tal}) com **Varinha de Vidro Fosco** (poder mágico ${data.items.wand_t5.magicPower}) e **Foco de Lente de Bomba** (poder mágico ${data.items.focus_t5.magicPower}) contra o mesmo ${boar.name} (resistência mágica ${boar.mres}). Rolagens: acerto 0,40; crítico 0,90.\n`);
   out.push([
     `1. Magia não usa evasão: acerto = clamp(100 + 4 × (5 − 5), 60, 100) = **${r3.hitChance}%** → acerta.`,
-    `2. Fixo do grau 2 = 14 + 7 × 1 = **${r3.flat}**. Espírito: ⌊${tcStats.attrs.spi} × 0,9⌋ = **${r3.spiPart}**. Poder mágico (arma + foco) = **${r3.magicPower}**. Bruto = **${r3.raw}**.`,
+    `2. Fixo do grau 2 = ${se.flat} + ${se.flatPerRank || 0} × 1 = **${r3.flat}**. Espírito: ⌊${tcStats.attrs.spi} × ${coef(se.spiCoef)}⌋ = **${r3.spiPart}**. Poder mágico: ${se.magicPowerPct ?? 100}% de (arma + foco) = ⌊${tcStats.magicPower} × ${se.magicPowerPct ?? 100} / 100⌋ = **${r3.magicPower}**. Bruto = **${r3.raw}**.`,
     `3. Crítico mágico = 3 + ${tcStats.attrs.spi} × 0,05 + ${tcStats.attrs.tal} × 0,1 = **${n1(r3.critChance)}%**; rolagem ${n1(r3.critRoll)} → sem crítico.`,
-    `4. Final = round(${r3.afterCrit} × ${r3.mitigationK} / (${r3.mitigationK} + ${boar.mres})) = **${r3.damage}** (custa ${data.skills.glass_spark.mp + 1} de mana; recarga 2 s).`,
+    `4. Final = round(${r3.afterCrit} × ${r3.mitigationK} / (${r3.mitigationK} + ${boar.mres})) = **${r3.damage}** (custa ${sparkDef.mp + (sparkDef.mpPerRank || 0)} de mana no grau 2; recarga ${n1(sparkDef.cooldownMs / 1000)} s).`,
   ].join('\n'));
   const r4 = monsterAttack(boar, qfStats, data, seq(0.30, 0.50, 0.99));
   out.push(`\n### Exemplo 4 — defesa e precisão do lado do monstro\n\nO ${boar.name} (precisão ${boar.accuracy}, dano ${boar.damage.join('–')}) ataca o Quebraferro do exemplo 1 (Couraça de Bronze de Eclusa 13 + Elmo de Ferro Batido ${data.items.heavy_helm_t1.defense}, Vit ${qfStats.attrs.vit}).\n`);

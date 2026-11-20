@@ -30,7 +30,7 @@ Personagens: modelos VRM de anime — **Seed-san model by VirtualCast, Inc.** e 
 | [docs/06-mundo-e-mapas.md](docs/06-mundo-e-mapas.md) | Cidades, as áreas de caça (cinco da versão 1 e A Cava Primeira), regras de monstros, morte e resgate, combate legível, telas da interface |
 | [docs/07-navegacao.md](docs/07-navegacao.md) | Telas, camadas dentro do jogo, mapa do mundo, controles, direção gráfica e som |
 | [docs/08-operacao.md](docs/08-operacao.md) | Execução e operação: opções do servidor, métricas, banco e backup, testes e medições; implantação do teste público (CI, releases assinadas, Docker/Compose, systemd, TLS); várias zonas |
-| [docs/relatorio-progressao.md](docs/relatorio-progressao.md) | Marco 4: tempo medido por nível (1→20) de cada classe caçando solo, contra as metas da tabela de XP; economia de tônicos, equipamento, mortes e problemas encontrados *(gerado pela simulação)* |
+| [docs/relatorio-progressao.md](docs/relatorio-progressao.md) | Marco 4: tempo medido por nível (1→25) de cada classe caçando solo, contra as metas da tabela de XP; economia de tônicos e equipamento, mortes e problemas encontrados *(gerado pela simulação)* |
 | [docs/GUIA.md](docs/GUIA.md) | Guia do jogador do teste público: entrar, classes, controles, progressão, equipamento, mapas, grupo, troca, clã, duelo e convivência |
 | [docs/TERMOS.md](docs/TERMOS.md) · [docs/PRIVACIDADE.md](docs/PRIVACIDADE.md) | Termos de uso (regras de convivência e jogo limpo) e política de privacidade do teste público (rascunhos) |
 | [docs/DECISOES.md](docs/DECISOES.md) | Todas as decisões tomadas por conta própria e o motivo |
@@ -159,7 +159,7 @@ npm run validate-data
 npm run gen-docs
 ```
 
-Medir a progressão (Marco 4): um bot por classe caça do nível 1 ao teto (25) num servidor em processo, acelerado (`server.step(100)` em laço, sem rede), e o tempo de cada nível é comparado com as metas de `data/xp_table.json`. A rodada padrão (8 classes × 8 sementes, mais o mesmo lote sem a prova de classe) leva ~5 min e regrava [docs/relatorio-progressao.md](docs/relatorio-progressao.md); o JSON completo vai para `server/relatorio-progressao.json` (fora do git). O relatório versionado ainda é a rodada 1→20, anterior ao teto 25 (`--ate-nivel 20 --md ../docs/relatorio-progressao.md` repete aquela medição; a faixa 20–25 está resumida em D109 de `docs/DECISOES.md`):
+Medir a progressão (Marco 4): um bot por classe caça do nível 1 ao teto (25) num servidor em processo, acelerado (`server.step(100)` em laço, sem rede), e o tempo de cada nível é comparado com as metas de `data/xp_table.json`. A rodada padrão (8 classes × 8 sementes, mais o mesmo lote sem a prova de classe) leva ~13 min com 3 linhas de execução e regrava [docs/relatorio-progressao.md](docs/relatorio-progressao.md); o JSON completo vai para `server/relatorio-progressao.json` (fora do git). O relatório versionado é essa rodada, do 1 ao 25, com o equilíbrio do Marco 4 (decisões a partir de D127 em `docs/DECISOES.md`); as sementes são fixas, então a mesma versão do jogo repete os mesmos números:
 
 ```bash
 npm run simular-progressao

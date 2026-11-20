@@ -83,6 +83,59 @@ test('Pulso de Atração que mata o monstro não o devolve à perseguição (sem
   assert.ok(!sent.some((m) => m.t === 'hit' && m.src === ms[0].eid), 'o morto nunca ataca');
 });
 
+test('golpe de monstro bloqueado pelo escudo na zona: "errou" com block, sem dano e sem contar como golpe recebido', () => {
+  const { zone, mk, sent } = setup();
+  const p = mk('bastion', 'Tescudo', 40, 36);
+  assert.equal(p.stats.blockPct, data.items.shield_t1.blockPct, 'o Bastião começa com escudo');
+  const m = toad(zone).find((x) => x.state !== 'dead');
+  m.x = p.char.x + 1; m.z = p.char.z; m.state = 'chase'; m.targetId = p.eid; m.threat.set(p.char.id, 100); m.nextAttackAt = 0;
+  // toda rolagem 0: o golpe acerta (0 < chance de acerto) e é bloqueado (0 < chance de bloqueio)
+  zone.rng = () => 0;
+  const hp0 = p.char.hp;
+  zone.tick(100);
+  const h = sent.find((x) => x.t === 'hit' && x.src === m.eid && x.dst === p.eid);
+  assert.ok(h, 'o sapo bateu');
+  assert.equal(h.block, true); assert.equal(h.miss, true); assert.equal(h.dmg, 0);
+  assert.equal(p.char.hp, hp0, 'bloqueado não tira vida');
+  assert.equal(p.lastHitAt, undefined, 'nem conta como golpe recebido (não interromperia uma canalização)');
+  // sem escudo, a mesma rolagem acerta e tira vida
+  const w = mk('breaker', 'Tsemescudo', 44, 36);
+  assert.equal(w.stats.blockPct, 0);
+  const m2 = toad(zone).find((x) => x.state !== 'dead' && x !== m);
+  m2.x = w.char.x + 1; m2.z = w.char.z; m2.state = 'chase'; m2.targetId = w.eid; m2.threat.set(w.char.id, 100); m2.nextAttackAt = 0;
+  const hpw = w.char.hp;
+  zone.tick(100);
+  const h2 = sent.find((x) => x.t === 'hit' && x.src === m2.eid && x.dst === w.eid);
+  assert.ok(h2 && !h2.miss && h2.block === undefined && h2.dmg > 0, 'golpe comum');
+  assert.equal(w.char.hp, hpw - h2.dmg);
+});
+
+test('ficha antiga com habilidade que os dados passaram para um nível acima: sai da ficha e os graus comprados voltam (Luz Compartilhada, do 5 para o 15)', () => {
+  const store = createStore(':memory:');
+  const acc = store.createAccount('t', 'senha');
+  const zone = new Zone({ mapId: 'brejo_bombas', data, store, rng: makeRng(3), send: () => {}, broadcast: () => {} });
+  const cls = data.classes.veilsinger;
+  const id = store.createCharacter({ accountId: acc, name: 'Antiga', classId: 'veilsinger', hp: 99, mp: 99, mapId: 'brejo_bombas', x: 40, z: 36, kit: cls.startingKit, slotFor: (d) => data.items[d].slot });
+  const c = store.loadCharacter(id);
+  assert.ok(data.skills.shared_light.unlockLevel > 8 && data.skills.clear_note.unlockLevel <= 8, 'Luz Compartilhada acima do 8 e Nota Clara até o 8');
+  // gravada antes da troca, no nível 8: Canto de Amparo grau 2 e Luz Compartilhada grau 3 (3 pontos gastos)
+  const total = 7 * data.skillPointsPerLevel;
+  c.level = 8; c.quests = new Map(); c.skills = { sustain_chant: 2, shared_light: 3 }; c.skillPoints = total - 3;
+  const p = zone.addPlayer(c);
+  assert.equal(c.skills.shared_light, undefined, 'a Luz Compartilhada saiu da ficha');
+  assert.equal(c.skills.clear_note, data.skillRules.unlockGivesRank, 'a Nota Clara, que agora é do nível 5, foi liberada');
+  assert.equal(c.skills.sustain_chant, 2, 'o resto fica como estava');
+  assert.equal(c.skillPoints, total - 1, 'os 2 graus comprados na Luz Compartilhada voltaram');
+  const r = zone.castNow(p, 'shared_light');
+  assert.equal(r.ok, false); assert.equal(r.code, 'not_learned');
+  // outra entrada (troca de zona, novo login): nada muda de novo
+  assert.equal(zone.grantUnlockedSkills(c), false);
+  assert.equal(c.skillPoints, total - 1);
+  // no nível 15 ela volta liberada (grau de desbloqueio), como para qualquer personagem
+  c.level = 15; zone.grantUnlockedSkills(c);
+  assert.equal(c.skills.shared_light, data.skillRules.unlockGivesRank);
+});
+
 test('habilidade do nível 10 só existe depois da prova de classe', () => {
   const { zone, mk } = setup();
   const p = mk('breaker', 'Semprova', 40, 36);
