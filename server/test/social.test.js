@@ -408,3 +408,48 @@ test('casos de borda: empate do duelo por tempo, troca com bolsa cheia, clã com
     A.ws.close(); B.ws.close();
   }, { timeScale: 60 });
 });
+
+test('troca: item oferecido que muda depois de travar (tônico bebido, compra que empilharia) destrava e mostra o novo valor', async () => {
+  await withServer(async (server, url) => {
+    const A = await hero(url, 'Astuta');
+    const B = await hero(url, 'Atento');
+    const pa = server.playerOf(A.char.id), pb = server.playerOf(B.char.id);
+    await tp(A, pa.char.x, pa.char.z);
+    await tp(B, pa.char.x + 2, pa.char.z);
+    await B.request('gm', { cmd: 'gold', amount: 900 });
+    const pots = [...pa.char.items.values()].find((x) => x.defId === 'potion_hp_s' && x.loc === 'bag');
+    const q0 = pots.qty;
+    const { push: inv } = await expectPush(B, (m) => m.t === 'trade_invite', () => A.request('trade_request', { name: 'Atento' }), 'convite');
+    await B.request('trade_accept', { from: inv.fromId });
+    await A.request('trade_offer', { items: [pots.id] });
+    await B.request('trade_offer', { gold: 900 });
+    await A.request('trade_lock');
+    await B.request('trade_lock');
+    assert.equal((await A.request('trade_confirm')).waiting, true);
+    // A bebe um tônico da pilha oferecida: B vê a quantidade nova e os dois destravam
+    const seen = B.waitFor((m) => m.t === 'trade' && m.trade.them.items[0]?.qty === q0 - 1, 3000, 'pilha menor na tela de B');
+    pa.potionReadyAt = 0;
+    assert.equal((await A.request('use_item', { instance: pots.id })).ok, true);
+    const v = (await seen).trade;
+    assert.equal(v.them.locked, false);
+    assert.equal(v.them.confirmed, false);
+    assert.equal((await B.request('trade_confirm')).code, 'not_locked', 'B não confirma às cegas');
+    // compra do mesmo tônico não entra na pilha oferecida
+    const zw = A.waitFor((m) => m.t === 'zone' && m.mapId === 'pedrambar', 5000, 'pedrâmbar');
+    const zb = B.waitFor((m) => m.t === 'zone' && m.mapId === 'pedrambar', 5000, 'pedrâmbar B');
+    await A.request('gm', { cmd: 'teleport', mapId: 'pedrambar', x: 23, z: 48 });
+    await zw;
+    // trocar de mapa cancela a troca; abre outra lá
+    await B.request('gm', { cmd: 'teleport', mapId: 'pedrambar', x: 24, z: 48 });
+    await zb;
+    const { push: inv2 } = await expectPush(B, (m) => m.t === 'trade_invite', () => A.request('trade_request', { name: 'Atento' }), 'convite 2');
+    await B.request('trade_accept', { from: inv2.fromId });
+    await A.request('trade_offer', { items: [pots.id] });
+    await A.request('gm', { cmd: 'gold', amount: 100 });
+    const before = pots.qty;
+    assert.equal((await A.request('buy', { npc: 'potions_resina', item: 'potion_hp_s', qty: 2 })).ok, true);
+    assert.equal(pots.qty, before, 'a pilha oferecida não cresceu');
+    assert.ok([...pa.char.items.values()].some((x) => x.defId === 'potion_hp_s' && x.id !== pots.id && x.qty === 2), 'compra numa pilha nova');
+    A.ws.close(); B.ws.close();
+  });
+});
