@@ -12,8 +12,9 @@ revise com assessoria jurídica (LGPD — Lei 13.709/2018).*
 | Nome da conta, e-mail | Entrar no jogo, confirmar a conta, recuperar a senha | Enquanto a conta existir |
 | Senha | Entrar no jogo — guardamos só um resumo (scrypt com sal), nunca a senha | Enquanto a conta existir |
 | Personagens, itens, missões, ouro, tempo jogado | Fazer o jogo funcionar e medir o ritmo de progressão | Enquanto a conta existir |
-| Registros de segurança: entradas (com endereço IP), comandos de mestre, saque, compras, refino, recompensas, trocas entre jogadores, expulsões por excesso de comandos, suspensões e silêncios | Prevenir trapaça e fraude, investigar problemas | 90 dias (configurável no servidor) |
-| Denúncias: quem denunciou, quem foi denunciado, o motivo e as **últimas 20 falas do denunciado** que quem denunciou podia ver (só as da última hora: as do mapa e os sussurros, falas de grupo e de clã que chegaram a quem denunciou) | Analisar a denúncia | 90 dias, como os registros de segurança |
+| Lista de ignorados de cada personagem (quem você ignorou e quando) | Não mostrar a você as falas e os convites de quem você ignorou | Enquanto o personagem existir (sai com ele ou quando você designora) |
+| Registros de segurança: entradas (com endereço IP), comandos de mestre, saque, compras, refino, recompensas, trocas entre jogadores, expulsões por excesso de comandos, suspensões e silêncios, nomes trocados e itens ou ouro retirados pela equipe, senhas erradas ao excluir conta ou personagem e exclusões de personagem (com o nome que ele tinha) | Prevenir trapaça e fraude, investigar problemas | 90 dias (configurável no servidor) |
+| Denúncias: quem denunciou, quem foi denunciado, o motivo e as **últimas 20 falas do denunciado** que quem denunciou podia ver (só as da última hora: as do mapa e os sussurros, falas de grupo e de clã que chegaram a quem denunciou). Quem da equipe está no jogo recebe na hora um aviso com os dois nomes e o motivo | Analisar a denúncia | 90 dias, como os registros de segurança |
 | Relatos de problema (`/bug`): o texto, o personagem, o mapa, a posição e as versões do jogo | Corrigir o problema relatado | 90 dias, como os registros de segurança |
 | Suspensão ou silêncio da conta (até quando e por quê) | Aplicar as regras de convivência | Enquanto valer; o histórico fica nos registros de segurança |
 | Códigos de confirmação e de troca de senha | Confirmar o e-mail e trocar a senha | 30 minutos de validade; apagados depois de 1 dia |
@@ -36,13 +37,17 @@ do servidor e envio de e-mail (SMTP), sob contrato.
 
 - **Acesso e portabilidade**: o serviço de contas devolve, em JSON, tudo o que guardamos da sua conta
   (`POST /contas/dados` com conta e senha): conta (com suspensão e silêncio), personagens, itens, missões,
-  clãs e os registros de segurança da conta e dos personagens. As denúncias que você fez vêm sem as falas
-  do denunciado (são dados de outra pessoa, guardados só para a equipe analisar).
+  clãs, as listas de ignorados e os registros de segurança da conta e dos personagens. As denúncias que você
+  fez vêm sem as falas do denunciado (são dados de outra pessoa, guardados só para a equipe analisar).
 - **Exclusão**: no jogo (tela de personagens) ou pelo serviço de contas (`POST /contas/excluir`).
-  Na exclusão apagamos na hora o e-mail, a senha, os itens e as missões; o nome da conta e dos
-  personagens é trocado por um código anônimo. Registros de segurança ligados à conta ficam até
-  completar os 90 dias e então são apagados. Cópias de segurança do banco são rotacionadas e
+  Na exclusão apagamos na hora o e-mail, a senha, os itens, as missões e as listas de ignorados; o nome
+  da conta e dos personagens é trocado por um código anônimo. Registros de segurança ligados à conta
+  ficam até completar os 90 dias e então são apagados. Cópias de segurança do banco são rotacionadas e
   substituídas em até 14 dias.
+- **Exclusão de um personagem** (só no jogo, na tela de personagens, com a senha da conta): apagamos na
+  hora os itens que ele carregava, o ouro, as missões e a lista de ignorados dele (e as entradas dele nas
+  listas dos outros), e o nome dele vira um código anônimo; as peças que ele guardou no depósito da conta
+  continuam com a conta.
 - **Correção**: troca de senha por código enviado ao e-mail; demais correções pelo contato acima.
 
 ## Segurança

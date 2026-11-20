@@ -9,7 +9,7 @@
 //   node tools/conta.mjs --db cinzas.db --denuncias [--n 50]
 //   node tools/conta.mjs --db cinzas.db --bugs [--n 50]        (relatos de problema do /bug)
 // (--personagem Nome no lugar de --conta acha a conta pelo personagem)
-// Suspensões e silêncios valem no servidor em até 1 minuto (ele confere o banco a cada minuto).
+// Suspensões, silêncios e papéis valem no servidor em até 1 minuto (ele confere o banco a cada minuto).
 // --db (ou CINZAS_DB) aceita arquivo SQLite ou postgres://usuario:senha@host/banco.
 import { createStore } from '../src/db.js';
 import { PERMANENT } from '../src/moderation.js';
@@ -69,7 +69,7 @@ try {
       if (!['player', 'gm', 'admin'].includes(role)) { console.error('papel: player, gm ou admin'); process.exit(1); }
       st.setRole(acc.id, role);
       st.audit('role_set', { accountId: acc.id, role, by: 'ferramenta' });
-      console.log(`conta ${name}: papel ${role}`);
+      console.log(`conta ${name}: papel ${role} (quem está no jogo recebe o papel novo em até 60 s, sem entrar de novo)`);
     }
   }
 } finally { st.close(); }

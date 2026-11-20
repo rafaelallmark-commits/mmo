@@ -10,7 +10,8 @@ import { fileURLToPath } from 'node:url';
 import { verifyToken, ReplayGuard } from './token.js';
 import { TradeManager } from './trade.js';
 import { ClanManager } from './clans.js';
-import { Moderation, banMessage } from './moderation.js';
+import { Moderation, banMessage, STAFF_ROLES } from './moderation.js';
+import { checkCharName, accentCaseVariants, DELETED_PREFIX_RE } from './names.js';
 import { enhanceable, enhanceQuote, enhancePreview, rollEnhance, enhanceOutcome } from './smith.js';
 import { randomUUID } from 'node:crypto';
 import { loadGameData, ATTRS } from './data.js';
@@ -27,26 +28,14 @@ import { Metrics, startMetricsServer } from './metrics.js';
 
 export const PROTOCOL_VERSION = 3; // 3: snapshots por diferença, login por token, escolta, canalização
 const SERVER_VERSION = JSON.parse(readFileSync(pathJoin(pathDirname(fileURLToPath(import.meta.url)), '../package.json'), 'utf8')).version;
-// Nome de personagem: sem espaços (comandos de chat como /s Nome e /denunciar Nome terminam o nome no
-// primeiro espaço) e sem × ÷. Nomes antigos com espaço continuam valendo (o cliente aceita "entre aspas").
-const NAME_RE = /^[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ0-9_-]{2,15}$/;
-// prefixos que a exclusão de conta usa para renomear (store.deleteAccount): reservados
-const RESERVED_NAME_RE = /^exclu[ií]d[oa]_/i;
+// (nomes de personagem: formato, prefixos da exclusão e palavras da equipe ficam em names.js)
 // comandos de mestre que criam ouro, itens, níveis, refino ou progresso: só admin ou --dev (D138)
 const GM_SCENARIO_CMDS = new Set(['give', 'xp', 'set_enh', 'gold', 'quest_progress', 'quest_done']);
 const GM_GOLD_MAX = 1_000_000;
-// Variantes de maiúsculas das letras acentuadas: o banco compara sem diferença de maiúsculas só em A-Z
-// (NOCASE), mas o jogo procura nomes em minúsculas Unicode (byName); "Ângela" e "ângela" não podem coexistir.
-function accentCaseVariants(name) {
-  let out = [''];
-  for (const ch of name) {
-    const lo = ch.toLowerCase(), up = ch.toUpperCase();
-    const alts = ch.charCodeAt(0) > 127 && lo !== up && lo.length === 1 && up.length === 1 ? [lo, up] : [ch];
-    out = out.flatMap((pre) => alts.map((a) => pre + a));
-    if (out.length > 16) return [name, name.toLowerCase(), name.toUpperCase()]; // muitos acentos: os extremos bastam
-  }
-  return out;
-}
+// senha conferida dentro do jogo (excluir conta ou personagem): no máximo 5 erradas por conta a cada 10 min (D144)
+const PW_FAIL_MAX = 5;
+const PW_FAIL_WINDOW_MS = 10 * 60_000;
+const IGNORE_MAX = 100; // nomes na lista de ignorados de cada personagem (D145)
 const RID_CACHE = 128;
 const PARTY_MAX = 5;
 const DEFAULT_MAP = 'estrada_velha';
@@ -68,6 +57,8 @@ export class GameServer {
       // várias zonas: endereço do serviço de mundo, segredo compartilhado, id desta zona, mapas que ela
       // hospeda (lista separada por vírgula; padrão: todos) e o endereço que os clientes usam para chegar aqui
       world: null, worldSecret: null, zoneId: null, maps: null, publicUrl: null, worldWaitMs: 10000,
+      // convite de grupo: no máximo 1 a cada 10 s por quem convida (D145; os testes que montam grupos usam 0)
+      partyInviteGapMs: 10_000,
       ...Object.fromEntries(Object.entries(opts).filter(([, v]) => v !== undefined)),
     };
     this.data = opts.data ?? loadGameData(opts.dataDir);
@@ -97,6 +88,8 @@ export class GameServer {
     this.parties = new Map(); // partyId -> { id, leader, members:Set }
     this.charParty = new Map(); // charId -> partyId
     this.invites = new Map(); // charId convidado -> { from, at }
+    this.partyInviteAt = new Map(); // charId de quem convidou -> instante do último convite de grupo
+    this.pwFails = new Map();       // accountId -> instantes das senhas erradas (excluir conta ou personagem)
     this.trials = new Map();
     this.dungeons = new Map();      // chave da instância -> Dungeon
     this.partyDungeon = new Map();  // grupo -> chave da instância // chave da instância -> estado da prova
@@ -242,8 +235,15 @@ export class GameServer {
       if (this.world) this.worldPartyTick();
       this.trades.check();
       this.mod.sweep();
+      this.pruneLimits();
     }
     this.metrics.recordTick(performance.now() - t0);
+  }
+
+  // limites por tempo (convite de grupo, senhas erradas): esquece o que já venceu
+  pruneLimits(now = Date.now()) {
+    for (const [id, at] of this.partyInviteAt) if (now - at >= this.opts.partyInviteGapMs) this.partyInviteAt.delete(id);
+    for (const [id, list] of this.pwFails) if (!list.some((t) => now - t < PW_FAIL_WINDOW_MS)) this.pwFails.delete(id);
   }
 
   // Snapshot de cada jogador. Clientes que pediram "delta" no login recebem só as entidades a até
@@ -595,6 +595,7 @@ export class GameServer {
       case 'create_char': return this.hCreateChar(s, msg);
       case 'enter': return this.hEnter(s, msg);
       case 'delete_account': return this.hDeleteAccount(s, msg);
+      case 'delete_char': return this.hDeleteChar(s, msg);
     }
     if (s.charId == null) return { ok: false, code: 'not_in_world', reason: 'Entre no mundo com um personagem primeiro.' };
     const zone = this.zoneOfChar(s.charId);
@@ -643,6 +644,10 @@ export class GameServer {
       case 'gm': return this.hGm(p, msg);
       case 'report': return this.mod.report(p, msg);
       case 'bug_report': return this.mod.bugReport(p, msg);
+      // lista de ignorados (por personagem)
+      case 'ignore_add': return this.hIgnoreAdd(p, msg);
+      case 'ignore_remove': return this.hIgnoreRemove(p, msg);
+      case 'ignore_list': return this.hIgnoreList(p);
       // comércio
       case 'trade_request': return this.trades.request(p, msg.name);
       case 'trade_accept': return this.trades.accept(p, msg.from);
@@ -699,16 +704,105 @@ export class GameServer {
   }
 
   // ---------- autenticação e personagens ----------
-  // Exclusão da própria conta (privacidade), confirmada com a senha; fora do mundo.
-  hDeleteAccount(s, { password }) {
-    if (s.charId != null) return { ok: false, code: 'in_world', reason: 'Saia do mundo antes de excluir a conta.' };
-    if (this.world && this.store.listCharacters(s.accountId).some((c) => this.isOnline(c.id))) return { ok: false, code: 'in_world', reason: 'Um personagem desta conta ainda está no mundo. Saia dele antes de excluir a conta.' };
+  // Senha da própria conta conferida fora da thread do jogo (scrypt assíncrono; o dispatch espera a promessa
+  // com a sessão em s.pending): no máximo PW_FAIL_MAX erradas por conta a cada 10 min — depois, recusa sem
+  // nem calcular (D144). Devolve { acc } ou { err } (resposta de recusa).
+  async checkAccountPassword(s, password, req) {
     const acc = this.store.findAccountById(s.accountId);
-    if (!acc || typeof password !== 'string' || !this.store.checkPassword(acc, password)) return { ok: false, code: 'bad_password', reason: 'Senha incorreta.' };
+    if (!acc) return { err: { ok: false, code: 'bad_password', reason: 'Senha incorreta.' } };
+    const recent = (now) => (this.pwFails.get(acc.id) ?? []).filter((t) => now - t < PW_FAIL_WINDOW_MS);
+    const now = Date.now();
+    const fails = recent(now);
+    if (fails.length >= PW_FAIL_MAX) {
+      const min = Math.max(1, Math.ceil((fails[0] + PW_FAIL_WINDOW_MS - now) / 60_000));
+      return { err: { ok: false, code: 'too_many', reason: `Senha errada vezes demais. Tente de novo em ${min} min.` } };
+    }
+    if (typeof password !== 'string' || !password) return { err: { ok: false, code: 'bad_password', reason: 'Digite a senha da conta.' } };
+    if (await this.store.checkPasswordAsync(acc, password)) {
+      this.pwFails.delete(acc.id);
+      return { acc };
+    }
+    const list = recent(Date.now());
+    list.push(Date.now());
+    this.pwFails.set(acc.id, list);
+    this.audit('password_fail', { accountId: acc.id, ip: s.ip, req });
+    return { err: { ok: false, code: 'bad_password', reason: list.length >= PW_FAIL_MAX ? 'Senha incorreta. Espere 10 minutos para tentar de novo.' : 'Senha incorreta.' } };
+  }
+
+  // Exclusão da própria conta (privacidade), confirmada com a senha; fora do mundo.
+  async hDeleteAccount(s, { password }) {
+    const busy = () => {
+      if (s.charId != null) return { ok: false, code: 'in_world', reason: 'Saia do mundo antes de excluir a conta.' };
+      if (this.world && this.store.listCharacters(s.accountId).some((c) => this.isOnline(c.id))) return { ok: false, code: 'in_world', reason: 'Um personagem desta conta ainda está no mundo. Saia dele antes de excluir a conta.' };
+      return null;
+    };
+    const before = busy();
+    if (before) return before;
+    const chk = await this.checkAccountPassword(s, password, 'delete_account');
+    if (chk.err) return chk.err;
+    if (!this.sessions.has(s) || s.accountId !== chk.acc.id) return undefined; // a conexão caiu enquanto conferia
+    const after = busy();
+    if (after) return after;
+    const acc = chk.acc;
+    const gone = this.store.listCharacters(acc.id).map((c) => ({ charId: c.id, name: c.name, clan: this.store.clanOfChar(c.id) }));
     const n = this.store.deleteAccount(acc.id);
+    for (const g of gone) this.afterCharGone(g.charId, g.name, g.clan);
     this.audit('account_deleted', { accountId: acc.id, ip: s.ip, characters: n });
     this.log(`conta excluída: ${acc.id} (${n} personagens)`);
     return { ok: true, after: () => this.dropSession(s) };
+  }
+
+  // Exclusão de um personagem (a conta continua), confirmada com a senha; só na tela de personagens (D144).
+  // Mesma limpeza da exclusão de conta para ele: troca e convites cancelados, saída do grupo e do clã (o clã
+  // que ele liderava passa para quem tem o maior cargo; vazio, acaba), itens, missões e ignorados apagados e
+  // o nome liberado. As peças que ele guardou no depósito da conta continuam lá.
+  async hDeleteChar(s, { charId, password }) {
+    if (s.charId != null) return { ok: false, code: 'in_world', reason: 'Saia do mundo antes de excluir um personagem.' };
+    const row = Number.isInteger(charId) ? this.store.listCharacters(s.accountId).find((c) => c.id === charId) : null;
+    if (!row) return { ok: false, code: 'bad_char', reason: 'Personagem não encontrado nesta conta.' };
+    const inWorld = { ok: false, code: 'in_world', reason: `${row.name} ainda está no mundo. Saia dele antes de excluir.` };
+    if (this.isOnline(charId)) return inWorld;
+    const chk = await this.checkAccountPassword(s, password, 'delete_char');
+    if (chk.err) return chk.err;
+    if (!this.sessions.has(s) || s.accountId !== chk.acc.id) return undefined; // a conexão caiu enquanto conferia
+    if (s.charId != null || this.isOnline(charId)) return inWorld;
+    const clan = this.store.clanOfChar(charId);
+    const name = this.store.deleteCharacter(s.accountId, charId);
+    if (!name) return { ok: false, code: 'bad_char', reason: 'Personagem não encontrado nesta conta.' };
+    this.afterCharGone(charId, name, clan);
+    this.audit('char_deleted', { accountId: s.accountId, charId, ip: s.ip, name, clan: clan?.id ?? null });
+    this.log(`personagem excluído: ${name} (conta ${s.accountId})`);
+    return { ok: true, deleted: charId, name, chars: this.store.listCharacters(s.accountId).map(charRow), classes: this.creatableClasses(), cache: false };
+  }
+
+  // Personagem excluído (sozinho ou com a conta): o que a memória do servidor ainda guardava dele sai (troca,
+  // convites, grupo, falas guardadas para denúncias, ignorados dos outros), e o clã fica sabendo da saída e,
+  // se ele liderava, de quem é o novo líder.
+  afterCharGone(charId, name, clan) {
+    this.trades.cancel(charId, 'O outro jogador saiu.');
+    const dropInvites = (map) => { map.delete(charId); for (const [k, inv] of map) if (inv.from === charId) map.delete(k); };
+    dropInvites(this.trades.invites);
+    dropInvites(this.invites);
+    dropInvites(this.clans.invites);
+    for (const z of this.zones.values()) {
+      dropInvites(z.duels.invites);
+      for (const q of z.players.values()) q.char.ignored?.delete(charId);
+    }
+    for (const dg of this.dungeons.values()) dg.away.delete(charId);
+    if (this.world) this.world.request('party_leave', { charId }).catch(() => {});
+    else if (this.charParty.has(charId)) this.removeFromParty(charId);
+    this.partyInviteAt.delete(charId);
+    this.ridCache.delete(charId);
+    this.mod.forget(charId);
+    if (!clan) return;
+    const now = this.store.clanById(clan.id);
+    if (!now) return; // era o último membro: o clã acabou
+    this.clans.refreshOnline(clan.id);
+    this.clans.notifyClan(clan.id, { t: 'clan_event', text: `${name} saiu do clã.` });
+    if (clan.rank === 'leader' && now.leader_char_id !== charId) {
+      const lead = this.store.clanMembers(clan.id).find((m) => m.char_id === now.leader_char_id);
+      if (lead) this.clans.notifyClan(clan.id, { t: 'clan_event', text: `${lead.name} é o novo líder do clã.` });
+    }
   }
 
   hRegister(s, { account, password }) {
@@ -760,14 +854,14 @@ export class GameServer {
     return { ok: true, account: acc.name, chars: this.store.listCharacters(acc.id).map(charRow), classes: this.creatableClasses() };
   }
 
-  hCreateChar(s, { name, classId }) {
-    if (typeof name !== 'string' || !NAME_RE.test(name.trim())) return { ok: false, code: 'bad_name', reason: 'Nome: 3 a 16 letras, números, _ ou -, começando por letra e sem espaços.' };
-    name = name.trim();
-    if (RESERVED_NAME_RE.test(name)) return { ok: false, code: 'bad_name', reason: 'Esse nome não pode ser usado.' };
-    const cls = this.data.classes[classId];
+  hCreateChar(s, { name: rawName, classId }) {
+    // formato, prefixos da exclusão, palavras da equipe (D145) e duplicata por maiúscula acentuada
+    const v = checkCharName(this.store, rawName);
+    if (v.err) return v.err;
+    const name = v.name;
+    const cls = Object.hasOwn(this.data.classes, classId) ? this.data.classes[classId] : null;
     if (!cls) return { ok: false, code: 'bad_class', reason: 'Classe inexistente.' };
     if (!['M1', 'M2'].includes(cls.implementedIn)) return { ok: false, code: 'class_locked', reason: `${cls.name} ainda não está disponível.` };
-    if (accentCaseVariants(name).some((v) => this.store.characterNameTaken(v))) return { ok: false, code: 'name_taken', reason: 'Esse nome já está em uso.' };
     if (this.store.listCharacters(s.accountId).length >= 4) return { ok: false, code: 'too_many', reason: 'Limite de 4 personagens por conta.' };
     const map = this.data.maps[DEFAULT_MAP];
     const st = derivedStats({ classId, level: 1, alloc: {} }, cls.startingKit.equip.map((id) => ({ def: this.data.items[id] })), this.data);
@@ -795,6 +889,9 @@ export class GameServer {
     const charId = char.id;
     this.quests.load(char);
     this.clans.attach(char);
+    // marca [Equipe] pelo papel da conta (relido a cada minuto) e a lista de ignorados do personagem (D145)
+    char.staff = STAFF_ROLES.has(s.role);
+    char.ignored = new Set(this.store.listIgnored(charId).map((r) => r.ignored_id));
     const wasDead = char.dead;
     let zone = this.zones.get(char.mapId) ?? this.zones.get(DEFAULT_MAP);
     // voltou dentro do prazo: reentra no calabouço do grupo como estava (morto continua morto)
@@ -1150,7 +1247,8 @@ export class GameServer {
   }
 
   storageView(p) {
-    const items = this.store.listAccountStorage(p.char.accountId).map((r) => ({ id: r.id, defId: r.def_id, qty: r.qty, enh: r.enh, owner: r.owner }));
+    // peça guardada por um personagem que foi excluído continua no depósito da conta (D144)
+    const items = this.store.listAccountStorage(p.char.accountId).map((r) => ({ id: r.id, defId: r.def_id, qty: r.qty, enh: r.enh, owner: DELETED_PREFIX_RE.test(r.owner) ? 'personagem excluído' : r.owner }));
     return { items, capacity: this.data.formulas.storage.capacity };
   }
 
@@ -1489,9 +1587,26 @@ export class GameServer {
     return this.world.request(t, payload).then(({ pid, party, ...r }) => ({ ...r, ...(party ? { party: this.partyView(pid) ?? party } : {}), cache: false }));
   }
 
+  // Convite de grupo: no máximo 1 a cada partyInviteGapMs (10 s) por quem convida, contando os enviados (D145).
+  // Quem está na lista de ignorados do convidado recebe a mesma resposta de um convite enviado, mas nada chega.
   hPartyInvite(p, { name }) {
-    if (this.world) return this.worldParty('party_invite', { charId: p.char.id, name });
     const c = p.char;
+    const now = Date.now();
+    const last = this.partyInviteAt.get(c.id) ?? -Infinity;
+    if (now - last < this.opts.partyInviteGapMs) {
+      return { ok: false, code: 'too_fast', reason: `Espere ${Math.ceil((last + this.opts.partyInviteGapMs - now) / 1000)} s para convidar de novo.`, cache: false };
+    }
+    if (this.world) {
+      // várias zonas: o convite mora no mundo; a lista de ignorados do convidado é conferida aqui antes (na
+      // memória, se ele está nesta zona; no banco, se está em outra) e de novo na zona dele, na entrega
+      const key = typeof name === 'string' ? name.trim().toLowerCase() : '';
+      const tid = this.byName.get(key) ?? this.remoteByName.get(key);
+      if (tid != null && tid !== c.id && !c.staff && (this.byChar.has(tid) ? this.ignoredBy(tid, c.id, false) : this.store.isIgnoring(tid, c.id))) {
+        this.partyInviteAt.set(c.id, now);
+        return { ok: true, cache: false };
+      }
+      return this.worldParty('party_invite', { charId: c.id, name }).then((r) => { if (r.ok) this.partyInviteAt.set(c.id, Date.now()); return r; });
+    }
     const targetId = typeof name === 'string' ? this.byName.get(name.trim().toLowerCase()) : null;
     if (!targetId) return { ok: false, code: 'offline', reason: `${name} não está conectado.` };
     if (targetId === c.id) return { ok: false, code: 'self', reason: 'Você não pode se convidar.' };
@@ -1499,7 +1614,9 @@ export class GameServer {
     const pid = this.charParty.get(c.id);
     if (pid && this.parties.get(pid).members.size >= PARTY_MAX) return { ok: false, code: 'full', reason: `Grupo cheio (máximo ${PARTY_MAX}).` };
     if (pid && this.parties.get(pid).leader !== c.id) return { ok: false, code: 'not_leader', reason: 'Só o líder pode convidar.' };
-    this.invites.set(targetId, { from: c.id, at: Date.now() });
+    this.partyInviteAt.set(c.id, now);
+    if (this.ignoredBy(targetId, c.id, c.staff)) return { ok: true, cache: false }; // recusado em silêncio
+    this.invites.set(targetId, { from: c.id, at: now });
     this.sendTo(this.byChar.get(targetId), { t: 'party_invite', from: c.name, fromId: c.id });
     return { ok: true, cache: false };
   }
@@ -1647,6 +1764,7 @@ export class GameServer {
       case 'clan': return this.onWorldClan(m);
       case 'mod': return this.mod.applyRemote(m);
       case 'announce': return typeof m.text === 'string' ? this.mod.announce(m.text) : undefined;
+      case 'staff': return typeof m.text === 'string' ? this.mod.notifyStaff(m.text.slice(0, 300), { remote: false }) : undefined;
     }
   }
 
@@ -1693,6 +1811,9 @@ export class GameServer {
     const s = this.byChar.get(charId);
     const early = s ? null : this.arriving.get(charId);
     if (early) { if (early.length < 32) early.push({ msg, note }); return; } // chegando: entrega depois do login_transfer
+    // de quem ele ignora (sussurro, fala de grupo, convite de grupo ou de clã vindos de outra zona): some em silêncio
+    const from = Number.isInteger(note?.from) ? note.from : msg?.t === 'party_invite' && Number.isInteger(msg.fromId) ? msg.fromId : null;
+    if (from != null && this.ignoredBy(charId, from, msg?.staff)) return;
     if (note?.kind === 'clan_invite' && Number.isInteger(note.clanId)) this.clans.invites.set(charId, { clanId: note.clanId, from: note.from, at: Date.now() });
     // fala de quem está em outra zona (sussurro, grupo): guardada para dar contexto a denúncias daqui, com
     // quem a recebeu (este personagem)
@@ -1731,6 +1852,7 @@ export class GameServer {
       if (Number.isInteger(from) && msg.t === 'chat' && typeof msg.text === 'string') this.mod.remember(from, 'clan', msg.text, members.map((m) => m.char_id));
       for (const m of members) {
         if (m.char_id === except) continue;
+        if (Number.isInteger(from) && this.ignoredBy(m.char_id, from, msg.staff)) continue; // fala de quem ele ignora
         const s = this.byChar.get(m.char_id);
         if (s) this.sendTo(s, msg);
       }
@@ -1893,39 +2015,180 @@ export class GameServer {
     const clean = text.replace(/[\u0000-\u001f]/g, '').trim().slice(0, 200);
     if (!clean) return { ok: false, code: 'empty', reason: 'Mensagem vazia.' };
     const msg = { t: 'chat', channel, from: p.char.name, eid: p.eid, text: clean };
+    if (p.char.staff) msg.staff = true; // marca [Equipe]: só o servidor põe, pelo papel da conta (D145)
     // depois de entregue, a fala vira contexto de denúncia com quem a recebeu (null = mapa, pública)
     const said = (to) => this.mod.remember(p.char.id, channel, clean, to);
-    if (channel === 'zone') { this.broadcastZone(p.zone.key, msg); said(null); }
-    else if (channel === 'party' && this.world) {
-      // várias zonas: entrega aqui aos membros desta zona; o mundo leva aos das outras
-      const pid = this.partyIdOf(p.char.id);
+    // quem ignora quem falou não recebe a fala (quem falou sempre vê a própria)
+    const me = p.char.id;
+    const hears = (id) => id === me || !this.ignoredBy(id, me, msg.staff);
+    if (channel === 'zone') {
+      const raw = JSON.stringify(msg);
+      for (const id of p.zone.players.keys()) if (hears(id)) this.rawSend(this.byChar.get(id), raw);
+      said(null);
+    } else if (channel === 'party' && this.world) {
+      // várias zonas: entrega aqui aos membros desta zona; o mundo leva aos das outras (a zona de cada um
+      // confere a lista de ignorados dele na entrega)
+      const pid = this.partyIdOf(me);
       if (!pid) return { ok: false, code: 'no_party', reason: 'Você não está em um grupo.' };
-      const members = this.partyMemberIds(pid);
+      const members = this.partyMemberIds(pid).filter(hears);
       for (const m of members) this.sendTo(this.byChar.get(m), msg);
-      this.world.notify('party_chat', { charId: p.char.id, msg });
+      this.world.notify('party_chat', { charId: me, msg });
       said(members);
     } else if (channel === 'party') {
-      const pid = this.charParty.get(p.char.id);
+      const pid = this.charParty.get(me);
       if (!pid) return { ok: false, code: 'no_party', reason: 'Você não está em um grupo.' };
-      const members = [...this.parties.get(pid).members];
+      const members = [...this.parties.get(pid).members].filter(hears);
       for (const m of members) this.sendTo(this.byChar.get(m), msg);
       said(members);
     } else if (channel === 'whisper') {
       const targetId = typeof to === 'string' ? this.byName.get(to.trim().toLowerCase()) : null;
       const remote = !targetId && this.world ? this.remoteChar(to) : null;
       if (remote) {
-        // várias zonas: a pessoa está em outra zona; o mundo entrega
-        this.world.notify('send', { to: remote.charId, msg: { ...msg, to: remote.name }, note: { kind: 'chat', from: p.char.id } });
-        this.sendTo(this.byChar.get(p.char.id), { ...msg, to: remote.name });
-        said([remote.charId]);
+        // várias zonas: a pessoa está em outra zona; o mundo entrega. Ignorado por ela (lista no banco): quem
+        // falou vê a própria fala como sempre, e nada é entregue
+        if (msg.staff || !this.store.isIgnoring(remote.charId, me)) {
+          this.world.notify('send', { to: remote.charId, msg: { ...msg, to: remote.name }, note: { kind: 'chat', from: me } });
+          said([remote.charId]);
+        }
+        this.sendTo(this.byChar.get(me), { ...msg, to: remote.name });
         return { ok: true, cache: false };
       }
       if (!targetId) return { ok: false, code: 'offline', reason: `${to} não está conectado.` };
-      this.sendTo(this.byChar.get(targetId), { ...msg, to: this.playerOf(targetId).char.name });
-      this.sendTo(this.byChar.get(p.char.id), { ...msg, to: this.playerOf(targetId).char.name });
-      said([targetId]);
+      const shown = { ...msg, to: this.playerOf(targetId).char.name };
+      if (hears(targetId)) { this.sendTo(this.byChar.get(targetId), shown); said([targetId]); }
+      this.sendTo(this.byChar.get(me), shown); // descartado em silêncio: quem falou não fica sabendo
     } else return { ok: false, code: 'bad_channel', reason: 'Canal inválido.' };
     return { ok: true, cache: false };
+  }
+
+  // O personagem recipientId (carregado nesta zona) ignora senderId? A equipe nunca é ignorada (D145).
+  ignoredBy(recipientId, senderId, senderStaff = false) {
+    if (senderStaff || recipientId === senderId) return false;
+    return !!this.playerOf(recipientId)?.char.ignored?.has(senderId);
+  }
+
+  // ---------- lista de ignorados (por personagem, no banco, até IGNORE_MAX) ----------
+  // Nome do personagem a ignorar: on-line aqui, em outra zona ou fora do ar (excluídos não contam).
+  findCharByName(name) {
+    const key = typeof name === 'string' ? name.trim() : '';
+    if (!key) return null;
+    const id = this.byName.get(key.toLowerCase());
+    const live = id != null ? this.playerOf(id)?.char : null;
+    if (live) return { id: live.id, name: live.name, accountId: live.accountId };
+    // o banco só iguala maiúsculas em A-Z: "ângela" acha "Ângela" pelas variantes das letras acentuadas
+    const row = accentCaseVariants(key).map((v) => this.store.characterByName(v)).find(Boolean);
+    return row && !DELETED_PREFIX_RE.test(row.name) ? { id: row.id, name: row.name, accountId: row.account_id } : null;
+  }
+
+  hIgnoreAdd(p, { name }) {
+    const c = p.char;
+    const t = this.findCharByName(name);
+    if (!t) return { ok: false, code: 'not_found', reason: typeof name === 'string' && name.trim() ? `Personagem ${name.trim().slice(0, 32)} não encontrado.` : 'Use: /ignorar Nome.', cache: false };
+    if (t.id === c.id) return { ok: false, code: 'self', reason: 'Você não pode ignorar a si mesmo.', cache: false };
+    // a equipe não pode ser ignorada: avisos e conversas da moderação precisam chegar
+    if (STAFF_ROLES.has(this.store.findAccountById(t.accountId)?.role)) return { ok: false, code: 'staff', reason: 'Não dá para ignorar a equipe.', cache: false };
+    if (c.ignored.has(t.id)) return { ok: true, message: `${t.name} já está na sua lista de ignorados.`, cache: false };
+    if (c.ignored.size >= IGNORE_MAX) return { ok: false, code: 'full', reason: `Sua lista de ignorados está cheia (${IGNORE_MAX}). Tire alguém com /designorar Nome.`, cache: false };
+    this.store.addIgnore(c.id, t.id);
+    c.ignored.add(t.id);
+    // convites dele que já estavam esperando resposta somem também
+    for (const map of [this.invites, this.clans.invites, this.trades.invites, p.zone.duels.invites]) if (map.get(c.id)?.from === t.id) map.delete(c.id);
+    return { ok: true, message: `Você não verá mais as falas nem os convites de ${t.name}. Para desfazer: /designorar ${t.name}.`, cache: false };
+  }
+
+  hIgnoreRemove(p, { name }) {
+    const key = typeof name === 'string' ? name.trim().toLowerCase() : '';
+    if (!key) return { ok: false, code: 'bad_request', reason: 'Use: /designorar Nome.', cache: false };
+    // pelo nome de agora (quem foi renomeado aparece na lista com o nome novo)
+    const hit = this.store.listIgnored(p.char.id).find((r) => r.name.toLowerCase() === key);
+    if (!hit) return { ok: false, code: 'not_found', reason: `${name.trim().slice(0, 32)} não está na sua lista de ignorados.`, cache: false };
+    this.store.removeIgnore(p.char.id, hit.ignored_id);
+    p.char.ignored.delete(hit.ignored_id);
+    return { ok: true, message: `${hit.name} saiu da sua lista de ignorados.`, cache: false };
+  }
+
+  hIgnoreList(p) {
+    const names = this.store.listIgnored(p.char.id).map((r) => r.name);
+    return { ok: true, ignored: names, message: names.length ? `Ignorados (${names.length}/${IGNORE_MAX}): ${names.join(', ')}.` : 'Sua lista de ignorados está vazia.', cache: false };
+  }
+
+  // ---------- administração (D146): chamados por moderation.js, só para admin ----------
+  // Nome novo com o personagem on-line nesta zona: memória (nome, busca por nome, grupo, diretório do mundo)
+  // e o próprio jogador fica sabendo; o banco já foi gravado.
+  renameOnline(p, name) {
+    const c = p.char;
+    const old = c.name;
+    c.name = name;
+    if (this.byName.get(old.toLowerCase()) === c.id) this.byName.delete(old.toLowerCase());
+    this.byName.set(name.toLowerCase(), c.id);
+    const party = this.parties.get(this.charParty.get(c.id));
+    if (party) party.names.set(c.id, name);
+    if (this.world) this.world.notify('online', { charId: c.id, name, mapId: p.zone.mapId, state: this.memberSummary(p) });
+    const s = this.byChar.get(c.id);
+    this.sendTo(s, { t: 'char', char: p.zone.charView(p) });
+    this.sendTo(s, { t: 'system', text: `A equipe renomeou seu personagem: agora você é ${name}.` });
+  }
+
+  // Retira até `want` unidades de defId do personagem: bolsa, caixa de recuperação, equipamento e o que ele
+  // guardou no depósito da conta, nessa ordem. On-line nesta zona: memória e banco (troca aberta cancelada,
+  // atributos recalculados, ficha nova para ele); fora do ar: só o banco. Devolve { qty, instances }.
+  takeItemsOf(charId, defId, want) {
+    const p = this.playerOf(charId);
+    const fromRow = (r) => ({ id: r.id, defId: r.def_id, qty: r.qty, enh: r.enh, loc: r.loc, slot: r.slot });
+    const rows = this.store.characterItems(charId);
+    const held = p ? [...p.char.items.values()] : rows.filter((r) => r.loc !== 'storage').map(fromRow);
+    const ORDER = { bag: 0, recovery: 1, equip: 2, storage: 3 };
+    const pool = [...held, ...rows.filter((r) => r.loc === 'storage').map(fromRow)]
+      .filter((it) => it.defId === defId).sort((a, b) => ORDER[a.loc] - ORDER[b.loc]);
+    let left = want;
+    const plan = [];
+    for (const it of pool) {
+      if (left <= 0) break;
+      const take = Math.min(left, it.qty);
+      left -= take;
+      plan.push({ it, take });
+    }
+    if (!plan.length) return { qty: 0, instances: [] };
+    if (p) this.trades.cancel(charId, 'Troca cancelada: a equipe mexeu nos itens.');
+    this.store.tx(() => {
+      for (const { it, take } of plan) {
+        if (take >= it.qty) {
+          this.store.deleteItem(charId, it.id);
+          if (p) p.char.items.delete(it.id);
+        } else {
+          it.qty -= take;
+          this.store.saveItems(charId, [it]);
+        }
+      }
+    });
+    const qty = plan.reduce((n, x) => n + x.take, 0);
+    if (p) {
+      if (plan.some((x) => x.it.loc === 'equip')) p.zone.recalc(p);
+      const s = this.byChar.get(charId);
+      this.sendTo(s, { t: 'char', char: p.zone.charView(p) });
+      this.sendTo(s, { t: 'system', text: `A equipe retirou do seu personagem: ${this.data.items[defId].name} ×${qty}.` });
+    }
+    return { qty, instances: plan.map((x) => x.it.id) };
+  }
+
+  // Retira até n de ouro do personagem (on-line nesta zona: memória e banco; fora do ar: banco).
+  takeGoldOf(charId, n) {
+    const p = this.playerOf(charId);
+    if (p) {
+      const taken = Math.min(n, p.char.gold);
+      if (!taken) return { taken: 0, gold: p.char.gold };
+      this.trades.cancel(charId, 'Troca cancelada: a equipe mexeu no ouro.');
+      p.char.gold -= taken;
+      this.store.saveCharacter(p.char);
+      const s = this.byChar.get(charId);
+      this.sendTo(s, { t: 'char', char: p.zone.charView(p) });
+      this.sendTo(s, { t: 'system', text: `A equipe retirou ${taken} de ouro do seu personagem.` });
+      return { taken, gold: p.char.gold };
+    }
+    const c = this.store.loadCharacter(charId);
+    const taken = Math.min(n, c?.gold ?? 0);
+    if (taken) this.store.setCharacterGold(charId, c.gold - taken);
+    return { taken, gold: (c?.gold ?? 0) - taken };
   }
 
   // Comandos de mestre (D138). Moderação (expulsar, suspender, silenciar, onde, anunciar) e teleporte do

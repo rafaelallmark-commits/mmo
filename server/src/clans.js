@@ -1,5 +1,7 @@
 // Clãs (pós-versão 1): criar (nível 10, 500 de ouro), convidar, entrar, sair, expulsar, promover,
 // passar a liderança, desfazer, mensagem do dia e canal de chat do clã. A sigla aparece no nome.
+import { isReservedClanName, isReservedClanTag } from './names.js';
+
 const NAME_RE = /^[A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9 '-]{2,23}$/;
 const TAG_RE = /^[A-Z0-9]{2,4}$/;
 const CREATE_LEVEL = 10;
@@ -7,6 +9,19 @@ const CREATE_GOLD = 500;
 const MAX_MEMBERS = 50;
 const INVITE_MS = 60000;
 const RANK_ORDER = { leader: 3, officer: 2, member: 1 };
+const BAD_NAME = { ok: false, code: 'bad_name', reason: 'Nome do clã: 3 a 24 letras, números, espaços, hífen ou apóstrofo.' };
+const RESERVED_NAME = { ok: false, code: 'bad_name', reason: 'Esse nome de clã não pode ser usado (imita a equipe).' };
+
+// Nome de clã novo (fundação ou /gm renomear_cla): { name } ou { err }. Palavras da equipe são reservadas
+// (D145); exceptId: o próprio clã (trocar só maiúsculas do nome não conta como duplicata).
+export function checkClanName(store, raw, exceptId = null) {
+  const name = typeof raw === 'string' ? raw.trim() : '';
+  if (!NAME_RE.test(name)) return { err: BAD_NAME };
+  if (isReservedClanName(name)) return { err: RESERVED_NAME };
+  const other = store.clanByName(name);
+  if (other && other.id !== exceptId) return { err: { ok: false, code: 'taken', reason: 'Já existe um clã com esse nome.' } };
+  return { name };
+}
 
 export class ClanManager {
   constructor(server) {
@@ -35,16 +50,20 @@ export class ClanManager {
   }
 
   // fromCharId: quem falou (chat do clã), para as outras zonas guardarem a fala como contexto de denúncia
+  // e para quem ignora quem falou não receber a fala (D145; cada zona filtra os membros dela)
   // devolve os ids dos membros (quem recebeu; o chat guarda isso para o contexto de denúncias)
   notifyClan(clanId, msg, exceptCharId = null, fromCharId = null) {
     const members = this.st.clanMembers(clanId);
+    const to = [];
     for (const m of members) {
       if (m.char_id === exceptCharId) continue;
+      if (fromCharId != null && this.s.ignoredBy?.(m.char_id, fromCharId, msg.staff)) continue;
+      to.push(m.char_id);
       const s = this.s.byChar.get(m.char_id);
       if (s) this.s.sendTo(s, msg);
     }
     this.s.clanRemote({ clanId, msg, except: exceptCharId, from: fromCharId }); // várias zonas: membros nas outras
-    return members.map((m) => m.char_id).filter((id) => id !== exceptCharId);
+    return to;
   }
 
   create(p, { name, tag }) {
@@ -54,8 +73,10 @@ export class ClanManager {
     if (c.gold < CREATE_GOLD) return { ok: false, code: 'no_gold', reason: `Fundar um clã custa ${CREATE_GOLD} de ouro.` };
     name = typeof name === 'string' ? name.trim() : '';
     tag = typeof tag === 'string' ? tag.trim().toUpperCase() : '';
-    if (!NAME_RE.test(name)) return { ok: false, code: 'bad_name', reason: 'Nome do clã: 3 a 24 letras, números, espaços, hífen ou apóstrofo.' };
+    if (!NAME_RE.test(name)) return BAD_NAME;
     if (!TAG_RE.test(tag)) return { ok: false, code: 'bad_tag', reason: 'Sigla: 2 a 4 letras ou números.' };
+    if (isReservedClanName(name)) return RESERVED_NAME;
+    if (isReservedClanTag(tag)) return { ok: false, code: 'bad_tag', reason: 'Essa sigla não pode ser usada (imita a equipe).' };
     if (this.st.clanByNameOrTag(name, tag)) return { ok: false, code: 'taken', reason: 'Já existe um clã com esse nome ou sigla.' };
     let id;
     this.st.tx(() => {
@@ -81,6 +102,8 @@ export class ClanManager {
     if (t.char.clanId) return { ok: false, code: 'in_clan', reason: `${t.char.name} já tem clã.` };
     if (this.st.clanMembers(p.char.clanId).length >= MAX_MEMBERS) return { ok: false, code: 'full', reason: `O clã já tem ${MAX_MEMBERS} membros.` };
     const clan = this.st.clanById(p.char.clanId);
+    // quem convida está na lista de ignorados do convidado: recusado em silêncio (resposta igual)
+    if (this.s.ignoredBy?.(t.char.id, p.char.id, p.char.staff)) return { ok: true, message: `Convite enviado a ${t.char.name}.` };
     this.invites.set(t.char.id, { clanId: clan.id, from: p.char.id, at: Date.now() });
     this.s.sendTo(this.s.byChar.get(t.char.id), { t: 'clan_invite', clan: { id: clan.id, name: clan.name, tag: clan.tag }, from: p.char.name });
     return { ok: true, message: `Convite enviado a ${t.char.name}.` };
@@ -91,6 +114,8 @@ export class ClanManager {
     if (this.st.clanOfChar(t.charId)) return { ok: false, code: 'in_clan', reason: `${t.name} já tem clã.` };
     if (this.st.clanMembers(p.char.clanId).length >= MAX_MEMBERS) return { ok: false, code: 'full', reason: `O clã já tem ${MAX_MEMBERS} membros.` };
     const clan = this.st.clanById(p.char.clanId);
+    // ignorado pelo convidado (lista no banco): recusado em silêncio; a zona dele também confere na entrega
+    if (!p.char.staff && this.st.isIgnoring(t.charId, p.char.id)) return { ok: true, message: `Convite enviado a ${t.name}.` };
     this.s.worldSend(t.charId, { t: 'clan_invite', clan: { id: clan.id, name: clan.name, tag: clan.tag }, from: p.char.name }, { kind: 'clan_invite', clanId: clan.id, from: p.char.id });
     return { ok: true, message: `Convite enviado a ${t.name}.` };
   }
@@ -210,10 +235,12 @@ export class ClanManager {
     };
   }
 
-  // canal de chat do clã: todos os membros on-line
+  // canal de chat do clã: todos os membros on-line (menos quem ignora quem falou)
   chat(p, text) {
     if (!p.char.clanId) return { ok: false, code: 'no_clan', reason: 'Você não tem clã.' };
-    const to = this.notifyClan(p.char.clanId, { t: 'chat', channel: 'clan', from: p.char.name, eid: p.eid, text, tag: p.char.clanTag }, null, p.char.id);
+    const msg = { t: 'chat', channel: 'clan', from: p.char.name, eid: p.eid, text, tag: p.char.clanTag };
+    if (p.char.staff) msg.staff = true; // marca da equipe (D145)
+    const to = this.notifyClan(p.char.clanId, msg, null, p.char.id);
     return { ok: true, to };
   }
 }

@@ -35,16 +35,16 @@ test('moderação: silêncio, denúncia, suspensão, ferramenta, onde está e an
   const aport = await accSvc.start();
   try {
     // contas e papéis (o papel vale a partir do login)
-    for (const n of ['Admina', 'Mestre']) {
+    for (const n of ['Altiva', 'Guardia']) {
       const c = new SimClient(n);
       await c.connect(url);
       await c.request('register', { account: `m_${n.toLowerCase()}`, password: 'senha123' });
       c.ws.close();
     }
-    server.store.setRole(server.store.findAccount('m_admina').id, 'admin');
-    server.store.setRole(server.store.findAccount('m_mestre').id, 'gm');
-    const { c: A } = await enter(url, 'Admina');
-    const { c: G } = await enter(url, 'Mestre');
+    server.store.setRole(server.store.findAccount('m_altiva').id, 'admin');
+    server.store.setRole(server.store.findAccount('m_guardia').id, 'gm');
+    const { c: A } = await enter(url, 'Altiva');
+    const { c: G } = await enter(url, 'Guardia');
     const { c: P } = await enter(url, 'Peregrino');
     const { c: Q } = await enter(url, 'Quezilento');
 
@@ -59,8 +59,8 @@ test('moderação: silêncio, denúncia, suspensão, ferramenta, onde está e an
     assert.match(r.reason, /silenciado até/);
     assert.equal((await G.request('gm', { cmd: 'unmute', name: 'Quezilento' })).ok, true);
     for (const t of ['vocês são todos ruins', 'vou te achar']) assert.equal((await Q.request('chat', { text: t })).ok, true);
-    // sussurros: um para a Admina (outra pessoa) e um para o Peregrino (quem vai denunciar)
-    assert.equal((await Q.request('chat', { channel: 'whisper', to: 'Admina', text: 'segredo só da Admina' })).ok, true);
+    // sussurros: um para a Altiva (outra pessoa) e um para o Peregrino (quem vai denunciar)
+    assert.equal((await Q.request('chat', { channel: 'whisper', to: 'Altiva', text: 'segredo só da Altiva' })).ok, true);
     assert.equal((await Q.request('chat', { channel: 'whisper', to: 'Peregrino', text: 'sei onde você mora' })).ok, true);
     // sussurro para quem não está on-line não foi entregue: não vira contexto
     assert.equal((await Q.request('chat', { channel: 'whisper', to: 'Ninguem', text: 'fala que ninguém ouviu' })).code, 'offline');
@@ -104,7 +104,7 @@ test('moderação: silêncio, denúncia, suspensão, ferramenta, onde está e an
     assert.match((await ann).text, /Reinício às 20h/);
 
     // hierarquia e limites: mestre não modera admin; prazos absurdos recusados (antes corrompiam a conta)
-    assert.equal((await G.request('gm', { cmd: 'mute', name: 'Admina', minutes: 10, reason: 'x' })).code, 'forbidden');
+    assert.equal((await G.request('gm', { cmd: 'mute', name: 'Altiva', minutes: 10, reason: 'x' })).code, 'forbidden');
     assert.equal((await A.request('gm', { cmd: 'ban', name: 'Quezilento', hours: 1e15, reason: 'x' })).code, 'bad_request');
     assert.equal((await G.request('gm', { cmd: 'mute', name: 'Quezilento', minutes: 1e12, reason: 'x' })).code, 'bad_request');
 
@@ -151,7 +151,7 @@ test('moderação: silêncio, denúncia, suspensão, ferramenta, onde está e an
     assert.match((await pk).reason, /teste da ferramenta/);
     // conta excluída fora do servidor (serviço de contas, ferramenta): a sessão cai na varredura
     const gk = G.waitFor((m) => m.t === 'kicked', 3000, 'expulsão de conta excluída');
-    server.store.deleteAccount(server.store.findAccount('m_mestre').id);
+    server.store.deleteAccount(server.store.findAccount('m_guardia').id);
     server.mod.lastSweep = 0;
     server.mod.sweep();
     assert.match((await gk).reason, /excluída/);

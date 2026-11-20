@@ -8,6 +8,9 @@ const WINDOW = 6000; // últimos 6000 ticks (10 min a 10 Hz)
 export class Metrics {
   constructor() {
     this.tick = new Float64Array(WINDOW);
+    // contadores do processo inteiro (não zeram com a janela): denúncias e /bug gravados (D146)
+    this.reportsTotal = 0;
+    this.bugReportsTotal = 0;
     this.reset();
   }
 
@@ -67,6 +70,8 @@ export class Metrics {
       cpuPct: ((cpu.user + cpu.system) / 1000 / (secs * 1000)) * 100,
       rssMb: mem.rss / 1048576,
       heapMb: mem.heapUsed / 1048576,
+      reportsTotal: this.reportsTotal,
+      bugReportsTotal: this.bugReportsTotal,
       ...extra,
     };
   }
@@ -90,6 +95,12 @@ export function prometheusText(m) {
   g('cpu_pct', 'Uso de CPU do processo na janela (%).', m.cpuPct);
   g('rss_mb', 'Memória residente (MB).', m.rssMb);
   g('uptime_s', 'Tempo no ar (s).', m.uptimeS);
+  // contadores de verdade (só sobem; voltam a 0 quando o processo reinicia, como o Prometheus espera)
+  const c = (name, help, v) => {
+    lines.push(`# HELP cinzas_${name} ${help}`, `# TYPE cinzas_${name} counter`, `cinzas_${name} ${Number.isFinite(v) ? v : 0}`);
+  };
+  c('reports_total', 'Denúncias de jogadores gravadas desde que o processo subiu.', m.reportsTotal);
+  c('bug_reports_total', 'Relatos de problema (/bug) gravados desde que o processo subiu.', m.bugReportsTotal);
   if (m.db) { // PostgreSQL: cada chamada pela ponte síncrona para o laço de eventos
     g('db_calls_per_s', 'Chamadas ao banco por segundo.', m.db.callsPerS);
     g('db_wait_ms_per_s', 'Milissegundos por segundo com o laço de eventos parado esperando o banco.', m.db.waitMsPerS);

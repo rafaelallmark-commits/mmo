@@ -1,10 +1,17 @@
 // Moderação do teste público: suspensão (ban) e silêncio (mute) por conta, expulsão, anúncio,
 // "onde está" e denúncias com o contexto do chat. Comandos de mestre (papel gm/admin) e a ferramenta
-// tools/conta.mjs mexem no banco; o servidor confere o banco a cada minuto, então uma suspensão feita
-// pela ferramenta derruba quem estiver on-line em até 60 s. Tudo vai para a auditoria.
+// tools/conta.mjs mexem no banco; o servidor confere o banco a cada minuto, então uma suspensão, um
+// silêncio ou um papel novo dado pela ferramenta vale para quem estiver on-line em até 60 s. Tudo vai
+// para a auditoria. Administração (só admin, D146): renomear personagem e clã e retirar itens e ouro,
+// com o personagem on-line (na memória) ou fora do ar (no banco). Denúncia e /bug avisam a equipe on-line.
 // Várias zonas: o alvo pode estar em outra zona; expulsão, suspensão e silêncio seguem pela conta
-// através do serviço de mundo (server.modRemote), "onde está" pergunta ao mundo e o anúncio vai a todas.
+// através do serviço de mundo (server.modRemote), "onde está" pergunta ao mundo e o anúncio e os avisos
+// para a equipe vão a todas.
+import { checkCharName, accentCaseVariants, DELETED_PREFIX_RE } from './names.js';
+import { checkClanName } from './clans.js';
+
 export const PERMANENT = 253402300799000; // 31/12/9999: suspensão sem data para acabar
+export const STAFF_ROLES = new Set(['gm', 'admin']); // papéis com a marca [Equipe] e os avisos de denúncia
 const CHAT_KEEP = 20;          // últimas falas por personagem guardadas para dar contexto às denúncias
 const REPORTS_PER_HOUR = 5;
 const BUGS_PER_HOUR = 10;
@@ -14,9 +21,16 @@ const MAX_MUTE_MIN = 60 * 24 * 30;  // silêncio: até 30 dias
 const CHANNELS = new Set(['zone', 'party', 'whisper', 'clan']);
 const HOUR = 3600_000;
 const ROLE_LEVEL = { player: 0, gm: 1, admin: 2 };
+const ROLE_NAME = { player: 'jogador', gm: 'mestre', admin: 'administrador' };
+const MOD_CMDS = new Set(['kick', 'ban', 'unban', 'mute', 'unmute', 'where', 'announce', 'rename', 'rename_clan', 'take_item', 'take_gold']);
+// administração que muda nome, itens ou ouro de um jogador: só admin (ou --dev), como os comandos de cenário (D138)
+const ADMIN_CMDS = new Set(['rename', 'rename_clan', 'take_item', 'take_gold']);
+const TAKE_GOLD_MAX = 1_000_000_000;
 // texto vindo do jogador, sem caracteres de controle (não mexe no terminal de quem lê a auditoria)
 export const cleanText = (t, max) => (typeof t === 'string' ? t.replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').trim().slice(0, max) : '');
 
+// trecho do texto do jogador no aviso para a equipe (o texto inteiro fica na auditoria)
+const short = (t, max = 80) => (t.length > max ? `${t.slice(0, max - 1)}…` : t);
 const fmt = (ms) => new Date(ms).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' });
 const untilText = (ms) => (ms >= PERMANENT ? 'sem data para acabar' : `até ${fmt(ms)}`);
 
@@ -39,6 +53,12 @@ export class Moderation {
 
   // no login: guarda o silêncio na sessão (o chat não consulta o banco a cada fala)
   onLogin(s, acc) { s.mutedUntil = acc.muted_until ?? 0; }
+
+  // Aviso curto para a equipe on-line (papéis gm e admin) desta zona e, com várias zonas, das outras.
+  notifyStaff(text, { remote = true } = {}) {
+    for (const s of this.s.sessions) if (STAFF_ROLES.has(s.role)) this.s.sendTo(s, { t: 'notice', kind: 'staff', text });
+    if (remote) this.s.world?.notify('staff', { text });
+  }
 
   // gancho do chat: recusa se a conta está silenciada. A fala só é guardada (remember) depois de entregue,
   // com quem a recebeu: sussurro para quem não está on-line ou grupo inexistente não viram contexto.
@@ -111,8 +131,21 @@ export class Moderation {
       if (!acc) { this.kickSession(s, 'Esta conta foi excluída.'); continue; }
       s.mutedUntil = acc.muted_until ?? 0;
       const ban = banMessage(acc, now);
-      if (ban) this.kickSession(s, ban);
+      if (ban) { this.kickSession(s, ban); continue; }
+      this.applyRole(s, acc.role ?? 'player');
     }
+  }
+
+  // Papel relido do banco (varredura de cada minuto): rebaixar um mestre on-line tira o poder sem novo login,
+  // e a marca [Equipe] do personagem acompanha o papel.
+  applyRole(s, role) {
+    if (s.role === role) return;
+    const was = s.role;
+    s.role = role;
+    const p = s.charId != null ? this.s.playerOf(s.charId) : null;
+    if (p) p.char.staff = STAFF_ROLES.has(role);
+    this.s.log(`papel da conta ${s.accountId}: ${was} -> ${role}`);
+    if (s.charId != null) this.s.sendTo(s, { t: 'system', text: `Seu papel na equipe mudou: agora você é ${ROLE_NAME[role] ?? role}.` });
   }
 
   kickSession(s, reason) {
@@ -131,18 +164,22 @@ export class Moderation {
       const p = this.s.playerOf(charId);
       return { charId, name: p?.char.name ?? name, accountId: sess?.accountId ?? p?.char.accountId, sess, p };
     }
-    const row = this.st.characterByName?.(name.trim());
-    if (!row) return null;
+    // (o banco só iguala maiúsculas em A-Z: as variantes das letras acentuadas acham "Ângela" por "ângela")
+    const row = accentCaseVariants(name.trim()).map((v) => this.st.characterByName?.(v)).find(Boolean);
+    // personagem excluído (excluido_<id>) não é alvo: renomeá-lo o traria de volta à lista da conta
+    if (!row || DELETED_PREFIX_RE.test(row.name)) return null;
     const remote = this.s.remoteChar?.(name);
     return { charId: row.id, name: row.name, accountId: row.account_id, sess: null, p: null, remote: remote?.charId === row.id };
   }
 
-  // Comandos de mestre de moderação. Devolve null se o comando não é de moderação.
+  // Comandos de mestre de moderação e de administração. Devolve null se o comando não é deles.
   gm(p, msg, sess) {
     const cmd = msg.cmd;
-    if (!['kick', 'ban', 'unban', 'mute', 'unmute', 'where', 'announce'].includes(cmd)) return null;
+    if (!MOD_CMDS.has(cmd)) return null;
     const by = { accountId: sess?.accountId ?? null, charId: p.char.id, ip: sess?.ip ?? null };
     const role = this.s.opts.dev ? 'admin' : sess?.role;
+    if (ADMIN_CMDS.has(cmd) && role !== 'admin') return { ok: false, code: 'forbidden', reason: 'Renomear e retirar itens ou ouro são comandos só para administradores.' };
+    if (cmd === 'rename_clan') return this.renameClan(msg, by);
     if (cmd === 'announce') {
       const text = typeof msg.text === 'string' ? msg.text.trim().slice(0, 200) : '';
       if (!text) return { ok: false, code: 'empty', reason: 'Anúncio vazio.' };
@@ -216,8 +253,71 @@ export class Moderation {
         this.s.modRemote?.({ accountId: t.accountId, mutedUntil: 0 });
         this.st.audit('mod_unmute', { ...by, targetAccount: t.accountId, target: t.charId });
         return { ok: true, message: `${t.name} pode falar de novo.`, cache: false };
+      case 'rename': return this.renameChar(t, msg, by, reason);
+      case 'take_item': return this.takeItem(t, msg, by, reason);
+      case 'take_gold': return this.takeGold(t, msg, by, reason);
     }
     return null;
+  }
+
+  // ---------- administração (D146): só admin, personagem on-line (memória) ou fora do ar (banco) ----------
+  // Personagem on-line em outra zona (várias zonas): a memória de lá é que vale, e ela gravaria por cima do
+  // ouro e dos itens mexidos aqui no banco. Nome: o banco muda e ele é desconectado lá (o salvamento não
+  // grava o nome); itens e ouro: recusado, com o caminho (/gm onde e o comando na zona dele).
+  otherZone(t) {
+    return { ok: false, code: 'other_zone', reason: `${t.name} está on-line em outra zona: veja onde com /gm onde ${t.name} e use o comando de lá, ou espere ele sair.`, cache: false };
+  }
+
+  // /gm renomear Nome NovoNome: as regras de nome da criação (formato, reservados, duplicata)
+  renameChar(t, msg, by, reason) {
+    const v = checkCharName(this.st, msg.newName, t.charId);
+    if (v.err) return { ...v.err, cache: false };
+    const old = t.name;
+    if (v.name === old) return { ok: false, code: 'same', reason: 'O nome novo é igual ao atual.', cache: false };
+    try { this.st.renameCharacter(t.charId, v.name); } catch { return { ok: false, code: 'name_taken', reason: 'Esse nome já está em uso.', cache: false }; }
+    if (t.p) this.s.renameOnline(t.p, v.name);
+    else if (t.remote) this.s.modRemote?.({ accountId: t.accountId, kick: `A equipe renomeou seu personagem para ${v.name}. Entre de novo.` });
+    this.st.audit('mod_rename', { ...by, targetAccount: t.accountId, target: t.charId, from: old, to: v.name, reason, online: !!t.p, otherZone: !!t.remote });
+    return { ok: true, message: `${old} agora se chama ${v.name}.`, cache: false };
+  }
+
+  // /gm renomear_cla SIGLA Novo Nome: as regras da fundação (formato, reservados, duplicata)
+  renameClan(msg, by) {
+    const tag = typeof msg.tag === 'string' ? msg.tag.trim().toUpperCase() : '';
+    const cl = tag ? this.st.clanByTag(tag) : null;
+    if (!cl) return { ok: false, code: 'not_found', reason: `Clã ${tag || '(sem sigla)'} não encontrado.`, cache: false };
+    const v = checkClanName(this.st, msg.newName, cl.id);
+    if (v.err) return { ...v.err, cache: false };
+    if (v.name === cl.name) return { ok: false, code: 'same', reason: 'O nome novo é igual ao atual.', cache: false };
+    try { this.st.renameClan(cl.id, v.name); } catch { return { ok: false, code: 'taken', reason: 'Já existe um clã com esse nome.', cache: false }; }
+    this.s.clans.notifyClan(cl.id, { t: 'clan_event', text: `A equipe renomeou o clã para ${v.name}.` });
+    this.st.audit('mod_rename_clan', { ...by, clan: cl.id, tag: cl.tag, from: cl.name, to: v.name, reason: cleanText(msg.reason, 140) });
+    return { ok: true, message: `O clã [${cl.tag}] agora se chama ${v.name}.`, cache: false };
+  }
+
+  // /gm retirar Nome defId [qtd]: da bolsa, da caixa de recuperação, do equipamento e do que ele guardou no
+  // depósito da conta, nessa ordem; sem quantidade, todas as unidades
+  takeItem(t, msg, by, reason) {
+    const def = typeof msg.defId === 'string' && Object.hasOwn(this.s.data.items, msg.defId) ? this.s.data.items[msg.defId] : null;
+    if (!def) return { ok: false, code: 'bad_item', reason: `Item inexistente: ${cleanText(String(msg.defId ?? ''), 40)}.`, cache: false };
+    const want = msg.qty == null ? Infinity : msg.qty;
+    if (want !== Infinity && !(Number.isInteger(want) && want >= 1)) return { ok: false, code: 'bad_request', reason: 'Use: /gm retirar Nome item [quantidade].', cache: false };
+    if (t.remote) return this.otherZone(t);
+    const r = this.s.takeItemsOf(t.charId, def.id, want);
+    if (!r.qty) return { ok: false, code: 'not_found', reason: `${t.name} não tem ${def.name}.`, cache: false };
+    this.st.audit('mod_take_item', { ...by, targetAccount: t.accountId, target: t.charId, item: def.id, qty: r.qty, instances: r.instances, reason, online: !!t.p });
+    return { ok: true, message: `Retirado de ${t.name}: ${def.name} ×${r.qty}.`, qty: r.qty, cache: false };
+  }
+
+  // /gm retirar_ouro Nome N: até o que ele tem
+  takeGold(t, msg, by, reason) {
+    const n = Number(msg.amount);
+    if (!Number.isInteger(n) || n < 1 || n > TAKE_GOLD_MAX) return { ok: false, code: 'bad_request', reason: 'Use: /gm retirar_ouro Nome quantia (número inteiro).', cache: false };
+    if (t.remote) return this.otherZone(t);
+    const r = this.s.takeGoldOf(t.charId, n);
+    if (!r.taken) return { ok: false, code: 'no_gold', reason: `${t.name} não tem ouro.`, cache: false };
+    this.st.audit('mod_take_gold', { ...by, targetAccount: t.accountId, target: t.charId, amount: r.taken, goldAfter: r.gold, reason, online: !!t.p });
+    return { ok: true, message: `Retirado de ${t.name}: ${r.taken} de ouro (ficou com ${r.gold}).`, cache: false };
   }
 
   // aviso da equipe para quem está no mundo nesta zona
@@ -250,6 +350,8 @@ export class Moderation {
     this.st.audit('bug_report', { accountId: sess?.accountId ?? null, charId: c.id, ip: sess?.ip ?? null, text: t, map: p.zone.mapId, instance: p.zone.instanceId ?? null,
       x: Math.round(c.x * 10) / 10, z: Math.round(c.z * 10) / 10, level: c.level, classId: c.classId, client: cleanText(client, 40) || null,
       server: this.s.serverVersion ?? null, data: this.s.dataVersion ?? null });
+    this.s.metrics.bugReportsTotal++;
+    this.notifyStaff(`Novo /bug de ${c.name} em ${p.zone.mapId}: ${short(t)} (npm run conta -- --bugs)`);
     return { ok: true, message: 'Obrigado! O problema foi registrado com o lugar e a hora em que você está.', cache: false };
   }
 
@@ -271,6 +373,8 @@ export class Moderation {
     const chat = (this.chatLog.get(t.charId) ?? []).filter((l) => now - l.at <= HOUR && Moderation.visibleTo(l, p.char.id))
       .map(({ at, channel, text }) => ({ at, channel, text }));
     this.st.audit('report', { accountId: sess?.accountId ?? null, charId: p.char.id, ip: sess?.ip ?? null, target: t.charId, targetName: t.name, targetAccount: t.accountId, reason: why, map: p.zone.mapId, chat });
+    this.s.metrics.reportsTotal++;
+    this.notifyStaff(`Nova denúncia de ${p.char.name} contra ${t.name}: ${short(why)} (npm run conta -- --denuncias)`);
     return { ok: true, message: 'Denúncia registrada. A equipe vai analisar. Obrigado.', cache: false };
   }
 }

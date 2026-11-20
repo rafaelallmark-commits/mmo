@@ -37,18 +37,22 @@ O cliente conecta com `--server=ws://host:porta` (ex.: `godot --path client -- -
 Com `--metrics-port`, o servidor expõe:
 
 - `GET /metrics` — texto do Prometheus (`cinzas_players_online`, `cinzas_tick_ms_p50|p95|p99|max`,
-  `cinzas_slow_ticks_total`, `cinzas_bytes_out_per_s`, `cinzas_msgs_in_per_s`, `cinzas_cpu_pct`, `cinzas_rss_mb`, …).
+  `cinzas_slow_ticks_total`, `cinzas_bytes_out_per_s`, `cinzas_msgs_in_per_s`, `cinzas_cpu_pct`, `cinzas_rss_mb`, …)
+  e os contadores `cinzas_reports_total` (denúncias de jogadores) e `cinzas_bug_reports_total` (relatos do `/bug`),
+  contados desde que o processo subiu (D146).
 - `GET /metrics.json` — o mesmo em JSON (janela dos últimos 6000 ticks = 10 min).
 - `GET /health` — `200 {"ok":true}` enquanto o servidor responde.
-- `POST /metrics/reset` — zera a janela (usado pelo teste de carga depois do aquecimento).
+- `POST /metrics/reset` — zera a janela (usado pelo teste de carga depois do aquecimento); os dois contadores acima
+  não zeram.
 
 Alertas sugeridos: `tick_ms_p99 > 30` por 5 min; `slow_ticks_total` subindo; `/health` falhando 3 vezes;
-`rss_mb` crescendo sem parar (vazamento).
+`rss_mb` crescendo sem parar (vazamento); denúncia nova (`increase(cinzas_reports_total[10m]) > 0`, alerta
+`DenunciaNova`).
 
 **Painel pronto**: `docker compose --profile monitoramento up -d` (em `deploy/`) sobe Prometheus (coleta a cada 15 s,
 retenção de 15 dias, alertas acima em `deploy/monitoramento/alertas.yml`) e Grafana com o painel "Cinzas do Meridiano —
-servidor de zona" (jogadores, duração do tick com as linhas de 30 e 50 ms, ticks lentos, banda, mensagens, CPU e
-memória) em `http://127.0.0.1:3000` — só nesta máquina; de fora, `ssh -L 3000:127.0.0.1:3000 servidor`. Senha do
+servidor de zona" (jogadores, duração do tick com as linhas de 30 e 50 ms, ticks lentos, banda, mensagens, CPU,
+memória e denúncias e `/bug` por hora) em `http://127.0.0.1:3000` — só nesta máquina; de fora, `ssh -L 3000:127.0.0.1:3000 servidor`. Senha do
 admin do Grafana em `GRAFANA_SENHA` no `deploy/.env`. Para receber os alertas por e-mail ou chat, ligue um
 Alertmanager ao Prometheus.
 
@@ -286,10 +290,45 @@ systemctl status cinzas; journalctl -u cinzas -f; systemctl list-timers backup.t
   `sudo -u cinzas cp /var/lib/cinzas/backups/cinzas-AAAA-MM-DDTHH-MM-SS.db /var/lib/cinzas/cinzas.db`,
   `sudo -u cinzas rm -f /var/lib/cinzas/cinzas.db-wal /var/lib/cinzas/cinzas.db-shm` e `sudo systemctl start cinzas`.
 
+### Primeira conta de administrador
+
+O servidor de produção sobe sem `--dev`: ninguém tem comandos de mestre até uma conta receber um papel no banco.
+Faça isto uma vez em cada implantação, depois que zona e contas estiverem no ar:
+
+1. **Crie e confirme a conta pelo cliente**, como um jogador: *Criar conta* (nome, e-mail, senha, aceite dos termos),
+   digite o código que chega por e-mail e entre uma vez, para conferir que o login por token funciona. Crie um
+   personagem com o nome que a equipe vai usar (nomes com palavras da equipe, como "GM" ou "Admin", são recusados
+   para todo mundo, D145: a marca **[Equipe]** é que identifica a equipe no jogo).
+2. **Dê o papel `admin` à conta** (o nome da conta, não o do personagem):
+   - **Docker**, em `deploy/`:
+
+     ```bash
+     docker compose exec servidor npm run conta -- --db /data/cinzas.db --conta nome --papel admin
+     ```
+
+     Com o perfil `postgres`, tire o `--db /data/cinzas.db`: sem ele a ferramenta usa o `CINZAS_DB` do contêiner,
+     que aponta para o banco.
+   - **systemd**, como o usuário do serviço (para o arquivo do banco continuar dele; `-H` usa a pasta dele,
+     `/var/lib/cinzas`, como o `backup.service`):
+
+     ```bash
+     cd /opt/cinzas/server && sudo -H -u cinzas npm run conta -- --db /var/lib/cinzas/cinzas.db --conta nome --papel admin
+     ```
+
+     No PostgreSQL, troque `--db /var/lib/cinzas/cinzas.db` pelo `CINZAS_DB` de `/etc/cinzas/cinzas.env`.
+3. **Espere até 60 s**: o servidor relê os papéis das sessões abertas a cada minuto (D146). Quem já está no jogo
+   recebe "Seu papel na equipe mudou: agora você é administrador." e passa a aparecer com **[Equipe]**, sem sair e
+   entrar de novo.
+4. **Confira**: no jogo, `/gm onde SeuPersonagem` responde com o mapa e a posição; fora dele,
+   `npm run conta -- --db ... --auditoria --tipo role_set --n 5` mostra a troca de papel.
+
+Mestres voluntários recebem `--papel gm` do mesmo jeito; `--papel player` tira o papel (também em até 60 s, com a
+marca **[Equipe]** saindo junto). O que cada papel pode: [§8.9](#89-contas-segurança-e-privacidade-teste-público).
+
 ### Antes de abrir o teste
 
 - DNS e portas 80/443 prontos; `DOMINIO`, `CINZAS_TOKEN_SECRET` e SMTP em `deploy/.env` (ou `/etc/cinzas/cinzas.env`);
-  servidor **sem** `--dev`; uma conta com papel `admin` para a equipe (`npm run conta -- --conta nome --papel admin`).
+  servidor **sem** `--dev`; uma conta com papel `admin` para a equipe ([Primeira conta de administrador](#primeira-conta-de-administrador)).
 - Domínio do remetente verificado no provedor de e-mail, com **SPF**, **DKIM** e **DMARC** publicados no DNS (o
   provedor mostra os registros; sem eles os códigos caem no lixo eletrônico ou são recusados). Mande um código para
   um endereço do Gmail e um do Outlook e confira que chega na caixa de entrada.
@@ -343,7 +382,10 @@ recompensas de missão, criação/confirmação/exclusão de conta, troca de sen
 personagem (`teleport`). Os comandos de cenário, que criam ouro, itens, níveis, refino ou progresso de missão
 (`give`, `gold`, `xp`, `set_enh`, `quest_progress`, `quest_done`), são só do papel `admin` (ou `--dev`), com teto:
 `give` até uma pilha do item e `gold` até 1.000.000 por comando. Todo comando de mestre, inclusive o recusado, fica
-na auditoria.
+na auditoria. O papel vale sem novo login: o servidor relê o papel das sessões abertas na varredura de cada minuto,
+então dar, trocar ou tirar um papel pela ferramenta vale em até 60 s, com a marca **[Equipe]** junto (D146). Contas
+`gm` e `admin` aparecem no jogo com **[Equipe]** antes do nome (nos personagens e no chat) e não podem ser ignoradas
+pelos jogadores; nomes de personagem e de clã com palavras da equipe são recusados para todo mundo (D145).
 
 **Moderação** (no chat do jogo, contas da equipe):
 
@@ -354,13 +396,36 @@ na auditoria.
 | `/gm suspender Nome horas motivo` · `/gm desbloquear Nome` | Suspende a conta (derruba e recusa o login, também no serviço de contas). Mestre: até 72 h; acima disso ou `perm` (sem data), só `admin`. Motivo obrigatório. |
 | `/gm onde Nome` · `/gm anunciar texto` | Mapa e posição do jogador / aviso para todos os conectados. |
 
+**Administração** (só papel `admin` ou `--dev`, D146) — o que os [Termos](TERMOS.md) prometem para nomes ofensivos e
+itens obtidos de forma irregular. Vale com o personagem on-line (a memória e o banco mudam juntos, a troca aberta é
+cancelada e o jogador recebe um aviso) ou fora do ar (direto no banco). Ninguém age sobre conta com papel igual ou
+maior que o seu, e cada comando fica na auditoria (`mod_rename`, `mod_rename_clan`, `mod_take_item`, `mod_take_gold`):
+
+| Comando | Efeito |
+|---|---|
+| `/gm renomear Nome NovoNome [motivo]` | Troca o nome do personagem, com as regras da criação (3 a 16 letras, sem espaço, sem palavras da equipe, sem duplicata). |
+| `/gm renomear_cla SIGLA Novo Nome` | Troca o nome do clã (a sigla fica), com as regras da fundação; os membros on-line são avisados. |
+| `/gm retirar Nome item [quantidade] [motivo]` | Retira o item (pelo identificador dos dados, ex.: `axe_1h_t1`) da bolsa, da caixa de recuperação, do equipamento e do que o personagem guardou no depósito da conta, nessa ordem; sem quantidade, todas as unidades. |
+| `/gm retirar_ouro Nome quantia [motivo]` | Retira ouro, até o que o personagem tem. |
+
+Com várias zonas e o personagem on-line em outra zona, o nome muda no banco e ele é desconectado lá (entra de novo já
+com o nome novo); itens e ouro são recusados com o aviso para usar `/gm onde` e repetir o comando na zona dele.
+
 Jogadores denunciam com `/denunciar Nome motivo` (5 por hora); a denúncia grava as últimas falas do denunciado que
-o denunciante podia ver (as do mapa e os sussurros, falas de grupo e de clã que chegaram a ele; D123).
+o denunciante podia ver (as do mapa e os sussurros, falas de grupo e de clã que chegaram a ele; D123). Cada denúncia e
+cada `/bug` mandam um aviso curto às contas `gm` e `admin` que estão no jogo, em todas as zonas ("Nova denúncia de
+Fulano contra Ciclano: …", em azul no chat), contam em `cinzas_reports_total` e `cinzas_bug_reports_total` e a
+denúncia dispara o alerta `DenunciaNova` (§8.3).
 Pela ferramenta, fora do jogo: `npm run conta -- --db cinzas.db --personagem Nome --suspender --horas 24 --motivo "..."`
 (ou `--permanente`, `--retirar-suspensao`, `--silenciar --minutos 60`, `--retirar-silencio`) e
 `npm run conta -- --db cinzas.db --denuncias --n 50`; relatos de problema dos testadores (`/bug texto` no jogo, com mapa,
-posição, nível e versões do cliente, do servidor e dos dados): `npm run conta -- --db cinzas.db --bugs --n 50`. O servidor confere o banco a cada minuto: uma suspensão feita pela
-ferramenta derruba quem estiver on-line em até 60 s.
+posição, nível e versões do cliente, do servidor e dos dados): `npm run conta -- --db cinzas.db --bugs --n 50`. O servidor confere o banco a cada minuto: uma suspensão, um silêncio ou um papel novo dados pela
+ferramenta valem para quem estiver on-line em até 60 s.
+
+**Convivência entre jogadores** (D145): `/ignorar Nome`, `/designorar Nome` e `/ignorados` mantêm uma lista por
+personagem (até 100, no banco). De quem está nela, sussurros são descartados em silêncio, falas do mapa, do grupo e do
+clã não chegam e convites de grupo, clã, troca e duelo recebem a resposta de um convite enviado, sem chegar. Convite de
+grupo: no máximo 1 a cada 10 s por quem convida.
 
 **Anti-trapaça (o que o servidor já impede)**: o cliente só pede destinos, alvos e habilidades — posição, velocidade,
 alcance, recarga, mana, chance, dano e saque são calculados no servidor; teleporte e "speed hack" não têm efeito. Itens,
@@ -376,7 +441,13 @@ na auditoria; `GET /termos` e `GET /privacidade` servem os textos (o cliente abr
 pasta, padrão `docs/` do repositório).
 
 **Privacidade**: política em [PRIVACIDADE.md](PRIVACIDADE.md). Exclusão de conta pelo jogo (tela de
-personagens) ou pelo serviço de contas apaga e-mail, senha, itens e missões na hora e anonimiza os nomes.
+personagens) ou pelo serviço de contas apaga e-mail, senha, itens e missões na hora e anonimiza os nomes. Na tela de
+personagens também dá para **excluir um personagem só** (D144): o jogador digita o nome dele e a senha da conta; saem
+os itens, o ouro, as missões e as listas de ignorados, ele sai do grupo e do clã (o clã que ele liderava passa ao
+membro de maior cargo; sem ninguém, acaba) e o nome fica livre; as peças que ele guardou no depósito da conta
+continuam lá. Na zona, a senha de excluir conta ou personagem é conferida fora da thread do jogo (o tick não para), com
+no máximo 5 senhas erradas por conta a cada 10 minutos; cada erro fica na auditoria (`password_fail`), e a exclusão de
+personagem, como `char_deleted` (com o nome que ele tinha).
 
 ## 8.10 Múltiplas zonas
 
@@ -431,7 +502,11 @@ de posses e grupos. Cada zona continua com as próprias métricas (`--metrics-po
 - **Login com o personagem aberto em outra zona**: a outra zona grava e derruba ("Sua conta entrou em outra
   conexão") antes de a nova entrada carregar o personagem; nunca há duas cópias.
 - **Moderação** vale em todas as zonas: suspensão e silêncio na chegada por transferência e os comandos de
-  mestre (`expulsar`, `suspender`, `silenciar`, `onde`, `anunciar`) alcançam quem está em outra zona.
+  mestre (`expulsar`, `suspender`, `silenciar`, `onde`, `anunciar`) alcançam quem está em outra zona. O aviso de
+  denúncia nova e de `/bug` chega à equipe de todas as zonas; `/gm renomear` de quem está em outra zona muda o nome
+  no banco e o desconecta lá; `/gm retirar` e `/gm retirar_ouro` só valem na zona em que o personagem está (D146).
+- **Lista de ignorados** vale entre zonas: fica no banco, a zona de quem fala confere antes de mandar e a zona de
+  quem recebe confere de novo na entrega (sussurro, fala de grupo e de clã, convites de grupo e de clã).
 
 ## 8.11 PostgreSQL
 

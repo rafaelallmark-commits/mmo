@@ -550,7 +550,7 @@ func _build_actions(root: Control) -> void:
 	v.add_child(actions_label)
 	var row := HBoxContainer.new()
 	v.add_child(row)
-	for spec in [["Trocar", "trade"], ["Duelar", "duel"], ["Grupo", "party"], ["Clã", "clan"], ["Sussurrar", "whisper"], ["×", "close"]]:
+	for spec in [["Trocar", "trade"], ["Duelar", "duel"], ["Grupo", "party"], ["Clã", "clan"], ["Sussurrar", "whisper"], ["Ignorar", "ignore"], ["×", "close"]]:
 		var b := Button.new()
 		b.text = spec[0]
 		var what: String = spec[1]
@@ -583,6 +583,8 @@ func _act(what: String) -> void:
 			hud.chat_input.text = "/s %s " % quote_name(n)
 			hud.chat_input.grab_focus()
 			hud.chat_input.caret_column = hud.chat_input.text.length()
+		"ignore":
+			Net.request("ignore_add", {"name": n}, _msg_or_err)
 
 func _msg_or_err(r) -> void:
 	if r["ok"]:
@@ -593,9 +595,24 @@ func _msg_or_err(r) -> void:
 
 # ---------------- comandos de chat ----------------
 ## /troca Nome · /duelo Nome · /c texto · /cla · /cla criar Nome SIGLA · /cla convidar Nome · /cla sair
-## /denunciar Nome motivo · equipe: /gm expulsar|suspender|silenciar|liberar|desbloquear|onde|anunciar
+## /denunciar Nome motivo · /ignorar Nome · /designorar Nome · /ignorados
+## equipe: /gm expulsar|suspender|silenciar|liberar|desbloquear|onde|anunciar|renomear|renomear_cla|retirar|retirar_ouro
 func chat_command(t: String) -> bool:
-	if t.begins_with("/bug ") or t == "/bug":
+	if t.begins_with("/ignorar ") or t == "/ignorar":
+		var who := name_arg(t.substr(9)) if t.length() > 9 else ""
+		if who == "":
+			hud.error("Use: /ignorar Nome (some o chat e os convites dessa pessoa para você)")
+		else:
+			Net.request("ignore_add", {"name": who}, _msg_or_err)
+	elif t.begins_with("/designorar ") or t == "/designorar":
+		var who2 := name_arg(t.substr(12)) if t.length() > 12 else ""
+		if who2 == "":
+			hud.error("Use: /designorar Nome")
+		else:
+			Net.request("ignore_remove", {"name": who2}, _msg_or_err)
+	elif t == "/ignorados":
+		Net.request("ignore_list", {}, _msg_or_err)
+	elif t.begins_with("/bug ") or t == "/bug":
 		var text := t.substr(5).strip_edges() if t.length() > 5 else ""
 		if text.length() < 5:
 			hud.error("Use: /bug o que aconteceu (vai junto o lugar e a hora)")
@@ -638,6 +655,8 @@ func chat_command(t: String) -> bool:
 
 ## Moderação (só contas da equipe): /gm expulsar Nome motivo · /gm suspender Nome horas|perm motivo ·
 ## /gm desbloquear Nome · /gm silenciar Nome minutos motivo · /gm liberar Nome · /gm onde Nome · /gm anunciar texto
+## Administração (só papel admin): /gm renomear Nome NovoNome [motivo] · /gm renomear_cla SIGLA Novo Nome ·
+## /gm retirar Nome item [quantidade] [motivo] · /gm retirar_ouro Nome quantia [motivo]
 ## Nome com espaço (de antes da regra) vai entre aspas: /gm expulsar "Ana Maria" flood.
 func _gm_command(rest: String) -> void:
 	rest = rest.strip_edges()
@@ -668,5 +687,35 @@ func _gm_command(rest: String) -> void:
 			Net.request("gm", {"cmd": "where", "name": name}, _msg_or_err)
 		"anunciar":
 			Net.request("gm", {"cmd": "announce", "text": after}, _msg_or_err)
+		"renomear":
+			if name == "" or str(args[0]) == "":
+				hud.error("Use: /gm renomear Nome NovoNome [motivo]")
+			else:
+				Net.request("gm", {"cmd": "rename", "name": name, "newName": str(args[0]), "reason": str(args[1])}, _msg_or_err)
+		"renomear_cla":
+			# a sigla é a primeira palavra; o resto é o nome novo (pode ter espaços)
+			var tg: Array = split_name(after)
+			if str(tg[0]) == "" or str(tg[1]) == "":
+				hud.error("Use: /gm renomear_cla SIGLA Novo Nome")
+			else:
+				Net.request("gm", {"cmd": "rename_clan", "tag": str(tg[0]), "newName": str(tg[1])}, _msg_or_err)
+		"retirar":
+			# depois do item, um número é a quantidade (sem ele, todas as unidades); o resto é o motivo
+			var qr: Array = split_name(str(args[1]))
+			var payload := {"cmd": "take_item", "name": name, "defId": str(args[0])}
+			if str(qr[0]).is_valid_int():
+				payload["qty"] = str(qr[0]).to_int()
+				payload["reason"] = str(qr[1])
+			else:
+				payload["reason"] = str(args[1])
+			if name == "" or str(args[0]) == "":
+				hud.error("Use: /gm retirar Nome item [quantidade] [motivo]")
+			else:
+				Net.request("gm", payload, _msg_or_err)
+		"retirar_ouro":
+			if name == "" or not str(args[0]).is_valid_int():
+				hud.error("Use: /gm retirar_ouro Nome quantia [motivo]")
+			else:
+				Net.request("gm", {"cmd": "take_gold", "name": name, "amount": str(args[0]).to_int(), "reason": args[1]}, _msg_or_err)
 		_:
-			hud.error("Comandos da equipe: expulsar, suspender, desbloquear, silenciar, liberar, onde, anunciar")
+			hud.error("Comandos da equipe: expulsar, suspender, desbloquear, silenciar, liberar, onde, anunciar; administração: renomear, renomear_cla, retirar, retirar_ouro")

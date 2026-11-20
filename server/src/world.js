@@ -9,7 +9,8 @@
 // - o diretório de quem está on-line (nome → personagem, zona e mapa): sussurro, grupo e clã;
 // - os grupos, que neste modo moram aqui: convite, aceite, recusa, saída, expulsão e liderança;
 // - o barramento de mensagens entre zonas e os tokens de transferência (HMAC, 30 s, uso único);
-// - a rota da moderação (expulsão, suspensão e silêncio por conta) e dos anúncios para todas as zonas.
+// - a rota da moderação (expulsão, suspensão e silêncio por conta), dos anúncios e dos avisos para a equipe
+//   (denúncia nova, /bug) para todas as zonas.
 //
 // Protocolo interno (WebSocket + JSON), só para as zonas. A primeira mensagem da zona é
 //   { t:'hello', zoneId, maps, publicUrl, ts, auth, online, draining }   auth = HMAC-SHA256(segredo, `${zoneId}:${ts}`)
@@ -18,9 +19,9 @@
 // pedidos) provam que o mundo ainda a via quando ela os mandou.
 // Pedidos: acquire, transfer, party_invite/accept/decline/leave/kick, where.
 // Avisos da zona: hb, release, transfer_saved, transfer_cancel, transfer_abort, online, moved, send,
-//   party_chat, party_state, clan, mod, announce, draining, bye.
+//   party_chat, party_state, clan, mod, announce, staff, draining, bye.
 // Avisos do mundo: welcome, refused, hb_ack, zones, presence, kick, deliver, party, party_clear, clan,
-//   mod, announce.
+//   mod, announce, staff.
 //
 // Transferência sem dois donos: a posse passa a "em transferência" quando o mundo emite o token, mas
 // continua contando como da zona de origem até ela avisar que gravou e soltou o personagem
@@ -259,6 +260,9 @@ export class WorldService {
       case 'announce':
         if (typeof m.text === 'string' && m.text) this.broadcast({ t: 'announce', text: m.text.slice(0, 300) }, z.id);
         return;
+      case 'staff': // aviso para a equipe on-line nas outras zonas (denúncia nova, /bug)
+        if (typeof m.text === 'string' && m.text) this.broadcast({ t: 'staff', text: m.text.slice(0, 300) }, z.id);
+        return;
       case 'where': return reply(this.where(m));
       case 'draining': z.draining = true; return this.broadcastZones(); // desligando: não recebe mais transferências
       case 'bye': return this.zoneDown(z, 'desligada');
@@ -433,7 +437,8 @@ export class WorldService {
     this.online.set(charId, o);
     if (prev && prev.name.toLowerCase() !== o.name.toLowerCase() && this.names.get(prev.name.toLowerCase()) === charId) this.names.delete(prev.name.toLowerCase());
     this.names.set(o.name.toLowerCase(), charId);
-    if (!prev || prev.zoneId !== o.zoneId) this.broadcast({ t: 'presence', charId, name: o.name, zoneId: o.zoneId, online: true });
+    // (nome novo, de um /gm renomear com o personagem on-line, também: o diretório das zonas troca o nome)
+    if (!prev || prev.zoneId !== o.zoneId || prev.name !== o.name) this.broadcast({ t: 'presence', charId, name: o.name, zoneId: o.zoneId, online: true });
     const pid = this.charParty.get(charId);
     if (pid) this.pushParty(pid, !prev || prev.zoneId !== o.zoneId);
   }

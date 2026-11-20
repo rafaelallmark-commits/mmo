@@ -28,6 +28,8 @@ export class TradeManager {
     if (t.zone !== p.zone || dist(t.char, p.char) > RANGE_START) return { ok: false, code: 'too_far', reason: `Chegue mais perto de ${t.char.name} (até ${RANGE_START} m).` };
     if (p.char.dead || t.char.dead) return { ok: false, code: 'dead', reason: 'Ninguém negocia caído.' };
     if (this.byChar.has(p.char.id) || this.byChar.has(t.char.id)) return { ok: false, code: 'busy', reason: 'Um de vocês já está negociando.' };
+    // na lista de ignorados de quem foi chamado: recusado em silêncio (a resposta é a mesma de um pedido enviado)
+    if (this.s.ignoredBy?.(t.char.id, p.char.id, p.char.staff)) return { ok: true, message: `Pedido de troca enviado a ${t.char.name}.` };
     this.invites.set(t.char.id, { from: p.char.id, at: Date.now() });
     this.s.sendTo(this.s.byChar.get(t.char.id), { t: 'trade_invite', from: p.char.name, fromId: p.char.id });
     return { ok: true, message: `Pedido de troca enviado a ${t.char.name}.` };
