@@ -116,6 +116,26 @@ recompensas de missão, criação/confirmação/exclusão de conta, troca de sen
 **Mestres**: comandos `/gm` só para contas com papel `gm` ou `admin` (ou com `--dev`, em desenvolvimento):
 `npm run conta -- --db cinzas.db --conta nome --papel gm`. Todo comando de mestre fica na auditoria.
 
+**Moderação** (no chat do jogo, contas da equipe):
+
+| Comando | Efeito |
+|---|---|
+| `/gm expulsar Nome motivo` | Desconecta o jogador. |
+| `/gm silenciar Nome minutos motivo` · `/gm liberar Nome` | Silencia a conta (todos os canais) / retira. |
+| `/gm suspender Nome horas motivo` · `/gm desbloquear Nome` | Suspende a conta (derruba e recusa o login, também no serviço de contas). Mestre: até 72 h; acima disso ou `perm` (sem data), só `admin`. Motivo obrigatório. |
+| `/gm onde Nome` · `/gm anunciar texto` | Mapa e posição do jogador / aviso para todos os conectados. |
+
+Jogadores denunciam com `/denunciar Nome motivo` (5 por hora); a denúncia grava as últimas falas do denunciado.
+Pela ferramenta, fora do jogo: `npm run conta -- --db cinzas.db --personagem Nome --suspender --horas 24 --motivo "..."`
+(ou `--permanente`, `--retirar-suspensao`, `--silenciar --minutos 60`, `--retirar-silencio`) e
+`npm run conta -- --db cinzas.db --denuncias --n 50`. O servidor confere o banco a cada minuto: uma suspensão feita pela
+ferramenta derruba quem estiver on-line em até 60 s.
+
+**Anti-trapaça (o que o servidor já impede)**: o cliente só pede destinos, alvos e habilidades — posição, velocidade,
+alcance, recarga, mana, chance, dano e saque são calculados no servidor; teleporte e "speed hack" não têm efeito. Itens,
+ouro e XP só mudam em transações (troca entre jogadores inclusive); pedidos repetidos com o mesmo `rid` não duplicam.
+Inundação de comandos e de chat é limitada e auditada.
+
 **Versões**: o `hello` traz `protocol` (3), `version` do servidor e `dataVersion` (hash dos dados); o cliente
 recusa servidor de protocolo diferente com uma mensagem clara.
 

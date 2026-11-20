@@ -14,6 +14,7 @@
 import http from 'node:http';
 import { Store } from './store.js';
 import { signToken } from './token.js';
+import { banMessage } from './moderation.js';
 import { createMailer } from './mailer.js';
 
 const ACCOUNT_RE = /^[a-zA-Z0-9_]{3,20}$/;
@@ -121,6 +122,8 @@ export class AccountsService {
         const acc = typeof b.conta === 'string' && typeof b.senha === 'string' ? st.verifyAccount(b.conta, b.senha) : null;
         if (!acc) { st.audit('login_fail', { ip, via: 'contas' }); return { ok: false, status: 401, erro: 'Conta ou senha incorretas.' }; }
         if (!acc.verified) return { ok: false, status: 403, erro: 'Confirme seu e-mail antes de entrar.' };
+        const ban = banMessage(acc);
+        if (ban) { st.audit('login_banned', { accountId: acc.id, ip, via: 'contas' }); return { ok: false, status: 403, erro: ban }; }
         const token = signToken({ sub: acc.id, name: acc.name, role: acc.role }, this.opts.tokenSecret, this.opts.tokenTtlS);
         return { ok: true, token, expiraEm: this.opts.tokenTtlS };
       }

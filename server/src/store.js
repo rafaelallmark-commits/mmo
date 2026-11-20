@@ -142,6 +142,11 @@ export const MIGRATIONS = [
     )`);
     db.exec('CREATE INDEX IF NOT EXISTS idx_clan_members_clan ON clan_members(clan_id)');
   } },
+  { v: 5, name: 'moderação: suspensão e silêncio por conta', up: (db) => {
+    db.exec('ALTER TABLE accounts ADD COLUMN banned_until INTEGER');
+    db.exec('ALTER TABLE accounts ADD COLUMN ban_reason TEXT');
+    db.exec('ALTER TABLE accounts ADD COLUMN muted_until INTEGER');
+  } },
 ];
 
 export function migrate(db) {
@@ -239,6 +244,8 @@ export class Store {
 
   setVerified(accountId) { this.prep('UPDATE accounts SET verified = 1 WHERE id = ?').run(accountId); }
   setRole(accountId, role) { this.prep('UPDATE accounts SET role = ? WHERE id = ?').run(role, accountId); }
+  setBan(accountId, until, reason) { this.prep('UPDATE accounts SET banned_until = ?, ban_reason = ? WHERE id = ?').run(until, reason, accountId); }
+  setMute(accountId, until) { this.prep('UPDATE accounts SET muted_until = ? WHERE id = ?').run(until, accountId); }
 
   // Código de 6 dígitos (verificação de e-mail ou troca de senha). Guarda só o hash; vale 30 min.
   issueCode(accountId, kind, ttlMs = 30 * 60 * 1000) {
@@ -355,6 +362,10 @@ export class Store {
 
   characterNameTaken(name) {
     return !!this.prep('SELECT 1 FROM characters WHERE name = ?').get(name);
+  }
+
+  characterByName(name) {
+    return this.prep('SELECT id, name, account_id FROM characters WHERE name = ? COLLATE NOCASE').get(name);
   }
 
   // kit: { equip: [defId], bag: [[defId, qty]] }; slotFor: defId -> slot

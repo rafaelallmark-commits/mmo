@@ -125,6 +125,7 @@ Decisões tomadas por conta própria durante a sessão que criou o Marco 1. Cada
 | D77 | **Exclusão de conta anonimiza** (nome trocado, e-mail e senha apagados, itens e missões removidos) em vez de apagar as linhas. | Mantém a integridade das referências (saque, auditoria) sem guardar dados pessoais. |
 | D78 | **Desligamento gracioso** no `SIGTERM` (aviso com contagem, recusa de novos logins, salvar, sair) e `hello` com protocolo 3, versão do servidor e hash dos dados. | Reinícios sem perda e sem surpresa para quem joga; cliente desatualizado recebe mensagem clara. |
 | D79 | **TLS direto opcional** (`--tls-cert/--tls-key`) além do proxy. | Permite `wss://` sem proxy em instalações pequenas; em produção o proxy (Caddy) renova certificados sozinho. |
+| D86 | **Moderação por conta**: suspensão (com motivo, até uma data ou sem data) e silêncio gravados na conta, recusados no login da zona e do serviço de contas; mestres suspendem até 72 h, acima disso só administradores; denúncia pelo chat grava as últimas falas do denunciado (memória de 1 h, nunca o chat de todos); o servidor relê suspensões e silêncios do banco a cada minuto. | O teste público precisa de ferramenta para convivência. Conferir o banco a cada minuto deixa a ferramenta de linha de comando valer sem canal extra até o servidor; guardar só as falas do denunciado limita os dados pessoais (LGPD). |
 
 ## Som
 

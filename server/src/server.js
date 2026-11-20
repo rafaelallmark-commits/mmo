@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { verifyToken, ReplayGuard } from './token.js';
 import { TradeManager } from './trade.js';
 import { ClanManager } from './clans.js';
+import { Moderation, banMessage } from './moderation.js';
 import { enhanceable, enhanceQuote, enhancePreview, rollEnhance, enhanceOutcome } from './smith.js';
 import { randomUUID } from 'node:crypto';
 import { loadGameData, ATTRS } from './data.js';
@@ -52,6 +53,7 @@ export class GameServer {
     this.replay = new ReplayGuard();
     this.trades = new TradeManager(this);
     this.clans = new ClanManager(this);
+    this.mod = new Moderation(this);
     this.closing = false;
     this.dataVersion = dataVersionOf(this.data);
     this.byChar = new Map(); // charId -> session
@@ -164,7 +166,7 @@ export class GameServer {
     this.tickTrials();
     this.tickDungeons();
     this.tickCount++;
-    if (this.tickCount % this.opts.tickHz === 0) { for (const pid of this.parties.keys()) this.sendPartyUpdate(pid); this.trades.check(); }
+    if (this.tickCount % this.opts.tickHz === 0) { for (const pid of this.parties.keys()) this.sendPartyUpdate(pid); this.trades.check(); this.mod.sweep(); }
     this.metrics.recordTick(performance.now() - t0);
   }
 
@@ -476,6 +478,7 @@ export class GameServer {
       case 'storage_take': return this.hStorageTake(p, msg);
       case 'dungeon_enter': return this.hDungeonEnter(s, p, msg);
       case 'gm': return this.hGm(p, msg);
+      case 'report': return this.mod.report(p, msg);
       // comércio
       case 'trade_request': return this.trades.request(p, msg.name);
       case 'trade_accept': return this.trades.accept(p, msg.from);
@@ -574,6 +577,8 @@ export class GameServer {
   }
 
   completeLogin(s, msg, acc, via) {
+    const ban = banMessage(acc);
+    if (ban) { this.audit('login_banned', { accountId: acc.id, ip: s.ip, via }); return { ok: false, code: 'banned', reason: ban }; }
     const old = this.byAccount.get(acc.id);
     if (old) {
       // Reconexão: a sessão antiga (talvez "pendurada") é encerrada e salva antes de continuar.
@@ -582,6 +587,7 @@ export class GameServer {
     }
     s.accountId = acc.id;
     s.role = acc.role ?? 'player';
+    this.mod.onLogin(s, acc);
     s.delta = msg.delta === true; // cliente entende snapshots por diferença
     this.audit('login', { accountId: acc.id, ip: s.ip, via });
     this.byAccount.set(acc.id, s);
@@ -1226,6 +1232,8 @@ export class GameServer {
       if (sess.chat.length >= this.opts.chatPer5s) return { ok: false, code: 'chat_flood', reason: 'Calma: mensagens demais em pouco tempo.' };
       sess.chat.push(now);
     }
+    const blocked = this.mod.chatBlocked(p, channel, text);
+    if (blocked) return blocked;
     if (channel === 'clan') {
       const t = typeof text === 'string' ? text.replace(/[\u0000-\u001f]/g, '').trim().slice(0, 200) : '';
       if (!t) return { ok: false, code: 'empty', reason: 'Mensagem vazia.' };
@@ -1254,6 +1262,8 @@ export class GameServer {
     const s = this.byChar.get(p.char.id);
     if (!this.opts.dev && !['gm', 'admin'].includes(s?.role)) return { ok: false, code: 'forbidden', reason: 'Comandos de mestre desativados.' };
     this.audit('gm', { accountId: s?.accountId ?? null, charId: p.char.id, ip: s?.ip ?? null, cmd: msg.cmd, args: Object.fromEntries(Object.entries(msg).filter(([k]) => !['t', 'rid', 'cmd'].includes(k))) });
+    const modRes = this.mod.gm(p, msg, s);
+    if (modRes) return modRes;
     const c = p.char;
     if (msg.cmd === 'give') {
       const def = this.data.items[msg.defId];

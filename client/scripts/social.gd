@@ -554,8 +554,18 @@ func _msg_or_err(r) -> void:
 
 # ---------------- comandos de chat ----------------
 ## /troca Nome · /duelo Nome · /c texto · /cla · /cla criar Nome SIGLA · /cla convidar Nome · /cla sair
+## /denunciar Nome motivo · equipe: /gm expulsar|suspender|silenciar|liberar|desbloquear|onde|anunciar
 func chat_command(t: String) -> bool:
-	if t.begins_with("/troca "):
+	if t.begins_with("/denunciar "):
+		var rest := t.substr(11).strip_edges()
+		var sp := rest.find(" ")
+		if sp <= 0:
+			hud.error("Use: /denunciar Nome motivo")
+		else:
+			Net.request("report", {"name": rest.substr(0, sp), "reason": rest.substr(sp + 1)}, _msg_or_err)
+	elif t.begins_with("/gm "):
+		_gm_command(t.substr(4).strip_edges())
+	elif t.begins_with("/troca "):
 		Net.request("trade_request", {"name": t.substr(7).strip_edges()}, _msg_or_err)
 	elif t.begins_with("/duelo "):
 		Net.request("duel_request", {"name": t.substr(7).strip_edges()}, _msg_or_err)
@@ -581,3 +591,35 @@ func chat_command(t: String) -> bool:
 	else:
 		return false
 	return true
+
+## Moderação (só contas da equipe): /gm expulsar Nome motivo · /gm suspender Nome horas|perm motivo ·
+## /gm desbloquear Nome · /gm silenciar Nome minutos motivo · /gm liberar Nome · /gm onde Nome · /gm anunciar texto
+func _gm_command(rest: String) -> void:
+	var parts := rest.split(" ", false)
+	if parts.is_empty():
+		return
+	var cmd := parts[0]
+	var name := parts[1] if parts.size() > 1 else ""
+	var tail := func(from: int) -> String:
+		return " ".join(parts.slice(from)) if parts.size() > from else ""
+	match cmd:
+		"expulsar":
+			Net.request("gm", {"cmd": "kick", "name": name, "reason": tail.call(2)}, _msg_or_err)
+		"suspender":
+			var h := parts[2] if parts.size() > 2 else ""
+			var hours: Variant = h.to_float()
+			if h == "perm":
+				hours = "perm"
+			Net.request("gm", {"cmd": "ban", "name": name, "hours": hours, "reason": tail.call(3)}, _msg_or_err)
+		"desbloquear":
+			Net.request("gm", {"cmd": "unban", "name": name}, _msg_or_err)
+		"silenciar":
+			Net.request("gm", {"cmd": "mute", "name": name, "minutes": (parts[2] if parts.size() > 2 else "0").to_float(), "reason": tail.call(3)}, _msg_or_err)
+		"liberar":
+			Net.request("gm", {"cmd": "unmute", "name": name}, _msg_or_err)
+		"onde":
+			Net.request("gm", {"cmd": "where", "name": name}, _msg_or_err)
+		"anunciar":
+			Net.request("gm", {"cmd": "announce", "text": tail.call(1)}, _msg_or_err)
+		_:
+			hud.error("Comandos da equipe: expulsar, suspender, desbloquear, silenciar, liberar, onde, anunciar")
