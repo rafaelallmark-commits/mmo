@@ -16,8 +16,8 @@ Agora os condutores voltam a funcionar sozinhos: sinos tocam debaixo da terra, m
 | Mara Quintela, cartógrafa | Estrada Velha → Galerias | Guia o jogador; mapeia a rede; quer a verdade mais que um culpado. |
 | Sentinela Ruy | Posto da Ponte | Guarda do posto de guarda; ponto de retorno ao cair. |
 | Mestres de classe | Pedrâmbar / Vau de Nácar | Ensinam habilidades, requisitos e aplicam a prova de classe. |
-| Gusmão (Pedrâmbar) e Tiela Martelo-Fino (Vau de Nácar) | Ferreiros | Refino até +3. |
-| Dona Resina (Pedrâmbar) e Boticário Lume (Vau de Nácar) | Tônicos | Comércio de tônicos e missões de coleta. |
+| Gusmão (Pedrâmbar) e Tiela Martelo-Fino (Vau de Nácar) | Ferreiros | Refino até +6; missões de materiais (Pêlo de Cinza, Seda Condutora e a diária Brasa para a Forja), oferecidas e recebidas por qualquer um dos dois. |
+| Dona Resina (Pedrâmbar) e Boticário Lume (Vau de Nácar) | Tônicos | Comércio de tônicos e missões de coleta (Ninho Morno com Dona Resina, Sapos de Vapor com o Boticário Lume). |
 | Joca Vedante, mecânico | Brejo das Bombas → Oficina | Conhece as bombas; quer provar que a rede pode ser segura. |
 | Ilda Varen, engenheira | Galerias do Eco | Quer religar a rede antes do inverno. Tem razão e está errada ao mesmo tempo. |
 | O Custódio da Eclusa | Última Eclusa | Máquina de segurança que fecha as saídas quando a pressão sobe. |
@@ -55,7 +55,7 @@ Cena em tempo real, câmera elevada mais baixa que a de jogo, sem interface. O j
 
 ## Como ler as missões
 
-Cada missão principal lista **NPC**, **objetivo**, **diálogo curto**, **recompensa**, **pré-requisitos** e **condição de conclusão** (o que o servidor verifica). O XP das missões principais soma ~30% do XP de cada faixa de níveis (tabela em `04-progressao-e-formulas.md`). **A história pode ser concluída com a arma inicial**: nenhuma missão principal exige ter equipado um item de faixa superior. As missões secundárias apontam bons pontos de caça e motivos para voltar a cada mapa, sem impor uma rota única.
+Cada missão principal lista **NPC**, **objetivo**, **diálogo curto**, **recompensa**, **pré-requisitos** e **condição de conclusão** (o que o servidor verifica). O XP das missões principais soma ~30% do XP de cada faixa de níveis; com as secundárias, as missões dão no máximo 55% do XP de uma faixa (conta em `04-progressao-e-formulas.md`, 4.2.1). **A história pode ser concluída com a arma inicial**: nenhuma missão principal exige ter equipado um item de faixa superior. As missões secundárias apontam bons pontos de caça e motivos para voltar a cada mapa, sem impor uma rota única.
 
 ---
 
@@ -91,7 +91,7 @@ Cada missão principal lista **NPC**, **objetivo**, **diálogo curto**, **recomp
 - **NPC**: Mara Quintela (Curva dos Cães).
 - **Objetivo**: afastar a matilha da Curva dos Cães (6 Cães de Ferrugem) e fincar 3 marcos de rota no caminho.
 - **Diálogo**: MARA: "A estrada velha é mais longa, mas não abre no meio. Se a gente marcar, as caravanas voltam a passar. Cuidado: esses cães chamam os outros quando você bate em um."
-- **Recompensa**: 150 XP, Botas leves/Grevas/Sandálias de faixa 1 da sua armadura (escolha conforme a classe).
+- **Recompensa**: 150 XP, 30 ouro e as botas de faixa 1 da sua armadura: Grevas de Ferro Batido (armadura pesada), Botas de Couro Cru (leve) ou Sandálias de Linho (vestes).
 - **Pré-requisitos**: 1.3.
 - **Conclusão**: 6 abates registrados + 3 marcos interagidos (estado salvo por marco, reconexões não perdem progresso).
 
@@ -123,7 +123,7 @@ Cada missão principal lista **NPC**, **objetivo**, **diálogo curto**, **recomp
 - **Diálogo**: JOCA: "Se eu abrir devagar, ela não estoura. Se você deixar alguma coisa morder minha mão, estoura. Combinado?"
 - **Recompensa**: 900 XP, Anel de Bronze.
 - **Pré-requisitos**: 2.1.
-- **Conclusão**: Joca vivo no fim do cronômetro do servidor. Se ele cair, a missão reinicia em 30 s (sem perder o progresso de 2.1).
+- **Conclusão**: Joca vivo no fim do cronômetro do servidor. Se ele cair, a missão reinicia em 30 s (sem perder o progresso de 2.1). Implementado: a **Válvula principal**, ao lado do Joca na frente da Casa das Bombas, começa a defesa; o Joca da defesa (900 de vida) fica no lugar do NPC e seis ondas (Válvulas Errantes e Enguias de Lodo, a cada 30 s) vêm do canal e miram nele até alguém chamar a atenção delas. Se ele cair, ou o grupo inteiro cair, as ondas somem e ele recomeça 30 s depois, assim que alguém do grupo estiver por perto; vencido o cronômetro, conta para todo o grupo a até 40 m. Recompensa: 900 XP, 60 ouro, Anel de Bronze.
 
 ### 2.3 Registros Molhados
 - **NPC**: Joca Vedante.
@@ -183,7 +183,7 @@ Cada missão principal lista **NPC**, **objetivo**, **diálogo curto**, **recomp
   - Cantora: manter três aprendizes vivos sob dano contínuo (Selo do Véu).
   - Tecelão: conter três ondas com áreas e controle (Círculo de Fuligem).
 - **Diálogo** (Dama Aurélia): "Escudo não é para você. É para quem está atrás de você. Mostre que entendeu."
-- **Recompensa**: 1.800 XP, habilidade de nível 10 no grau 1, teto de graus passa a 4, título "Provado(a)".
+- **Recompensa**: 1.800 XP, habilidade de nível 10 no grau 1, teto de graus passa a 4, título "Provado(a)" — "Provado" ou "Provada" conforme a classe (Escudeira, Andarilha e Cantora são "Provada"). O título aparece acima do nome; na ficha (C) dá para escolher qual dos títulos ganhos mostrar.
 - **Pré-requisitos**: nível 10; 3.2.
 - **Conclusão**: objetivo da instância concluído (a instância é recriada se a conexão cair; a recompensa só é concedida uma vez).
 
@@ -191,7 +191,7 @@ Cada missão principal lista **NPC**, **objetivo**, **diálogo curto**, **recomp
 - **NPC**: Mara (Arquivo).
 - **Objetivo**: chegar à Sala do Supervisor pelos Trilhos da Esteira e abrir o cofre de ordens.
 - **Diálogo**: MARA (com a ordem na mão): "Duas assinaturas. Âmbar e Nacre. Na mesma noite, no mesmo papel. Eles desligaram juntos." · MARA: "E aqui embaixo, carimbo da Companhia: 'Registro substituído'. Alguém trocou os livros das duas cidades."
-- **Recompensa**: 2.700 XP, Elmo/Capuz/Diadema de faixa 9 da sua armadura.
+- **Recompensa**: 2.700 XP, 150 ouro e a peça de cabeça de faixa 9 da sua armadura: Elmo de Ferro Frio, Capuz de Couro Rebitado ou Diadema de Tecido de Bomba.
 - **Pré-requisitos**: 3.3.
 - **Conclusão**: cofre aberto (interação) — o Supervisor de Turno (elite) guarda a sala, mas é possível abrir o cofre sem derrotá-lo se o grupo segurar a atenção dele.
 
@@ -287,7 +287,7 @@ Se a conexão cair no meio do encontro, a instância espera o jogador por 3 minu
 - **Diálogo**: ILDA (lendo o registro): "As últimas mensagens não são da Companhia. São pedidos de socorro... datados de trezentos anos atrás. Antes das cidades." · MARA: "E esta aqui? É de hoje." · Na tela do registro: **"Estamos ouvindo. A passagem continua fechada."**
 - **Recompensa**: 5.700 XP, título "Quem Ouviu o Segundo Toque".
 - **Pré-requisitos**: 5.3.
-- **Conclusão**: entregar o registro nas duas cidades (abre o gancho do arco depois do nível 20: quem enviou os pedidos e por que voltaram a circular? — respondido em parte no capítulo 6).
+- **Conclusão**: entregar o registro nas duas cidades (abre o gancho do arco depois do nível 20: quem enviou os pedidos e por que voltaram a circular? — respondido em parte no capítulo 6). Implementado: mostrar o registro a Teodoro, a um mestre de classe de Pedrâmbar e a um do Vau de Nácar (qualquer um de cada cidade, em qualquer ordem) e entregar a qualquer mestre; dá o título "Quem Ouviu o Segundo Toque".
 
 ---
 
@@ -349,25 +349,32 @@ Missões secundárias apontam lugares bons para caçar em cada faixa e dão moti
 
 | Missão | NPC | Nível | Ponto de caça | Objetivo | Recompensa | Por que voltar |
 |---|---|---|---|---|---|---|
-| Ninho Morno | Dona Resina | 2–3 | Encosta Morna (Besouros-Brasa) | 10 carapaças mornas | 120 XP, Tônicos ×5 | Tônicos baratos para quem começa |
-| Ponte do Lagarto | Sentinela Ruy | 3–5 | Leito Seco (Lagartos de Lastro) | 8 abates | 180 XP, Luvas de faixa 1 | Monstro lento, bom para solo de distância |
-| Pêlo de Cinza | Gusmão / Tiela | 4–6 | Campo de Cinza (Javalis de Cinza) | 6 couros chamuscados | 250 XP, Pó de Refino ×2 | Primeiros materiais do ferreiro |
-| Pronto para a Pedreira | Mestre de classe | 5 | — | Equipar qualquer arma de nível 5 da sua classe | 200 XP | Fecha o ciclo "achar → planejar → equipar" |
-| Recibo do Capataz | Teodoro (repetível 1×/dia) | 4–6 | Curva do Capataz (elite) | Derrotar o Capataz Rachado | 120 XP, 30 ouro | Chance de Anel do Sulco (incomum) |
-| Sapos de Vapor | Boticário Lume | 5–7 | Lagoa das Bombas | 12 glândulas de vapor | 900 XP, Tônicos ×8 | Ponto solo de baixo risco |
-| Fios de Enguia | Joca | 6–8 | Canal Raso (Enguias de Lodo, agressivas) | 10 fios condutores | 1.100 XP, Anel de Bronze | Bom para dupla corpo a corpo + distância |
-| Bico de Ferro | Vigia Olga Sal | 7–9 | Margem Alta (Garças de Ferrugem) | 8 bicos | 1.300 XP | Garças isoladas: caça solo eficiente |
-| Bomba-Mestra | Joca (repetível 1×/dia) | 8–10 | Casa das Bombas (elite) | Derrotar a Bomba-Mestra Desregulada | 1.500 XP | Brasa Cristalizada e família de faixa 9; Amuleto do Segundo Toque (raro) |
-| Fusíveis Velhos | Pina | 9–11 | Galeria dos Escavadores | 6 fusíveis extras | 2.200 XP | Família de armaduras de Ferro Frio |
-| Esteira Desgovernada | Pina | 11–12 | Trilhos da Esteira (Lâminas, passivas) | 10 abates sem ser atingido pela esteira | 3.000 XP | Monstro de vida baixa e dano alto: teste de posicionamento |
-| Supervisor de Turno | Mara (repetível 1×/dia) | 11–13 | Sala do Supervisor (elite, grupo) | Derrotar o Supervisor | 3.500 XP | Pó de Refino; chance de faixa 13 |
-| Ecos Repetidos | Mara | 13–15 | Salão dos Sinos (Ecoantes) | 12 ecos presos | 6.000 XP | Ponto de grupo (Ecoantes repetem o último golpe) |
-| Seda Condutora | Tiela / Gusmão | 15–16 | Ponte dos Fios (Aranhas de Conduto) | 10 fios de seda | 8.000 XP | Material para refino +2/+3 |
-| Mãe do Eco | Ilda (repetível 1×/dia) | 15–17 | Ninho da Mãe (elite, grupo) | Derrotar a Mãe do Eco | 9.000 XP | Faixa 13/17 |
-| Escória | Joca | 17–19 | Bacia de Vapor (Escória Pressurizada) | 15 núcleos | 14.000 XP | Ponto de grupo com explosões em área |
-| Draga Perdida | Ilda | 17–20 | Canal Lamacento (Dragas Vivas) | 10 abates | 15.000 XP | Família de Liga Rubra (faixa 17) |
+| Ninho Morno | Dona Resina (Pedrâmbar) | 2–3 | Encosta Morna (Besouros-Brasa) | 10 Carapaças Mornas | 75 XP, Tônicos ×5 | Tônicos baratos para quem começa |
+| Ponte do Lagarto | Sentinela Ruy | 3–5 | Leito Seco (Lagartos de Lastro) | 8 abates | 115 XP, luvas de faixa 1 da sua armadura | Monstro lento, bom para solo de distância |
+| Pêlo de Cinza | Gusmão ou Tiela | 4–6 | Campo de Cinza (Javalis de Cinza) | 6 Couros Chamuscados e 5 Sucatas de Condutor | 160 XP, Pó de Refino ×2 | Primeiros materiais do ferreiro |
+| Pronto para a Pedreira | Mestre de classe | 5 | — | Equipar qualquer arma de nível 5 da sua classe | 125 XP | Fecha o ciclo "achar → planejar → equipar" |
+| Recibo do Capataz | Teodoro (repetível 1×/dia) | 4–6 | Curva do Capataz (elite) | Derrotar o Capataz Rachado | 75 XP, 30 ouro | Chance de Anel do Sulco (incomum) e, para o Quebraferro, do Machado de Pedreira Lascado |
+| Sapos de Vapor | Boticário Lume (Vau de Nácar) | 5–7 | Lagoa das Bombas | 12 Glândulas de Vapor | 570 XP, Tônicos ×8 | Ponto solo de baixo risco |
+| Fios de Enguia | Joca | 6–8 | Canal Raso (Enguias de Lodo, agressivas) | 10 Fios Condutores | 700 XP, Anel de Bronze | Bom para dupla corpo a corpo + distância |
+| Bico de Ferro | Vigia Olga Sal | 7–9 | Margem Alta (Garças de Ferrugem) | 8 Bicos de Garça | 825 XP | Garças isoladas: caça solo eficiente |
+| Bomba-Mestra | Joca (repetível 1×/dia) | 8–10 | Casa das Bombas (elite) | Derrotar a Bomba-Mestra Desregulada | 955 XP | Brasa Cristalizada e família de faixa 9; Amuleto do Segundo Toque (raro) |
+| Fusíveis Velhos | Pina | 9–11 | Galeria dos Escavadores | 6 Fusíveis Velhos | 1.575 XP | Família de armaduras de Ferro Frio |
+| Brasa para a Forja | Gusmão ou Tiela (repetível 1×/dia) | 9+ | — | 6 Brasas Cristalizadas e 10 Sucatas de Condutor | Pó de Refino ×4 (sem XP) | Dá destino à brasa e à sucata que sobram da caça |
+| Esteira Desgovernada | Pina | 11–12 | Trilhos da Esteira (Lâminas, passivas) | 10 abates seguidos sem ser atingido pela esteira | 2.150 XP | Monstro de vida baixa e dano alto: teste de posicionamento |
+| Supervisor de Turno | Mara (repetível 1×/dia) | 11–13 | Sala do Supervisor (elite, grupo) | Derrotar o Supervisor | 2.500 XP | Pó de Refino; chance de faixa 13 |
+| Ecos Repetidos | Mara | 13–15 | Salão dos Sinos (Ecoantes) | 12 Ecos Presos | 4.400 XP | Ponto de grupo (Ecoantes repetem o último golpe) |
+| Seda Condutora | Tiela ou Gusmão | 15–16 | Ponte dos Fios (Aranhas de Conduto) | 10 fios de Seda Condutora e 4 Brasas Cristalizadas | 5.900 XP, 250 ouro, Pó de Refino ×5 | Material para refino +2/+3 |
+| Mãe do Eco | Ilda (repetível 1×/dia) | 15–17 | Ninho da Mãe (elite, grupo) | Derrotar a Mãe do Eco | 6.600 XP, 400 ouro | Faixa 13/17 |
+| Escória Viva | Joca | 17–19 | Bacia de Vapor (Escória Pressurizada) | 15 Núcleos de Escória | 14.000 XP, 450 ouro, Tônicos Médios ×5 | Ponto de grupo com explosões em área |
+| Draga Perdida | Ilda | 17–20 | Canal Lamacento (Dragas Vivas) | 10 abates | 15.000 XP, 500 ouro | Família de Liga Rubra (faixa 17) e, para a Cantora, o Cetro do Sino Mudo (raro) |
 | Badalos Soltos | Joca | 21–22 | Salão das Placas (Sineiros de Bronze, matilha) | 12 abates | 9.000 XP, Tônicos Médios ×8 | Máquinas em bando: puxar pela borda; faixa 21 |
 | Túneis Novos | Mara | 23–24 | Poço Quente e sul das ruínas (Toupeiras de Basalto) | 12 abates | 10.500 XP, Pó de Refino ×5 | Ponto de grupo; faixa 21 e chance de faixa 25 |
 | Selador da Porta Funda | — (elite diária) | 24–25 | Porta Funda (elite, grupo) | Derrotar o Selador | XP em dobro e saque extra no primeiro abate do dia | Faixa 21 (60%), faixa 25 (12%), Pó de Refino Superior e, às vezes, Selo de Proteção |
 
-As missões secundárias seguem o mesmo modelo de dados das principais (NPC, objetivo, recompensa, pré-requisitos, condição de conclusão) e entram no M2 (capítulos 1–3), M3 (capítulos 4–5) e pós-v1 (capítulo 6).
+As missões secundárias seguem o mesmo modelo de dados das principais (NPC, objetivo, recompensa, pré-requisitos, condição de conclusão) e entram no M2 (capítulos 1–3), M3 (capítulos 4–5) e pós-v1 (capítulo 6). Como funcionam no jogo:
+
+- **Materiais de coleta** (carapaças, couros, glândulas, fios, bicos, fusíveis, ecos, seda e núcleos) são itens de missão: só caem do monstro certo enquanto a missão está ativa e a bolsa ainda não tem o bastante, um por abate, para todo participante do abate (como os abates de missão). Não se vendem, trocam, descartam nem vão para o depósito, e saem todos da bolsa na entrega; um que tenha ficado no chão some quando é coletado depois da entrega. Sucata de Condutor e Brasa Cristalizada, que caem de qualquer jeito, são consumidas só na quantidade pedida.
+- **Diárias** (repetíveis 1×/dia) voltam à 00:00 UTC, o mesmo relógio das elites diárias; o NPC deixa de oferecer a missão no resto do dia e o diário (J) e o quadro de missões dizem em quanto tempo ela volta.
+- **Esteira Desgovernada**: Pina religa a esteira dos Trilhos só para quem está com a missão. A cada 7 s faixas do chão acendem (aviso de 2 s, como as linhas do Custódio) e a esteira varre quem estiver nelas (12% da vida); ser varrido zera os abates seguidos.
+- **XP**: as secundárias do documento levavam as faixas 1–16 a 64%–69% do XP vindo de missões. Os valores acima já estão reduzidos na mesma proporção dentro de cada faixa, para que principais + secundárias (diárias contadas uma vez) fiquem em no máximo 55% (conta em `04-progressao-e-formulas.md`, 4.2.1; D158).
+- **Quadro de missões**: nas praças de Pedrâmbar e do Vau de Nácar, mostra tudo o que o personagem pode aceitar no mundo inteiro, com nível, NPC e mapa, e as diárias que voltam amanhã.

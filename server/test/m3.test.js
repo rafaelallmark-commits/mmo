@@ -183,9 +183,12 @@ test('Custódio: quem está caído na morte do chefe também leva XP, a única e
   assert.ok(caido.char.xp > xp0, 'o caído recebeu a XP do chefe');
   assert.ok(caido.char.dead, 'continua caído até a vitória o levantar (subir de nível não levanta)');
   assert.ok(credits.some(([n, d]) => n === 'Caido' && d === 'lock_custodian'), 'crédito da missão para o caído');
-  const weapon = data.lootTables.lt_lock_custodian.entries.find((e) => e.type === 'classDrop').byClass.breaker;
+  // o Quebraferro do kit empunha o machado de uma mão: a única do Custódio vem da mesma família
+  const weapon = 'axe_1h_t20';
+  assert.ok([].concat(data.lootTables.lt_lock_custodian.entries.find((e) => e.type === 'classDrop').byClass.breaker).includes(weapon));
   const loot = store.unclaimedLoot(caido.char.id, Date.now()).map((r) => r.def_id);
   assert.ok(loot.includes(weapon), `o caído recebeu ${weapon}`);
+  assert.ok(loot.some((d) => /^heavy_.*_t20$/.test(d)), 'e uma peça única de armadura pesada');
 });
 
 // ---------------------------------------------------------------- capítulos 4 e 5
@@ -408,9 +411,10 @@ async function runDungeon(url, label, comp, { reconnect = false } = {}) {
   // recompensa: arma única da classe para cada participante
   await sleep(400);
   for (const c of clients) {
-    const weapon = data.lootTables.lt_lock_custodian.entries.find((e) => e.type === 'classDrop').byClass[c.classId];
-    const got = [...c.loot.values()].some((l) => l.defId === weapon) || c.events.some((m) => m.t === 'loot' && m.loot.defId === weapon);
-    assert.ok(got, `${c.label} recebeu ${weapon}`);
+    // a arma única da classe (da família da arma equipada, quando a classe usa mais de uma)
+    const weapons = [].concat(data.lootTables.lt_lock_custodian.entries.find((e) => e.type === 'classDrop').byClass[c.classId]);
+    const got = [...c.loot.values()].some((l) => weapons.includes(l.defId)) || c.events.some((m) => m.t === 'loot' && weapons.includes(m.loot.defId));
+    assert.ok(got, `${c.label} recebeu ${weapons.join(' ou ')}`);
   }
   for (const c of clients) await c.close().catch(() => {});
 }

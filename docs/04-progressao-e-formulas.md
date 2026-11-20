@@ -13,7 +13,7 @@ Atributos permanentes = iniciais da classe + pontos distribuídos. São os únic
 
 ## 4.2 Tabela de XP acumulada (níveis 1–25)
 
-Calibração: a tabela foi montada com 3 abates por minuto de caça ativa solo contra monstros do mesmo nível (inclui deslocamento e pausas curtas): XP para o próximo nível = meta em minutos × 3 × XP da curva de referência do nível (4.3), arredondado para dezenas, com meta = 2 + 1,5 × (nível − 1). A mesma regra vale para os níveis 21–25 (pós-v1). A simulação do Marco 4 ([relatório](relatorio-progressao.md)) mostrou que, com habilidades, tônicos e o equipamento do armeiro, quem só caça mata bem mais do que 3 por minuto (de 3 a 10 conforme o nível; perto de 5 na média): em vez de refazer a tabela, o **XP de cada monstro** foi ajustado nível a nível para o tempo só caçando ficar perto da meta. A coluna "Abates/min para a meta" mostra o ritmo que cada nível pede com o XP atual. Os tempos são **metas de teste** para o Marco 4 medir e ajustar, não promessas. Missões principais somam cerca de 30% do XP de cada capítulo, então quem faz caça + missões chega ao teto de nível em cerca de 70% do tempo de quem só caça.
+Calibração: a tabela foi montada com 3 abates por minuto de caça ativa solo contra monstros do mesmo nível (inclui deslocamento e pausas curtas): XP para o próximo nível = meta em minutos × 3 × XP da curva de referência do nível (4.3), arredondado para dezenas, com meta = 2 + 1,5 × (nível − 1). A mesma regra vale para os níveis 21–25 (pós-v1). A simulação do Marco 4 ([relatório](relatorio-progressao.md)) mostrou que, com habilidades, tônicos e o equipamento do armeiro, quem só caça mata bem mais do que 3 por minuto (de 3 a 10 conforme o nível; perto de 5 na média): em vez de refazer a tabela, o **XP de cada monstro** foi ajustado nível a nível para o tempo só caçando ficar perto da meta. A coluna "Abates/min para a meta" mostra o ritmo que cada nível pede com o XP atual. Os tempos são **metas de teste** para o Marco 4 medir e ajustar, não promessas. Missões principais somam cerca de 30% do XP de cada capítulo, então quem faz caça + missões principais chega ao teto de nível em cerca de 70% do tempo de quem só caça (coluna "Meta caça + missões"); as secundárias somam mais, até o teto de 55% por faixa (4.2.1).
 
 | Nível | XP acumulada | XP para o próximo | Monstro típico do nível (XP) | Abates solo | Abates/min para a meta | Meta só caça | Meta caça + missões | Acumulado só caça |
 |---|---|---|---|---|---|---|---|---|
@@ -42,6 +42,19 @@ Calibração: a tabela foi montada com 3 abates por minuto de caça ativa solo c
 | 23 | 378.440 | 60.270 | Voz Soterrada (367) | 165 | 4,7 | 35 min | 24,5 min | 7,1 h |
 | 24 | 438.710 | 66.800 | Toupeira de Basalto (409) | 164 | 4,5 | 36,5 min | 25,5 min | 7,7 h |
 | 25 | 505.510 | — | — | — | — | — | — | — |
+
+### 4.2.1 XP de missões por faixa
+
+Soma do XP de todas as missões que ficam disponíveis em cada faixa (pelo nível mínimo de cada uma), contra o XP que a faixa pede na tabela acima. As **diárias** (Recibo do Capataz, Bomba-Mestra, Brasa para a Forja, Supervisor de Turno e A Mãe do Eco) entram **uma vez**. As principais ficam em ~30%; as secundárias completam até no máximo **55%** — as do documento passavam disso nas faixas 1–16 (de 64% a 69%) e foram reduzidas na mesma proporção dentro de cada faixa (D158). O validador (`npm run validate-data`) recusa uma faixa acima do teto. A simulação de progressão do Marco 4 continua só de caça (sem missões).
+
+| Faixa (níveis) | Capítulo | XP da faixa | Principais | % da faixa | Secundárias | % da faixa | Missões no total | % da faixa |
+|---|---|---|---|---|---|---|---|---|
+| 1–5 | 1 | 1.930 | 630 | 32,6% | 425 | 22% | 1.055 | 54,7% |
+| 5–9 | 2 | 12.700 | 3.800 | 29,9% | 3.175 | 25% | 6.975 | 54,9% |
+| 9–12 | 3 | 24.960 | 7.500 | 30% | 6.225 | 24,9% | 13.725 | 55% |
+| 12–16 | 4 | 67.730 | 20.300 | 30% | 16.900 | 25% | 37.200 | 54,9% |
+| 16–20 | 5 | 125.660 | 37.700 | 30% | 29.000 | 23,1% | 66.700 | 53,1% |
+| 20–25 | 6 | 272.530 | 81.800 | 30% | 19.500 | 7,2% | 101.300 | 37,2% |
 
 ## 4.3 XP por monstro
 

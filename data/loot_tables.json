@@ -1,5 +1,5 @@
 {
- "_doc": "Tabelas de saque. Cada participante elegível rola a tabela inteira separadamente (saque individual). Tipos: gold, item, pool (um item aleatório da lista), classDrop (item conforme a classe de quem recebe).",
+ "_doc": "Tabelas de saque. Cada participante elegível rola a tabela inteira separadamente (saque individual). Tipos: gold, item, pool (um item aleatório da lista), classDrop (item conforme a classe de quem recebe; com uma lista de itens para a classe, vale o da família da arma equipada, senão um sorteado) e classPool (um item sorteado da lista da classe). Materiais de coleta das missões não ficam aqui: caem pelo objetivo collect com drop (quests.json), só com a missão ativa.",
  "tables": {
   "lt_tier_1": {
    "entries": [
@@ -511,6 +511,13 @@
       "amulet_t21"
      ],
      "chance": 0.004
+    },
+    {
+     "type": "classDrop",
+     "chance": 0.005,
+     "byClass": {
+      "veilsinger": "scepter_t17"
+     }
     }
    ]
   },
@@ -674,6 +681,13 @@
      "chance": 0.25,
      "min": 1,
      "max": 1
+    },
+    {
+     "type": "classDrop",
+     "chance": 0.15,
+     "byClass": {
+      "breaker": "axe_1h_t5_u"
+     }
     }
    ]
   },
@@ -1027,11 +1041,18 @@
      "chance": 1,
      "min": 2,
      "max": 3
+    },
+    {
+     "type": "classDrop",
+     "chance": 0.1,
+     "byClass": {
+      "veilsinger": "scepter_t17"
+     }
     }
    ]
   },
   "lt_lock_custodian": {
-   "_doc": "Chefe: cada participante recebe uma arma única de nível 20 da sua classe e uma joia única.",
+   "_doc": "Chefe da Última Eclusa: a arma única da classe (da família da arma equipada, quando a classe usa mais de uma) e o Anel do Meridiano ou o Amuleto da Resposta saem uma única vez por personagem (D60); a peça única de armadura ou de mão secundária da classe (classPool) sai em toda vitória, junto com ouro e materiais.",
    "entries": [
     {
      "type": "gold",
@@ -1043,14 +1064,89 @@
      "type": "classDrop",
      "chance": 1,
      "byClass": {
-      "breaker": "axe_2h_t20",
-      "bastion": "claw_t20",
+      "breaker": [
+       "axe_2h_t20",
+       "axe_1h_t20"
+      ],
+      "bastion": [
+       "claw_t20",
+       "hammer_1h_t20"
+      ],
       "pikeman": "spear_2h_t20",
       "warden": "bow_t20",
-      "dawnshield": "sword_1h_t20",
+      "dawnshield": [
+       "sword_1h_t20",
+       "sword_2h_t20"
+      ],
       "windwalker": "javelin_t20",
-      "veilsinger": "scepter_t20",
-      "emberweaver": "staff_2h_t20"
+      "veilsinger": [
+       "scepter_t20",
+       "wand_t20"
+      ],
+      "emberweaver": [
+       "staff_2h_t20",
+       "wand_t20"
+      ]
+     }
+    },
+    {
+     "type": "classPool",
+     "chance": 1,
+     "byClass": {
+      "breaker": [
+       "heavy_armor_t20",
+       "heavy_helm_t20",
+       "heavy_gloves_t20",
+       "heavy_boots_t20"
+      ],
+      "bastion": [
+       "heavy_armor_t20",
+       "heavy_helm_t20",
+       "heavy_gloves_t20",
+       "heavy_boots_t20",
+       "shield_t20"
+      ],
+      "pikeman": [
+       "heavy_armor_t20",
+       "heavy_helm_t20",
+       "heavy_gloves_t20",
+       "heavy_boots_t20"
+      ],
+      "warden": [
+       "light_armor_t20",
+       "light_hood_t20",
+       "light_gloves_t20",
+       "light_boots_t20",
+       "quiver_t20"
+      ],
+      "dawnshield": [
+       "heavy_armor_t20",
+       "heavy_helm_t20",
+       "heavy_gloves_t20",
+       "heavy_boots_t20",
+       "shield_t20"
+      ],
+      "windwalker": [
+       "light_armor_t20",
+       "light_hood_t20",
+       "light_gloves_t20",
+       "light_boots_t20",
+       "light_shield_t20"
+      ],
+      "veilsinger": [
+       "robe_t20",
+       "robe_circlet_t20",
+       "robe_gloves_t20",
+       "robe_sandals_t20",
+       "focus_t20"
+      ],
+      "emberweaver": [
+       "robe_t20",
+       "robe_circlet_t20",
+       "robe_gloves_t20",
+       "robe_sandals_t20",
+       "focus_t20"
+      ]
      }
     },
     {

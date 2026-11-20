@@ -1,5 +1,5 @@
 {
- "_doc": "Mapas. Coordenadas em metros no plano XZ. M2: Estrada Velha, as duas cidades, Brejo das Bombas e Oficina Soterrada; M3: Galerias do Eco, Canais da Eclusa e a Última Eclusa; pós-v1: A Cava Primeira (níveis 20–25). portals levam a outro mapa; npcs e objects são usados pelas missões.",
+ "_doc": "Mapas. Coordenadas em metros no plano XZ. M2: Estrada Velha, as duas cidades, Brejo das Bombas e Oficina Soterrada; M3: Galerias do Eco, Canais da Eclusa e a Última Eclusa; pós-v1: A Cava Primeira (níveis 20–25). portals levam a outro mapa; npcs e objects são usados pelas missões. objects com kind \"board\" são os quadros de missões das cidades; kind \"defense\" começa uma defesa (defenses: alvo parado com vida, ondas por tempo e cronômetro); hazards são perigos do mapa que só ligam com a missão que precisa deles (a esteira da Oficina).",
  "maps": {
   "estrada_velha": {
    "name": "A Estrada Velha",
@@ -2477,6 +2477,14 @@
      "name": "Página do registro (cofre alagado)",
      "x": 128,
      "z": 60
+    },
+    {
+     "id": "main_valve",
+     "name": "Válvula principal",
+     "x": 109,
+     "z": 56,
+     "kind": "defense",
+     "defense": "joca_valve"
     }
    ],
    "returnToMapReason": "Bomba-Mestra Desregulada (elite), Brasa Cristalizada, família Ferro Frio.",
@@ -4930,7 +4938,97 @@
      "rot": 279,
      "r": 0
     }
-   ]
+   ],
+   "defenses": {
+    "joca_valve": {
+     "name": "Joca Vedante",
+     "model": "npc",
+     "npc": "joca",
+     "x": 112,
+     "z": 58,
+     "hp": 900,
+     "defense": 14,
+     "evasion": 0,
+     "level": 7,
+     "durationMs": 180000,
+     "retryMs": 30000,
+     "followRadius": 30,
+     "spawnAt": [
+      {
+       "x": 96,
+       "z": 64
+      },
+      {
+       "x": 100,
+       "z": 70
+      }
+     ],
+     "waves": [
+      {
+       "atMs": 0,
+       "monsters": [
+        [
+         "errant_valve",
+         2
+        ]
+       ]
+      },
+      {
+       "atMs": 30000,
+       "monsters": [
+        [
+         "silt_eel",
+         2
+        ]
+       ]
+      },
+      {
+       "atMs": 60000,
+       "monsters": [
+        [
+         "errant_valve",
+         1
+        ],
+        [
+         "silt_eel",
+         1
+        ]
+       ]
+      },
+      {
+       "atMs": 90000,
+       "monsters": [
+        [
+         "errant_valve",
+         2
+        ]
+       ]
+      },
+      {
+       "atMs": 120000,
+       "monsters": [
+        [
+         "silt_eel",
+         2
+        ]
+       ]
+      },
+      {
+       "atMs": 150000,
+       "monsters": [
+        [
+         "errant_valve",
+         2
+        ],
+        [
+         "silt_eel",
+         1
+        ]
+       ]
+      }
+     ]
+    }
+   }
   },
   "oficina_soterrada": {
    "name": "Oficina Soterrada",
@@ -7052,7 +7150,70 @@
      "rot": 43,
      "r": 0.69
     }
-   ]
+   ],
+   "hazards": {
+    "belt_sweep": {
+     "name": "Esteira desgovernada",
+     "area": {
+      "x0": 108,
+      "z0": 126,
+      "x1": 140,
+      "z1": 154
+     },
+     "periodMs": 7000,
+     "warnMs": 2000,
+     "width": 3,
+     "damagePctMaxHp": 12,
+     "patterns": [
+      [
+       {
+        "axis": "z",
+        "at": 132
+       },
+       {
+        "axis": "z",
+        "at": 148
+       }
+      ],
+      [
+       {
+        "axis": "x",
+        "at": 116
+       },
+       {
+        "axis": "x",
+        "at": 132
+       }
+      ],
+      [
+       {
+        "axis": "z",
+        "at": 140
+       }
+      ],
+      [
+       {
+        "axis": "x",
+        "at": 124
+       }
+      ],
+      [
+       {
+        "axis": "z",
+        "at": 132
+       },
+       {
+        "axis": "z",
+        "at": 148
+       },
+       {
+        "axis": "x",
+        "at": 124
+       }
+      ]
+     ]
+    }
+   }
   },
   "galerias_eco": {
    "name": "Galerias do Eco",
@@ -14992,7 +15153,15 @@
      "role": "storage"
     }
    ],
-   "objects": [],
+   "objects": [
+    {
+     "id": "board_ambar",
+     "name": "Quadro de missões",
+     "x": 35,
+     "z": 24,
+     "kind": "board"
+    }
+   ],
    "roads": [
     {
      "w": 8,
@@ -15548,7 +15717,15 @@
      "role": "storage"
     }
    ],
-   "objects": [],
+   "objects": [
+    {
+     "id": "board_nacre",
+     "name": "Quadro de missões",
+     "x": 25,
+     "z": 35,
+     "kind": "board"
+    }
+   ],
    "roads": [
     {
      "w": 8,

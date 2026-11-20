@@ -58,6 +58,9 @@ var _channel_left := 0.0
 var ping_label: Label
 var ping_ms := -1.0          # ida e volta medida (média móvel), em ms
 var _ping_in := 0.5
+var defense_label: Label     # cronômetro da defesa (Joca na válvula)
+var _defense_left := 0.0
+var _defense_on := false
 
 func _ready() -> void:
 	layer = 5
@@ -363,6 +366,18 @@ func _build_channel(root: Control) -> void:
 	v.add_child(channel_label)
 	channel_bar = _bar(v, Color("#ffb347"), 320.0)
 	channel_bar.max_value = 1.0
+	# cronômetro da defesa, no alto da tela, enquanto ela dura
+	defense_label = Label.new()
+	defense_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	defense_label.offset_left = -160.0
+	defense_label.offset_right = 160.0
+	defense_label.offset_top = 96.0
+	defense_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	defense_label.add_theme_color_override("font_color", Theme_.AMBER)
+	defense_label.add_theme_font_size_override("font_size", 18)
+	defense_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	defense_label.visible = false
+	root.add_child(defense_label)
 
 func show_channel(text: String, ms: float) -> void:
 	_channel_total = maxf(ms / 1000.0, 0.1)
@@ -385,16 +400,47 @@ func _tick_channel(delta: float) -> void:
 	_channel_left = maxf(0.0, _channel_left - delta)
 	channel_bar.value = 1.0 - _channel_left / _channel_total
 
-## Mensagens da escolta: viram linha no chat e, as importantes, aviso no centro.
+## Mensagens da escolta e da defesa: viram linha no chat e, as importantes, aviso no centro. A defesa
+## (Joca na válvula) também mostra o cronômetro no alto da tela.
 func on_escort(m: Dictionary) -> void:
 	var text := str(m.get("text", ""))
 	system(text)
+	if m.has("msLeft"):
+		_defense_left = float(m["msLeft"]) / 1000.0
+		_defense_on = true
 	if m.has("ambush"):
 		_flash("Emboscada!", Color("#ff6a5a"))
+	elif m.has("wave"):
+		_flash("Onda %d de %d!" % [int(m["wave"]), int(m.get("waves", 0))], Color("#ff6a5a"))
+	elif m.get("started", false) and m.has("msLeft"):
+		_flash("Segure as ondas!", Theme_.AMBER)
+	elif m.get("down", false):
+		_defense_on = false
+		_flash("A válvula fechou!", Color("#ff6a5a"))
+	elif m.get("won", false):
+		_defense_on = false
+		_flash("A válvula abriu!", Theme_.AMBER)
 	elif m.get("broken", false):
 		_flash("A carroça quebrou!", Color("#ff6a5a"))
 	elif m.get("arrived", false):
 		_flash("A carroça chegou!", Theme_.AMBER)
+
+func _tick_defense(delta: float) -> void:
+	if defense_label == null:
+		return
+	if not _defense_on:
+		defense_label.visible = false
+		return
+	_defense_left = maxf(0.0, _defense_left - delta)
+	var s := int(ceil(_defense_left))
+	defense_label.text = "Válvula: %d:%02d" % [s / 60, s % 60]
+	defense_label.visible = true
+
+## "em 5 h 12 min" (até a virada do dia UTC, quando a diária volta)
+func _wait_text(seconds: int) -> String:
+	var h := seconds / 3600
+	var m := int(ceil(float(seconds % 3600) / 60.0))
+	return ("em %d h %d min" % [h, m]) if h > 0 else ("em %d min" % m)
 
 func _tick_ping(delta: float) -> void:
 	_ping_in -= delta
@@ -421,6 +467,7 @@ func _process(delta: float) -> void:
 			_refresh_hotbar()
 	_tick_ping(delta)
 	_tick_channel(delta)
+	_tick_defense(delta)
 	# mantém o inventário inteiro dentro da tela, qualquer que seja a largura do conteúdo
 	if inv_panel and inv_panel.visible:
 		var vw := get_viewport().get_visible_rect().size.x
@@ -847,6 +894,29 @@ func _refresh_sheet() -> void:
 	t.add_theme_color_override("font_color", Theme_.AMBER)
 	t.add_theme_font_size_override("font_size", 18)
 	sheet_box.add_child(t)
+	# título mostrado acima do nome: um dos já ganhos (respostas e missões) ou nenhum
+	var titles: Array = c.get("titles", [])
+	if not titles.is_empty():
+		var trow := HBoxContainer.new()
+		sheet_box.add_child(trow)
+		var tl := Label.new()
+		tl.text = "Título:"
+		trow.add_child(tl)
+		var opt := OptionButton.new()
+		opt.add_item("(nenhum)")
+		var cur := str(c.get("title", "")) if c.get("title") != null else ""
+		for i in titles.size():
+			opt.add_item(str(titles[i]))
+			if str(titles[i]) == cur:
+				opt.select(i + 1)
+		if cur == "":
+			opt.select(0)
+		opt.item_selected.connect(func(idx: int):
+			var want = null if idx == 0 else opt.get_item_text(idx)
+			Net.request("set_title", {"title": want}, func(r):
+				if r["ok"]:
+					system("Título: «%s»" % str(r["title"]) if r.get("title") != null else "Sem título.")))
+		trow.add_child(opt)
 	var pend := 0
 	for v in pending_alloc.values():
 		pend += int(v)
@@ -1065,6 +1135,10 @@ func show_npc(r: Dictionary) -> void:
 						system("Missão concluída: %s" % res["quest"]["title"])
 						if res.has("dialogue"):
 							chat_line("[color=#ffe39a]%s: \"%s\"[/color]" % [npc["name"], res["dialogue"]])
+						if res.get("title") != null:
+							system("Título recebido: «%s» (troque na ficha, C)" % str(res["title"]))
+						if str(res.get("repeat", "")) == "daily":
+							system("Diária: volta à 00:00 UTC (%s)." % _wait_text(int(res.get("backInS", 0))))
 						npc_panel.visible = false
 					else:
 						error(res["reason"])))
@@ -1094,7 +1168,7 @@ func show_npc(r: Dictionary) -> void:
 						error(res["reason"])))
 			npc_box.add_child(cb)
 	for q in quests.get("offer", []):
-		_title(npc_box, "Nova missão: %s" % q["title"], 14)
+		_title(npc_box, "Nova missão: %s%s" % [q["title"], " (diária)" if str(q.get("repeat", "")) == "daily" else ""], 14)
 		_text(npc_box, "\"%s\"" % q["dialogue"]["offer"])
 		_text(npc_box, _objectives_text(q), Theme_.MUTED)
 		_text(npc_box, "Recompensa: %s" % _rewards_text(q["rewards"]), Theme_.MUTED)
@@ -1165,6 +1239,42 @@ func show_npc(r: Dictionary) -> void:
 	npc_box.add_child(close)
 	npc_panel.visible = true
 
+## Quadro de missões das cidades: o que dá para aceitar agora no mundo inteiro, com nível, NPC e mapa, e as
+## diárias que voltam amanhã.
+func show_board(b: Dictionary) -> void:
+	_clear(npc_box)
+	npc_open = {"id": "", "role": "board", "name": "Quadro de missões"}
+	_npc_open_at = Time.get_ticks_msec()
+	_title(npc_box, "Quadro de missões", 18)
+	var avail: Array = b.get("available", [])
+	if avail.is_empty():
+		_text(npc_box, "Nenhuma missão para o seu nível agora. Volte depois de subir de nível.", Theme_.MUTED)
+	else:
+		_text(npc_box, "Missões que você pode aceitar agora, em todo o mundo:", Theme_.MUTED)
+	for q in avail:
+		var kind := "secundária" if q.get("side", false) else "principal"
+		if str(q.get("repeat", "")) == "daily":
+			kind += ", diária"
+		_title(npc_box, "%s — nível %d (%s)" % [q["title"], int(q["level"]), kind], 14)
+		var maps: Array = q.get("maps", [])
+		var where := ""
+		for i in maps.size():
+			where += (", " if i > 0 else "") + str(maps[i])
+		var line := "Fale com %s%s." % [str(q.get("npcName", "")), (" (%s)" % where) if where != "" else ""]
+		if q.get("area") != null and str(q.get("area")) != "" and not maps.has(q.get("area")):
+			line += " Caça em: %s." % str(q["area"])
+		_text(npc_box, line, Theme_.MUTED)
+	var dd: Array = b.get("dailyDone", [])
+	if not dd.is_empty():
+		_title(npc_box, "Diárias já feitas hoje", 14)
+		for q in dd:
+			_text(npc_box, "%s — volta à 00:00 UTC (%s)" % [q["title"], _wait_text(int(q.get("backInS", 0)))], Theme_.MUTED)
+	var close := Button.new()
+	close.text = "Fechar"
+	close.pressed.connect(func(): npc_panel.visible = false)
+	npc_box.add_child(close)
+	npc_panel.visible = true
+
 func refresh_quests() -> void:
 	if tracker == null:
 		return
@@ -1183,8 +1293,12 @@ func refresh_quests() -> void:
 			_text(journal_box, _objectives_text(q))
 		_title(journal_box, "Disponíveis", 14)
 		for q in j.get("available", []):
-			_text(journal_box, "%s — nível %d (fale com %s)" % [q["title"], int(q["level"]), q.get("npcName", q["npc"])], Theme_.MUTED)
+			_text(journal_box, "%s%s — nível %d (fale com %s)" % [q["title"], " (diária)" if str(q.get("repeat", "")) == "daily" else "", int(q["level"]), q.get("npcName", q["npc"])], Theme_.MUTED)
 		_title(journal_box, "Concluídas: %d" % j.get("done", []).size(), 14)
+		# diárias feitas hoje: quando voltam
+		for q in j.get("done", []):
+			if q.has("backInS"):
+				_text(journal_box, "%s (diária) — feita hoje; volta à 00:00 UTC (%s)" % [q["title"], _wait_text(int(q["backInS"]))], Theme_.MUTED)
 
 func refresh_party() -> void:
 	_clear(party_box)
@@ -1412,7 +1526,9 @@ func show_boss(m: Dictionary) -> void:
 
 ## "120 XP, 40 ouro, Anel de Nácar, 3× Tônico de Vida Pequeno, +1 grau em habilidade"
 func _rewards_text(rw: Dictionary) -> String:
-	var parts := ["%d XP" % int(rw.get("xp", 0))]
+	var parts := []
+	if int(rw.get("xp", 0)) > 0:
+		parts.append("%d XP" % int(rw["xp"]))
 	if int(rw.get("gold", 0)) > 0:
 		parts.append("%d ouro" % int(rw["gold"]))
 	for it in rw.get("items", []):
@@ -1431,4 +1547,6 @@ func _rewards_text(rw: Dictionary) -> String:
 		parts.append(("%d× %s" % [qty, nm]) if qty > 1 else nm)
 	if int(rw.get("skillRank", 0)) > 0:
 		parts.append("+%d grau em habilidade" % int(rw["skillRank"]))
-	return ", ".join(parts)
+	if rw.get("title") != null and str(rw.get("title")) != "":
+		parts.append("título «%s»" % str(rw["title"]))
+	return ", ".join(parts) if not parts.is_empty() else "—"

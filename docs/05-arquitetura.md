@@ -62,9 +62,10 @@ mmo/
 │   │   ├── zone.js                simulação da zona: jogadores, monstros (IA), combate, XP, saque
 │   │   ├── nav.js                 grade de ocupação, A* + suavização, seguidor com aceleração/frenagem
 │   │   ├── skills.js              execução das 40 habilidades (formas e efeitos)
-│   │   ├── quests.js              motor de missões (falar, matar, coletar, interagir, entrar no mapa...)
+│   │   ├── quests.js              motor de missões (falar, matar, coletar, interagir, entrar no mapa, defender...), diárias, títulos, quadro
 │   │   ├── smith.js               ferreiro: custo, chance, risco (+4..+6), selo e rolagem do refino
 │   │   ├── escort.js              escolta da carroça (capítulo 4): rota, marcos, emboscadas, quebra
+│   │   ├── defense.js             defesa parada sobre a escolta (Joca na válvula, 2.2): ondas, cronômetro, recomeço
 │   │   ├── trade.js               comércio entre jogadores: ofertas, travas, confirmação, troca numa transação
 │   │   ├── clans.js               clãs: fundar, convidar, cargos, liderança, mensagem do dia, chat do clã
 │   │   ├── duel.js                duelos sem morte: pedido, contagem, dano até 1 de vida, fuga e empate
@@ -94,6 +95,7 @@ mmo/
 │   │   ├── m2.test.js             aceitação do Marco 2 (grupo de 5, prova de classe, missões)
 │   │   ├── m3.test.js             aceitação do Marco 3 (refino, depósito, elite diária, Custódio com bots)
 │   │   ├── ch4.test.js            capítulo 4: canalização, escolta, escolha de diálogo
+│   │   ├── secundarias.test.js    secundárias: coleta só com a missão, diárias, armadura, títulos, defesa, quadro, fontes
 │   │   ├── snapshots.test.js · store.test.js   snapshots por diferença · migrações
 │   │   ├── publico.test.js        contas, token, limites, papéis, desligamento, TLS, SMTP
 │   │   ├── social.test.js         refino +4..+6, troca atômica, clãs, duelos
@@ -177,7 +179,8 @@ Todo pedido do cliente leva `rid` (texto único por pedido). A resposta é `{ t:
 | `respawn` | — | volta ao posto de guarda |
 | `chat` | text | canal da zona |
 | `char` | — | ficha atual |
-| `talk`, `interact`, `buy`, `quests`, `quest_accept`, `quest_turnin` | npc / object / item | NPCs, objetos de missão, loja e diário |
+| `talk`, `interact`, `buy`, `quests`, `quest_accept`, `quest_turnin` | npc / object / item | NPCs, objetos de missão, loja e diário; `interact` no quadro da praça devolve `board` (missões aceitáveis no mundo, com nível, NPC e mapa) e na Válvula principal começa a defesa do Joca |
+| `set_title` | title (ou null) | título mostrado acima do nome, entre os ganhos em respostas e missões |
 | `trial_start` | npc | prova de classe (instância solo) |
 | `party_invite`, `party_accept`, `party_decline`, `party_leave`, `party_kick` | name / from | grupos de até 5 |
 | `enhance_quote`, `enhance` | npc (ferreiro), instance | custo, chance e prévia; refino com RNG semeado (falha mantém o grau e gasta ouro e materiais) |
@@ -188,7 +191,7 @@ Todo pedido do cliente leva `rid` (texto único por pedido). A resposta é `{ t:
 
 Com várias zonas, o `enter` de um personagem cujo mapa é de outra zona responde `{ ok, transfer: { url, token, mapId } }`, e um portal para um mapa de outra zona manda o evento `transfer` com os mesmos campos (seção [Múltiplas zonas](#múltiplas-zonas)).
 
-Eventos do servidor: `hello`, `defs`, `snap` (10 Hz: `now` = relógio da zona em ms; por entidade id, tipo, posição, velocidade `vx`/`vz`, vida, alvo), `hit` (origem, destino, dano, crítico, errou, habilidade), `death`, `spawn`, `loot` (só para o dono), `xp`, `level_up`, `char`, `buff`, `ground`, `cast`, `player_dead`, `respawn`, `joined`, `left`, `chat`, `kicked`, `cast` (habilidade usada, para os efeitos), `shield`, `quest_update`, `party`, `trial`, `boss` (fase, vida, proteção, válvula, comportas) e `warn` (aviso de perigo: círculo ou linha, duração).
+Eventos do servidor: `hello`, `defs`, `snap` (10 Hz: `now` = relógio da zona em ms; por entidade id, tipo, posição, velocidade `vx`/`vz`, vida, alvo), `hit` (origem, destino, dano, crítico, errou, habilidade), `death`, `spawn`, `loot` (só para o dono), `xp`, `level_up`, `char`, `buff`, `ground`, `cast`, `player_dead`, `respawn`, `joined`, `left`, `chat`, `kicked`, `cast` (habilidade usada, para os efeitos), `shield`, `quest_update`, `party`, `trial`, `boss` (fase, vida, proteção, válvula, comportas), `warn` (aviso de perigo: círculo ou linha, duração; `hazard` quando é um perigo do mapa, como a esteira da Oficina) e `escort` (mensagens da escolta e da defesa: marcos, ondas, queda, recomeço, vitória e o tempo que falta).
 
 ## Movimento no cliente
 

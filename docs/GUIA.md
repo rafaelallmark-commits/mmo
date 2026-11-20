@@ -58,13 +58,23 @@ próximos animados), **Sombras**, **Tela cheia** e limite de **quadros por segun
 ## 4. Subir de nível e se equipar
 
 - Cace monstros da sua faixa (o nível aparece sobre eles) e siga as **missões** do diário (**J**): elas contam a
-  história e dão XP, ouro e tônicos.
+  história e dão XP, ouro e tônicos. As **secundárias** apontam bons lugares de caça em cada faixa e dão itens
+  (luvas, anéis, Pó de Refino). O **quadro de missões** da praça de cada cidade mostra tudo o que você pode
+  aceitar agora, no mundo inteiro, com o nível, com quem falar e em que mapa.
+- **Materiais de missão** (carapaças, couros, fios...) só caem enquanto a missão está aceita e saem da bolsa na
+  entrega; não dá para vender, trocar nem guardar no depósito.
+- **Diárias** (Recibo do Capataz, Bomba-Mestra, Supervisor de Turno, Mãe do Eco, Brasa para a Forja): dá para
+  fazer uma vez por dia; voltam à **00:00 UTC** (21:00 em Brasília) — o diário e o quadro mostram quanto falta.
+- **Títulos**: algumas missões e respostas dão um título, mostrado acima do nome. Na ficha (**C**) você escolhe qual
+  aparece, ou nenhum.
 - A cada nível você ganha **pontos de atributo** e **de habilidade**: distribua na ficha (**C**). Os itens exigem
   nível, classe e atributos — a dica do item mostra o que falta.
 - **Equipamento**: o **armeiro** de cada cidade (Amaro em Pedrâmbar, Inês no Vau de Nácar) vende as peças comuns
   da sua faixa e da próxima; peças melhores caem dos monstros, das elites e dos chefes.
 - **Ferreiro**: refina peças até **+6**. Até +3, a falha só gasta ouro e material; dali em diante a falha derruba
-  um grau, a menos que você use um **Selo de Proteção** (só é gasto quando segura uma falha).
+  um grau, a menos que você use um **Selo de Proteção** (só é gasto quando segura uma falha). O Pó de Refino se
+  compra com ele ou se ganha nas missões dos ferreiros, que aceitam a Brasa Cristalizada e a Sucata de Condutor
+  que sobram da caça.
 - **Vender e descartar**: na bolsa (**I**), botão direito no item. Qualquer comerciante compra pela metade do valor.
 - **Depósito**: guarda-volumes compartilhado entre os personagens da sua conta.
 - Caiu? Volte ao posto de guarda do mapa. Se sair do jogo no meio de uma instância, você volta à porta dela.
