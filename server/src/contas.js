@@ -75,8 +75,8 @@ export class AccountsService {
     let b;
     try { b = JSON.parse(body || '{}'); } catch { return send(400, { ok: false, erro: 'JSON inválido.' }); }
     try {
-      const r = await this.route(url, b, ip);
-      return send(r.status ?? (r.ok ? 200 : 400), r.body ?? r);
+      const { status, ...rest } = await this.route(url, b, ip);
+      return send(status ?? (rest.ok ? 200 : 400), rest);
     } catch (e) {
       this.log('erro', url, e.message);
       return send(500, { ok: false, erro: 'Erro interno.' });

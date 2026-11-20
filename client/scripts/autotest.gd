@@ -35,8 +35,18 @@ func fail(why: String) -> void:
 	get_tree().quit(1)
 
 func _connected() -> void:
-	Net.request("register", {"account": main.account, "password": main.password}, func(_r):
-		Net.request("login", {"account": main.account, "password": main.password}, _logged))
+	# espera o "hello": servidor do teste público (--auth token) entra pelo serviço de contas
+	main._when_hello(func():
+		if str(main.server_hello.get("auth", "both")) == "token":
+			say("servidor pede login por token; usando o serviço de contas em %s" % main._accounts_base())
+			main._accounts_post("/sessoes", {"conta": main.account, "senha": main.password}, func(ok: bool, b: Dictionary):
+				if not ok:
+					fail(str(b.get("erro", "serviço de contas recusou")))
+					return
+				Net.request("login_token", {"token": b["token"], "delta": true}, _logged))
+			return
+		Net.request("register", {"account": main.account, "password": main.password}, func(_r):
+			Net.request("login", {"account": main.account, "password": main.password, "delta": true}, _logged)))
 
 func _logged(r: Dictionary) -> void:
 	if not r["ok"]:

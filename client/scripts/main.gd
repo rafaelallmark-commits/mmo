@@ -35,6 +35,10 @@ var chars_cache := []
 var classes_cache := []
 var settings := {"camera_sensitivity": 1.0, "show_names": true, "ui_scale": 1.0}
 var snap_cache := {}   # entidades conhecidas (snapshots por diferença do servidor)
+const PROTOCOL := 3    # versão do protocolo que este cliente fala (o servidor manda no "hello")
+var server_hello := {}
+var _hello_waiters: Array = []
+var accounts_url := ""  # serviço de contas (teste público); vazio = deduzido do endereço do servidor
 var state := "title"
 
 var ui: CanvasLayer
@@ -54,6 +58,7 @@ func _ready() -> void:
 		var kv := s.split("=", true, 1)
 		args[kv[0]] = kv[1] if kv.size() > 1 else "true"
 	server_url = args.get("server", server_url)
+	accounts_url = args.get("accounts", accounts_url)
 	account = args.get("account", "")
 	password = args.get("password", "")
 	_load_settings()
@@ -264,7 +269,7 @@ func show_title() -> void:
 	cred.add_theme_color_override("font_color", Color(1, 1, 1, 0.65))
 	root.add_child(cred)
 	var ver := Label.new()
-	ver.text = "Marco 2 · protótipo"
+	ver.text = "Teste público · protocolo %d" % PROTOCOL
 	ver.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	ver.position = Vector2(-170, -34)
 	ver.add_theme_color_override("font_color", Color(1, 1, 1, 0.6))
@@ -292,6 +297,9 @@ func show_login() -> void:
 		server_url = e_url.text.strip_edges(); account = e_acc.text.strip_edges(); password = e_pass.text
 		connect_and_login(true))
 	b2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_button(box, "Esqueci a senha", func():
+		server_url = e_url.text.strip_edges()
+		show_forgot_accounts())
 	_button(box, "Voltar", func():
 		Net.close()
 		show_title())
@@ -300,6 +308,7 @@ func show_login() -> void:
 
 func connect_and_login(register: bool) -> void:
 	_pending_register = register
+	server_hello = {}
 	set_status("Conectando a %s..." % server_url)
 	if Net.is_open():
 		_after_connect()
@@ -314,26 +323,151 @@ func _on_connected() -> void:
 func _after_connect() -> void:
 	if _pending_register:
 		_pending_register = false
-		Net.request("register", {"account": account, "password": password}, func(r):
-			if not r["ok"] and r.get("code", "") != "account_exists":
-				set_status(r["reason"], true)
+		_when_hello(func():
+			if str(server_hello.get("auth", "both")) == "token":
+				show_register_accounts()
 				return
-			_login())
+			Net.request("register", {"account": account, "password": password}, func(r):
+				if not r["ok"] and r.get("code", "") != "account_exists":
+					set_status(r["reason"], true)
+					return
+				_login()))
 	else:
 		_login()
 
+# ---------------- CONTA (serviço de contas do teste público) ----------------
+func show_register_accounts() -> void:
+	state = "login"
+	var box := _menu_panel("Criar conta")
+	var e_acc := _field(box, "Conta", account)
+	var e_mail := _field(box, "E-mail", "")
+	var e_pass := _field(box, "Senha (8 ou mais caracteres)", password, true)
+	_button(box, "Criar e receber o código", func():
+		account = e_acc.text.strip_edges(); password = e_pass.text
+		_accounts_post("/contas", {"conta": account, "email": e_mail.text.strip_edges(), "senha": password}, func(ok: bool, b: Dictionary):
+			if ok:
+				show_verify_accounts(str(b.get("mensagem", "")))
+			else:
+				set_status(str(b.get("erro", "Não foi possível criar a conta.")), true)), true)
+	_button(box, "Voltar", show_login)
+	_status(box)
+
+func show_verify_accounts(msg := "") -> void:
+	var box := _menu_panel("Confirmar e-mail")
+	var info := Label.new()
+	info.text = msg if msg != "" else "Digite o código de 6 dígitos que enviamos para o seu e-mail."
+	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(info)
+	var e_code := _field(box, "Código", "")
+	_button(box, "Confirmar", func():
+		_accounts_post("/contas/verificar", {"conta": account, "codigo": e_code.text.strip_edges()}, func(ok: bool, b: Dictionary):
+			if ok:
+				show_login()
+				set_status(str(b.get("mensagem", "Conta confirmada.")))
+			else:
+				set_status(str(b.get("erro", "Código incorreto.")), true)), true)
+	_button(box, "Reenviar código", func():
+		_accounts_post("/contas/reenviar", {"conta": account}, func(_ok: bool, b: Dictionary):
+			set_status(str(b.get("mensagem", "Pedido enviado.")))))
+	_button(box, "Voltar", show_login)
+	_status(box)
+
+func show_forgot_accounts() -> void:
+	var box := _menu_panel("Esqueci a senha")
+	var e_mail := _field(box, "E-mail", "")
+	_button(box, "Enviar código", func():
+		_accounts_post("/senha/esqueci", {"email": e_mail.text.strip_edges()}, func(_ok: bool, b: Dictionary):
+			set_status(str(b.get("mensagem", "Se o e-mail tiver conta, enviamos um código.")))), true)
+	var e_code := _field(box, "Código", "")
+	var e_new := _field(box, "Nova senha", "", true)
+	_button(box, "Trocar a senha", func():
+		_accounts_post("/senha/redefinir", {"email": e_mail.text.strip_edges(), "codigo": e_code.text.strip_edges(), "senha": e_new.text}, func(ok: bool, b: Dictionary):
+			if ok:
+				show_login()
+				set_status("Senha trocada. Entre com a nova senha.")
+			else:
+				set_status(str(b.get("erro", "Não foi possível trocar a senha.")), true)))
+	_button(box, "Voltar", show_login)
+	_status(box)
+
+## Exclusão da própria conta (privacidade), confirmada com a senha.
+func show_delete_account() -> void:
+	var box := _menu_panel("Excluir conta")
+	var warn := Label.new()
+	warn.text = "Isto apaga a conta %s, os personagens, os itens e o e-mail. Não dá para desfazer." % account
+	warn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	warn.add_theme_color_override("font_color", Color("#ff8a7a"))
+	box.add_child(warn)
+	var e_pass := _field(box, "Senha", "", true)
+	_button(box, "Excluir para sempre", func():
+		Net.request("delete_account", {"password": e_pass.text}, func(r):
+			if r["ok"]:
+				account = ""; password = ""
+				show_title()
+			else:
+				set_status(r["reason"], true)))
+	_button(box, "Cancelar", func(): show_chars())
+	_status(box)
+
+## Espera o "hello" do servidor (versão e modo de login) antes de seguir.
+func _when_hello(cb: Callable) -> void:
+	if not server_hello.is_empty():
+		cb.call()
+	else:
+		_hello_waiters.append(cb)
+
 func _login() -> void:
-	Net.request("login", {"account": account, "password": password, "delta": true}, func(r):
-		if not r["ok"]:
-			set_status(r["reason"], true)
-			return
-		chars_cache = r["chars"]
-		classes_cache = r["classes"]
-		if reconnecting and char_id >= 0 and state == "world":
-			enter_world(char_id)
+	_when_hello(func():
+		if str(server_hello.get("auth", "both")) == "token":
+			_login_with_accounts()
 		else:
-			reconnecting = false
-			show_chars())
+			Net.request("login", {"account": account, "password": password, "delta": true}, _on_login))
+
+## Teste público: conta e senha vão ao serviço de contas, que devolve um token de uso único para a zona.
+func _login_with_accounts() -> void:
+	set_status("Entrando pelo serviço de contas...")
+	_accounts_post("/sessoes", {"conta": account, "senha": password}, func(ok: bool, body: Dictionary):
+		if not ok:
+			set_status(str(body.get("erro", "Não foi possível entrar.")), true)
+			return
+		Net.request("login_token", {"token": body["token"], "delta": true}, _on_login))
+
+func _accounts_base() -> String:
+	if accounts_url != "":
+		return accounts_url.trim_suffix("/")
+	var u := server_url
+	var host := u.get_slice("://", 1).get_slice("/", 0).get_slice(":", 0)
+	if u.begins_with("wss://"):
+		return "https://%s/contas" % host
+	return "http://%s:7780" % host
+
+func _accounts_post(path: String, body: Dictionary, cb: Callable) -> void:
+	var http := HTTPRequest.new()
+	add_child(http)
+	http.timeout = 15.0
+	http.request_completed.connect(func(result: int, code: int, _h: PackedStringArray, raw: PackedByteArray):
+		http.queue_free()
+		var data = JSON.parse_string(raw.get_string_from_utf8()) if raw.size() > 0 else null
+		var d: Dictionary = data if data is Dictionary else {}
+		if result != HTTPRequest.RESULT_SUCCESS:
+			d = {"erro": "Serviço de contas indisponível (%s)." % _accounts_base()}
+		cb.call(result == HTTPRequest.RESULT_SUCCESS and code >= 200 and code < 300 and d.get("ok", false), d))
+	var err := http.request(_accounts_base() + path, ["Content-Type: application/json"], HTTPClient.METHOD_POST, JSON.stringify(body))
+	if err != OK:
+		http.queue_free()
+		cb.call(false, {"erro": "Não foi possível falar com o serviço de contas."})
+
+func _on_login(r: Dictionary) -> void:
+	if not r["ok"]:
+		set_status(r["reason"], true)
+		return
+	chars_cache = r["chars"]
+	classes_cache = r["classes"]
+	if reconnecting and char_id >= 0 and state == "world":
+		enter_world(char_id)
+	else:
+		reconnecting = false
+		show_chars()
 
 # ---------------- PERSONAGENS ----------------
 var _selected_char := -1
@@ -365,6 +499,7 @@ func show_chars(select_id := -1) -> void:
 		_button(box, "Jogar", func(): enter_world(_selected_char), true)
 	if chars_cache.size() < 4:
 		_button(box, "Criar novo personagem", show_create)
+	_button(box, "Excluir conta", show_delete_account)
 	_button(box, "Voltar", func():
 		Net.close()
 		show_login())
@@ -730,6 +865,24 @@ func _unhandled_input(event: InputEvent) -> void:
 func _on_message(m: Dictionary) -> void:
 	var t: String = m.get("t", "")
 	match t:
+		"hello":
+			server_hello = m
+			if int(m.get("protocol", 0)) != PROTOCOL:
+				set_status("Versão incompatível: este cliente fala o protocolo %d e o servidor, o %d. Atualize o jogo." % [PROTOCOL, int(m.get("protocol", 0))], true)
+				Net.close()
+				_hello_waiters.clear()
+				return
+			var waiting := _hello_waiters
+			_hello_waiters = []
+			for cb in waiting:
+				(cb as Callable).call()
+		"notice":
+			# aviso do servidor (ex.: reinício programado)
+			if hud and in_world:
+				hud.system(str(m.get("text", "")))
+				hud._flash(str(m.get("text", "")), Color("#ffcf7a"))
+			else:
+				set_status(str(m.get("text", "")))
 		"defs":
 			defs = m
 		"res":
