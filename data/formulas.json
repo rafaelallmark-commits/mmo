@@ -187,5 +187,9 @@
     },
     "switchMargin": 1.1,
     "proximityAggro": 25
+  },
+  "skills": {
+    "_doc": "Recarga global: depois de usar uma habilidade, nenhuma outra (exceto as marcadas offGcd) sai antes de globalCooldownMs. Habilidades com castMs conjuram parado (mover, atacar ou usar item interrompe) e a recarga global cobre a conjuração.",
+    "globalCooldownMs": 1000
   }
 }

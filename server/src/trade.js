@@ -51,6 +51,16 @@ export class TradeManager {
 
   tradeOf(p) { const id = this.byChar.get(p.char.id); return id ? this.trades.get(id) : null; }
 
+  // item saiu da bolsa por fora (venda, descarte): tira da oferta e destrava os dois lados
+  dropItem(charId, itemId) {
+    const id = this.byChar.get(charId);
+    const tr = id ? this.trades.get(id) : null;
+    if (!tr || !tr.offer[charId].items.includes(itemId)) return;
+    tr.offer[charId].items = tr.offer[charId].items.filter((x) => x !== itemId);
+    for (const c of [tr.a, tr.b]) { tr.locked[c] = false; tr.confirmed[c] = false; }
+    this.push(tr);
+  }
+
   offer(p, { items = [], gold = 0 }) {
     const tr = this.tradeOf(p);
     if (!tr) return { ok: false, code: 'no_trade', reason: 'Nenhuma troca aberta.' };

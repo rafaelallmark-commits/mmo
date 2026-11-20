@@ -150,7 +150,7 @@ test('M2 — grupo de 5 papéis no Poço das Sanguessugas', { timeout: 240000 },
     const t0 = Date.now();
     while (held < 3 && Date.now() - t0 < 10000) {
       const pull = await B.request('cast', { skill: 'pull_pulse' });
-      if (!pull.ok && pull.code !== 'cooldown') assert.fail(pull.reason);
+      if (!pull.ok && !['cooldown', 'gcd'].includes(pull.code)) assert.fail(pull.reason);
       await sleep(300);
       held = B.snap.ents.filter((e) => e.k === 'm' && e.tgt === B.char.eid).length;
     }
