@@ -51,7 +51,7 @@ export function derivedStats(char, equipped, data, buffs = {}) {
   const f = data.formulas;
   const perm = permanentAttrs(char, data);
   const attrs = { ...perm };
-  let defense = 0, mres = 0, evasion = 0, accuracy = 0, critBonus = 0, magicPower = 0, bonusHp = 0, bonusMp = 0, healBonusPct = 0;
+  let defense = 0, mres = 0, evasion = 0, accuracy = 0, critBonus = 0, magicPower = 0, bonusHp = 0, bonusMp = 0, healBonusPct = 0, blockPct = 0;
   let weapon = UNARMED, weaponEnh = 0;
   for (const { def, enh = 0 } of equipped) {
     const enhMul = 1 + (f.defense.enhancePct * enh) / 100;
@@ -64,6 +64,7 @@ export function derivedStats(char, equipped, data, buffs = {}) {
     if (def.bonusHp) bonusHp += def.bonusHp;
     if (def.bonusMp) bonusMp += def.bonusMp;
     if (def.healBonusPct) healBonusPct += def.healBonusPct;
+    if (def.blockPct && def.slot === 'offhand') blockPct += def.blockPct;
     if (def.slot === 'weapon') { weapon = def; weaponEnh = enh; }
     else if (def.crit) critBonus += def.crit;
   }
@@ -82,7 +83,7 @@ export function derivedStats(char, equipped, data, buffs = {}) {
   if (buffs.attackSpeedPct) attackIntervalMs = Math.round(attackIntervalMs / (1 + buffs.attackSpeedPct / 100));
   return {
     level: L, attrs, permanent: perm, maxHp, maxMp, defense, mres, evasion, accuracy: Math.floor(accuracy),
-    crit: round1(crit), magicCrit: round1(magicCrit), magicPower: Math.floor(magicPower), healBonusPct,
+    crit: round1(crit), magicCrit: round1(magicCrit), magicPower: Math.floor(magicPower), healBonusPct, blockPct,
     weapon, weaponEnh, attackIntervalMs, range: weapon.range, physDamagePct: buffs.physDamagePct || 0,
     moveSpeedPct: buffs.moveSpeedPct || 0, regenPctMaxHpPerSec: buffs.regenPctMaxHpPerSec || 0,
     // Vitalidade: resistência a controle (reduz duração de atordoamento/enraizamento de monstros, M3)
@@ -143,7 +144,9 @@ export function playerAttack(stats, target, data, rng, skill) {
   if (isSpell) {
     steps.flat = eff.flat + (eff.flatPerRank || 0) * (rank - 1);
     steps.spiPart = Math.floor(stats.attrs.spi * eff.spiCoef);
-    steps.magicPower = stats.magicPower;
+    // fração do poder mágico da arma e do foco que a magia soma (padrão 100%): áreas de vários pulsos
+    // dividem o poder mágico entre os pulsos em vez de somá-lo inteiro a cada pulso em cada alvo
+    steps.magicPower = Math.floor((stats.magicPower * (eff.magicPowerPct ?? 100)) / 100);
     steps.raw = steps.flat + steps.spiPart + steps.magicPower;
   } else if (magic) {
     steps.roll = rollInt(rng, w.damage[0], w.damage[1]);
@@ -184,6 +187,12 @@ export function monsterAttack(mdef, targetStats, data, rng) {
   steps.hitRoll = round1(rng() * 100);
   steps.hit = steps.hitRoll < steps.hitChance;
   if (!steps.hit) return { ...steps, damage: 0 };
+  // escudo: chance de bloquear (anular) o golpe que acertaria — o "bloqueio X%" da peça
+  if (targetStats.blockPct > 0) {
+    steps.blockChance = targetStats.blockPct;
+    steps.blockRoll = round1(rng() * 100);
+    if (steps.blockRoll < steps.blockChance) return { ...steps, blocked: true, damage: 0 };
+  }
   steps.roll = rollInt(rng, mdef.damage[0], mdef.damage[1]);
   steps.critChance = 5;
   steps.critRoll = round1(rng() * 100);

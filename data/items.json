@@ -5994,7 +5994,7 @@
    "use": {
     "healHp": 140
    },
-   "value": 15
+   "value": 12
   },
   "potion_mp_s": {
    "id": "potion_mp_s",
@@ -6026,7 +6026,7 @@
    "use": {
     "healMp": 110
    },
-   "value": 18
+   "value": 15
   },
   "mat_scrap": {
    "id": "mat_scrap",

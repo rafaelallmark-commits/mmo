@@ -162,6 +162,8 @@ export function executeSkill(zone, p, s, rank, { target, x, z, ally }) {
         zone.pullMonster(m, p, 1.6);
         const res = zone.hitMonster(p, m, skill, s.id);
         hits.push(m.eid);
+        // o golpe pode matar: monstro morto não volta a perseguir (ficava com vida 0, batendo e sem morrer)
+        if (m.state === 'dead') continue;
         zone.addThreat(m, p, (res.damage || 1) * (eff.threatMult || 1) + 50);
         m.targetId = p.eid; m.state = 'chase';
         zone.creditControl(m, p, 1.0);

@@ -4974,8 +4974,8 @@
      "monster": "gear_rat",
      "x": 88,
      "z": 62,
-     "radius": 8,
-     "count": 8
+     "radius": 10,
+     "count": 6
     },
     {
      "monster": "blind_welder",
@@ -14675,7 +14675,7 @@
      "monster": "bronze_bellringer",
      "x": 64,
      "z": 34,
-     "radius": 10,
+     "radius": 12,
      "count": 7
     },
     {

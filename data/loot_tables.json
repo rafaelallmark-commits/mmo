@@ -109,8 +109,8 @@
     {
      "type": "gold",
      "chance": 1,
-     "min": 6,
-     "max": 18
+     "min": 8,
+     "max": 22
     },
     {
      "type": "item",
@@ -212,8 +212,8 @@
     {
      "type": "gold",
      "chance": 1,
-     "min": 12,
-     "max": 36
+     "min": 15,
+     "max": 40
     },
     {
      "type": "item",
@@ -315,8 +315,8 @@
     {
      "type": "gold",
      "chance": 1,
-     "min": 20,
-     "max": 60
+     "min": 15,
+     "max": 45
     },
     {
      "type": "item",
@@ -417,8 +417,8 @@
     {
      "type": "gold",
      "chance": 1,
-     "min": 30,
-     "max": 90
+     "min": 18,
+     "max": 54
     },
     {
      "type": "item",
@@ -519,8 +519,8 @@
     {
      "type": "gold",
      "chance": 1,
-     "min": 45,
-     "max": 135
+     "min": 27,
+     "max": 80
     },
     {
      "type": "item",

@@ -922,8 +922,9 @@ export class Zone {
       m.nextAttackAt = this.now + m.def.attackIntervalMs;
       const res = monsterAttack(m.def, target.stats, this.data, this.rng);
       target.lastCombatAt = this.now;
-      this.broadcast({ t: 'hit', src: m.eid, dst: target.eid, dmg: res.damage, crit: !!res.crit, miss: !res.hit, skill: null, magic: false });
-      if (res.hit) this.damagePlayer(target, res.damage, m);
+      // golpe bloqueado pelo escudo: chega como "errou" (block marca o motivo) e não causa dano
+      this.broadcast({ t: 'hit', src: m.eid, dst: target.eid, dmg: res.damage, crit: !!res.crit, miss: !res.hit || !!res.blocked, block: res.blocked || undefined, skill: null, magic: false });
+      if (res.hit && !res.blocked) this.damagePlayer(target, res.damage, m);
     }
   }
 

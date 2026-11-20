@@ -37,9 +37,18 @@ test('magia ignora evasão e soma Espírito e poder mágico', () => {
   const c = { classId: 'emberweaver', level: 1, alloc: {} };
   const st = derivedStats(c, equip('wand_t1', 'focus_t1', 'robe_t1'), data);
   assert.equal(st.magicPower, 7);
+  // Faísca de Vidro soma só a fração do poder mágico da habilidade (magicPowerPct)
+  const gs = data.skills.glass_spark.effect;
+  assert.ok(gs.magicPowerPct > 0 && gs.magicPowerPct < 100);
   const r = playerAttack(st, { level: 1, defense: 2, mres: 1, evasion: 999 }, data, seq(0.5, 0.99), { def: data.skills.glass_spark, rank: 1 });
   assert.equal(r.hit, true);
-  assert.equal(r.raw, 14 + Math.floor(20 * 0.9) + 7);
+  assert.equal(r.magicPower, Math.floor((7 * gs.magicPowerPct) / 100));
+  assert.equal(r.raw, gs.flat + Math.floor(20 * gs.spiCoef) + Math.floor((7 * gs.magicPowerPct) / 100));
+  // sem magicPowerPct, a magia soma o poder mágico inteiro (Coração da Fornalha)
+  const fh = data.skills.furnace_heart.effect;
+  assert.equal(fh.magicPowerPct, undefined);
+  const f = playerAttack(st, { level: 1, defense: 2, mres: 1, evasion: 999 }, data, seq(0.5, 0.99), { def: data.skills.furnace_heart, rank: 1 });
+  assert.equal(f.raw, fh.flat + Math.floor(20 * fh.spiCoef) + 7);
 });
 
 test('mitigação mínima de 1 e teto de grau por nível', () => {
@@ -48,12 +57,31 @@ test('mitigação mínima de 1 e teto de grau por nível', () => {
 });
 
 test('XP dividido por participação, com bônus de cooperação e diferença de nível', () => {
-  const m = data.monsters.cracked_foreman; // nv4, 212 XP
+  const m = data.monsters.cracked_foreman; // elite nv4
   const s = splitKillXp(m, [{ charId: 1, level: 4, score: 300 }, { charId: 2, level: 4, score: 100 }], data);
-  assert.equal(s[0].xp, Math.round(212 * 0.75 * 1.1));
-  assert.equal(s[1].xp, Math.round(212 * 0.25 * 1.1));
-  const low = splitKillXp(data.monsters.furrow_rat, [{ charId: 1, level: 10, score: 1 }], data);
-  assert.equal(low[0].xp, Math.round(14 * 0.1));
+  assert.equal(s[0].xp, Math.round(m.xp * 0.75 * 1.1));
+  assert.equal(s[1].xp, Math.round(m.xp * 0.25 * 1.1));
+  // 6 níveis abaixo: ×0,1, com mínimo de 1 XP
+  const rat = data.monsters.furrow_rat;
+  const low = splitKillXp(rat, [{ charId: 1, level: 10, score: 1 }], data);
+  assert.equal(low[0].xp, Math.max(1, Math.round(rat.xp * 0.1)));
+  const mid = splitKillXp(data.monsters.gear_rat, [{ charId: 1, level: 16, score: 1 }], data);
+  assert.equal(mid[0].xp, Math.max(1, Math.round(data.monsters.gear_rat.xp * 0.1)));
+});
+
+test('escudo bloqueia golpe de monstro com a chance da peça (bloqueado não causa dano)', () => {
+  const c = { classId: 'bastion', level: 1, alloc: {} };
+  const st = derivedStats(c, equip('hammer_1h_t1', 'shield_t1', 'heavy_armor_t1'), data);
+  assert.equal(st.blockPct, data.items.shield_t1.blockPct);
+  assert.equal(derivedStats(c, equip('hammer_1h_t1', 'heavy_armor_t1'), data).blockPct, 0, 'sem escudo, sem bloqueio');
+  const rat = data.monsters.furrow_rat;
+  // acerta (0.0), rolagem de bloqueio 0.05 → 5 < 8: bloqueado
+  const b = monsterAttack(rat, st, data, seq(0.0, 0.05, 0.99, 0.99));
+  assert.equal(b.hit, true); assert.equal(b.blocked, true); assert.equal(b.damage, 0);
+  // rolagem de bloqueio 0.5 → 50 ≥ 8: o golpe passa e é mitigado pela defesa
+  const n = monsterAttack(rat, st, data, seq(0.0, 0.5, 0.99, 0.99));
+  assert.equal(n.blocked, undefined); assert.ok(n.damage >= 1);
+  assert.equal(n.damage, Math.round(n.afterCrit * 48 / (48 + st.defense)));
 });
 
 test('ataque de monstro respeita defesa do jogador', () => {

@@ -59,6 +59,30 @@ test('as 24 habilidades dos níveis 1, 5 e 10 executam com o efeito esperado', (
   }
 });
 
+test('Pulso de Atração que mata o monstro não o devolve à perseguição (sem monstro de vida 0 imortal)', () => {
+  const { zone, mk, sent } = setup();
+  const p = mk('bastion', 'Tpuxa', 40, 36);
+  p.char.skills.pull_pulse = 1;
+  // só dois sapos no raio do pulso: um com 1 de vida (o golpe o mata) e outro inteiro
+  for (const m of zone.monsters.values()) if (Math.hypot(m.x - p.char.x, m.z - p.char.z) < 12) { m.x = p.char.x + 30; m.z = p.char.z + 30; }
+  const ms = toad(zone).filter((m) => m.state !== 'dead').slice(0, 2);
+  ms.forEach((m, i) => { m.x = p.char.x + 2 + i; m.z = p.char.z; m.hp = m.def.hp * (i ? 20 : 1); });
+  ms[0].hp = 1;
+  // golpe físico pode errar: repete o pulso até acertar o de 1 de vida
+  for (let i = 0; i < 20 && ms[0].state !== 'dead'; i++) {
+    p.cooldowns = {}; p.char.mp = p.stats.maxMp; p.char.hp = p.stats.maxHp;
+    const res = zone.castNow(p, 'pull_pulse', ms[0].eid);
+    assert.equal(res.ok, true, res.reason);
+  }
+  assert.equal(ms[0].state, 'dead', 'o abatido continua morto');
+  assert.equal(ms[0].targetId, null, 'e sem alvo');
+  assert.ok(sent.some((m) => m.t === 'death' && m.eid === ms[0].eid), 'a morte foi anunciada');
+  assert.equal(ms[1].state, 'chase', 'o outro foi puxado e persegue');
+  assert.equal(ms[1].targetId, p.eid);
+  for (let i = 0; i < 30; i++) zone.tick(100);
+  assert.ok(!sent.some((m) => m.t === 'hit' && m.src === ms[0].eid), 'o morto nunca ataca');
+});
+
 test('habilidade do nível 10 só existe depois da prova de classe', () => {
   const { zone, mk } = setup();
   const p = mk('breaker', 'Semprova', 40, 36);

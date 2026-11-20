@@ -23,7 +23,7 @@
    "aggroRadius": 0,
    "leashRadius": 25,
    "respawnSec": 20,
-   "xp": 14,
+   "xp": 5,
    "lootTable": "lt_tier_1",
    "description": "Rato cego que segue o calor dos condutores."
   },
@@ -49,7 +49,7 @@
    "aggroRadius": 0,
    "leashRadius": 25,
    "respawnSec": 20,
-   "xp": 24,
+   "xp": 16,
    "lootTable": "lt_tier_1",
    "description": "Carapaça morna; foge da luz e morde quem pisa no ninho."
   },
@@ -75,7 +75,7 @@
    "aggroRadius": 8,
    "leashRadius": 25,
    "respawnSec": 20,
-   "xp": 38,
+   "xp": 19,
    "lootTable": "lt_tier_1",
    "description": "Anda em matilha. Chama os vizinhos quando ferido."
   },
@@ -101,7 +101,7 @@
    "aggroRadius": 0,
    "leashRadius": 25,
    "respawnSec": 20,
-   "xp": 53,
+   "xp": 45,
    "lootTable": "lt_tier_1",
    "description": "Engole pedras para afundar na lama; golpes lentos e pesados."
   },
@@ -127,7 +127,7 @@
    "aggroRadius": 8,
    "leashRadius": 25,
    "respawnSec": 20,
-   "xp": 70,
+   "xp": 66,
    "lootTable": "lt_tier_1",
    "description": "Investe contra o que se move. Deixa um rastro de fuligem."
   },
@@ -153,7 +153,7 @@
    "aggroRadius": 10,
    "leashRadius": 25,
    "respawnSec": 120,
-   "xp": 212,
+   "xp": 180,
    "lootTable": "lt_cracked_foreman",
    "description": "Autômato de turno que ainda cobra a carga das caravanas. Elite."
   },
@@ -179,7 +179,7 @@
    "aggroRadius": 0,
    "leashRadius": 25,
    "respawnSec": 20,
-   "xp": 70,
+   "xp": 66,
    "lootTable": "lt_tier_1",
    "description": "Infla com água quente e explode em vapor quando morre."
   },
@@ -257,7 +257,7 @@
    "aggroRadius": 0,
    "leashRadius": 25,
    "respawnSec": 20,
-   "xp": 130,
+   "xp": 112,
    "lootTable": "lt_tier_5",
    "description": "Bico de metal; caça sozinha nas margens."
   },
@@ -309,7 +309,7 @@
    "aggroRadius": 10,
    "leashRadius": 25,
    "respawnSec": 120,
-   "xp": 520,
+   "xp": 448,
    "lootTable": "lt_master_pump",
    "description": "Elite do brejo. Alterna pressão alta e baixa; derruba Brasa Cristalizada."
   },
@@ -387,7 +387,7 @@
    "aggroRadius": 8,
    "leashRadius": 25,
    "respawnSec": 20,
-   "xp": 202,
+   "xp": 178,
    "lootTable": "lt_tier_9",
    "description": "Solda o que toca. Cone de faíscas à frente."
   },
@@ -413,7 +413,7 @@
    "aggroRadius": 0,
    "leashRadius": 25,
    "respawnSec": 20,
-   "xp": 228,
+   "xp": 178,
    "lootTable": "lt_tier_9",
    "description": "Corre em trilhos; dano alto, defesa baixa."
   },
@@ -439,7 +439,7 @@
    "aggroRadius": 10,
    "leashRadius": 25,
    "respawnSec": 120,
-   "xp": 808,
+   "xp": 712,
    "lootTable": "lt_shift_supervisor",
    "description": "Elite da oficina. Chama Ratos-Engrenagem a cada 30% de vida."
   },
@@ -465,7 +465,7 @@
    "aggroRadius": 8,
    "leashRadius": 25,
    "respawnSec": 20,
-   "xp": 228,
+   "xp": 178,
    "lootTable": "lt_tier_9",
    "description": "Desorienta com gritos; ataca em bandos."
   },
@@ -491,7 +491,7 @@
    "aggroRadius": 0,
    "leashRadius": 25,
    "respawnSec": 20,
-   "xp": 255,
+   "xp": 179,
    "lootTable": "lt_tier_13",
    "description": "Nasce onde o solo esquenta demais."
   },
@@ -517,7 +517,7 @@
    "aggroRadius": 8,
    "leashRadius": 25,
    "respawnSec": 20,
-   "xp": 283,
+   "xp": 184,
    "lootTable": "lt_tier_13",
    "description": "Criatura feita do som dos sinos. Repete o último golpe recebido."
   },
@@ -543,7 +543,7 @@
    "aggroRadius": 8,
    "leashRadius": 25,
    "respawnSec": 20,
-   "xp": 312,
+   "xp": 206,
    "lootTable": "lt_tier_13",
    "description": "Sentinela pesada; protege as portas das galerias."
   },
@@ -569,7 +569,7 @@
    "aggroRadius": 8,
    "leashRadius": 25,
    "respawnSec": 20,
-   "xp": 342,
+   "xp": 233,
    "lootTable": "lt_tier_13",
    "description": "Tece fios condutores que dão choque."
   },
@@ -595,7 +595,7 @@
    "aggroRadius": 10,
    "leashRadius": 25,
    "respawnSec": 120,
-   "xp": 1248,
+   "xp": 824,
    "lootTable": "lt_echo_mother",
    "description": "Elite das galerias. Cada grito gera um Ecoante.",
    "daily": true
@@ -622,7 +622,7 @@
    "aggroRadius": 8,
    "leashRadius": 25,
    "respawnSec": 20,
-   "xp": 342,
+   "xp": 233,
    "lootTable": "lt_tier_13",
    "description": "Fecha a passagem de quem não tem ordem de abertura."
   },
@@ -648,7 +648,7 @@
    "aggroRadius": 8,
    "leashRadius": 25,
    "respawnSec": 20,
-   "xp": 373,
+   "xp": 257,
    "lootTable": "lt_tier_17",
    "description": "Arrasta os pés pela lama e puxa quem estiver perto."
   },
@@ -674,7 +674,7 @@
    "aggroRadius": 8,
    "leashRadius": 25,
    "respawnSec": 20,
-   "xp": 405,
+   "xp": 283,
    "lootTable": "lt_tier_17",
    "description": "Vapor solidificado; explode em área ao morrer."
   },
@@ -700,7 +700,7 @@
    "aggroRadius": 10,
    "leashRadius": 25,
    "respawnSec": 120,
-   "xp": 1748,
+   "xp": 1204,
    "lootTable": "lt_custodian_shard",
    "description": "Pedaço autônomo do Custódio; patrulha os canais.",
    "daily": true
@@ -727,7 +727,7 @@
    "aggroRadius": 10,
    "leashRadius": 0,
    "respawnSec": 0,
-   "xp": 9400,
+   "xp": 6400,
    "lootTable": "lt_lock_custodian",
    "description": "Chefe do calabouço. Interpreta a reativação como emergência e fecha as saídas."
   },
@@ -753,7 +753,7 @@
    "aggroRadius": 0,
    "leashRadius": 25,
    "respawnSec": 20,
-   "xp": 504,
+   "xp": 317,
    "lootTable": "lt_tier_21",
    "description": "Pele que brilha como brasa debaixo da água parada; só morde quem pisa na sua margem."
   },
@@ -779,7 +779,7 @@
    "aggroRadius": 8,
    "leashRadius": 25,
    "respawnSec": 20,
-   "xp": 538,
+   "xp": 323,
    "lootTable": "lt_tier_21",
    "description": "Autômato de carga com um sino no peito; ainda carrega placas de chamada para um posto que ninguém atende."
   },
@@ -805,7 +805,7 @@
    "aggroRadius": 8,
    "leashRadius": 25,
    "respawnSec": 20,
-   "xp": 574,
+   "xp": 367,
    "lootTable": "lt_tier_21",
    "description": "Um pedido de socorro que ficou tempo demais no metal; repete a última frase e ataca quem não responde."
   },
@@ -831,7 +831,7 @@
    "aggroRadius": 8,
    "leashRadius": 25,
    "respawnSec": 20,
-   "xp": 610,
+   "xp": 409,
    "lootTable": "lt_tier_21",
    "description": "Cava sempre na direção do calor; garras de pedra que atravessam rocha e couraça."
   },
@@ -857,7 +857,7 @@
    "aggroRadius": 10,
    "leashRadius": 25,
    "respawnSec": 120,
-   "xp": 2440,
+   "xp": 1636,
    "lootTable": "lt_deep_sealer",
    "description": "Máquina mais velha que o Custódio: sela qualquer fresta da Porta Funda e responde sozinha a quem chama do outro lado.",
    "daily": true

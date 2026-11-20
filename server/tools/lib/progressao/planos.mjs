@@ -16,22 +16,39 @@ const ARMADURA = {
 const RARIDADE = { common: 0, uncommon: 1, rare: 2, unique: 3 };
 
 // Família da arma e da mão secundária do kit inicial da classe (a escolha "padrão" de cada classe,
-// a mesma dos exemplos de evolução da documentação).
+// a mesma dos exemplos de evolução da documentação). `armas`: famílias de arma aceitas — a do kit e,
+// como reserva, as outras da classe com a mesma empunhadura e o mesmo tipo de dano (usadas só na
+// faixa em que a família do kit não tem peça comum, ex.: o cetro da faixa 17 é raro).
 export function kitPadrao(classId, data) {
   const cls = data.classes[classId];
   const defs = cls.startingKit.equip.map((id) => data.items[id]);
   const arma = defs.find((d) => d.slot === 'weapon');
   const mao = defs.find((d) => d.slot === 'offhand');
-  return { arma: arma.family, maoSecundaria: arma.hands === 1 ? mao?.family ?? null : null, armaduras: ARMADURA[cls.armorWeight] };
+  const reservas = cls.weaponFamilies.filter((f) => {
+    const d = data.items[`${f}_t1`];
+    return f !== arma.family && d && d.hands === arma.hands && d.damageType === arma.damageType;
+  });
+  return { arma: arma.family, armas: [arma.family, ...reservas], maoSecundaria: arma.hands === 1 ? mao?.family ?? null : null, armaduras: ARMADURA[cls.armorWeight] };
 }
 
-// Peças comuns da faixa: arma + mão secundária (arma de uma mão) + 4 peças de armadura.
+const comum = (data, id) => data.items[id]?.rarity === 'common';
+
+// Peças comuns da faixa (as que o armeiro vende): arma + mão secundária (arma de uma mão) + 4 peças
+// de armadura, na ordem de compra (arma, corpo, mão secundária, cabeça, mãos, pés). Sem peça comum da
+// família do kit na faixa, a arma vem da família de reserva.
 export function kitDaFaixa(classId, faixa, data) {
   const k = kitPadrao(classId, data);
-  const ids = [`${k.arma}_t${faixa}`];
+  const arma = k.armas.map((f) => `${f}_t${faixa}`).find((id) => comum(data, id));
+  const [corpo, ...resto] = k.armaduras.map((f) => `${f}_t${faixa}`);
+  const ids = [arma, corpo];
   if (k.maoSecundaria) ids.push(`${k.maoSecundaria}_t${faixa}`);
-  for (const f of k.armaduras) ids.push(`${f}_t${faixa}`);
-  return ids.filter((id) => data.items[id]);
+  ids.push(...resto);
+  return ids.filter((id) => id && comum(data, id));
+}
+
+// Joias comuns da faixa (amuleto e os dois anéis): compradas só com ouro sobrando.
+export function joiasDaFaixa(faixa, data) {
+  return [`amulet_t${faixa}`, `ring_t${faixa}`, `ring_t${faixa}`].filter((id) => comum(data, id));
 }
 
 function requisitos(ids, data) {
@@ -162,6 +179,7 @@ export function cidadeDaClasse(classId, data) {
       return {
         mapId: id, mestre,
         loja: (m.npcs ?? []).find((n) => n.role === 'shop') ?? null,
+        armeiro: (m.npcs ?? []).find((n) => n.role === 'armorer') ?? null,
         deposito: (m.npcs ?? []).find((n) => n.role === 'storage') ?? null,
       };
     }

@@ -349,9 +349,9 @@
       "mpPerLevel": 4,
       "skills": [
         "sustain_chant",
-        "shared_light",
-        "veil_seal",
         "clear_note",
+        "veil_seal",
+        "shared_light",
         "renewal_choir",
         "vigil_chant"
       ],

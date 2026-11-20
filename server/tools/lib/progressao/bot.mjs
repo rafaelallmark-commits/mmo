@@ -1,15 +1,16 @@
 // Bot de caça solo para a simulação de progressão. Joga como um jogador razoável da classe:
 // distribui atributos pelo plano, compra graus de habilidade, escolhe a área de caça do nível,
-// puxa monstros pela borda do grupo, usa habilidades e tônicos, recolhe o saque útil, equipa
-// melhorias, descansa, foge quando vai morrer e volta do posto depois de cair.
+// puxa monstros pela borda do grupo, usa habilidades (respeitando a recarga global e conjurando
+// parado) e tônicos, recolhe o saque, vende o que não usa, compra o equipamento da faixa no armeiro,
+// equipa melhorias, descansa, foge quando vai morrer e volta do posto depois de cair.
 // Toda AÇÃO sai como mensagem do protocolo (move, attack, cast, use_item, pickup, equip,
-// allocate, learn_skill, buy, respawn, gm...). As DECISÕES usam o que um cliente sabe: a visão
+// allocate, learn_skill, buy, sell, respawn, gm...). As DECISÕES usam o que um cliente sabe: a visão
 // montada pelos snapshots e a ficha do personagem que o servidor devolve (pedido 'char').
 import { IMPLEMENTED_KINDS } from '../../../src/skills.js';
 import { requirementFailures } from '../../../src/equipment.js';
 import { ClienteEmProcesso } from './cliente.mjs';
 import {
-  FAIXAS, kitPadrao, kitDaFaixa, planoAtributos, prioridadeHabilidades, valorItem,
+  FAIXAS, kitPadrao, kitDaFaixa, joiasDaFaixa, planoAtributos, prioridadeHabilidades, valorItem,
   grafoMapas, rota, cidadeDaClasse, areasDeCaca, escolherArea,
 } from './planos.mjs';
 
@@ -27,6 +28,9 @@ export const PADROES = {
   estoqueManaOutros: 10,
   minimoParaComprar: 5, // vai à cidade quando sobram menos de 5...
   reservaPocoes: 15, // ...e fora de combate só bebe tônico se tiver mais que essa reserva
+  estoqueMinimoVida: 60, // no armeiro, guarda ouro para ao menos 60 tônicos de vida antes do equipamento
+  folgaBolsaSucata: 5, // só recolhe sucata (para vender) com mais de 5 espaços livres na bolsa
+  intervaloIdaEquipMs: 10 * 60_000, // no máximo uma ida à cidade só por equipamento a cada 10 min
   prova: true, // faz a prova de classe no nível 10 (libera a habilidade do nível 10)
   semAbateMaxMs: 15 * 60_000, // sem abate por 15 min simulados: vigia destrava (posto + outra área)
   detalhe: false,
@@ -82,6 +86,8 @@ export class BotProgressao {
     this.alvoId = null; this.alvoDesde = 0; this.alvoVidaInicio = 0; this.evitarAlvo = new Map();
     this.andando = null; this.descansando = false; this.descansoDesde = 0; this.fuga = null;
     this.cd = {}; this.buffAte = {}; this.potPronto = 0;
+    this.gcdAte = 0; this.conjurando = null; // recarga global e conjuração em andamento ({ skill, ate })
+    this.ultimaIdaEquip = -1e9;
     this.saque = new Map(); this.falhasSaque = new Map();
     this.area = null; this.reavaliarArea = true; this.ajuste = 0; this.ajusteAte = 0; this.evitarArea = new Map();
     this.tarefa = null; this.tentativasProva = 0; this.provaInicio = 0;
@@ -90,7 +96,9 @@ export class BotProgressao {
     // métricas
     this.niveis = new Map();
     this.equipamento = []; this.provas = []; this.rejeicoes = {}; this.ignorados = 0; this.viagens = 0;
-    this.destravamentos = 0; this.compras = []; this.depositados = 0; this.anomalias = []; this.viagensPorMotivo = {}; this.mortesPor = {};
+    this.destravamentos = 0; this.compras = []; this.vendas = { itens: 0, ouro: 0 }; this.anomalias = []; this.viagensPorMotivo = {}; this.mortesPor = {};
+    this.conjuracoes = { iniciadas: 0, concluidas: 0, interrompidas: 0 };
+    this.faixas = {}; // faixa -> { nivel, minutoNivel, minutoKitCompleto }
   }
 
   log(...a) { if (this.op.detalhe) console.log(`[${this.classId} ${(this.now / 60000).toFixed(1)}min nv${this.level}]`, ...a); }
@@ -99,7 +107,7 @@ export class BotProgressao {
   met(L = this.level) {
     let m = this.niveis.get(L);
     if (!m) {
-      m = { nivel: L, inicioMs: this.now, fimMs: null, abates: 0, xpAbates: 0, mortes: 0, fugas: 0, pocoesVida: 0, pocoesMana: 0, pocoesFora: 0, ouroSaqueado: 0, ouroDropado: 0, ouroGasto: 0, viagens: 0, danoCausado: 0, danoRecebido: 0, cura: 0, monstros: {}, tempos: Object.fromEntries(TEMPOS.map((k) => [k, 0])) };
+      m = { nivel: L, inicioMs: this.now, fimMs: null, abates: 0, xpAbates: 0, mortes: 0, fugas: 0, pocoesVida: 0, pocoesMana: 0, pocoesFora: 0, ouroSaqueado: 0, ouroDropado: 0, ouroVendas: 0, ouroGasto: 0, ouroGastoPocoes: 0, ouroGastoEquip: 0, viagens: 0, danoCausado: 0, danoRecebido: 0, cura: 0, monstros: {}, tempos: Object.fromEntries(TEMPOS.map((k) => [k, 0])) };
       this.niveis.set(L, m);
     }
     return m;
@@ -131,7 +139,10 @@ export class BotProgressao {
     if (!ch) return;
     this.char = ch;
     this.charEm = this.now;
-    for (const [sid, ms] of Object.entries(ch.cooldowns || {})) this.cd[sid] = this.now + ms;
+    // a ficha traz o tempo restante de toda habilidade já usada (0 = pronta). A que está sendo
+    // conjurada só ganha recarga no servidor quando a conjuração termina: até lá vale a do bot (sem
+    // isso, um "0" antigo liberava a habilidade de novo e o bot recomeçava a conjuração sem fim)
+    for (const [sid, ms] of Object.entries(ch.cooldowns || {})) if (this.conjurando?.skill !== sid) this.cd[sid] = this.now + ms;
     if (ch.level > this.level) this.subiuNivel(ch.level);
   }
 
@@ -170,7 +181,7 @@ export class BotProgressao {
         // o servidor manda o saque ainda não recolhido (e não vencido) deste mapa: o que ficou no
         // chão numa fuga, morte ou ida à cidade volta para a lista
         this.saque = new Map((m.loot || []).filter((l) => this.querSaque(l)).map((l) => [l.id, { ...l, visto: this.now }]));
-        this.alvoId = null; this.andando = null; this.descansando = false; this.fuga = null;
+        this.alvoId = null; this.andando = null; this.descansando = false; this.fuga = null; this.conjurando = null;
         break;
       case 'player_dead':
         if (m.eid === this.eid && !this.morto) {
@@ -184,6 +195,21 @@ export class BotProgressao {
         }
         break;
       case 'respawn': if (m.eid === this.eid) this.morto = false; break;
+      case 'cast_end': {
+        // fim da conjuração (só o conjurador recebe): concluída, a recarga começa agora; interrompida,
+        // nada foi gasto e a habilidade pode ser tentada de novo logo
+        const s = this.data.skills[m.skill];
+        if (m.ok) {
+          this.conjuracoes.concluidas++;
+          this.cd[m.skill] = this.now + (m.cooldownMs ?? s?.cooldownMs ?? 0);
+          if (s?.effect.durationMs) this.buffAte[m.skill] = this.now + s.effect.durationMs;
+        } else {
+          this.conjuracoes.interrompidas++;
+          this.cd[m.skill] = this.now + 1500;
+        }
+        if (this.conjurando?.skill === m.skill) this.conjurando = null;
+        break;
+      }
       case 'trial': {
         if (m.char) this.recebeChar(m.char);
         if (m.state === 'success' || m.state === 'failed') {
@@ -247,6 +273,16 @@ export class BotProgressao {
     // parado no lugar? (para detectar caminhos que não chegam)
     if (!this.ultimaPos || dist(eu, this.ultimaPos) > 0.3) { this.ultimaPos = { x: eu.x, z: eu.z }; this.paradoDesde = this.now; }
     if (eu.dead || this.morto) return this.tratarMorte();
+    // conjurando: fica parado (andar, atacar, outra habilidade ou tônico interrompem). Só um tônico
+    // de emergência interrompe a conjuração.
+    if (this.conjurando) {
+      if (this.now <= this.conjurando.ate) {
+        this.atividade = 'combate';
+        if (eu.hp / eu.mhp < 0.3 && this.now >= this.potPronto) this.usarPocao(POCOES_VIDA, eu.mhp - eu.hp, 'pocoesVida');
+        return;
+      }
+      this.conjurando = null; // o fim não chegou (não deveria acontecer): segue a vida
+    }
     if (this.vigiar()) return;
     if (this.pendenteNivel) this.gerenciarPersonagem();
     if (this.now - this.charEm >= 1000) this.atualizarChar();
@@ -440,16 +476,22 @@ export class BotProgressao {
   alcance(s) { return s.range === 'weapon' ? this.char.stats.range : s.range; }
 
   usarHabilidades(eu, alvo, atac, mundo) {
+    // recarga global (formulas.skills.globalCooldownMs): nenhuma habilidade antes do fim dela
+    if (this.now < this.gcdAte) return false;
     const vida = eu.hp / eu.mhp;
     const d = dist(eu, alvo);
     const armaR = this.char.stats.range;
     const engajado = atac.length > 0 || d <= armaR + 4;
     const cura = this.data.skills[this.ordemCombate.find((id) => this.data.skills[id].effect.kind === 'heal')];
+    // conjurar exige ficar parado: com o personagem ainda em movimento (perseguindo o alvo), a frenagem
+    // passaria dos 0,35 m tolerados e interromperia a conjuração
+    const parado = Math.hypot(eu.vx || 0, eu.vz || 0) < 1;
     for (const sid of this.ordemCombate) {
       const rank = this.char.skills[sid] || 0;
       if (rank < 1) continue;
       if ((this.cd[sid] || 0) > this.now) continue;
       const s = this.data.skills[sid];
+      if (s.castMs > 0 && !parado) continue;
       const custo = s.mp + (s.mpPerRank || 0) * (rank - 1);
       // a curadora guarda mana para duas curas
       const reserva = cura && s !== cura ? (cura.mp + (cura.mpPerRank || 0) * ((this.char.skills[cura.id] || 1) - 1)) * 2 : 0;
@@ -458,12 +500,21 @@ export class BotProgressao {
       if (!payload) continue;
       const r = this.cli.pedir('cast', { skill: sid, ...payload });
       if (r.ok) {
-        this.cd[sid] = this.now + s.cooldownMs;
-        if (s.effect.durationMs) this.buffAte[sid] = this.now + s.effect.durationMs;
+        this.gcdAte = this.now + (r.gcdMs ?? 0);
+        if (r.casting) {
+          // conjuração: a recarga só começa no fim (evento cast_end); até lá o bot fica parado
+          this.conjuracoes.iniciadas++;
+          this.conjurando = { skill: sid, ate: this.now + r.casting.ms + 500 };
+          this.cd[sid] = this.conjurando.ate;
+        } else {
+          this.cd[sid] = this.now + s.cooldownMs;
+          if (s.effect.durationMs) this.buffAte[sid] = this.now + s.effect.durationMs;
+        }
         if (r.char) this.recebeChar(r.char);
         return true;
       }
       this.rejeitou(`cast_${this.instancia ? 'prova' : 'mundo'}`, r);
+      if (r.code === 'gcd') { this.gcdAte = this.now + 200; return false; }
       if (r.code === 'cooldown') this.cd[sid] = this.now + 1000;
       if (r.code === 'no_mana') this.atualizarChar();
     }
@@ -566,21 +617,33 @@ export class BotProgressao {
     const def = this.data.items[l.defId];
     if (!def) return false;
     if (def.kind === 'consumable') return this.bolsa([def.id]) < 150;
-    if (!def.slot) return false; // materiais: sem uso para quem só caça (sem venda no jogo)
-    if (def.classes && !def.classes.includes(this.classId)) return false;
-    if (def.slot === 'weapon' && def.family !== this.kit.arma) return false;
-    if (def.slot === 'offhand' && def.family !== this.kit.maoSecundaria) return false;
-    if (!this.char || this.char.bagUsed >= this.char.bagCapacity - 1) return false;
-    // só se for melhor que o que já tem para esse espaço (agora ou para mais tarde)
-    return valorItem(def) > this.melhorPossuido(def.slot);
+    if (!this.char) return false;
+    const livres = this.char.bagCapacity - this.char.bagUsed;
+    // melhoria da própria classe (agora ou para mais tarde) ainda cabe com a bolsa quase cheia
+    if (this.serveParaMim(def) && valorItem(def) > this.melhorPossuido(def.slot)) return livres > 1;
+    // o resto (materiais, peças de outras classes ou piores) é sucata para vender no comerciante,
+    // recolhida só com folga na bolsa, para nunca ocupar o lugar de uma melhoria
+    return !def.questItem && (def.value || 0) > 0 && livres > this.op.folgaBolsaSucata;
   }
 
+  // Peça que esta classe usaria: arma da família do kit (ou da de reserva, só na faixa em que a do kit
+  // não tem peça comum), mão secundária da família do kit, armadura do seu peso e joias.
+  serveParaMim(def) {
+    if (!def.slot) return false;
+    if (def.classes && !def.classes.includes(this.classId)) return false;
+    if (def.slot === 'weapon' && def.family !== this.kit.arma
+      && !(this.kit.armas.includes(def.family) && this.data.items[`${this.kit.arma}_t${def.level}`]?.rarity !== 'common')) return false;
+    if (def.slot === 'offhand' && def.family !== this.kit.maoSecundaria) return false;
+    return true;
+  }
+
+  // Melhor peça da própria classe para o espaço (equipada ou na bolsa); sucata não conta.
   melhorPossuido(slot) {
     let best = 0;
     for (const it of this.char?.items ?? []) {
       if (it.loc !== 'bag' && it.loc !== 'equip') continue;
       const d = this.data.items[it.defId];
-      if (d.slot === slot) best = Math.max(best, valorItem(d));
+      if (d.slot === slot && this.serveParaMim(d)) best = Math.max(best, valorItem(d));
     }
     return best;
   }
@@ -609,6 +672,8 @@ export class BotProgressao {
     if (!best) return false;
     this.atividade = 'saque';
     if (bd <= this.pickupRange - 0.5) {
+      const defSaque = best.defId ? this.data.items[best.defId] : null;
+      const melhoria = !!defSaque?.slot && this.serveParaMim(defSaque) && valorItem(defSaque) > this.melhorPossuido(defSaque.slot);
       const r = this.cli.pedir('pickup', { loot: best.id });
       this.saque.delete(best.id);
       if (!r.ok) {
@@ -619,7 +684,7 @@ export class BotProgressao {
       this.recebeChar(r.char);
       if (!r.alreadyClaimed) {
         if (r.gold) this.met().ouroSaqueado += r.gold;
-        if (r.defId && this.data.items[r.defId].slot) {
+        if (melhoria) {
           this.equipamento.push({ nivel: this.level, item: r.defId, fonte: 'saque', minuto: Math.round(this.now / 60000) });
           this.equiparMelhorias();
         }
@@ -703,7 +768,7 @@ export class BotProgressao {
       this.nivelAlocado = L;
     }
     for (const T of FAIXAS) {
-      if (T <= this.char.level && !this.kitVerificado.has(T)) { this.garantirKit(T); this.kitVerificado.add(T); }
+      if (T <= this.char.level && !this.kitVerificado.has(T)) { this.chegouNaFaixa(T); this.kitVerificado.add(T); }
     }
     for (let guarda = 0; this.char.skillPoints > 0 && guarda < 10; guarda++) {
       const sid = this.proximaHabilidade();
@@ -726,27 +791,37 @@ export class BotProgressao {
     return null;
   }
 
-  // Faixa sem a peça comum da classe (nem por saque): o jogador a obtém no nível da faixa
-  // (modelado com o comando de mestre 'give'; ver premissas no relatório).
-  garantirKit(T) {
+  // Chegou ao nível de uma faixa: as peças comuns que faltam são compradas no armeiro com ouro
+  // (planejarCidade decide quando ir). O que já tinha (saque ou compra adiantada) é anotado.
+  chegouNaFaixa(T) {
+    const min = Math.round(this.now / 60000);
+    this.faixas[T] = { nivel: this.level, minutoNivel: min, minutoKitCompleto: null, pecas: kitDaFaixa(this.classId, T, this.data).length };
+    if (T === 1) return;
     for (const id of kitDaFaixa(this.classId, T, this.data)) {
-      const def = this.data.items[id];
-      if (this.melhorPossuido(def.slot) >= valorItem(def)) {
-        if (T > 1) this.equipamento.push({ nivel: this.level, item: id, fonte: 'ja_tinha', minuto: Math.round(this.now / 60000) });
-        continue;
-      }
-      const r = this.cli.pedir('gm', { cmd: 'give', defId: id });
-      if (!r.ok) { this.rejeitou('gm_give', r); continue; }
-      this.recebeChar(r.char);
-      this.equipamento.push({ nivel: this.level, item: id, fonte: 'kit', minuto: Math.round(this.now / 60000) });
+      if (this.melhorPossuido(this.data.items[id].slot) >= valorItem(this.data.items[id])) this.equipamento.push({ nivel: this.level, item: id, fonte: 'ja_tinha', minuto: min });
     }
-    this.equiparMelhorias();
+    this.conferirKit();
   }
 
+  faixaAtual() { return FAIXAS.filter((t) => t <= this.level).pop() ?? 1; }
+
+  // Peças comuns da faixa que ainda faltam (nenhuma peça igual ou melhor no espaço), na ordem de compra.
+  faltandoDaFaixa(T) {
+    if (T == null) return [];
+    return kitDaFaixa(this.classId, T, this.data).filter((id) => this.melhorPossuido(this.data.items[id].slot) < valorItem(this.data.items[id]));
+  }
+
+  // Marca o minuto em que o kit da faixa atual ficou completo (equipado ou na bolsa à espera dos requisitos).
+  conferirKit() {
+    const T = this.faixaAtual();
+    const f = this.faixas[T];
+    if (f && f.minutoKitCompleto == null && !this.faltandoDaFaixa(T).length) f.minutoKitCompleto = Math.round(this.now / 60000);
+  }
+
+  precoEquip(defId) { return Math.max(1, Math.round((this.data.items[defId].value || 1) * (this.data.formulas.economy?.gearPriceMult ?? 3))); }
+
   usavelAgora(def) {
-    if (!def.slot) return false;
-    if (def.slot === 'weapon' && def.family !== this.kit.arma) return false;
-    if (def.slot === 'offhand' && def.family !== this.kit.maoSecundaria) return false;
+    if (!this.serveParaMim(def)) return false;
     return requirementFailures(this.char, def, this.data).length === 0;
   }
 
@@ -779,6 +854,7 @@ export class BotProgressao {
       this.recebeChar(r.char);
       this.log('equipou', cand.defId);
     }
+    this.conferirKit();
   }
 
   // ---------- cidade: compras, depósito e prova de classe ----------
@@ -795,14 +871,117 @@ export class BotProgressao {
     const valeAPena = qtd >= 40 && qtd * this.data.items[pocao].use.healHp >= regenNaViagem;
     const faltaVida = this.bolsa(POCOES_VIDA) < this.op.minimoParaComprar;
     const faltaMana = this.conjurador && this.bolsa(POCOES_MANA) < this.op.minimoParaComprar;
-    const bolsaCheia = this.char.bagUsed >= this.char.bagCapacity - 4;
-    if (!prova && !bolsaCheia && !((faltaVida || faltaMana) && valeAPena)) return false;
-    this.tarefa = { prova, comprar: true, guardar: true, voltarPara: this.area?.mapId ?? this.mapa, motivo: prova ? 'prova' : bolsaCheia ? 'deposito' : 'compras' };
+    const bolsaCheia = this.char.bagUsed >= this.char.bagCapacity - 2;
+    const equip = this.querIrPorEquipamento();
+    if (!prova && !bolsaCheia && !equip && !((faltaVida || faltaMana) && valeAPena)) return false;
+    this.tarefa = { prova, armeiro: true, comprar: true, voltarPara: this.area?.mapId ?? this.mapa, motivo: prova ? 'prova' : equip ? 'equipamento' : bolsaCheia ? 'venda' : 'compras' };
+    if (equip) this.ultimaIdaEquip = this.now;
     this.log('vai à cidade:', this.tarefa.motivo);
     return true;
   }
 
+  // Ida à cidade só pelo equipamento da faixa: quando o ouro (fora a reserva para tônicos) compra todo
+  // o kit que falta, numa viagem só (no máximo uma vez a cada 10 min). Antes disso as peças vão sendo
+  // compradas nas idas por tônicos, que acontecem de qualquer jeito.
+  querIrPorEquipamento() {
+    const falta = this.faltandoDaFaixa(this.faixaAtual());
+    if (!falta.length || this.now - this.ultimaIdaEquip < this.op.intervaloIdaEquipMs) return false;
+    const custo = falta.reduce((s, id) => s + this.precoEquip(id), 0);
+    return this.char.gold - this.reservaPocoes() >= custo;
+  }
+
   preco(defId) { return Math.max(1, (this.data.items[defId].value || 1) * 2); }
+
+  // Tônicos que o bot quer ter na bolsa: o padrão ou 2,5 × o que gastou no nível anterior (o que for
+  // maior), até 300 (quem bebe muito leva mais e volta menos à cidade); mana: 60 para conjuradores
+  // (ou 2,5 × o gasto, até 300), 10 para os demais.
+  alvosPocoes() {
+    const uso = (k) => Math.max(this.niveis.get(this.level - 1)?.[k] ?? 0, this.niveis.get(this.level)?.[k] ?? 0);
+    return {
+      vida: Math.min(300, Math.max(this.op.estoqueVida, Math.ceil(uso('pocoesVida') * 2.5))),
+      mana: this.conjurador ? Math.min(300, Math.max(this.op.estoqueManaConjurador, Math.ceil(uso('pocoesMana') * 2.5))) : this.op.estoqueManaOutros,
+    };
+  }
+
+  // Custo de completar a bolsa de tônicos até `qVida`/`qMana` (tônico médio a partir do nível 9).
+  custoPocoes(qVida, qMana) {
+    const v = this.level >= 9 ? 'potion_hp_m' : 'potion_hp_s';
+    const m = this.level >= 9 ? 'potion_mp_m' : 'potion_mp_s';
+    return Math.max(0, qVida - this.bolsa(POCOES_VIDA)) * this.preco(v) + Math.max(0, qMana - this.bolsa(POCOES_MANA)) * this.preco(m);
+  }
+
+  // Ouro guardado para tônicos antes de comprar equipamento: o estoque mínimo (60 de vida; 40 de mana
+  // para conjuradores), no máximo 60% do ouro — equipamento nunca deixa o bot sem tônico.
+  reservaPocoes() {
+    return Math.min(this.custoPocoes(this.op.estoqueMinimoVida, this.conjurador ? 40 : 0), this.char.gold * 0.6);
+  }
+
+  // Joias da faixa que faltam: amuleto e anéis com valor abaixo dos da faixa (dois espaços de anel).
+  joiasFaltando(T) {
+    const out = [];
+    const joias = joiasDaFaixa(T, this.data);
+    const amuleto = joias.find((id) => id.startsWith('amulet'));
+    if (amuleto && this.melhorPossuido('amulet') < valorItem(this.data.items[amuleto])) out.push(amuleto);
+    const anel = joias.find((id) => id.startsWith('ring'));
+    if (anel) {
+      const v = valorItem(this.data.items[anel]);
+      const tem = (this.char?.items ?? []).filter((i) => (i.loc === 'bag' || i.loc === 'equip') && this.data.items[i.defId].slot === 'ring' && valorItem(this.data.items[i.defId]) >= v).length;
+      for (let k = tem; k < 2; k++) out.push(anel);
+    }
+    return out;
+  }
+
+  // Armeiro: kit comum da faixa atual (a arma primeiro: se ela não couber no orçamento, espera por
+  // ela), com o ouro que sobra da reserva de tônicos. Com o kit completo e ouro além do estoque cheio
+  // de tônicos: o kit da próxima faixa, quando faltam até 2 níveis para ela, e as joias da faixa.
+  comprarEquipamento(npc) {
+    const T = this.faixaAtual();
+    const reservaMin = this.reservaPocoes();
+    const alvos = this.alvosPocoes();
+    const reservaCheia = this.custoPocoes(alvos.vida, alvos.mana);
+    const compra = (id, guardar) => {
+      const preco = this.precoEquip(id);
+      if (preco > this.char.gold - guardar) return false;
+      const r = this.cli.pedir('buy', { npc: npc.id, item: id, qty: 1 });
+      if (!r.ok) { this.rejeitou('buy_equip', r); return false; }
+      this.recebeChar(r.char);
+      this.met().ouroGasto += r.cost; this.met().ouroGastoEquip += r.cost;
+      this.equipamento.push({ nivel: this.level, item: id, fonte: 'compra', custo: r.cost, minuto: Math.round(this.now / 60000) });
+      return true;
+    };
+    const kit = (lista, guardar) => {
+      for (const id of lista) if (!compra(id, guardar) && this.data.items[id].slot === 'weapon') return;
+    };
+    kit(this.faltandoDaFaixa(T), reservaMin);
+    if (!this.faltandoDaFaixa(T).length) {
+      const prox = FAIXAS.find((t) => t > this.level);
+      if (prox && prox - this.level <= 2) kit(this.faltandoDaFaixa(prox), reservaCheia);
+      for (const id of this.joiasFaltando(T)) compra(id, reservaCheia);
+    }
+    this.equiparMelhorias();
+    this.conferirKit();
+  }
+
+  // Sucata: materiais (o bot não refina), peças que a classe não usa e peças da classe que não são
+  // melhores que as equipadas no espaço. Peça da classe ainda sem requisito (para mais tarde) fica.
+  ehSucata(def) {
+    if (def.kind === 'consumable' || def.questItem || !(def.value > 0)) return false;
+    if (!def.slot || !this.serveParaMim(def)) return true;
+    const equipados = this.char.items.filter((i) => i.loc === 'equip' && this.data.items[i.defId].slot === def.slot).map((i) => valorItem(this.data.items[i.defId]));
+    return equipados.length >= (def.slot === 'ring' ? 2 : 1) && Math.min(...equipados) >= valorItem(def);
+  }
+
+  // Vende a sucata da bolsa a qualquer comerciante ('sell': valor × economy.sellFraction).
+  venderSucata(npc) {
+    for (const it of [...this.char.items]) {
+      if (it.loc !== 'bag' || !this.ehSucata(this.data.items[it.defId])) continue;
+      const r = this.cli.pedir('sell', { npc: npc.id, instance: it.id });
+      if (!r.ok) { this.rejeitou('sell', r); continue; }
+      this.recebeChar(r.char);
+      this.met().ouroVendas += r.gold;
+      this.vendas.itens += it.qty; this.vendas.ouro += r.gold;
+    }
+  }
 
   executarTarefa(eu, mundo) {
     const t = this.tarefa;
@@ -810,19 +989,25 @@ export class BotProgressao {
     if (this.instancia) return this.lutarNaProva(eu, mundo);
     this.atividade = 'cidade';
     if (this.mapa !== c.mapId) {
-      const npc = t.comprar ? c.loja : c.mestre;
+      const npc = t.armeiro && c.armeiro ? c.armeiro : t.comprar ? c.loja : c.mestre;
       return this.viajar(c.mapId, npc.x, npc.z + 2, t.motivo);
+    }
+    // armeiro primeiro (vende a sucata e compra o equipamento com o que sobra da reserva de tônicos),
+    // depois a loja de tônicos, a poucos metros
+    if (t.armeiro) {
+      if (c.armeiro) {
+        if (!this.perto(eu, c.armeiro)) return;
+        this.venderSucata(c.armeiro);
+        this.comprarEquipamento(c.armeiro);
+      }
+      t.armeiro = false;
+      return;
     }
     if (t.comprar) {
       if (!this.perto(eu, c.loja)) return;
+      if (!c.armeiro) this.venderSucata(c.loja);
       this.comprar(c.loja);
       t.comprar = false;
-      return;
-    }
-    if (t.guardar) {
-      if (c.deposito && !this.perto(eu, c.deposito)) return;
-      if (c.deposito) this.guardarObsoletos(c.deposito);
-      t.guardar = false;
       return;
     }
     if (t.prova && !this.char.trialDone && this.tentativasProva < 3) {
@@ -876,7 +1061,7 @@ export class BotProgressao {
         if (!r.ok) { this.rejeitou('buy', r); break; }
         this.recebeChar(r.char);
         orcamento -= r.cost;
-        this.met().ouroGasto += r.cost;
+        this.met().ouroGasto += r.cost; this.met().ouroGastoPocoes += r.cost;
         const ultima = this.compras.at(-1);
         if (ultima && ultima.item === defId && ultima.minuto === Math.round(this.now / 60000)) { ultima.qtd += qtd; ultima.custo += r.cost; }
         else this.compras.push({ nivel: this.level, item: defId, qtd, custo: r.cost, minuto: Math.round(this.now / 60000) });
@@ -889,9 +1074,7 @@ export class BotProgressao {
     const vida = this.level >= 9 && porCompra >= this.preco('potion_hp_m') * 40 ? 'potion_hp_m' : 'potion_hp_s';
     const mana = this.level >= 9 && porCompra >= this.preco('potion_mp_m') * 40 ? 'potion_mp_m' : 'potion_mp_s';
     // estoque: o padrão ou o dobro do que gastou no nível anterior (o que for maior), até 200
-    const uso = (k) => Math.max(this.niveis.get(this.level - 1)?.[k] ?? 0, this.niveis.get(this.level)?.[k] ?? 0);
-    const alvoVida = Math.min(200, Math.max(this.op.estoqueVida, uso('pocoesVida') * 2));
-    const alvoMana = this.conjurador ? Math.min(200, Math.max(this.op.estoqueManaConjurador, uso('pocoesMana') * 2)) : this.op.estoqueManaOutros;
+    const { vida: alvoVida, mana: alvoMana } = this.alvosPocoes();
     const pedidos = [
       [vida, alvoVida - (this.bolsa(POCOES_VIDA) - this.bolsa([vida]))],
       [mana, alvoMana - (this.bolsa(POCOES_MANA) - this.bolsa([mana]))],
@@ -904,24 +1087,6 @@ export class BotProgressao {
       orcamento = total - (metade - orcamento); compra(...pedidos[1]);
       compra(...pedidos[0]);
     } else for (const p of pedidos) compra(...p);
-  }
-
-  // Peças substituídas (pior que a equipada no mesmo espaço) vão para o depósito da conta: o jogo
-  // não tem venda nem descarte, e a bolsa tem 30 espaços.
-  guardarObsoletos(npc) {
-    for (const it of [...this.char.items]) {
-      if (it.loc !== 'bag') continue;
-      const def = this.data.items[it.defId];
-      if (!def.slot) continue;
-      const equipado = this.char.items.filter((i) => i.loc === 'equip' && this.data.items[i.defId].slot === def.slot).map((i) => valorItem(this.data.items[i.defId]));
-      const obsoleto = equipado.length && Math.min(...equipado) >= valorItem(def) && (def.slot !== 'ring' || equipado.length >= 2);
-      const inutil = (def.classes && !def.classes.includes(this.classId)) || (def.slot === 'weapon' && def.family !== this.kit.arma);
-      if (!obsoleto && !inutil) continue;
-      const r = this.cli.pedir('storage_put', { npc: npc.id, instance: it.id });
-      if (!r.ok) { this.rejeitou('storage_put', r); if (r.code === 'storage_full') break; continue; }
-      this.recebeChar(r.char);
-      this.depositados++;
-    }
   }
 
   // ---------- viagem e deslocamento ----------
@@ -1043,7 +1208,8 @@ export class BotProgressao {
         nivel: m.nivel, concluido: fim != null, minutos: fim != null ? r2(minutos) : null, meta,
         desvioPct: minutos != null && meta ? r1((minutos / meta - 1) * 100) : null,
         abates: m.abates, abatesPorMin: min > 0 ? r2(m.abates / min) : 0, mortes: m.mortes, fugas: m.fugas,
-        pocoesVida: m.pocoesVida, pocoesMana: m.pocoesMana, pocoesFora: m.pocoesFora, ouroSaqueado: m.ouroSaqueado, ouroDropado: m.ouroDropado, ouroGasto: m.ouroGasto,
+        pocoesVida: m.pocoesVida, pocoesMana: m.pocoesMana, pocoesFora: m.pocoesFora, ouroSaqueado: m.ouroSaqueado, ouroDropado: m.ouroDropado, ouroVendas: m.ouroVendas,
+        ouroGasto: m.ouroGasto, ouroGastoPocoes: m.ouroGastoPocoes, ouroGastoEquip: m.ouroGastoEquip,
         xpAbates: m.xpAbates, viagens: m.viagens, danoCausado: m.danoCausado, danoRecebido: m.danoRecebido, cura: m.cura,
         tempos: Object.fromEntries(Object.entries(m.tempos).map(([k, v]) => [k, r1(v / 1000)])),
         monstros: m.monstros,
@@ -1055,9 +1221,10 @@ export class BotProgressao {
       minutosTotais: r2(ultimo.reduce((s, n) => s + n.minutos, 0)), simMs: this.now,
       plano: this.plano.fonte, niveis, equipamento: this.equipamento, provas: this.provas, compras: this.compras,
       rejeicoes: this.rejeicoes, saquesIgnorados: this.ignorados, trocasDeArea: this.viagens, destravamentos: this.destravamentos,
-      depositados: this.depositados, ouroFinal: this.char?.gold ?? 0, anomalias: this.anomalias, dano: this.dano,
+      vendas: this.vendas, ouroFinal: this.char?.gold ?? 0, anomalias: this.anomalias, dano: this.dano,
       trocasPorPerigo: this.trocasPorPerigo ?? 0, viagensPorMotivo: this.viagensPorMotivo, mortesPor: this.mortesPor,
-      habilidadesDeAreaEvitadas: this.areaEvitada ?? 0,
+      habilidadesDeAreaEvitadas: this.areaEvitada ?? 0, conjuracoes: this.conjuracoes, faixas: this.faixas,
+      equipadoFinal: (this.char?.items ?? []).filter((i) => i.loc === 'equip').map((i) => i.defId),
       protocolo: { ...this.cli.contagem, snapshotsPorDiferenca: this.cli.delta },
       atributosFinais: this.char?.permanent ?? null, habilidadesFinais: this.char?.skills ?? null, provaVencida: !!this.char?.trialDone,
     };
