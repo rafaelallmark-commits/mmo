@@ -55,7 +55,8 @@ export class WorldLink {
     this.ws = ws;
     ws.on('open', () => {
       const ts = Date.now();
-      ws.send(JSON.stringify({ t: 'hello', zoneId: this.zoneId, maps: this.maps, publicUrl: this.publicUrl, ts, auth: zoneAuth(this.secret, this.zoneId, ts), online: this.s.worldOnlineList() }));
+      // online: quem esta zona tem carregado (o mundo refaz as posses); draining: já está desligando
+      ws.send(JSON.stringify({ t: 'hello', zoneId: this.zoneId, maps: this.maps, publicUrl: this.publicUrl, ts, auth: zoneAuth(this.secret, this.zoneId, ts), online: this.s.worldOnlineList(), draining: !!this.s.closing }));
     });
     ws.on('message', (buf) => {
       if (ws !== this.ws) return;

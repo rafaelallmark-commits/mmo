@@ -82,6 +82,7 @@ export class GameServer {
       this.hosted = new Set(list?.length ? list : open);
       this.world = new WorldLink(this, { url: this.opts.world, secret: this.opts.worldSecret });
       this.transferReplay = new ReplayGuard();
+      this.arriving = new Map();       // charId -> recados que chegaram antes de o login_transfer terminar
       this.remoteMaps = new Map();     // mapId -> { zoneId, up } (mapas das outras zonas)
       this.remote = new Map();         // charId -> { name, zoneId } (on-line em outra zona)
       this.remoteByName = new Map();   // nome minúsculo -> charId (on-line em outra zona)
@@ -747,7 +748,7 @@ export class GameServer {
     this.charZone.set(charId, zone.key);
     this.log(`entrou: ${char.name} nv${char.level} em ${zone.mapId}${wasDead ? ' (estava caído: restaurado no posto)' : ''}`);
     this.broadcastZone(zone.key, { t: 'joined', eid: p.eid, name: char.name });
-    const pid = this.charParty.get(charId);
+    const pid = this.partyIdOf(charId); // (várias zonas: o grupo vem do mundo e já está na cópia daqui)
     if (pid) this.sendPartyUpdate(pid);
     if (this.world) {
       s.leaseEpoch = leaseEpoch;
@@ -765,7 +766,7 @@ export class GameServer {
     if (this.closing) return { ok: false, code: 'closing', reason: 'O servidor está reiniciando. Tente em instantes.' };
     const prev = this.byChar.get(charId);
     if (prev) this.dropSession(prev); // a sessão antiga nesta zona sai antes (salva e devolve a posse)
-    const r = await this.world.request('acquire', { charId, accountId: s.accountId, name: row.name, mapId: row.map_id }, this.world.downMs + 10000);
+    const r = await this.world.request('acquire', { charId, accountId: s.accountId, name: row.name, mapId: row.map_id }, this.world.downMs * 2 + 10000);
     if (!r.ok) return { ok: false, code: r.code ?? 'busy', reason: r.reason, cache: false };
     const release = () => this.world.notify('release', { charId, epoch: r.epoch });
     if (!this.sessions.has(s) || s.charId != null) { release(); return undefined; } // a conexão caiu enquanto esperava
@@ -823,7 +824,15 @@ export class GameServer {
     if (b1) return abort(b1);
     const prev = this.byChar.get(p.charId);
     if (prev) this.dropSession(prev);
-    const r = await this.world.request('acquire', { charId: p.charId, accountId: acc.id, name: row.name, mapId: p.mapId, transfer: { jti: p.jti, from: p.from } }, this.world.downMs + 10000);
+    // recados para ele que chegarem enquanto a posse é confirmada ficam guardados (saem depois da resposta)
+    const early = [];
+    this.arriving.set(p.charId, early);
+    let r;
+    try {
+      r = await this.world.request('acquire', { charId: p.charId, accountId: acc.id, name: row.name, mapId: p.mapId, transfer: { jti: p.jti, from: p.from } }, this.world.downMs * 2 + 10000);
+    } finally {
+      if (this.arriving.get(p.charId) === early) this.arriving.delete(p.charId);
+    }
     if (!r.ok) return { ok: false, code: r.code ?? 'busy', reason: r.reason };
     if (!this.sessions.has(s) || s.accountId != null) { this.world.notify('release', { charId: p.charId, epoch: r.epoch }); return undefined; }
     acc = this.store.findAccountById(acc.id) ?? acc; // dados frescos: suspensão e silêncio podem ter mudado na espera
@@ -850,7 +859,10 @@ export class GameServer {
       np.potionReadyAt = np.zone.now + (r.timers.potion || 0);
       res.char = np.zone.charView(np);
     }
-    return { ...res, account: acc.name, transferred: true, dataVersion: this.dataVersion };
+    // depois da resposta: o que o mundo guardou durante a viagem e o que chegou enquanto a posse era confirmada
+    const mail = [...(r.inbox ?? []), ...early];
+    return { ...res, account: acc.name, transferred: true, dataVersion: this.dataVersion,
+      after: mail.length ? () => { for (const it of mail) this.onWorldDeliver({ charId: p.charId, msg: it.msg, note: it.note }); } : undefined };
   }
 
   // Leva o personagem para um mapa de outra zona: cancela troca e duelo, pede o token ao mundo (a
@@ -1579,10 +1591,12 @@ export class GameServer {
   }
 
   onWorldDeliver({ charId, msg, note }) {
+    const s = this.byChar.get(charId);
+    const early = s ? null : this.arriving.get(charId);
+    if (early) { if (early.length < 32) early.push({ msg, note }); return; } // chegando: entrega depois do login_transfer
     if (note?.kind === 'clan_invite' && Number.isInteger(note.clanId)) this.clans.invites.set(charId, { clanId: note.clanId, from: note.from, at: Date.now() });
     // fala de quem está em outra zona (sussurro, grupo): guardada para dar contexto a denúncias daqui
     if (note?.kind === 'chat' && Number.isInteger(note.from) && msg?.t === 'chat' && typeof msg.text === 'string') this.mod.remember(note.from, msg.channel, msg.text);
-    const s = this.byChar.get(charId);
     if (s && msg) this.sendTo(s, msg);
   }
 

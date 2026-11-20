@@ -12,7 +12,7 @@
 // - a rota da moderação (expulsão, suspensão e silêncio por conta) e dos anúncios para todas as zonas.
 //
 // Protocolo interno (WebSocket + JSON), só para as zonas. A primeira mensagem da zona é
-//   { t:'hello', zoneId, maps, publicUrl, ts, auth, online }   auth = HMAC-SHA256(segredo, `${zoneId}:${ts}`)
+//   { t:'hello', zoneId, maps, publicUrl, ts, auth, online, draining }   auth = HMAC-SHA256(segredo, `${zoneId}:${ts}`)
 // Pedidos { t, id, ... } recebem { t:'res', id, ok, ... }; o resto são avisos sem resposta.
 // Pedidos: acquire, transfer, party_invite/accept/decline/leave/kick, where.
 // Avisos da zona: hb, release, transfer_saved, transfer_cancel, transfer_abort, online, moved, send,
@@ -181,9 +181,9 @@ export class WorldService {
     let z = old;
     if (z) {
       for (const map of z.maps) if (!maps.includes(map) && this.mapOwner.get(map) === z.id) this.mapOwner.delete(map);
-      Object.assign(z, { ws, maps: new Set(maps), publicUrl: m.publicUrl, connected: true, draining: false, lastSeen: now });
+      Object.assign(z, { ws, maps: new Set(maps), publicUrl: m.publicUrl, connected: true, draining: !!m.draining, lastSeen: now });
     } else {
-      z = { id: m.zoneId, ws, maps: new Set(maps), publicUrl: m.publicUrl, players: 0, lastSeen: now, connected: true, since: now };
+      z = { id: m.zoneId, ws, maps: new Set(maps), publicUrl: m.publicUrl, players: 0, lastSeen: now, connected: true, draining: !!m.draining, since: now };
       this.zones.set(z.id, z);
     }
     for (const map of maps) this.mapOwner.set(map, z.id);
@@ -235,13 +235,7 @@ export class WorldService {
     const reply = (r) => { if (m.id != null) this.send(z, { t: 'res', id: m.id, ...r }); };
     switch (m.t) {
       case 'hb': z.players = Number(m.players) || 0; return this.send(z, { t: 'hb_ack' });
-      case 'acquire': {
-        // o que chegou para o personagem durante a transferência vai depois da resposta (ele já está na zona)
-        const { inbox, ...r } = await this.acquire(z, m);
-        reply(r);
-        for (const it of inbox ?? []) this.deliver(m.charId, it.msg, it.note);
-        return;
-      }
+      case 'acquire': return reply(await this.acquire(z, m)); // (na chegada, leva os recados guardados)
       case 'release': return this.release(z, m);
       case 'transfer': return reply(this.transfer(z, m));
       case 'transfer_saved': return this.transferSaved(z, m);
@@ -327,6 +321,7 @@ export class WorldService {
     const grace = this.startedAt + this.opts.downAfterMs - Date.now();
     if (grace > 0 && !this.leases.has(m.charId)) await sleep(grace);
     const deadline = Date.now() + this.opts.downAfterMs + 5000;
+    const kicked = new Set(); // posses para as quais este pedido já mandou "kick" (repetir não faz mal)
     for (;;) {
       if (!this.isCurrent(z)) return { ok: false, code: 'world_down', reason: 'Zona desconectada do mundo.' };
       const { error, list, wait } = this.conflictsFor(z, m);
@@ -334,8 +329,8 @@ export class WorldService {
       if (!list.length && !wait) break;
       for (const [cid, l] of list) {
         const holder = this.zones.get(l.zoneId);
-        if (holder?.connected && !l.kickSent) {
-          l.kickSent = true;
+        if (holder?.connected && !kicked.has(l)) {
+          kicked.add(l);
           this.send(holder, { t: 'kick', charId: cid, epoch: l.epoch, reason: 'Sua conta entrou em outra conexão.' });
         }
       }
@@ -379,7 +374,7 @@ export class WorldService {
     const x = Number(m.x) || 0, zz = Number(m.z) || 0;
     const token = signToken({ typ: 'transfer', charId: m.charId, accountId: l.accountId, from: z.id, to: to.id, mapId: m.mapId, x, z: zz }, this.opts.secret, ttl);
     const jti = JSON.parse(Buffer.from(token.split('.')[0], 'base64url').toString()).jti;
-    Object.assign(l, { state: 'transferring', to: to.id, until: Date.now() + ttl * 1000, fromMapId: l.mapId, mapId: m.mapId, jti, saved: !!m.saved, inbox: [], chat: chatOf(m.chat), kickSent: false });
+    Object.assign(l, { state: 'transferring', to: to.id, until: Date.now() + ttl * 1000, fromMapId: l.mapId, mapId: m.mapId, jti, saved: !!m.saved, inbox: [], chat: chatOf(m.chat) });
     const o = this.online.get(m.charId);
     if (o) this.setOnline(m.charId, { ...o, zoneId: to.id, mapId: m.mapId });
     if (l.saved) this.changed(m.charId);

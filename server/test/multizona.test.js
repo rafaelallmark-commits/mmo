@@ -486,6 +486,32 @@ test('várias zonas: login direto no meio de uma transferência e token antigo d
   });
 });
 
+test('várias zonas: recado para quem está mudando de zona é entregue na chegada', { timeout: 60000 }, async () => {
+  await withCluster(async ({ world, A, B }) => {
+    const a = await hero(A, 'Remetente');
+    const b0 = await hero(A, 'Andarilho');
+    const bid = b0.char.id;
+    await b0.request('gm', { cmd: 'xp', level: 5 });
+    await b0.request('gm', { cmd: 'teleport', x: 148.5, z: 92 });
+    const pushed = b0.waitFor((m) => m.t === 'transfer', 5000, 'transferência');
+    assert.equal((await b0.request('portal', { portal: 'to_brejo' })).ok, true);
+    const tr = await pushed;
+    await waitUntil(() => A.remote.get(bid)?.zoneId === 'B', 'diretório de A aponta para B');
+    // ainda sem chegar em B: o mundo guarda o sussurro
+    assert.equal((await a.request('chat', { channel: 'whisper', to: 'Andarilho', text: 'te espero no brejo' })).ok, true);
+    await waitUntil(() => world.leases.get(bid)?.inbox?.length === 1, 'recado guardado na posse em trânsito');
+    const c = new SimClient('andarilho-b');
+    await c.connect(tr.url);
+    const got = c.waitFor((m) => m.t === 'chat' && m.channel === 'whisper' && m.text === 'te espero no brejo', 3000, 'recado na chegada');
+    const r = await c.request('login_transfer', { token: tr.token });
+    assert.equal(r.ok, true, r.reason);
+    const w = await got;
+    assert.deepEqual([w.from, w.to], ['Remetente', 'Andarilho']);
+    log('sussurro mandado durante a transferência chegou depois do login_transfer em B');
+    for (const x of [a, b0, c]) x.ws.close();
+  });
+});
+
 test('várias zonas: moderação na chegada por transferência e entre zonas', { timeout: 60000 }, async () => {
   await withCluster(async ({ world, A, B }) => {
     const gm = await hero(A, 'Vigia');

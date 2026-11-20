@@ -663,7 +663,11 @@ func enter_world(cid: int) -> void:
 	Net.request("enter", {"charId": cid}, func(r):
 		if not r["ok"]:
 			hide_loading()
-			set_status(r["reason"], true)
+			if state == "world" and hud:
+				# reconexão recusada (ex.: área de outra zona fora do ar): o motivo fica no aviso de conexão
+				hud.show_disconnect(str(r["reason"]))
+			else:
+				set_status(r["reason"], true)
 			return
 		if r.get("transfer") is Dictionary:
 			# várias zonas: o mapa salvo é de outra zona; a conexão segue para lá
