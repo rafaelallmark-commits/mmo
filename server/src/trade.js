@@ -51,12 +51,48 @@ export class TradeManager {
 
   tradeOf(p) { const id = this.byChar.get(p.char.id); return id ? this.trades.get(id) : null; }
 
+  // foto de cada item oferecido (quantidade e grau como o outro lado viu)
+  snapOf(p, ids) {
+    const out = {};
+    for (const id of ids) { const it = p.char.items.get(id); if (it) out[id] = { defId: it.defId, qty: it.qty, enh: it.enh || 0 }; }
+    return out;
+  }
+
+  isOffered(charId, itemId) {
+    const id = this.byChar.get(charId);
+    const tr = id ? this.trades.get(id) : null;
+    return !!tr && tr.offer[charId].items.includes(itemId);
+  }
+
+  // Depois de qualquer ação que mexe em itens: se algo oferecido mudou (quantidade, grau, saiu da
+  // bolsa), a oferta passa a mostrar o valor novo e os dois lados destravam para conferir de novo.
+  refresh(charId) {
+    const id = this.byChar.get(charId);
+    const tr = id ? this.trades.get(id) : null;
+    if (!tr) return false;
+    const p = this.player(charId);
+    const o = tr.offer[charId];
+    if (!p || !o.items.length) return false;
+    const keep = o.items.filter((iid) => { const it = p.char.items.get(iid); return it && it.loc === 'bag'; });
+    const snap = this.snapOf(p, keep);
+    const same = keep.length === o.items.length && keep.every((iid) => {
+      const a = o.snap?.[iid], b = snap[iid];
+      return a && b && a.defId === b.defId && a.qty === b.qty && a.enh === b.enh;
+    });
+    if (same) return false;
+    o.items = keep; o.snap = snap;
+    for (const c of [tr.a, tr.b]) { tr.locked[c] = false; tr.confirmed[c] = false; }
+    this.push(tr);
+    return true;
+  }
+
   // item saiu da bolsa por fora (venda, descarte): tira da oferta e destrava os dois lados
   dropItem(charId, itemId) {
     const id = this.byChar.get(charId);
     const tr = id ? this.trades.get(id) : null;
     if (!tr || !tr.offer[charId].items.includes(itemId)) return;
     tr.offer[charId].items = tr.offer[charId].items.filter((x) => x !== itemId);
+    delete tr.offer[charId].snap?.[itemId];
     for (const c of [tr.a, tr.b]) { tr.locked[c] = false; tr.confirmed[c] = false; }
     this.push(tr);
   }
@@ -72,7 +108,7 @@ export class TradeManager {
     }
     gold = Math.floor(Number(gold) || 0);
     if (gold < 0 || gold > p.char.gold) return { ok: false, code: 'no_gold', reason: `Ouro insuficiente: você tem ${p.char.gold}.` };
-    tr.offer[p.char.id] = { items: [...items], gold };
+    tr.offer[p.char.id] = { items: [...items], gold, snap: this.snapOf(p, items) };
     for (const c of [tr.a, tr.b]) { tr.locked[c] = false; tr.confirmed[c] = false; }
     this.push(tr);
     return { ok: true };
@@ -131,6 +167,10 @@ export class TradeManager {
     for (const [pl, o] of [[a, oa], [b, ob]]) {
       if (o.gold > pl.char.gold) return fail(`${pl.char.name} não tem mais esse ouro.`);
       for (const id of o.items) { const it = pl.char.items.get(id); if (!it || it.loc !== 'bag') return fail('Um dos itens oferecidos não está mais na bolsa.'); }
+    }
+    // nada pode ter mudado desde a última oferta vista pelos dois (quantidade, grau)
+    for (const c of [tr.a, tr.b]) {
+      if (this.refresh(c)) return { ok: false, code: 'changed', reason: 'Um item oferecido mudou. As ofertas foram destravadas: confira e trave de novo.' };
     }
     if (bagCount(a.char) - oa.items.length + ob.items.length > BAG_CAPACITY) return fail(`Bolsa de ${a.char.name} cheia.`);
     if (bagCount(b.char) - ob.items.length + oa.items.length > BAG_CAPACITY) return fail(`Bolsa de ${b.char.name} cheia.`);
