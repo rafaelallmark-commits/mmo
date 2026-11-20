@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { GameServer } from '../src/server.js';
 import { loadGameData } from '../src/data.js';
-import { createStore } from '../src/db.js';
+import { createStore, testSchemaFor } from '../src/db.js';
 import { Zone } from '../src/zone.js';
 import { Dungeon } from '../src/dungeon.js';
 import { makeRng } from '../src/rng.js';
@@ -53,8 +53,15 @@ test('telemetria: morte, fim de sessão e missão aceita vão para a auditoria e
     assert.equal(sess.map, 'estrada_velha');
     assert.ok(server.store.auditTail(5, 'quest_accept').some((r) => JSON.parse(r.data_json).quest === 'tutorial'));
   } finally { await server.stop(); }
-  // o relatório lê o banco (só leitura) e resume
-  const r = spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', new URL('../tools/telemetria.mjs', import.meta.url).pathname, '--db', db], { encoding: 'utf8', timeout: 20000 });
+  // o relatório lê o banco (só leitura) e resume — o mesmo banco do servidor: o arquivo no SQLite ou, no
+  // npm run test:pg, o esquema que createStore deu a esse caminho
+  let target = db;
+  if (process.env.CINZAS_TEST_PG) {
+    const u = new URL(process.env.CINZAS_TEST_PG);
+    u.searchParams.set('schema', testSchemaFor(db).schema);
+    target = u.toString();
+  }
+  const r = spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', new URL('../tools/telemetria.mjs', import.meta.url).pathname, '--db', target], { encoding: 'utf8', timeout: 20000 });
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /## Mortes\n\n1 mortes/);
   assert.match(r.stdout, /Último golpe:\*\* furrow_rat \(1\)/);
