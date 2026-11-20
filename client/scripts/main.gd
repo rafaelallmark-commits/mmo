@@ -1,8 +1,10 @@
 extends Node
 ## Navegação do cliente (docs/07-navegacao.md):
-## Título → Entrar → Personagens ⇄ Criação → Carregando → Mundo (+ menu de pausa e opções).
+## Título → Entrar → Personagens ⇄ Criação → Carregando → (Abertura, só personagem novo) → Mundo
+## (+ menu de pausa e opções).
 ## Guarda o estado recebido do servidor (definições, ficha, diário, grupo).
-## Argumentos (após "--"): --server=ws://host:7777 --account=x --password=y --autotest --navshots=pasta --sceneshots=pasta ...
+## Argumentos (após "--"): --server=ws://host:7777 --account=x --password=y --autotest --navshots=pasta --sceneshots=pasta
+##   --sem-abertura (nunca toca a abertura) · --abertura=pasta (força a abertura e grava capturas nela) ...
 
 const WorldScript = preload("res://scripts/world.gd")
 const HudScript = preload("res://scripts/hud.gd")
@@ -776,6 +778,61 @@ func _enter_ok(r: Dictionary) -> void:
 	hud.system("Local: %s." % map_def().get("name", "?"))
 	in_world = true
 	hide_loading(0.5)
+	_maybe_play_intro(r["char"])
+
+# ---------------- abertura (uma vez por personagem novo) ----------------
+const IntroScript = preload("res://scripts/intro.gd")
+var intro: Node3D = null
+
+## Personagem que nunca jogou (nível 1, 0 XP, na Estrada Velha) e que ainda não viu a abertura neste
+## computador: ~40 s na ponte antes do Posto da Ponte (docs/02-campanha.md). O personagem já está no
+## mundo, dentro da área segura do posto; a interface e os cliques no mundo esperam a cena acabar.
+func _maybe_play_intro(c: Dictionary) -> void:
+	# --abertura=pasta: força a abertura (mesmo no autoteste) e grava capturas nela, para conferência
+	var forced := args.has("abertura")
+	if intro or args.has("sem-abertura") or (not forced and (args.has("autotest") or args.has("navshots") or args.has("sceneshots"))):
+		return
+	if int(c.get("level", 1)) != 1 or int(c.get("xp", 0)) != 0 or str(c.get("mapId", map_id)) != "estrada_velha":
+		return
+	var cfg := ConfigFile.new()
+	cfg.load(SETTINGS_PATH)
+	var key := str(c.get("id", ""))
+	if key == "" or (bool(cfg.get_value("abertura", key, false)) and not forced):
+		return
+	cfg.set_value("abertura", key, true)
+	cfg.save(SETTINGS_PATH)
+	var fam := ""
+	for it in c.get("items", []):
+		if it.get("loc", "") == "equip" and it.get("slot", "") == "weapon":
+			fam = defs["items"].get(it.get("defId", ""), {}).get("family", "")
+	intro = IntroScript.new()
+	intro.setup(str(c.get("classId", "")), fam)
+	if forced and not (str(args["abertura"]) in ["", "true"]):
+		intro.shots_dir = str(args["abertura"])
+	add_child(intro)
+	if hud:
+		hud.visible = false
+		hud.process_mode = Node.PROCESS_MODE_DISABLED
+	if world:
+		# o mapa fica atrás, escondido e parado (terreno, luz e personagens), até a cena acabar
+		world.process_mode = Node.PROCESS_MODE_DISABLED
+		world.visible = false
+	intro.finished.connect(_end_intro)
+
+func _end_intro() -> void:
+	if intro:
+		intro.queue_free()
+		intro = null
+	if world:
+		world.process_mode = Node.PROCESS_MODE_INHERIT
+		world.visible = true
+		if world.camera:
+			world.camera.current = true
+		if world.sun_light:
+			preload("res://scripts/art.gd").publish_sun(world.sun_light)  # a abertura publicou a luz dela
+	if hud:
+		hud.process_mode = Node.PROCESS_MODE_INHERIT
+		hud.visible = in_world
 
 ## Várias zonas: o personagem vai para um mapa de outra zona (resposta do "enter" ou mensagem "transfer"
 ## ao cruzar um portal). Tela Carregando, conexão nova no endereço recebido e "login_transfer"; a chegada
@@ -894,6 +951,9 @@ func leave_world(to_title: bool) -> void:
 	reconnecting = false
 	_transfer = {}  # várias zonas: sair no meio de uma transferência desiste dela (a conexão nova é a de entrada)
 	close_pause_menu()
+	if intro:
+		intro.queue_free()
+		intro = null
 	if world:
 		world.queue_free()
 		world = null
@@ -1074,6 +1134,8 @@ func close_options() -> void:
 		Sfx.ui("ui_close")
 
 func _unhandled_input(event: InputEvent) -> void:
+	if intro:
+		return  # a abertura trata o Esc (pular)
 	if event is InputEventKey and event.pressed and not event.echo and (event as InputEventKey).keycode == KEY_ESCAPE:
 		if options_panel:
 			close_options()

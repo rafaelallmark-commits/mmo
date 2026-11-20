@@ -34,7 +34,8 @@ Como o jogador se move entre telas, painéis e mapas. Este documento manda: o cl
 | **Entrar** | servidor, conta, senha; Entrar, Criar conta, Voltar; erros em vermelho | sucesso → Personagens; Voltar → Título |
 | **Personagens** | até 4 cartões (nome, classe, nível, mapa); personagem selecionado em 3D no centro, girando | Jogar → Carregando; Criar novo → Criação; Voltar → Entrar |
 | **Criação** | 8 classes em dois grupos (Âmbar / Nacre), papel e armas da classe, prévia 3D muda ao escolher, nome | Criar → Personagens; Voltar → Personagens |
-| **Carregando** | nome do mapa, dica de jogo; aparece ao entrar no mundo e em cada troca de mapa | → Mundo |
+| **Carregando** | nome do mapa, dica de jogo; aparece ao entrar no mundo e em cada troca de mapa | → Mundo (personagem novo: → Abertura) |
+| **Abertura** | ~40 s na ponte antes do amanhecer (docs/02, "Abertura"): caravana, primeiro toque, sulco vermelho, a margem que cede e Mara entregando o mapa; legendas, sem interface. Só na primeira entrada de um personagem novo neste computador | Pular (Esc, Espaço, Enter ou botão) ou fim da cena → Mundo, no Posto da Ponte |
 | **Opções** | sensibilidade da câmera, mostrar nomes, escala da interface (salvos em `user://opcoes.cfg`); volume geral, da música e dos efeitos (salvos em `user://settings.cfg`) | Fechar → tela anterior |
 
 ## 7.2 Dentro do jogo: camadas
