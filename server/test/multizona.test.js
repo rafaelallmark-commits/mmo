@@ -167,6 +167,10 @@ test('várias zonas: registro, entrada transferida, portal entre zonas e posse �
     const pid = p.char.id;
     await p.request('gm', { cmd: 'xp', level: 5 });
     await p.request('gm', { cmd: 'teleport', x: 148.5, z: 92 });
+    // recarga de habilidade e de tônico em andamento: seguem como tempo restante para a outra zona
+    const pa = A.playerOf(pid);
+    pa.cooldowns.rupture = pa.zone.now + 20000;
+    pa.potionReadyAt = pa.zone.now + 2500;
     const pushed = p.waitFor((m) => m.t === 'transfer', 5000, 'transferência');
     const pr = await p.request('portal', { portal: 'to_brejo' });
     assert.equal(pr.ok, true, pr.reason);
@@ -178,8 +182,13 @@ test('várias zonas: registro, entrada transferida, portal entre zonas e posse �
     const { c: pb, r: rb } = await follow(tr, 'passante-b');
     assert.equal(rb.ok, true, rb.reason);
     assert.deepEqual([rb.char.mapId, rb.char.x, rb.char.z, rb.char.level], ['brejo_bombas', 10, 70, 5]);
-    assert.ok(B.playerOf(pid));
+    const pb0 = B.playerOf(pid);
+    assert.ok(pb0);
     assert.ok(B.zone === undefined, 'B não hospeda a Estrada Velha');
+    const cdLeft = pb0.cooldowns.rupture - pb0.zone.now;
+    assert.ok(cdLeft > 15000 && cdLeft <= 20000, `recarga seguiu para B (${cdLeft} ms)`);
+    assert.ok(pb0.potionReadyAt - pb0.zone.now > 0, 'recarga do tônico seguiu para B');
+    assert.ok(rb.char.cooldowns.rupture > 15000, 'a ficha da chegada mostra a recarga');
     // o mesmo token de novo: recusado (uso único) e quem já entrou continua
     const replay = await follow(tr, 'replay');
     assert.equal(replay.r.ok, false);

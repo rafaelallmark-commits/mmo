@@ -300,7 +300,7 @@ reservado no compose), limites de taxa por conexão, papéis de mestre e privaci
 
 Modo **opcional** (`--world`): os mapas abertos se dividem entre processos de zona e um **serviço de mundo**
 coordena. Sem `--world`, um processo hospeda tudo, como antes. Operação em [08-operacao.md §8.10](08-operacao.md#810-múltiplas-zonas);
-decisões D93–D100 em [DECISOES.md](DECISOES.md).
+decisões D100–D107 em [DECISOES.md](DECISOES.md).
 
 ```
                      ┌──────────────────────────────────────────────┐
@@ -345,7 +345,8 @@ cliente           zona A (origem)            mundo                      zona B (
 
   Login direto antes do `transfer_saved` derruba o personagem na origem (que grava) e só depois concede;
   depois dele, o login vale e o token antigo passa a ser recusado. Recados para quem está em trânsito
-  ficam guardados e saem na chegada.
+  ficam guardados e saem na chegada; recargas de habilidade e de tônico e as últimas falas (contexto de
+  denúncias) vão junto com o `transfer_saved`.
 - **Instâncias**: a prova de classe nasce na zona da cidade do mestre e a Última Eclusa na zona dos
   Canais, como hoje (o grupo precisa estar junto na porta).
 - **Social**: sussurro e convite de grupo acham a pessoa pelo diretório do mundo; **grupos moram no mundo**

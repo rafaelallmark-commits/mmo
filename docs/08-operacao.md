@@ -339,7 +339,7 @@ personagens) ou pelo serviço de contas apaga e-mail, senha, itens e missões na
 ## 8.10 Múltiplas zonas
 
 Opcional: os mapas abertos se dividem entre processos de zona, coordenados por um **serviço de mundo** interno
-(desenho em [05-arquitetura.md](05-arquitetura.md#múltiplas-zonas), decisões D93–D100). Sem `--world`, nada muda.
+(desenho em [05-arquitetura.md](05-arquitetura.md#múltiplas-zonas), decisões D100–D107). Sem `--world`, nada muda.
 Todos os processos usam **o mesmo banco** e o **mesmo segredo do mundo**, só por variável de ambiente:
 
 ```bash

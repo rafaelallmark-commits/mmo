@@ -842,7 +842,15 @@ export class GameServer {
     if (r.chat) this.mod.adopt(p.charId, r.chat); // falas recentes vêm junto (contexto de denúncias)
     const char = this.store.loadCharacter(p.charId);
     if (!this.zones.has(char.mapId)) { char.mapId = p.mapId; char.x = p.x; char.z = p.z; }
-    return { ...this.enterChar(s, char, r.epoch), account: acc.name, transferred: true, dataVersion: this.dataVersion };
+    const res = this.enterChar(s, char, r.epoch);
+    const np = this.playerOf(p.charId);
+    if (r.timers && np) {
+      // recargas e tônico que vieram da zona de origem (tempo restante)
+      for (const [k, ms] of Object.entries(r.timers.cd ?? {})) np.cooldowns[k] = np.zone.now + ms;
+      np.potionReadyAt = np.zone.now + (r.timers.potion || 0);
+      res.char = np.zone.charView(np);
+    }
+    return { ...res, account: acc.name, transferred: true, dataVersion: this.dataVersion };
   }
 
   // Leva o personagem para um mapa de outra zona: cancela troca e duelo, pede o token ao mundo (a
@@ -876,8 +884,13 @@ export class GameServer {
     c.mapId = mapId; c.x = x; c.z = z;
     delete c.saveMapId; delete c.saveX; delete c.saveZ;
     this.store.saveCharacter(c);
-    // gravado e fora daqui: só agora a posse pode seguir para o destino (ou para um login direto)
-    this.world.notify('transfer_saved', { charId, jti: r.jti, chat: this.mod.chatLog.get(charId) ?? null });
+    // gravado e fora daqui: só agora a posse pode seguir para o destino (ou para um login direto). As
+    // recargas e o tônico vão junto como tempo restante (como na troca de mapa dentro do processo).
+    const timers = {
+      cd: Object.fromEntries(Object.entries(p.cooldowns).map(([k, t]) => [k, Math.round(t - zone.now)]).filter(([, ms]) => ms > 0)),
+      potion: Math.max(0, Math.round((p.potionReadyAt || 0) - zone.now)),
+    };
+    this.world.notify('transfer_saved', { charId, jti: r.jti, chat: this.mod.chatLog.get(charId) ?? null, timers });
     s.charId = null;
     s.leaseEpoch = null;
     this.forgetParty(charId);

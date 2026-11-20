@@ -48,6 +48,14 @@ function chatOf(list) {
     .map((l) => ({ at: Number(l.at) || 0, channel: String(l.channel ?? '').slice(0, 16), text: l.text.slice(0, 200) }));
 }
 
+// recargas que acompanham o personagem (tempo restante em ms; no máximo 10 min cada)
+function timersOf(t) {
+  if (!t || typeof t !== 'object') return null;
+  const ms = (v) => Math.max(0, Math.min(600000, Math.round(Number(v) || 0)));
+  const cd = Object.fromEntries(Object.entries(t.cd && typeof t.cd === 'object' ? t.cd : {}).filter(([k]) => typeof k === 'string' && k.length <= 40).slice(0, 40).map(([k, v]) => [k, ms(v)]));
+  return { cd, potion: ms(t.potion) };
+}
+
 function sameText(a, b) {
   const x = Buffer.from(String(a)), y = Buffer.from(String(b));
   return x.length === y.length && timingSafeEqual(x, y);
@@ -346,7 +354,8 @@ export class WorldService {
     }
     this.changed(m.charId);
     const arrived = m.transfer && prev?.state === 'transferring';
-    return { ok: true, epoch, ...(arrived && prev.chat ? { chat: prev.chat } : {}), ...(arrived && prev.inbox?.length ? { inbox: prev.inbox } : {}) };
+    return { ok: true, epoch, ...(arrived && prev.chat ? { chat: prev.chat } : {}), ...(arrived && prev.timers ? { timers: prev.timers } : {}),
+      ...(arrived && prev.inbox?.length ? { inbox: prev.inbox } : {}) };
   }
 
   release(z, m) {
@@ -384,6 +393,7 @@ export class WorldService {
     if (!l || l.state !== 'transferring' || l.zoneId !== z.id || l.jti !== m.jti) return;
     l.saved = true;
     if (m.chat) l.chat = chatOf(m.chat);
+    if (m.timers) l.timers = timersOf(m.timers);
     this.changed(m.charId);
   }
 
