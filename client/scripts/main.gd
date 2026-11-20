@@ -345,9 +345,26 @@ func show_register_accounts() -> void:
 	var e_acc := _field(box, "Conta", account)
 	var e_mail := _field(box, "E-mail", "")
 	var e_pass := _field(box, "Senha (8 ou mais caracteres)", password, true)
+	# aceite dos termos (o serviço de contas recusa o cadastro sem ele)
+	var agree := CheckBox.new()
+	agree.text = "Tenho 13 anos ou mais e aceito os Termos de Uso e a Política de Privacidade"
+	agree.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	agree.custom_minimum_size = Vector2(360, 0)
+	box.add_child(agree)
+	var links := HBoxContainer.new()
+	box.add_child(links)
+	for spec in [["Ler os Termos de Uso", "/termos"], ["Ler a Política de Privacidade", "/privacidade"]]:
+		var lb := LinkButton.new()
+		lb.text = spec[0]
+		var path: String = spec[1]
+		lb.pressed.connect(func(): OS.shell_open(_accounts_base() + path))
+		links.add_child(lb)
 	_button(box, "Criar e receber o código", func():
+		if not agree.button_pressed:
+			set_status("Para criar a conta, marque a confirmação de idade e de aceite dos termos.", true)
+			return
 		account = e_acc.text.strip_edges(); password = e_pass.text
-		_accounts_post("/contas", {"conta": account, "email": e_mail.text.strip_edges(), "senha": password}, func(ok: bool, b: Dictionary):
+		_accounts_post("/contas", {"conta": account, "email": e_mail.text.strip_edges(), "senha": password, "aceite": true}, func(ok: bool, b: Dictionary):
 			if ok:
 				show_verify_accounts(str(b.get("mensagem", "")))
 			else:

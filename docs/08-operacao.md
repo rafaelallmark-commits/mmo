@@ -139,6 +139,11 @@ Inundação de comandos e de chat é limitada e auditada.
 **Versões**: o `hello` traz `protocol` (3), `version` do servidor e `dataVersion` (hash dos dados); o cliente
 recusa servidor de protocolo diferente com uma mensagem clara.
 
+**Termos de uso**: [TERMOS.md](TERMOS.md) (regras de convivência e de jogo limpo que a moderação aplica). O cadastro
+pelo serviço de contas exige `aceite: true` (13 anos ou mais e aceite dos termos e da política) e grava a versão aceita
+na auditoria; `GET /termos` e `GET /privacidade` servem os textos (o cliente abre no navegador; `--docs-dir` aponta a
+pasta, padrão `docs/` do repositório).
+
 **Privacidade**: política em [PRIVACIDADE.md](PRIVACIDADE.md). Exclusão de conta pelo jogo (tela de
 personagens) ou pelo serviço de contas apaga e-mail, senha, itens e missões na hora e anonimiza os nomes.
 
