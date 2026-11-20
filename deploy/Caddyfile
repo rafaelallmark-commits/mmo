@@ -1,0 +1,34 @@
+# Proxy do teste público (Caddy 2, usado pelo docker-compose.yml). Ver docs/08-operacao.md §8.8.
+#
+# - Termina o TLS com certificado automático (Let's Encrypt/ZeroSSL) para o domínio em DOMINIO.
+#   Requisitos: DNS do domínio apontando para esta máquina e portas 80 e 443 abertas.
+# - Repassa o WebSocket do jogo: wss://DOMINIO/  ->  ws://servidor:7777 (rede interna do compose).
+# - As métricas e a saúde (porta 9100 do servidor) NÃO passam por aqui: o proxy só conhece a 7777,
+#   que fala apenas WebSocket (qualquer outra requisição recebe 426 do servidor).
+{
+	# E-mail para avisos de expiração do certificado (recomendado):
+	# email operacao@exemplo.com.br
+
+	servers {
+		# O jogo usa WebSocket sobre HTTP/1.1; sem HTTP/3 (a porta 443/udp não é publicada).
+		protocols h1 h2
+	}
+}
+
+{$DOMINIO:jogo.exemplo.com.br} {
+	# Serviço de contas: https://DOMINIO/contas/...  ->  http://contas:7780/... (o cliente usa esta base
+	# quando o servidor é wss://; cadastro, confirmação, sessão, senha, dados, exclusão, termos).
+	handle_path /contas/* {
+		reverse_proxy contas:7780
+	}
+
+	reverse_proxy servidor:7777 {
+		# Recarregar a configuração do Caddy não derruba de imediato quem está jogando.
+		stream_close_delay 5m
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

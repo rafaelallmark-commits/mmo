@@ -58,6 +58,8 @@ func _ready() -> void:
 		var s: String = a.trim_prefix("--")
 		var kv := s.split("=", true, 1)
 		args[kv[0]] = kv[1] if kv.size() > 1 else "true"
+	# endereço padrão do campo "Servidor": a release do teste público grava cinzas/servidor_padrao no projeto
+	server_url = str(ProjectSettings.get_setting("cinzas/servidor_padrao", server_url))
 	server_url = args.get("server", server_url)
 	accounts_url = args.get("accounts", accounts_url)
 	account = args.get("account", "")

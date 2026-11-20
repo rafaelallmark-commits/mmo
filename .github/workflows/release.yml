@@ -1,0 +1,537 @@
+# Release de CINZAS DO MERIDIANO (docs/08-operacao.md §8.8). A cada tag v* (ex.: v0.4.0, v0.4.0-teste.1):
+#   testes    - valida os dados e roda os testes do servidor (nada é publicado se falharem)
+#   exportar  - exporta o cliente com os presets de client/export_presets.cfg (Linux, Windows, macOS);
+#               assina o .exe com osslsigncode SE houver WINDOWS_CERT_PFX_BASE64/WINDOWS_CERT_PASSWORD
+#   macos     - SE houver os 5 segredos da Apple: assina (codesign, Developer ID + runtime endurecido),
+#               notariza (xcrun notarytool) e grampeia o ticket (stapler) num runner macOS
+#   publicar  - cria a release da tag com os pacotes e SHA256SUMS.txt
+#   imagem    - publica a imagem do servidor em ghcr.io/<dono>/cinzas-servidor
+# Sem os segredos, as versões saem sem assinatura (com aviso no resumo da execução e nas notas).
+# Disparo manual (workflow_dispatch): exporta e guarda os pacotes como artefatos, sem publicar nada.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+# "shell: bash" explícito = bash --noprofile --norc -eo pipefail (também no runner macOS). Sem ele o GitHub usa
+# "bash -e", sem pipefail, e o "godot ... | tee arquivo.log || status=$?" da importação e da exportação perderia o
+# código de saída do Godot. Um job com "defaults.run" próprio substitui este bloco inteiro: o job testes repete.
+defaults:
+  run:
+    shell: bash
+
+env:
+  GODOT_VERSION: 4.3-stable
+  GODOT_TEMPLATES: 4.3.stable
+  # SHA-512 publicados pelo Godot em .../releases/download/4.3-stable/SHA512-SUMS.txt
+  GODOT_ZIP_SHA512: fd52bb4ba8acc30ca5accd1c566d470ad7282f891ccc0995dfafabcf92bcf76280ce182bf9d80ebd885f3ed2165d01e1fc3f2928436b15498dfbd98656c2a45a
+  GODOT_TPZ_SHA512: 476366caf0fd45a8f24136cf9cf1dc0bc2b96f7c82d53e5f82200b55aefd07b286d283fd6f1ce29e0de70648c5a51d3b12f96c6d4fafd4e8c4878ecda6406d6a
+  # rcedit (electron/rcedit): o Godot 4.3 o roda pelo Wine para gravar nome, descrição e versão no .exe
+  RCEDIT_VERSION: v2.0.0
+  RCEDIT_SHA256: 3e7801db1a5edbec91b49a24a094aad776cb4515488ea5a4ca2289c400eade2a
+
+jobs:
+  testes:
+    name: Testes do servidor
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run validate-data
+      - run: npm test
+
+  exportar:
+    name: Exportar o cliente (Linux, Windows, macOS)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    outputs:
+      versao: ${{ steps.versao.outputs.versao }}
+      macos_assinar: ${{ steps.segredos.outputs.macos }}
+      windows_assinado: ${{ steps.segredos.outputs.windows }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Versão
+        id: versao
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            versao="${GITHUB_REF_NAME#v}"
+          else
+            versao="0.0.0-dev.${GITHUB_SHA::7}"
+          fi
+          # parte numérica (X.Y.Z) para o Info.plist do macOS e o recurso de versão do .exe
+          numerica=$(printf '%s' "$versao" | grep -oE '^[0-9]+(\.[0-9]+){0,3}' || true)
+          echo "versao=$versao" >> "$GITHUB_OUTPUT"
+          echo "numerica=$numerica" >> "$GITHUB_OUTPUT"
+          echo "Versão $versao (numérica: ${numerica:-nenhuma})"
+
+      - name: Assinaturas configuradas
+        id: segredos
+        env:
+          APPLE_CERT_P12_BASE64: ${{ secrets.APPLE_CERT_P12_BASE64 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          WINDOWS_CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          macos=false
+          windows=false
+          if [ -n "$APPLE_CERT_P12_BASE64" ] && [ -n "$APPLE_CERT_PASSWORD" ] && [ -n "$APPLE_ID" ] \
+             && [ -n "$APPLE_TEAM_ID" ] && [ -n "$APPLE_APP_PASSWORD" ]; then
+            macos=true
+          elif [ -n "${APPLE_CERT_P12_BASE64}${APPLE_CERT_PASSWORD}${APPLE_ID}${APPLE_TEAM_ID}${APPLE_APP_PASSWORD}" ]; then
+            echo "::warning title=macOS::segredos da Apple incompletos (são 5: APPLE_CERT_P12_BASE64, APPLE_CERT_PASSWORD, APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD)"
+          fi
+          if [ -n "$WINDOWS_CERT_PFX_BASE64" ] && [ -n "$WINDOWS_CERT_PASSWORD" ]; then
+            windows=true
+          elif [ -n "${WINDOWS_CERT_PFX_BASE64}${WINDOWS_CERT_PASSWORD}" ]; then
+            echo "::warning title=Windows::segredos incompletos (WINDOWS_CERT_PFX_BASE64 e WINDOWS_CERT_PASSWORD)"
+          fi
+          if [ "$macos" != true ]; then
+            echo "::warning title=macOS sem assinatura::o .app sai só com assinatura ad-hoc e sem notarização; o Gatekeeper vai pedir confirmação (botão direito > Abrir)"
+          fi
+          if [ "$windows" != true ]; then
+            echo "::warning title=Windows sem assinatura::o .exe sai sem assinatura Authenticode; o SmartScreen vai avisar na primeira execução"
+          fi
+          echo "macos=$macos" >> "$GITHUB_OUTPUT"
+          echo "windows=$windows" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Assinaturas"
+            echo "- Windows (osslsigncode): $windows"
+            echo "- macOS (codesign + notarytool): $macos"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Cache por ref: uma execução manual no ramo padrão deixa o cache disponível para as tags.
+      - name: Cache do Godot e dos modelos de exportação
+        id: cache-godot
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/godot
+            ~/.local/share/godot/export_templates/${{ env.GODOT_TEMPLATES }}
+          key: godot-${{ env.GODOT_VERSION }}-modelos-desktop-v1
+
+      - name: Baixar o Godot e os modelos de exportação (só sem cache)
+        if: steps.cache-godot.outputs.cache-hit != 'true'
+        run: |
+          base="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}"
+          mkdir -p ~/godot "$RUNNER_TEMP/godot-dl"
+          cd "$RUNNER_TEMP/godot-dl"
+          curl -fsSL --retry 3 -o godot.zip "$base/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+          echo "${GODOT_ZIP_SHA512}  godot.zip" | sha512sum -c -
+          unzip -q godot.zip
+          mv "Godot_v${GODOT_VERSION}_linux.x86_64" ~/godot/godot
+          chmod +x ~/godot/godot
+          # o .tpz (1 GB) tem modelos de todas as plataformas; só os de desktop vão para o cache (~240 MB)
+          curl -fsSL --retry 3 -o modelos.tpz "$base/Godot_v${GODOT_VERSION}_export_templates.tpz"
+          echo "${GODOT_TPZ_SHA512}  modelos.tpz" | sha512sum -c -
+          destino=~/.local/share/godot/export_templates/${GODOT_TEMPLATES}
+          mkdir -p "$destino"
+          unzip -q -j -o modelos.tpz -d "$destino" templates/version.txt templates/linux_release.x86_64 \
+            templates/windows_release_x86_64.exe templates/windows_release_x86_64_console.exe templates/macos.zip
+          rm -rf "$RUNNER_TEMP/godot-dl"
+          ls -la "$destino"
+
+      # Opcional: sem isto o .exe sai com o nome e a versão do Godot nas propriedades do arquivo
+      # (a exportação continua funcionando; o Godot só avisa). Falhas aqui não param a release.
+      - name: Wine e rcedit (nome e versão no .exe)
+        id: rcedit
+        continue-on-error: true
+        env:
+          WINEDEBUG: -all
+          WINEDLLOVERRIDES: mscoree,mshtml=
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends wine64
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/rcedit.exe" \
+            "https://github.com/electron/rcedit/releases/download/${RCEDIT_VERSION}/rcedit-x64.exe"
+          echo "${RCEDIT_SHA256}  $RUNNER_TEMP/rcedit.exe" | sha256sum -c -
+          # cria o prefixo do Wine antes da exportação (sem instalar Mono/Gecko)
+          timeout 300 /usr/lib/wine/wine64 wineboot --init
+          # configurações do editor do Godot 4.3: caminho do rcedit e do Wine (pacote wine64 do Ubuntu)
+          mkdir -p ~/.config/godot
+          {
+            echo '[gd_resource type="EditorSettings" format=3]'
+            echo
+            echo '[resource]'
+            echo "export/windows/rcedit = \"$RUNNER_TEMP/rcedit.exe\""
+            echo 'export/windows/wine = "/usr/lib/wine/wine64"'
+          } > ~/.config/godot/editor_settings-4.3.tres
+
+      - name: Versão no projeto
+        if: steps.versao.outputs.numerica != ''
+        env:
+          NUMERICA: ${{ steps.versao.outputs.numerica }}
+        run: |
+          # Os presets deixam a versão vazia ("usar a do projeto"); sem config/version o Godot usa 1.0.0.
+          # Só nesta cópia de trabalho: nada é commitado.
+          sed -i '/^config\/version=/d' client/project.godot
+          sed -i "/^\[application\]\$/a config/version=\"${NUMERICA}\"" client/project.godot
+          grep -n '^config/version=' client/project.godot
+
+      - name: Servidor padrão do cliente
+        if: vars.SERVIDOR_PADRAO != ''
+        env:
+          SERVIDOR: ${{ vars.SERVIDOR_PADRAO }}
+        run: |
+          # O campo "Servidor" da tela de entrada já vem com o endereço do teste público
+          # (variável do repositório SERVIDOR_PADRAO, ex.: wss://jogo.exemplo.com.br). Só nesta cópia de trabalho.
+          case "$SERVIDOR" in ws://*|wss://*) ;; *) echo "::error::SERVIDOR_PADRAO precisa começar com ws:// ou wss://"; exit 1 ;; esac
+          printf '\n[cinzas]\n\nservidor_padrao="%s"\n' "$SERVIDOR" >> client/project.godot
+          tail -n 3 client/project.godot
+
+      - name: Importar o projeto
+        run: |
+          status=0
+          ~/godot/godot --headless --path client --import 2>&1 | tee importacao.log || status=$?
+          if grep -nE 'SCRIPT ERROR|Parse Error' importacao.log; then
+            echo "::error title=Cliente Godot::a importação encontrou erros de script (linhas acima)"
+            exit 1
+          fi
+          if [ "$status" -ne 0 ]; then echo "::error::o Godot saiu com código $status"; exit "$status"; fi
+
+      - name: Exportar
+        env:
+          WINEDEBUG: -all
+          WINEDLLOVERRIDES: mscoree,mshtml=
+        run: |
+          cd client
+          mkdir -p build/linux build/windows build/macos
+          touch build/.gdignore   # o editor não importa nada da pasta de saída
+          exportar() {  # <preset> <arquivo de saída>
+            local log status=0
+            log="build/exportacao-$(printf '%s' "$1" | tr ' A-Z' '-a-z').log"
+            ~/godot/godot --headless --path . --export-release "$1" "$2" 2>&1 | tee "$log" || status=$?
+            if [ "$status" -ne 0 ] || [ ! -s "$2" ]; then
+              echo "::error title=Exportação $1::falhou (código $status; veja o registro acima)"
+              exit 1
+            fi
+            if grep -nE 'SCRIPT ERROR|Parse Error' "$log"; then
+              echo "::error title=Exportação $1::erros de script"
+              exit 1
+            fi
+            grep -E '^WARNING: ' "$log" | sed "s/^WARNING: /::warning title=Exportação $1::/" || true
+          }
+          exportar "Linux" build/linux/CinzasDoMeridiano.x86_64
+          exportar "Windows Desktop" build/windows/CinzasDoMeridiano.exe
+          exportar "macOS" build/macos/CinzasDoMeridiano.zip
+          ls -la build/linux build/windows build/macos
+          # confere se o rcedit gravou o nome do produto no recurso de versão (texto UTF-16 do .exe)
+          if python3 -c 'import sys; d=open(sys.argv[1],"rb").read(); sys.exit(0 if "Cinzas do Meridiano".encode("utf-16-le") in d else 1)' \
+               build/windows/CinzasDoMeridiano.exe; then
+            echo "Recurso de versão do .exe: Cinzas do Meridiano"
+          else
+            echo "::warning title=Windows::o .exe ficou com o nome e a versão do Godot nas propriedades (rcedit indisponível)"
+          fi
+
+      - name: Assinar o executável do Windows (osslsigncode)
+        if: steps.segredos.outputs.windows == 'true'
+        env:
+          WINDOWS_CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends osslsigncode
+          umask 077
+          cert="$RUNNER_TEMP/assinatura.pfx"
+          senha="$RUNNER_TEMP/assinatura.senha"
+          cadeia="$RUNNER_TEMP/cadeia.pem"
+          exe=client/build/windows/CinzasDoMeridiano.exe
+          trap 'rm -f "$cert" "$senha" "$cadeia" "$exe.assinado"' EXIT
+          printf '%s' "$WINDOWS_CERT_PFX_BASE64" | base64 --decode > "$cert"
+          printf '%s' "$WINDOWS_CERT_PASSWORD" > "$senha"
+          # O osslsigncode 2.8 do Ubuntu 24.04 cai (segfault) quando o servidor de carimbo de tempo
+          # responde com erro; por isso tenta mais de um.
+          assinado=false
+          for tsa in http://timestamp.digicert.com http://timestamp.sectigo.com http://timestamp.globalsign.com/tsa/r6advanced1; do
+            rm -f "$exe.assinado"
+            if osslsigncode sign -pkcs12 "$cert" -readpass "$senha" -h sha256 \
+                 -n "Cinzas do Meridiano" -i "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+                 -ts "$tsa" -in "$exe" -out "$exe.assinado"; then
+              assinado=true
+              break
+            fi
+            echo "::warning title=Windows::o carimbo de tempo falhou em $tsa; tentando o próximo"
+          done
+          if [ "$assinado" != true ]; then
+            echo "::error title=Windows::não foi possível assinar com carimbo de tempo"
+            exit 1
+          fi
+          mv "$exe.assinado" "$exe"
+          # Verificação: cadeia do próprio PFX + autoridades do sistema. Se a raiz de assinatura de código
+          # não estiver no sistema, basta o resumo bater (quem confia na raiz é o Windows).
+          openssl pkcs12 -in "$cert" -passin file:"$senha" -nokeys -out "$cadeia" 2>/dev/null \
+            || openssl pkcs12 -legacy -in "$cert" -passin file:"$senha" -nokeys -out "$cadeia"
+          cat /etc/ssl/certs/ca-certificates.crt >> "$cadeia"
+          if osslsigncode verify -CAfile "$cadeia" -in "$exe" > "$RUNNER_TEMP/verificacao.txt" 2>&1; then
+            echo "Assinatura verificada."
+          else
+            atual=$(sed -n 's/^Current message digest *: *\([0-9A-F]*\).*/\1/p' "$RUNNER_TEMP/verificacao.txt" | head -1)
+            calculado=$(sed -n 's/^Calculated message digest *: *\([0-9A-F]*\).*/\1/p' "$RUNNER_TEMP/verificacao.txt" | head -1)
+            if [ -n "$atual" ] && [ "$atual" = "$calculado" ]; then
+              echo "::warning title=Windows::assinatura íntegra, mas a cadeia do certificado não fechou neste runner"
+            else
+              cat "$RUNNER_TEMP/verificacao.txt"
+              echo "::error title=Windows::a assinatura não confere"
+              exit 1
+            fi
+          fi
+          grep -E "Subject:|Timestamp time" "$RUNNER_TEMP/verificacao.txt" | head -3 || true
+
+      - name: Empacotar
+        env:
+          VERSAO: ${{ steps.versao.outputs.versao }}
+        run: |
+          nome="CinzasDoMeridiano-${VERSAO}"
+          mkdir -p dist pacote/linux pacote/windows
+          # Linux: .tar.gz (preserva a permissão de execução)
+          mkdir -p "pacote/linux/${nome}-linux-x86_64"
+          cp client/build/linux/CinzasDoMeridiano.x86_64 "pacote/linux/${nome}-linux-x86_64/"
+          tar -C pacote/linux -czf "dist/${nome}-linux-x86_64.tar.gz" "${nome}-linux-x86_64"
+          # Windows: .zip
+          mkdir -p "pacote/windows/${nome}-windows-x86_64"
+          cp client/build/windows/CinzasDoMeridiano.exe "pacote/windows/${nome}-windows-x86_64/"
+          (cd pacote/windows && zip -q -r -9 "$GITHUB_WORKSPACE/dist/${nome}-windows-x86_64.zip" "${nome}-windows-x86_64")
+          # macOS: o .zip do Godot já traz "Cinzas do Meridiano.app" (universal, assinatura ad-hoc)
+          cp client/build/macos/CinzasDoMeridiano.zip "dist/${nome}-macos-universal.zip"
+          ls -la dist
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: cliente-linux
+          path: dist/*-linux-x86_64.tar.gz
+          compression-level: 0
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          name: cliente-windows
+          path: dist/*-windows-x86_64.zip
+          compression-level: 0
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          name: cliente-macos
+          path: dist/*-macos-universal.zip
+          compression-level: 0
+          if-no-files-found: error
+      - name: Guardar os registros da exportação
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: registros-exportacao
+          path: |
+            importacao.log
+            client/build/exportacao-*.log
+          retention-days: 14
+          if-no-files-found: ignore
+
+  macos:
+    name: Assinar e notarizar (macOS)
+    needs: exportar
+    if: needs.exportar.outputs.macos_assinar == 'true'
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: cliente-macos
+          path: entrada
+
+      - name: Importar o certificado Developer ID (keychain temporário)
+        env:
+          APPLE_CERT_P12_BASE64: ${{ secrets.APPLE_CERT_P12_BASE64 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+        run: |
+          keychain="$RUNNER_TEMP/assinatura.keychain-db"
+          senha_keychain=$(openssl rand -base64 32)
+          umask 077
+          printf '%s' "$APPLE_CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$senha_keychain" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$senha_keychain" "$keychain"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$APPLE_CERT_PASSWORD" -f pkcs12 -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$senha_keychain" "$keychain" > /dev/null
+          # põe o keychain novo na lista de busca sem tirar os que já estão lá (compatível com o bash 3.2)
+          existentes=()
+          while IFS= read -r k; do existentes+=("$k"); done \
+            < <(security list-keychains -d user | tr -d '"' | sed 's/^[[:space:]]*//')
+          security list-keychains -d user -s "$keychain" "${existentes[@]}"
+          rm -f "$RUNNER_TEMP/cert.p12"
+          identidade=$(security find-identity -v -p codesigning "$keychain" | grep -m1 'Developer ID Application' | sed -E 's/.*"(.*)"/\1/' || true)
+          if [ -z "$identidade" ]; then
+            echo "::error title=macOS::o certificado não tem uma identidade 'Developer ID Application'"
+            exit 1
+          fi
+          echo "Identidade: $identidade"
+          echo "IDENTIDADE=$identidade" >> "$GITHUB_ENV"
+          echo "KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+
+      - name: Assinar, notarizar e grampear
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          zip_in=$(ls entrada/*-macos-universal.zip)
+          nome=$(basename "$zip_in")
+          mkdir trabalho
+          ditto -x -k "$zip_in" trabalho
+          app=$(find trabalho -maxdepth 1 -name '*.app' | head -1)
+          [ -n "$app" ] || { echo "::error::nenhum .app no pacote"; exit 1; }
+          # de dentro para fora: bibliotecas embutidas (se houver) e depois o pacote, com runtime endurecido
+          find "$app/Contents" -type f -name '*.dylib' -print0 | while IFS= read -r -d '' lib; do
+            codesign --force --options runtime --timestamp --sign "$IDENTIDADE" "$lib"
+          done
+          codesign --force --options runtime --timestamp --sign "$IDENTIDADE" "$app"
+          codesign --verify --strict --verbose=2 "$app"
+          ditto -c -k --keepParent "$app" notarizar.zip
+          resultado=$(xcrun notarytool submit notarizar.zip --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_PASSWORD" --wait --timeout 30m --output-format json || true)
+          echo "$resultado"
+          estado=$(printf '%s' "$resultado" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))' || true)
+          if [ "$estado" != "Accepted" ]; then
+            envio=$(printf '%s' "$resultado" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("id",""))' || true)
+            if [ -n "$envio" ]; then
+              xcrun notarytool log "$envio" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" || true
+            fi
+            echo "::error title=macOS::notarização não aceita (estado: ${estado:-desconhecido})"
+            exit 1
+          fi
+          xcrun stapler staple "$app"
+          xcrun stapler validate "$app"
+          spctl --assess --type execute --verbose=2 "$app" \
+            || echo "::warning title=macOS::o spctl não confirmou a aprovação do Gatekeeper neste runner"
+          mkdir -p dist
+          ditto -c -k --keepParent "$app" "dist/$nome"
+          ls -la dist
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: cliente-macos-assinado
+          path: dist/*-macos-universal.zip
+          compression-level: 0
+          if-no-files-found: error
+
+      - name: Remover o keychain temporário
+        if: always()
+        run: |
+          if [ -n "${KEYCHAIN:-}" ]; then security delete-keychain "$KEYCHAIN" || true; fi
+
+  publicar:
+    name: Publicar a release
+    needs: [testes, exportar, macos]
+    if: >-
+      always() && startsWith(github.ref, 'refs/tags/v')
+      && needs.testes.result == 'success'
+      && needs.exportar.result == 'success'
+      && (needs.macos.result == 'success' || needs.macos.result == 'skipped')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: cliente-*
+          path: artefatos
+
+      - name: Montar os arquivos e as notas
+        env:
+          VERSAO: ${{ needs.exportar.outputs.versao }}
+          MACOS_ASSINADO: ${{ needs.macos.result == 'success' }}
+          WINDOWS_ASSINADO: ${{ needs.exportar.outputs.windows_assinado }}
+        run: |
+          mkdir dist
+          cp artefatos/cliente-linux/* artefatos/cliente-windows/* dist/
+          if [ "$MACOS_ASSINADO" = true ]; then
+            cp artefatos/cliente-macos-assinado/* dist/
+          else
+            cp artefatos/cliente-macos/* dist/
+          fi
+          (cd dist && sha256sum -- * > SHA256SUMS.txt && cat SHA256SUMS.txt)
+          if [ "$WINDOWS_ASSINADO" = true ]; then win="assinado (Authenticode, com carimbo de tempo)"; else win="**sem assinatura**: o SmartScreen avisa; \"Mais informações\" > \"Executar assim mesmo\""; fi
+          if [ "$MACOS_ASSINADO" = true ]; then mac="assinado (Developer ID) e notarizado"; else mac="**sem notarização** (assinatura ad-hoc): botão direito no app > Abrir, ou \`xattr -dr com.apple.quarantine \"Cinzas do Meridiano.app\"\`"; fi
+          {
+            echo "## CINZAS DO MERIDIANO ${VERSAO}"
+            echo
+            echo "| Plataforma | Arquivo | Assinatura |"
+            echo "|---|---|---|"
+            echo "| Linux x86_64 | \`CinzasDoMeridiano-${VERSAO}-linux-x86_64.tar.gz\` | não se aplica |"
+            echo "| Windows x86_64 | \`CinzasDoMeridiano-${VERSAO}-windows-x86_64.zip\` | ${win} |"
+            echo "| macOS (Intel e Apple Silicon) | \`CinzasDoMeridiano-${VERSAO}-macos-universal.zip\` | ${mac} |"
+            echo
+            echo "Para jogar: abra o cliente e, no campo **Servidor** da tela de entrada, use o endereço \`wss://\` divulgado para o teste."
+            echo "Conferir os downloads: \`sha256sum -c SHA256SUMS.txt\`."
+          } > notas.md
+          cat notas.md
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          name: CINZAS DO MERIDIANO ${{ needs.exportar.outputs.versao }}
+          body_path: notas.md
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: dist/*
+          fail_on_unmatched_files: true
+
+  imagem:
+    name: Imagem do servidor (ghcr.io)
+    needs: testes
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Nome da imagem (o ghcr.io exige minúsculas)
+        run: echo "IMAGEM=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/cinzas-servidor" >> "$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGEM }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
