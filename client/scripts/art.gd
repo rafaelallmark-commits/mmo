@@ -210,13 +210,18 @@ static func face_decal(head: Node3D, r: float, iris: Color, fem: bool, fierce :=
 
 # ---------------- personagens ----------------
 ## Personagem articulado e animado. Retorna o nó raiz (com rig.gd); "Body" é o quadril.
-static func character(class_id: String, weapon_family := "", is_npc := false, npc_color := Color("#c9b07a"), seed := 0) -> Node3D:
+## offhand: família do item da mão secundária ("shield", "light_shield", "quiver", "focus", "" = nada) ou
+## "?" para usar o visual padrão da classe (vitrine, sonda, telas de personagem).
+const TWO_HANDED := ["axe_2h", "spear_2h", "staff_2h", "sword_2h"]
+const OFFHAND_ACC := {"shield": "shield", "light_shield": "small_shield", "quiver": "quiver"}
+
+static func character(class_id: String, weapon_family := "", is_npc := false, npc_color := Color("#c9b07a"), seed := 0, offhand := "?") -> Node3D:
 	if VrmChar.available():
-		return vrm_character(class_id, weapon_family, is_npc, npc_color, seed)
+		return vrm_character(class_id, weapon_family, is_npc, npc_color, seed, offhand)
 	return proc_character(class_id, weapon_family, is_npc, npc_color, seed)
 
 ## Personagem de anime (modelo VRM) com cores e acessórios da classe.
-static func vrm_character(class_id: String, weapon_family := "", is_npc := false, npc_color := Color("#c9b07a"), seed := 0) -> Node3D:
+static func vrm_character(class_id: String, weapon_family := "", is_npc := false, npc_color := Color("#c9b07a"), seed := 0, offhand := "?") -> Node3D:
 	var look: Dictionary
 	var model_id := "girl"
 	var acc: Array = []
@@ -238,7 +243,16 @@ static func vrm_character(class_id: String, weapon_family := "", is_npc := false
 	else:
 		var l: Dictionary = CLASS_LOOK[class_id]
 		model_id = CLASS_VRM[class_id][0]
-		acc = CLASS_VRM[class_id][1]
+		acc = (CLASS_VRM[class_id][1] as Array).duplicate()
+		# escudo e aljava seguem o que está equipado (arma de duas mãos não deixa escudo)
+		if offhand != "?":
+			for a in ["shield", "small_shield", "quiver"]:
+				acc.erase(a)
+			if OFFHAND_ACC.has(offhand):
+				acc.append(OFFHAND_ACC[offhand])
+		if weapon_family in TWO_HANDED:
+			acc.erase("shield")
+			acc.erase("small_shield")
 		var outfit: Color = l["outfit"]
 		look = {"outfit": outfit, "pants": outfit.darkened(0.55), "boots": Color("#4a3428"), "hair": l["hair"], "eyes": l["eyes"],
 			"trim": l["trim"], "cape": l["trim"] if class_id == "dawnshield" else outfit.darkened(0.25)}

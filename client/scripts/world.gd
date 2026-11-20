@@ -248,8 +248,8 @@ func apply_snapshot(snap: Dictionary) -> void:
 		var eid: String = d["id"]
 		seen[eid] = true
 		var e: Dictionary = entities.get(eid, {})
-		if not e.is_empty() and d["k"] == "p" and e.get("w") != d.get("w"):
-			# trocou de arma: refaz o modelo no mesmo lugar
+		if not e.is_empty() and d["k"] == "p" and (e.get("w") != d.get("w") or e.get("oh") != d.get("oh")):
+			# trocou de arma ou de mão secundária: refaz o modelo no mesmo lugar
 			var keep: Motion.Track = e["track"]
 			var yaw: float = e["yaw"]
 			e["node"].queue_free()
@@ -327,7 +327,7 @@ func _stop_prediction() -> void:
 func _spawn_entity(d: Dictionary) -> Dictionary:
 	var root: Node3D
 	if d["k"] == "p":
-		root = Art.character(d.get("cls", ""), _weapon_family(d.get("w")))
+		root = Art.character(d.get("cls", ""), _weapon_family(d.get("w")), false, Color("#c9b07a"), 0, _weapon_family(d.get("oh")) if d.has("oh") else "?")
 	elif d["k"] == "e":
 		root = Art.cart()
 	else:
@@ -349,7 +349,7 @@ func _spawn_entity(d: Dictionary) -> Dictionary:
 	if _is_me(d["id"]):
 		_lp_render = Vector2(x, z)
 		_lp_offset = Vector2.ZERO
-	return {"node": root, "label": label, "data": d, "w": d.get("w"), "track": track, "yaw": yaw, "speed": 0.0, "vel": Vector2.ZERO, "accel": 0.0, "turn": 0.0, "knock": Vector2.ZERO, "snd": _sound_profile(d)}
+	return {"node": root, "label": label, "data": d, "w": d.get("w"), "oh": d.get("oh"), "track": track, "yaw": yaw, "speed": 0.0, "vel": Vector2.ZERO, "accel": 0.0, "turn": 0.0, "knock": Vector2.ZERO, "snd": _sound_profile(d)}
 
 ## Como a entidade soa: passos (arquivo, tom, volume) e voz ao apanhar/cair (tom pelo tamanho e família).
 ## Espíritos flutuam (sem passos); máquinas pisam pesado e rangem metal; bichos pequenos têm patas leves.
