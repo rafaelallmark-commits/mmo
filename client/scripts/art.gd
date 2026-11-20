@@ -486,6 +486,9 @@ const MONSTER_COLORS := {
 	"silt_eel": Color("#4a5a50"), "rust_heron": Color("#8a7a6a"), "boiling_leech": Color("#8a3a4a"),
 	"gear_rat": Color("#8a9098"), "echo_bat": Color("#5a4a6a"), "thermal_larva": Color("#e8b06a"),
 	"conduit_spider": Color("#3a3a4a"),
+	# A Cava Primeira (pós-v1): famílias existentes, só cores novas
+	"cistern_salamander": Color("#c8623a"), "bronze_bellringer": Color("#b0823a"), "buried_voice": Color("#c8a8e8"),
+	"basalt_mole": Color("#45403f"), "deep_sealer": Color("#5f8a84"),
 }
 
 ## Monstro por espécie (rato, besouro, cão, lagarto, javali) ou por família, com olhos

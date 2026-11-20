@@ -1,4 +1,4 @@
-// Simulação acelerada de progressão solo (Marco 4): um bot por classe caça do nível 1 ao 20
+// Simulação acelerada de progressão solo (Marco 4): um bot por classe caça do nível 1 ao teto
 // num GameServer em processo (sem rede, banco temporário, modo dev) e o tempo de cada nível é
 // comparado com as metas de data/xp_table.json. Ferramenta de MEDIÇÃO: não muda regra nem dado.
 //
@@ -10,11 +10,11 @@
 //     [--banco-arquivo] [--detalhe]
 //   npm run simular-progressao -- --classes breaker --repeticoes 1
 //
-// Padrões: todas as classes, nível 20, sementes 1..8 (--seed N --repeticoes R usa N..N+R−1),
+// Padrões: todas as classes, teto de nível (data.levelCap, hoje 25), sementes 1..8 (--seed N --repeticoes R usa N..N+R−1),
 // prova de classe no nível 10. Numa rodada completa também roda o mesmo lote sem a prova (caça
 // pura) para comparar (--sem-comparacao desliga; --comparar-sem-prova liga numa rodada parcial).
 // Sem --md, o relatório Markdown só é gravado (em docs/relatorio-progressao.md) quando a execução
-// cobre todas as classes até o nível 20, para não sobrescrever o relatório com uma rodada parcial.
+// cobre todas as classes até o teto, para não sobrescrever o relatório com uma rodada parcial.
 // O JSON (padrão: server/relatorio-progressao.json) é gerado e não vai para o git.
 import { Worker } from 'node:worker_threads';
 import { writeFileSync, mkdirSync } from 'node:fs';

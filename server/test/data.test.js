@@ -20,7 +20,7 @@ test('exemplos de evolução gastam exatamente 5 pontos por nível e atingem os 
   for (const b of Object.values(loadBuilds())) {
     const { steps, errors } = runBuild(b, data);
     assert.deepEqual(errors, []);
-    assert.equal(steps.at(-1).spent, 95);
+    assert.equal(steps.at(-1).spent, (data.levelCap - 1) * data.pointsPerLevel);
   }
 });
 

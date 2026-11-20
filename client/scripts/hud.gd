@@ -37,7 +37,8 @@ var cd_until := {}   # habilidade -> fim da recarga (Time.get_ticks_msec)
 var gcd_until := 0   # fim da recarga global
 var npc_open: Dictionary = {}  # último NPC com quem falou (venda na loja)
 var _npc_open_at := -1000000
-const HOT_SLOTS := 7  # 1–5 habilidades, 6–7 tônicos
+const SKILL_SLOTS := 6  # todas as habilidades da classe (a 6ª é a do nível 25, pós-v1)
+const HOT_SLOTS := SKILL_SLOTS + 2  # 1–6 habilidades, 7–8 tônicos
 var npc_panel: PanelContainer
 var npc_box: VBoxContainer
 var journal_panel: PanelContainer
@@ -116,7 +117,7 @@ func _build_status(root: Control) -> void:
 	mp_bar = _bar(v, Theme_.MP)
 	mp_text = _overlay_label(mp_bar)
 	var hint := Label.new()
-	hint.text = "I inventário · C ficha · J missões · 1-5 habilidades · 6-7 tônicos · Q/E gira · roda zoom"
+	hint.text = "I inventário · C ficha · J missões · 1-6 habilidades · 7-8 tônicos · Q/E gira · roda zoom"
 	hint.add_theme_font_size_override("font_size", 10)
 	hint.add_theme_color_override("font_color", Theme_.MUTED)
 	v.add_child(hint)
@@ -155,7 +156,7 @@ func _build_hotbar(root: Control) -> void:
 	p.add_child(hotbar)
 	for i in HOT_SLOTS:
 		var b := Button.new()
-		b.custom_minimum_size = Vector2(100, 46)
+		b.custom_minimum_size = Vector2(87, 46)  # 8 botões na largura dos 7 de antes
 		b.focus_mode = Control.FOCUS_NONE
 		b.autowrap_mode = TextServer.AUTOWRAP_WORD
 		b.add_theme_font_size_override("font_size", 11)
@@ -420,7 +421,7 @@ func _process(delta: float) -> void:
 func _hot_actions() -> Array:
 	var skills: Array = main.class_skills()
 	var acts := []
-	for i in 5:
+	for i in SKILL_SLOTS:
 		acts.append({"kind": "skill", "id": skills[i] if skills.size() > i else ""})
 	acts.append({"kind": "potion", "id": _best_potion(["potion_hp_m", "potion_hp_s"])})
 	acts.append({"kind": "potion", "id": _best_potion(["potion_mp_m", "potion_mp_s"])})
@@ -555,7 +556,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				_refresh_sheet()
 		KEY_ENTER, KEY_KP_ENTER:
 			chat_input.grab_focus()
-		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7:
+		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8:
 			_hotkey(k - KEY_1)
 		KEY_J:
 			journal_panel.visible = not journal_panel.visible

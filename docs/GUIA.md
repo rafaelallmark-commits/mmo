@@ -29,8 +29,8 @@ Bem-vindo a Várdia. Este guia cobre o que você precisa para começar; as regra
 | Nácar | **Cantora do Véu** | cura, proteção e dano sagrado | varinha, cetro ou cajado |
 | Nácar | **Tecelão da Brasa** | magia elemental em área e controle | varinha ou cajado |
 
-Cada classe tem cinco habilidades: as dos níveis 1 e 5, a do nível 10 (liberada pela **prova de classe** com o
-mestre da sua classe, na sua cidade) e as dos níveis 15 e 20.
+Cada classe tem seis habilidades: as dos níveis 1 e 5, a do nível 10 (liberada pela **prova de classe** com o
+mestre da sua classe, na sua cidade), as dos níveis 15 e 20 e a do nível 25, o teto de nível.
 
 ## 3. Controles
 
@@ -39,8 +39,8 @@ mestre da sua classe, na sua cidade) e as dos níveis 15 e 20.
 | Andar | clique no chão |
 | Atacar | clique no monstro (o personagem vai até ele e ataca sozinho) |
 | Falar com NPC, usar objeto, atravessar portal, coletar saque | clique neles |
-| Habilidades | **1–5** (a barra mostra a recarga; depois de cada habilidade há 1 s de recarga global) |
-| Tônicos | **6** vida, **7** mana (o mais forte que você pode usar) |
+| Habilidades | **1–6** (a barra mostra a recarga; depois de cada habilidade há 1 s de recarga global) |
+| Tônicos | **7** vida, **8** mana (o mais forte que você pode usar) |
 | Câmera | **Q/E** ou botão direito arrastando giram; a roda aproxima |
 | Painéis | **I** bolsa, **C** ficha (atributos e habilidades), **J** missões, **L** clã, **Enter** chat, **Esc** fecha |
 
@@ -65,7 +65,8 @@ ou usar um item interrompe (sem gastar mana).
 
 Pedrâmbar e Vau de Nácar (cidades) → **A Estrada Velha** (níveis 1–5) → **Brejo das Bombas** (5–9) →
 **Oficina Soterrada** (9–12) → **Galerias do Eco** (12–16) → **Canais da Eclusa** (16–20), com o calabouço
-**A Última Eclusa** (2 a 5 jogadores). Os portais mostram o nível mínimo.
+**A Última Eclusa** (2 a 5 jogadores) → no nível 20, o **Poço de Inspeção** dos Canais desce para **A Cava Primeira**
+(20–25). Os portais mostram o nível mínimo.
 
 ## 6. Junto com os outros
 

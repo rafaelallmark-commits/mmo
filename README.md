@@ -2,7 +2,7 @@
 
 MMORPG 3D de ação PvE para PC, com câmera elevada, movimento por clique, caça em grupo em mapas compartilhados e equipamento que exige nível, classe e atributos. Cliente em **Godot 4**, servidor autoritativo de zona em **Node.js**, dados do jogo em **JSON editável**.
 
-> Estado atual: **Marcos 1, 2 e 3 concluídos** — as 8 classes com todas as habilidades (níveis 1, 5, 10, 15 e 20), grupos de até 5, chat por canais, campanha dos capítulos 0 a 5 com missões secundárias, sete mapas abertos (Estrada Velha, Brejo das Bombas, Oficina Soterrada, Galerias do Eco, Canais da Eclusa e as duas cidades), prova de classe, ferreiro (+1 a +3), depósito da conta, elites diárias e o calabouço **A Última Eclusa** (Custódio em três fases para grupos de 2 a 5). Cliente em **3D estilizado com traço de anime** (personagens VRM, cenário com relevo, efeitos das habilidades, avisos do chefe), com **movimento fluido** (caminhos por A*, previsão do próprio personagem e interpolação dos outros). Próximo: Marco 4 (carga, ajuste e documentação final).
+> Estado atual: **Marcos 1, 2 e 3 concluídos** — as 8 classes com todas as habilidades (níveis 1, 5, 10, 15 e 20), grupos de até 5, chat por canais, campanha dos capítulos 0 a 5 com missões secundárias, sete mapas abertos (Estrada Velha, Brejo das Bombas, Oficina Soterrada, Galerias do Eco, Canais da Eclusa e as duas cidades), prova de classe, ferreiro (+1 a +3), depósito da conta, elites diárias e o calabouço **A Última Eclusa** (Custódio em três fases para grupos de 2 a 5). **Pós-v1, níveis acima de 20**: teto no nível 25 com a mesma calibração de XP, o mapa **A Cava Primeira** (níveis 20–25, pelo Poço de Inspeção dos Canais), quatro monstros novos e o Selador da Porta Funda (elite diária), equipamento das faixas 21 e 25 para todas as famílias, uma habilidade de nível 25 por classe e o **capítulo 6, "A Passagem Fechada"** (5 missões principais e 2 secundárias). Cliente em **3D estilizado com traço de anime** (personagens VRM, cenário com relevo, efeitos das habilidades, avisos do chefe), com **movimento fluido** (caminhos por A*, previsão do próprio personagem e interpolação dos outros). Próximo: Marco 4 (carga, ajuste e documentação final).
 
 | | |
 |---|---|
@@ -12,6 +12,7 @@ MMORPG 3D de ação PvE para PC, com câmera elevada, movimento por clique, caç
 | ![Posto da Ponte](docs/img/14_estrada_posto.png) | ![Correndo](docs/img/15_corrida.png) |
 | ![Pedrâmbar](docs/img/16_pedrambar.png) | ![Brejo das Bombas](docs/img/17_brejo.png) |
 | ![Galerias do Eco](docs/img/19_galerias.png) | ![O Custódio da Eclusa](docs/img/20_custodio.png) |
+| ![Canais da Eclusa](docs/img/22_canais.png) | ![A Cava Primeira](docs/img/23_cava.png) |
 
 Personagens: modelos VRM de anime — **Seed-san model by VirtualCast, Inc.** e amostra VRM © 2022 pixiv Inc., ambos sob a VRM Public License 1.0 (detalhes em [docs/CREDITOS.md](docs/CREDITOS.md)).
 
@@ -22,11 +23,11 @@ Personagens: modelos VRM de anime — **Seed-san model by VirtualCast, Inc.** e 
 | Documento | Conteúdo |
 |---|---|
 | [docs/01-visao.md](docs/01-visao.md) | Visão do jogo e o laço caçar → subir de nível → equipar |
-| [docs/02-campanha.md](docs/02-campanha.md) | Abertura roteirizada, tutorial, os 5 capítulos com todas as missões principais, encontro com o Custódio, missões secundárias e pontos de caça |
+| [docs/02-campanha.md](docs/02-campanha.md) | Abertura roteirizada, tutorial, os 6 capítulos com todas as missões principais (o 6º, pós-v1, nos níveis 20–25), encontro com o Custódio, missões secundárias e pontos de caça |
 | [docs/03-classes.md](docs/03-classes.md) | Fichas das 8 classes: papel, armas, atributos iniciais, kit, cada habilidade com custo, recarga, alcance, efeito e graus *(gerado dos dados)* |
-| [docs/04-progressao-e-formulas.md](docs/04-progressao-e-formulas.md) | Tabela de XP 1–20, XP por monstro, exemplos solo e em grupo, equipamento por faixa (todas as famílias de arma em todas as faixas), verificação de requisitos, dois exemplos de evolução passo a passo, fórmulas com exemplos calculados *(gerado dos dados)* |
+| [docs/04-progressao-e-formulas.md](docs/04-progressao-e-formulas.md) | Tabela de XP 1–25, XP por monstro, exemplos solo e em grupo, equipamento por faixa (todas as famílias de arma em todas as faixas), verificação de requisitos, dois exemplos de evolução passo a passo, fórmulas com exemplos calculados *(gerado dos dados)* |
 | [docs/05-arquitetura.md](docs/05-arquitetura.md) | Estrutura técnica, arquivos, protocolo, saque idempotente, reconexão, concorrência, critérios de aceitação dos 4 marcos, o que muda para teste público e múltiplas zonas |
-| [docs/06-mundo-e-mapas.md](docs/06-mundo-e-mapas.md) | Cidades, cinco áreas, regras de monstros, morte e resgate, combate legível, telas da interface |
+| [docs/06-mundo-e-mapas.md](docs/06-mundo-e-mapas.md) | Cidades, as áreas de caça (cinco da versão 1 e A Cava Primeira), regras de monstros, morte e resgate, combate legível, telas da interface |
 | [docs/07-navegacao.md](docs/07-navegacao.md) | Telas, camadas dentro do jogo, mapa do mundo, controles, direção gráfica e som |
 | [docs/08-operacao.md](docs/08-operacao.md) | Execução e operação: opções do servidor, métricas, banco e backup, testes e medições; implantação do teste público (CI, releases assinadas, Docker/Compose, systemd, TLS) |
 | [docs/relatorio-progressao.md](docs/relatorio-progressao.md) | Marco 4: tempo medido por nível (1→20) de cada classe caçando solo, contra as metas da tabela de XP; economia de tônicos, equipamento, mortes e problemas encontrados *(gerado pela simulação)* |
@@ -98,7 +99,7 @@ Para já abrir com a conta preenchida:
 
 Em cada janela: **Jogar** → servidor `ws://127.0.0.1:7777`, **Criar conta** (ou **Entrar**) → **Criar novo personagem** (escolha a classe; a prévia 3D muda) → **Jogar**. **Esc** fecha painéis ou abre o menu (Opções, Trocar de personagem, Sair para o título).
 
-Controles: clique no chão anda; clique no monstro ataca; clique no NPC conversa (missões, loja, armeiro com as peças da sua faixa, ferreiro, prova de classe); clique no anel de um portal muda de mapa; clique no saque coleta; **1–5** habilidades (com recarga e recarga global na barra), **6/7** tônicos (o melhor que você pode usar); **J** missões; chat com `/g` (grupo), `/s Nome` (sussurro), `/convidar Nome`, `/sair`; **I** inventário (clique no item equipa/usa; botão direito vende — com loja ou ferreiro aberto — ou descarta; passe o mouse para ver a descrição e a comparação); **C** ficha (pontos e habilidades); **Q/E** ou botão direito arrastando giram a câmera; roda do mouse aproxima; **Enter** conversa; **Esc** fecha painéis.
+Controles: clique no chão anda; clique no monstro ataca; clique no NPC conversa (missões, loja, armeiro com as peças da sua faixa, ferreiro, prova de classe); clique no anel de um portal muda de mapa; clique no saque coleta; **1–6** habilidades (com recarga e recarga global na barra; a 6ª é a do nível 25), **7/8** tônicos (o melhor que você pode usar); **J** missões; chat com `/g` (grupo), `/s Nome` (sussurro), `/convidar Nome`, `/sair`; **I** inventário (clique no item equipa/usa; botão direito vende — com loja ou ferreiro aberto — ou descarta; passe o mouse para ver a descrição e a comparação); **C** ficha (pontos e habilidades); **Q/E** ou botão direito arrastando giram a câmera; roda do mouse aproxima; **Enter** conversa; **Esc** fecha painéis.
 
 Para jogar em rede local, rode o servidor em uma máquina e use `ws://IP-DA-MÁQUINA:7777` no campo Servidor.
 
@@ -146,7 +147,7 @@ npm run validate-data
 npm run gen-docs
 ```
 
-Medir a progressão (Marco 4): um bot por classe caça do nível 1 ao 20 num servidor em processo, acelerado (`server.step(100)` em laço, sem rede), e o tempo de cada nível é comparado com as metas de `data/xp_table.json`. A rodada padrão (8 classes × 8 sementes, mais o mesmo lote sem a prova de classe) leva ~5 min e regrava [docs/relatorio-progressao.md](docs/relatorio-progressao.md); o JSON completo vai para `server/relatorio-progressao.json` (fora do git):
+Medir a progressão (Marco 4): um bot por classe caça do nível 1 ao teto (25) num servidor em processo, acelerado (`server.step(100)` em laço, sem rede), e o tempo de cada nível é comparado com as metas de `data/xp_table.json`. A rodada padrão (8 classes × 8 sementes, mais o mesmo lote sem a prova de classe) leva ~5 min e regrava [docs/relatorio-progressao.md](docs/relatorio-progressao.md); o JSON completo vai para `server/relatorio-progressao.json` (fora do git). O relatório versionado ainda é a rodada 1→20, anterior ao teto 25 (`--ate-nivel 20 --md ../docs/relatorio-progressao.md` repete aquela medição; a faixa 20–25 está resumida em D109 de `docs/DECISOES.md`):
 
 ```bash
 npm run simular-progressao

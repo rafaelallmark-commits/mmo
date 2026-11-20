@@ -1,5 +1,5 @@
 {
- "_doc": "XP acumulada para alcançar cada nível (índice 0 = nível 1). Calibrada para ~3 abates/min solo contra monstros do mesmo nível; targetMinutes é a meta de caça ativa solo para sair de cada nível (valor de teste, não promessa).",
+ "_doc": "XP acumulada para alcançar cada nível (índice 0 = nível 1). Calibrada para ~3 abates/min solo contra monstros do mesmo nível; targetMinutes é a meta de caça ativa solo para sair de cada nível (valor de teste, não promessa). Regra (vale também para 21–25): XP para o próximo = arredondar para dezenas(targetMinutes × 3 × XP base do monstro do nível), targetMinutes = 2 + 1,5 × (nível − 1).",
  "cumulative": [
   0,
   80,
@@ -20,7 +20,12 @@
   132460,
   161550,
   194960,
-  232980
+  232980,
+  275990,
+  324370,
+  378440,
+  438710,
+  505510
  ],
  "targetMinutesToNext": [
   2,
@@ -41,7 +46,12 @@
   24.5,
   26,
   27.5,
-  29
+  29,
+  30.5,
+  32,
+  33.5,
+  35,
+  36.5
  ],
  "killsPerMinuteSolo": 3
 }

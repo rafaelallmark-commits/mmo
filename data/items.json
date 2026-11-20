@@ -249,6 +249,68 @@
     "tal": 0.1
    }
   },
+  "axe_1h_t21": {
+   "id": "axe_1h_t21",
+   "name": "Machado de Poceiro",
+   "family": "axe_1h",
+   "kind": "weapon",
+   "slot": "weapon",
+   "hands": 1,
+   "level": 21,
+   "rarity": "common",
+   "classes": [
+    "breaker"
+   ],
+   "req": {
+    "str": 51,
+    "tal": 29
+   },
+   "damageType": "phys",
+   "attackIntervalMs": 1100,
+   "range": 2.5,
+   "crit": 5,
+   "ranged": false,
+   "value": 1300,
+   "damage": [
+    35,
+    49
+   ],
+   "scaling": {
+    "str": 0.3,
+    "tal": 0.1
+   }
+  },
+  "axe_1h_t25": {
+   "id": "axe_1h_t25",
+   "name": "Machado da Porta Funda",
+   "family": "axe_1h",
+   "kind": "weapon",
+   "slot": "weapon",
+   "hands": 1,
+   "level": 25,
+   "rarity": "common",
+   "classes": [
+    "breaker"
+   ],
+   "req": {
+    "str": 58,
+    "tal": 32
+   },
+   "damageType": "phys",
+   "attackIntervalMs": 1100,
+   "range": 2.5,
+   "crit": 5,
+   "ranged": false,
+   "value": 2100,
+   "damage": [
+    45,
+    61
+   ],
+   "scaling": {
+    "str": 0.3,
+    "tal": 0.1
+   }
+  },
   "axe_2h_t1": {
    "id": "axe_2h_t1",
    "name": "Machado de Lenhador",
@@ -429,6 +491,68 @@
    "damage": [
     54,
     75
+   ],
+   "scaling": {
+    "str": 0.35,
+    "tal": 0.1
+   }
+  },
+  "axe_2h_t21": {
+   "id": "axe_2h_t21",
+   "name": "Talhador de Basalto",
+   "family": "axe_2h",
+   "kind": "weapon",
+   "slot": "weapon",
+   "hands": 2,
+   "level": 21,
+   "rarity": "common",
+   "classes": [
+    "breaker"
+   ],
+   "req": {
+    "str": 53,
+    "tal": 27
+   },
+   "damageType": "phys",
+   "attackIntervalMs": 1450,
+   "range": 2.5,
+   "crit": 6,
+   "ranged": false,
+   "value": 1300,
+   "damage": [
+    53,
+    74
+   ],
+   "scaling": {
+    "str": 0.35,
+    "tal": 0.1
+   }
+  },
+  "axe_2h_t25": {
+   "id": "axe_2h_t25",
+   "name": "Grande Machado dos Fundadores",
+   "family": "axe_2h",
+   "kind": "weapon",
+   "slot": "weapon",
+   "hands": 2,
+   "level": 25,
+   "rarity": "common",
+   "classes": [
+    "breaker"
+   ],
+   "req": {
+    "str": 60,
+    "tal": 30
+   },
+   "damageType": "phys",
+   "attackIntervalMs": 1450,
+   "range": 2.5,
+   "crit": 6,
+   "ranged": false,
+   "value": 2100,
+   "damage": [
+    65,
+    89
    ],
    "scaling": {
     "str": 0.35,
@@ -627,6 +751,70 @@
    },
    "defense": 13
   },
+  "claw_t21": {
+   "id": "claw_t21",
+   "name": "Garra de Sineiro",
+   "family": "claw",
+   "kind": "weapon",
+   "slot": "weapon",
+   "hands": 1,
+   "level": 21,
+   "rarity": "common",
+   "classes": [
+    "bastion"
+   ],
+   "req": {
+    "str": 41,
+    "tal": 41
+   },
+   "damageType": "phys",
+   "attackIntervalMs": 1000,
+   "range": 2.5,
+   "crit": 4,
+   "ranged": false,
+   "value": 1300,
+   "damage": [
+    30,
+    42
+   ],
+   "scaling": {
+    "str": 0.25,
+    "tal": 0.15
+   },
+   "defense": 12
+  },
+  "claw_t25": {
+   "id": "claw_t25",
+   "name": "Garra da Porta Funda",
+   "family": "claw",
+   "kind": "weapon",
+   "slot": "weapon",
+   "hands": 1,
+   "level": 25,
+   "rarity": "common",
+   "classes": [
+    "bastion"
+   ],
+   "req": {
+    "str": 47,
+    "tal": 47
+   },
+   "damageType": "phys",
+   "attackIntervalMs": 1000,
+   "range": 2.5,
+   "crit": 4,
+   "ranged": false,
+   "value": 2100,
+   "damage": [
+    39,
+    53
+   ],
+   "scaling": {
+    "str": 0.25,
+    "tal": 0.15
+   },
+   "defense": 15
+  },
   "hammer_1h_t1": {
    "id": "hammer_1h_t1",
    "name": "Martelo de Rebitar",
@@ -819,6 +1007,70 @@
    },
    "defense": 7
   },
+  "hammer_1h_t21": {
+   "id": "hammer_1h_t21",
+   "name": "Martelo de Badalo",
+   "family": "hammer_1h",
+   "kind": "weapon",
+   "slot": "weapon",
+   "hands": 1,
+   "level": 21,
+   "rarity": "common",
+   "classes": [
+    "bastion"
+   ],
+   "req": {
+    "str": 51,
+    "tal": 29
+   },
+   "damageType": "phys",
+   "attackIntervalMs": 1200,
+   "range": 2.5,
+   "crit": 3,
+   "ranged": false,
+   "value": 1300,
+   "damage": [
+    34,
+    47
+   ],
+   "scaling": {
+    "str": 0.3,
+    "tal": 0.1
+   },
+   "defense": 6
+  },
+  "hammer_1h_t25": {
+   "id": "hammer_1h_t25",
+   "name": "Martelo dos Fundadores",
+   "family": "hammer_1h",
+   "kind": "weapon",
+   "slot": "weapon",
+   "hands": 1,
+   "level": 25,
+   "rarity": "common",
+   "classes": [
+    "bastion"
+   ],
+   "req": {
+    "str": 58,
+    "tal": 32
+   },
+   "damageType": "phys",
+   "attackIntervalMs": 1200,
+   "range": 2.5,
+   "crit": 3,
+   "ranged": false,
+   "value": 2100,
+   "damage": [
+    44,
+    59
+   ],
+   "scaling": {
+    "str": 0.3,
+    "tal": 0.1
+   },
+   "defense": 8
+  },
   "spear_2h_t1": {
    "id": "spear_2h_t1",
    "name": "Lança de Freixo",
@@ -999,6 +1251,68 @@
    "damage": [
     49,
     68
+   ],
+   "scaling": {
+    "str": 0.3,
+    "tal": 0.15
+   }
+  },
+  "spear_2h_t21": {
+   "id": "spear_2h_t21",
+   "name": "Pique de Aço Fundo",
+   "family": "spear_2h",
+   "kind": "weapon",
+   "slot": "weapon",
+   "hands": 2,
+   "level": 21,
+   "rarity": "common",
+   "classes": [
+    "pikeman"
+   ],
+   "req": {
+    "str": 51,
+    "tal": 29
+   },
+   "damageType": "phys",
+   "attackIntervalMs": 1300,
+   "range": 3.5,
+   "crit": 7,
+   "ranged": false,
+   "value": 1300,
+   "damage": [
+    49,
+    67
+   ],
+   "scaling": {
+    "str": 0.3,
+    "tal": 0.15
+   }
+  },
+  "spear_2h_t25": {
+   "id": "spear_2h_t25",
+   "name": "Pique da Passagem",
+   "family": "spear_2h",
+   "kind": "weapon",
+   "slot": "weapon",
+   "hands": 2,
+   "level": 25,
+   "rarity": "common",
+   "classes": [
+    "pikeman"
+   ],
+   "req": {
+    "str": 58,
+    "tal": 32
+   },
+   "damageType": "phys",
+   "attackIntervalMs": 1300,
+   "range": 3.5,
+   "crit": 7,
+   "ranged": false,
+   "value": 2100,
+   "damage": [
+    61,
+    81
    ],
    "scaling": {
     "str": 0.3,
@@ -1209,6 +1523,74 @@
     "quiver"
    ]
   },
+  "bow_t21": {
+   "id": "bow_t21",
+   "name": "Arco da Sentinela Antiga",
+   "family": "bow",
+   "kind": "weapon",
+   "slot": "weapon",
+   "hands": 1,
+   "level": 21,
+   "rarity": "common",
+   "classes": [
+    "warden"
+   ],
+   "req": {
+    "agi": 51,
+    "tal": 29
+   },
+   "damageType": "phys",
+   "attackIntervalMs": 1200,
+   "range": 18,
+   "crit": 7,
+   "ranged": true,
+   "value": 1300,
+   "damage": [
+    35,
+    49
+   ],
+   "scaling": {
+    "agi": 0.3,
+    "tal": 0.1
+   },
+   "offhandOnly": [
+    "quiver"
+   ]
+  },
+  "bow_t25": {
+   "id": "bow_t25",
+   "name": "Arco dos Fundadores",
+   "family": "bow",
+   "kind": "weapon",
+   "slot": "weapon",
+   "hands": 1,
+   "level": 25,
+   "rarity": "common",
+   "classes": [
+    "warden"
+   ],
+   "req": {
+    "agi": 58,
+    "tal": 33
+   },
+   "damageType": "phys",
+   "attackIntervalMs": 1200,
+   "range": 18,
+   "crit": 7,
+   "ranged": true,
+   "value": 2100,
+   "damage": [
+    45,
+    61
+   ],
+   "scaling": {
+    "agi": 0.3,
+    "tal": 0.1
+   },
+   "offhandOnly": [
+    "quiver"
+   ]
+  },
   "sword_1h_t1": {
    "id": "sword_1h_t1",
    "name": "Espada de Guarda",
@@ -1395,6 +1777,68 @@
     "spi": 0.1
    }
   },
+  "sword_1h_t21": {
+   "id": "sword_1h_t21",
+   "name": "Espada de Aço Fundo",
+   "family": "sword_1h",
+   "kind": "weapon",
+   "slot": "weapon",
+   "hands": 1,
+   "level": 21,
+   "rarity": "common",
+   "classes": [
+    "dawnshield"
+   ],
+   "req": {
+    "str": 51,
+    "spi": 28
+   },
+   "damageType": "phys",
+   "attackIntervalMs": 1000,
+   "range": 2.5,
+   "crit": 5,
+   "ranged": false,
+   "value": 1300,
+   "damage": [
+    35,
+    49
+   ],
+   "scaling": {
+    "str": 0.3,
+    "spi": 0.1
+   }
+  },
+  "sword_1h_t25": {
+   "id": "sword_1h_t25",
+   "name": "Espada da Primeira Manhã",
+   "family": "sword_1h",
+   "kind": "weapon",
+   "slot": "weapon",
+   "hands": 1,
+   "level": 25,
+   "rarity": "common",
+   "classes": [
+    "dawnshield"
+   ],
+   "req": {
+    "str": 58,
+    "spi": 32
+   },
+   "damageType": "phys",
+   "attackIntervalMs": 1000,
+   "range": 2.5,
+   "crit": 5,
+   "ranged": false,
+   "value": 2100,
+   "damage": [
+    45,
+    61
+   ],
+   "scaling": {
+    "str": 0.3,
+    "spi": 0.1
+   }
+  },
   "sword_2h_t1": {
    "id": "sword_2h_t1",
    "name": "Montante de Guarda",
@@ -1575,6 +2019,68 @@
    "damage": [
     52,
     73
+   ],
+   "scaling": {
+    "str": 0.35,
+    "spi": 0.1
+   }
+  },
+  "sword_2h_t21": {
+   "id": "sword_2h_t21",
+   "name": "Montante da Cava",
+   "family": "sword_2h",
+   "kind": "weapon",
+   "slot": "weapon",
+   "hands": 2,
+   "level": 21,
+   "rarity": "common",
+   "classes": [
+    "dawnshield"
+   ],
+   "req": {
+    "str": 53,
+    "spi": 28
+   },
+   "damageType": "phys",
+   "attackIntervalMs": 1350,
+   "range": 2.5,
+   "crit": 6,
+   "ranged": false,
+   "value": 1300,
+   "damage": [
+    52,
+    71
+   ],
+   "scaling": {
+    "str": 0.35,
+    "spi": 0.1
+   }
+  },
+  "sword_2h_t25": {
+   "id": "sword_2h_t25",
+   "name": "Montante da Primeira Manhã",
+   "family": "sword_2h",
+   "kind": "weapon",
+   "slot": "weapon",
+   "hands": 2,
+   "level": 25,
+   "rarity": "common",
+   "classes": [
+    "dawnshield"
+   ],
+   "req": {
+    "str": 60,
+    "spi": 32
+   },
+   "damageType": "phys",
+   "attackIntervalMs": 1350,
+   "range": 2.5,
+   "crit": 6,
+   "ranged": false,
+   "value": 2100,
+   "damage": [
+    66,
+    87
    ],
    "scaling": {
     "str": 0.35,
@@ -1768,6 +2274,68 @@
     "tal": 0.1
    }
   },
+  "javelin_t21": {
+   "id": "javelin_t21",
+   "name": "Azagaia de Vento Fundo",
+   "family": "javelin",
+   "kind": "weapon",
+   "slot": "weapon",
+   "hands": 1,
+   "level": 21,
+   "rarity": "common",
+   "classes": [
+    "windwalker"
+   ],
+   "req": {
+    "agi": 51,
+    "tal": 29
+   },
+   "damageType": "phys",
+   "attackIntervalMs": 1100,
+   "range": 14,
+   "crit": 6,
+   "ranged": true,
+   "value": 1300,
+   "damage": [
+    37,
+    52
+   ],
+   "scaling": {
+    "agi": 0.3,
+    "tal": 0.1
+   }
+  },
+  "javelin_t25": {
+   "id": "javelin_t25",
+   "name": "Azagaia dos Fundadores",
+   "family": "javelin",
+   "kind": "weapon",
+   "slot": "weapon",
+   "hands": 1,
+   "level": 25,
+   "rarity": "common",
+   "classes": [
+    "windwalker"
+   ],
+   "req": {
+    "agi": 58,
+    "tal": 32
+   },
+   "damageType": "phys",
+   "attackIntervalMs": 1100,
+   "range": 14,
+   "crit": 6,
+   "ranged": true,
+   "value": 2100,
+   "damage": [
+    46,
+    63
+   ],
+   "scaling": {
+    "agi": 0.3,
+    "tal": 0.1
+   }
+  },
   "wand_t1": {
    "id": "wand_t1",
    "name": "Varinha de Vidro Bruto",
@@ -1941,6 +2509,64 @@
     32
    ],
    "magicPower": 46
+  },
+  "wand_t21": {
+   "id": "wand_t21",
+   "name": "Varinha do Chamado",
+   "family": "wand",
+   "kind": "weapon",
+   "slot": "weapon",
+   "hands": 1,
+   "level": 21,
+   "rarity": "common",
+   "classes": [
+    "veilsinger",
+    "emberweaver"
+   ],
+   "req": {
+    "spi": 52,
+    "tal": 28
+   },
+   "damageType": "magic",
+   "attackIntervalMs": 1200,
+   "range": 16,
+   "crit": 3,
+   "ranged": true,
+   "value": 1300,
+   "damage": [
+    21,
+    32
+   ],
+   "magicPower": 44
+  },
+  "wand_t25": {
+   "id": "wand_t25",
+   "name": "Varinha do Primeiro Toque",
+   "family": "wand",
+   "kind": "weapon",
+   "slot": "weapon",
+   "hands": 1,
+   "level": 25,
+   "rarity": "common",
+   "classes": [
+    "veilsinger",
+    "emberweaver"
+   ],
+   "req": {
+    "spi": 59,
+    "tal": 32
+   },
+   "damageType": "magic",
+   "attackIntervalMs": 1200,
+   "range": 16,
+   "crit": 3,
+   "ranged": true,
+   "value": 2100,
+   "damage": [
+    28,
+    41
+   ],
+   "magicPower": 55
   },
   "scepter_t1": {
    "id": "scepter_t1",
@@ -2116,6 +2742,64 @@
    "magicPower": 41,
    "healBonusPct": 25
   },
+  "scepter_t21": {
+   "id": "scepter_t21",
+   "name": "Cetro da Turma Funda",
+   "family": "scepter",
+   "kind": "weapon",
+   "slot": "weapon",
+   "hands": 1,
+   "level": 21,
+   "rarity": "common",
+   "classes": [
+    "veilsinger"
+   ],
+   "req": {
+    "spi": 52,
+    "tal": 28
+   },
+   "damageType": "magic",
+   "attackIntervalMs": 1300,
+   "range": 14,
+   "crit": 3,
+   "ranged": true,
+   "value": 1300,
+   "damage": [
+    23,
+    34
+   ],
+   "magicPower": 40,
+   "healBonusPct": 22
+  },
+  "scepter_t25": {
+   "id": "scepter_t25",
+   "name": "Cetro dos Fundadores",
+   "family": "scepter",
+   "kind": "weapon",
+   "slot": "weapon",
+   "hands": 1,
+   "level": 25,
+   "rarity": "common",
+   "classes": [
+    "veilsinger"
+   ],
+   "req": {
+    "spi": 59,
+    "tal": 32
+   },
+   "damageType": "magic",
+   "attackIntervalMs": 1300,
+   "range": 14,
+   "crit": 3,
+   "ranged": true,
+   "value": 2100,
+   "damage": [
+    29,
+    43
+   ],
+   "magicPower": 50,
+   "healBonusPct": 27
+  },
   "staff_2h_t1": {
    "id": "staff_2h_t1",
    "name": "Cajado de Aprendiz",
@@ -2290,6 +2974,64 @@
    "magicPower": 78,
    "note": "Exceção por item: só o Tecelão da Brasa."
   },
+  "staff_2h_t21": {
+   "id": "staff_2h_t21",
+   "name": "Cajado de Basalto Vivo",
+   "family": "staff_2h",
+   "kind": "weapon",
+   "slot": "weapon",
+   "hands": 2,
+   "level": 21,
+   "rarity": "common",
+   "classes": [
+    "veilsinger",
+    "emberweaver"
+   ],
+   "req": {
+    "spi": 52,
+    "tal": 28
+   },
+   "damageType": "magic",
+   "attackIntervalMs": 1500,
+   "range": 18,
+   "crit": 4,
+   "ranged": true,
+   "value": 1300,
+   "damage": [
+    32,
+    48
+   ],
+   "magicPower": 74
+  },
+  "staff_2h_t25": {
+   "id": "staff_2h_t25",
+   "name": "Cajado da Porta Funda",
+   "family": "staff_2h",
+   "kind": "weapon",
+   "slot": "weapon",
+   "hands": 2,
+   "level": 25,
+   "rarity": "common",
+   "classes": [
+    "veilsinger",
+    "emberweaver"
+   ],
+   "req": {
+    "spi": 59,
+    "tal": 32
+   },
+   "damageType": "magic",
+   "attackIntervalMs": 1500,
+   "range": 18,
+   "crit": 4,
+   "ranged": true,
+   "value": 2100,
+   "damage": [
+    41,
+    60
+   ],
+   "magicPower": 91
+  },
   "heavy_armor_t1": {
    "id": "heavy_armor_t1",
    "name": "Couraça de Ferro Batido",
@@ -2422,6 +3164,50 @@
    "value": 1402,
    "mres": 8
   },
+  "heavy_armor_t21": {
+   "id": "heavy_armor_t21",
+   "name": "Couraça de Aço Fundo",
+   "family": "heavy_armor",
+   "kind": "armor",
+   "armorWeight": "heavy",
+   "slot": "body",
+   "level": 21,
+   "rarity": "common",
+   "classes": [
+    "breaker",
+    "bastion",
+    "pikeman",
+    "dawnshield"
+   ],
+   "req": {
+    "str": 49
+   },
+   "defense": 51,
+   "value": 912,
+   "mres": 7
+  },
+  "heavy_armor_t25": {
+   "id": "heavy_armor_t25",
+   "name": "Couraça dos Fundadores",
+   "family": "heavy_armor",
+   "kind": "armor",
+   "armorWeight": "heavy",
+   "slot": "body",
+   "level": 25,
+   "rarity": "common",
+   "classes": [
+    "breaker",
+    "bastion",
+    "pikeman",
+    "dawnshield"
+   ],
+   "req": {
+    "str": 56
+   },
+   "defense": 63,
+   "value": 1472,
+   "mres": 9
+  },
   "heavy_helm_t1": {
    "id": "heavy_helm_t1",
    "name": "Elmo de Ferro Batido",
@@ -2552,6 +3338,50 @@
    "defense": 21,
    "value": 562,
    "mres": 3
+  },
+  "heavy_helm_t21": {
+   "id": "heavy_helm_t21",
+   "name": "Elmo de Aço Fundo",
+   "family": "heavy_helm",
+   "kind": "armor",
+   "armorWeight": "heavy",
+   "slot": "head",
+   "level": 21,
+   "rarity": "common",
+   "classes": [
+    "breaker",
+    "bastion",
+    "pikeman",
+    "dawnshield"
+   ],
+   "req": {
+    "str": 47
+   },
+   "defense": 20,
+   "value": 366,
+   "mres": 3
+  },
+  "heavy_helm_t25": {
+   "id": "heavy_helm_t25",
+   "name": "Elmo dos Fundadores",
+   "family": "heavy_helm",
+   "kind": "armor",
+   "armorWeight": "heavy",
+   "slot": "head",
+   "level": 25,
+   "rarity": "common",
+   "classes": [
+    "breaker",
+    "bastion",
+    "pikeman",
+    "dawnshield"
+   ],
+   "req": {
+    "str": 54
+   },
+   "defense": 25,
+   "value": 590,
+   "mres": 4
   },
   "heavy_gloves_t1": {
    "id": "heavy_gloves_t1",
@@ -2684,6 +3514,50 @@
    "value": 422,
    "mres": 3
   },
+  "heavy_gloves_t21": {
+   "id": "heavy_gloves_t21",
+   "name": "Manoplas de Aço Fundo",
+   "family": "heavy_gloves",
+   "kind": "armor",
+   "armorWeight": "heavy",
+   "slot": "hands",
+   "level": 21,
+   "rarity": "common",
+   "classes": [
+    "breaker",
+    "bastion",
+    "pikeman",
+    "dawnshield"
+   ],
+   "req": {
+    "str": 46
+   },
+   "defense": 15,
+   "value": 275,
+   "mres": 2
+  },
+  "heavy_gloves_t25": {
+   "id": "heavy_gloves_t25",
+   "name": "Manoplas dos Fundadores",
+   "family": "heavy_gloves",
+   "kind": "armor",
+   "armorWeight": "heavy",
+   "slot": "hands",
+   "level": 25,
+   "rarity": "common",
+   "classes": [
+    "breaker",
+    "bastion",
+    "pikeman",
+    "dawnshield"
+   ],
+   "req": {
+    "str": 53
+   },
+   "defense": 19,
+   "value": 443,
+   "mres": 3
+  },
   "heavy_boots_t1": {
    "id": "heavy_boots_t1",
    "name": "Grevas de Ferro Batido",
@@ -2813,6 +3687,50 @@
    },
    "defense": 16,
    "value": 422,
+   "mres": 3
+  },
+  "heavy_boots_t21": {
+   "id": "heavy_boots_t21",
+   "name": "Grevas de Aço Fundo",
+   "family": "heavy_boots",
+   "kind": "armor",
+   "armorWeight": "heavy",
+   "slot": "feet",
+   "level": 21,
+   "rarity": "common",
+   "classes": [
+    "breaker",
+    "bastion",
+    "pikeman",
+    "dawnshield"
+   ],
+   "req": {
+    "str": 46
+   },
+   "defense": 15,
+   "value": 275,
+   "mres": 2
+  },
+  "heavy_boots_t25": {
+   "id": "heavy_boots_t25",
+   "name": "Grevas dos Fundadores",
+   "family": "heavy_boots",
+   "kind": "armor",
+   "armorWeight": "heavy",
+   "slot": "feet",
+   "level": 25,
+   "rarity": "common",
+   "classes": [
+    "breaker",
+    "bastion",
+    "pikeman",
+    "dawnshield"
+   ],
+   "req": {
+    "str": 53
+   },
+   "defense": 19,
+   "value": 443,
    "mres": 3
   },
   "light_armor_t1": {
@@ -2947,6 +3865,50 @@
    "evasion": 20,
    "mres": 14
   },
+  "light_armor_t21": {
+   "id": "light_armor_t21",
+   "name": "Gibão de Couro de Toupeira",
+   "family": "light_armor",
+   "kind": "armor",
+   "armorWeight": "light",
+   "slot": "body",
+   "level": 21,
+   "rarity": "common",
+   "classes": [
+    "warden",
+    "windwalker"
+   ],
+   "req": {
+    "agi": 48,
+    "tal": 28
+   },
+   "defense": 35,
+   "value": 912,
+   "evasion": 18,
+   "mres": 13
+  },
+  "light_armor_t25": {
+   "id": "light_armor_t25",
+   "name": "Gibão de Couro dos Fundadores",
+   "family": "light_armor",
+   "kind": "armor",
+   "armorWeight": "light",
+   "slot": "body",
+   "level": 25,
+   "rarity": "common",
+   "classes": [
+    "warden",
+    "windwalker"
+   ],
+   "req": {
+    "agi": 55,
+    "tal": 32
+   },
+   "defense": 43,
+   "value": 1472,
+   "evasion": 21,
+   "mres": 16
+  },
   "light_hood_t1": {
    "id": "light_hood_t1",
    "name": "Capuz de Couro Cru",
@@ -3077,6 +4039,50 @@
    "defense": 15,
    "value": 562,
    "evasion": 8,
+   "mres": 6
+  },
+  "light_hood_t21": {
+   "id": "light_hood_t21",
+   "name": "Capuz de Couro de Toupeira",
+   "family": "light_hood",
+   "kind": "armor",
+   "armorWeight": "light",
+   "slot": "head",
+   "level": 21,
+   "rarity": "common",
+   "classes": [
+    "warden",
+    "windwalker"
+   ],
+   "req": {
+    "agi": 46,
+    "tal": 26
+   },
+   "defense": 14,
+   "value": 366,
+   "evasion": 7,
+   "mres": 5
+  },
+  "light_hood_t25": {
+   "id": "light_hood_t25",
+   "name": "Capuz de Couro dos Fundadores",
+   "family": "light_hood",
+   "kind": "armor",
+   "armorWeight": "light",
+   "slot": "head",
+   "level": 25,
+   "rarity": "common",
+   "classes": [
+    "warden",
+    "windwalker"
+   ],
+   "req": {
+    "agi": 53,
+    "tal": 30
+   },
+   "defense": 17,
+   "value": 590,
+   "evasion": 9,
    "mres": 6
   },
   "light_gloves_t1": {
@@ -3210,6 +4216,50 @@
    "evasion": 6,
    "mres": 4
   },
+  "light_gloves_t21": {
+   "id": "light_gloves_t21",
+   "name": "Luvas de Couro de Toupeira",
+   "family": "light_gloves",
+   "kind": "armor",
+   "armorWeight": "light",
+   "slot": "hands",
+   "level": 21,
+   "rarity": "common",
+   "classes": [
+    "warden",
+    "windwalker"
+   ],
+   "req": {
+    "agi": 45,
+    "tal": 25
+   },
+   "defense": 10,
+   "value": 275,
+   "evasion": 6,
+   "mres": 4
+  },
+  "light_gloves_t25": {
+   "id": "light_gloves_t25",
+   "name": "Luvas de Couro dos Fundadores",
+   "family": "light_gloves",
+   "kind": "armor",
+   "armorWeight": "light",
+   "slot": "hands",
+   "level": 25,
+   "rarity": "common",
+   "classes": [
+    "warden",
+    "windwalker"
+   ],
+   "req": {
+    "agi": 52,
+    "tal": 29
+   },
+   "defense": 12,
+   "value": 443,
+   "evasion": 7,
+   "mres": 5
+  },
   "light_boots_t1": {
    "id": "light_boots_t1",
    "name": "Botas de Couro Cru",
@@ -3341,6 +4391,50 @@
    "evasion": 6,
    "mres": 4
   },
+  "light_boots_t21": {
+   "id": "light_boots_t21",
+   "name": "Botas de Couro de Toupeira",
+   "family": "light_boots",
+   "kind": "armor",
+   "armorWeight": "light",
+   "slot": "feet",
+   "level": 21,
+   "rarity": "common",
+   "classes": [
+    "warden",
+    "windwalker"
+   ],
+   "req": {
+    "agi": 45,
+    "tal": 25
+   },
+   "defense": 10,
+   "value": 275,
+   "evasion": 6,
+   "mres": 4
+  },
+  "light_boots_t25": {
+   "id": "light_boots_t25",
+   "name": "Botas de Couro dos Fundadores",
+   "family": "light_boots",
+   "kind": "armor",
+   "armorWeight": "light",
+   "slot": "feet",
+   "level": 25,
+   "rarity": "common",
+   "classes": [
+    "warden",
+    "windwalker"
+   ],
+   "req": {
+    "agi": 52,
+    "tal": 29
+   },
+   "defense": 12,
+   "value": 443,
+   "evasion": 7,
+   "mres": 5
+  },
   "robe_t1": {
    "id": "robe_t1",
    "name": "Veste de Linho",
@@ -3460,6 +4554,46 @@
    "defense": 23,
    "value": 1402,
    "mres": 34
+  },
+  "robe_t21": {
+   "id": "robe_t21",
+   "name": "Veste de Feltro de Cisterna",
+   "family": "robe",
+   "kind": "armor",
+   "armorWeight": "robe",
+   "slot": "body",
+   "level": 21,
+   "rarity": "common",
+   "classes": [
+    "veilsinger",
+    "emberweaver"
+   ],
+   "req": {
+    "spi": 50
+   },
+   "defense": 22,
+   "value": 912,
+   "mres": 32
+  },
+  "robe_t25": {
+   "id": "robe_t25",
+   "name": "Veste de Tecido dos Fundadores",
+   "family": "robe",
+   "kind": "armor",
+   "armorWeight": "robe",
+   "slot": "body",
+   "level": 25,
+   "rarity": "common",
+   "classes": [
+    "veilsinger",
+    "emberweaver"
+   ],
+   "req": {
+    "spi": 57
+   },
+   "defense": 27,
+   "value": 1472,
+   "mres": 40
   },
   "robe_circlet_t1": {
    "id": "robe_circlet_t1",
@@ -3581,6 +4715,46 @@
    "value": 562,
    "mres": 13
   },
+  "robe_circlet_t21": {
+   "id": "robe_circlet_t21",
+   "name": "Diadema de Feltro de Cisterna",
+   "family": "robe_circlet",
+   "kind": "armor",
+   "armorWeight": "robe",
+   "slot": "head",
+   "level": 21,
+   "rarity": "common",
+   "classes": [
+    "veilsinger",
+    "emberweaver"
+   ],
+   "req": {
+    "spi": 48
+   },
+   "defense": 8,
+   "value": 366,
+   "mres": 12
+  },
+  "robe_circlet_t25": {
+   "id": "robe_circlet_t25",
+   "name": "Diadema de Tecido dos Fundadores",
+   "family": "robe_circlet",
+   "kind": "armor",
+   "armorWeight": "robe",
+   "slot": "head",
+   "level": 25,
+   "rarity": "common",
+   "classes": [
+    "veilsinger",
+    "emberweaver"
+   ],
+   "req": {
+    "spi": 55
+   },
+   "defense": 10,
+   "value": 590,
+   "mres": 15
+  },
   "robe_gloves_t1": {
    "id": "robe_gloves_t1",
    "name": "Mitenes de Linho",
@@ -3701,6 +4875,46 @@
    "value": 422,
    "mres": 10
   },
+  "robe_gloves_t21": {
+   "id": "robe_gloves_t21",
+   "name": "Mitenes de Feltro de Cisterna",
+   "family": "robe_gloves",
+   "kind": "armor",
+   "armorWeight": "robe",
+   "slot": "hands",
+   "level": 21,
+   "rarity": "common",
+   "classes": [
+    "veilsinger",
+    "emberweaver"
+   ],
+   "req": {
+    "spi": 47
+   },
+   "defense": 6,
+   "value": 275,
+   "mres": 10
+  },
+  "robe_gloves_t25": {
+   "id": "robe_gloves_t25",
+   "name": "Mitenes de Tecido dos Fundadores",
+   "family": "robe_gloves",
+   "kind": "armor",
+   "armorWeight": "robe",
+   "slot": "hands",
+   "level": 25,
+   "rarity": "common",
+   "classes": [
+    "veilsinger",
+    "emberweaver"
+   ],
+   "req": {
+    "spi": 54
+   },
+   "defense": 8,
+   "value": 443,
+   "mres": 12
+  },
   "robe_sandals_t1": {
    "id": "robe_sandals_t1",
    "name": "Sandálias de Linho",
@@ -3820,6 +5034,46 @@
    "defense": 7,
    "value": 422,
    "mres": 10
+  },
+  "robe_sandals_t21": {
+   "id": "robe_sandals_t21",
+   "name": "Sandálias de Feltro de Cisterna",
+   "family": "robe_sandals",
+   "kind": "armor",
+   "armorWeight": "robe",
+   "slot": "feet",
+   "level": 21,
+   "rarity": "common",
+   "classes": [
+    "veilsinger",
+    "emberweaver"
+   ],
+   "req": {
+    "spi": 47
+   },
+   "defense": 6,
+   "value": 275,
+   "mres": 10
+  },
+  "robe_sandals_t25": {
+   "id": "robe_sandals_t25",
+   "name": "Sandálias de Tecido dos Fundadores",
+   "family": "robe_sandals",
+   "kind": "armor",
+   "armorWeight": "robe",
+   "slot": "feet",
+   "level": 25,
+   "rarity": "common",
+   "classes": [
+    "veilsinger",
+    "emberweaver"
+   ],
+   "req": {
+    "spi": 54
+   },
+   "defense": 8,
+   "value": 443,
+   "mres": 12
   },
   "shield_t1": {
    "id": "shield_t1",
@@ -4355,6 +5609,44 @@
    "blockPct": 20,
    "value": 1200
   },
+  "shield_t21": {
+   "id": "shield_t21",
+   "name": "Escudo de Aço Fundo",
+   "family": "shield",
+   "kind": "offhand",
+   "slot": "offhand",
+   "level": 21,
+   "rarity": "common",
+   "classes": [
+    "bastion",
+    "dawnshield"
+   ],
+   "req": {
+    "str": 49
+   },
+   "defense": 30,
+   "blockPct": 18,
+   "value": 780
+  },
+  "shield_t25": {
+   "id": "shield_t25",
+   "name": "Escudo dos Fundadores",
+   "family": "shield",
+   "kind": "offhand",
+   "slot": "offhand",
+   "level": 25,
+   "rarity": "common",
+   "classes": [
+    "bastion",
+    "dawnshield"
+   ],
+   "req": {
+    "str": 56
+   },
+   "defense": 37,
+   "blockPct": 21,
+   "value": 1260
+  },
   "light_shield_t20": {
    "id": "light_shield_t20",
    "name": "Broquel de Couro do Vento Antigo",
@@ -4372,6 +5664,42 @@
    "defense": 18,
    "evasion": 13,
    "value": 1000
+  },
+  "light_shield_t21": {
+   "id": "light_shield_t21",
+   "name": "Broquel de Couro de Toupeira",
+   "family": "light_shield",
+   "kind": "offhand",
+   "slot": "offhand",
+   "level": 21,
+   "rarity": "common",
+   "classes": [
+    "windwalker"
+   ],
+   "req": {
+    "agi": 48
+   },
+   "defense": 17,
+   "evasion": 12,
+   "value": 650
+  },
+  "light_shield_t25": {
+   "id": "light_shield_t25",
+   "name": "Broquel de Couro dos Fundadores",
+   "family": "light_shield",
+   "kind": "offhand",
+   "slot": "offhand",
+   "level": 25,
+   "rarity": "common",
+   "classes": [
+    "windwalker"
+   ],
+   "req": {
+    "agi": 55
+   },
+   "defense": 21,
+   "evasion": 15,
+   "value": 1050
   },
   "focus_t20": {
    "id": "focus_t20",
@@ -4392,6 +5720,44 @@
    "mres": 28,
    "value": 1000
   },
+  "focus_t21": {
+   "id": "focus_t21",
+   "name": "Foco do Chamado",
+   "family": "focus",
+   "kind": "offhand",
+   "slot": "offhand",
+   "level": 21,
+   "rarity": "common",
+   "classes": [
+    "veilsinger",
+    "emberweaver"
+   ],
+   "req": {
+    "spi": 50
+   },
+   "magicPower": 24,
+   "mres": 26,
+   "value": 650
+  },
+  "focus_t25": {
+   "id": "focus_t25",
+   "name": "Foco da Escuta",
+   "family": "focus",
+   "kind": "offhand",
+   "slot": "offhand",
+   "level": 25,
+   "rarity": "common",
+   "classes": [
+    "veilsinger",
+    "emberweaver"
+   ],
+   "req": {
+    "spi": 57
+   },
+   "magicPower": 30,
+   "mres": 32,
+   "value": 1050
+  },
   "quiver_t20": {
    "id": "quiver_t20",
    "name": "Aljava de Couro do Vento Antigo",
@@ -4410,6 +5776,42 @@
    "crit": 4,
    "value": 800
   },
+  "quiver_t21": {
+   "id": "quiver_t21",
+   "name": "Aljava de Couro de Toupeira",
+   "family": "quiver",
+   "kind": "offhand",
+   "slot": "offhand",
+   "level": 21,
+   "rarity": "common",
+   "classes": [
+    "warden"
+   ],
+   "req": {
+    "agi": 48
+   },
+   "accuracy": 18,
+   "crit": 3,
+   "value": 520
+  },
+  "quiver_t25": {
+   "id": "quiver_t25",
+   "name": "Aljava de Couro dos Fundadores",
+   "family": "quiver",
+   "kind": "offhand",
+   "slot": "offhand",
+   "level": 25,
+   "rarity": "common",
+   "classes": [
+    "warden"
+   ],
+   "req": {
+    "agi": 55
+   },
+   "accuracy": 22,
+   "crit": 4,
+   "value": 840
+  },
   "ring_t20": {
    "id": "ring_t20",
    "name": "Anel do Meridiano",
@@ -4425,6 +5827,36 @@
    },
    "value": 1000
   },
+  "ring_t21": {
+   "id": "ring_t21",
+   "name": "Anel de Aço Fundo",
+   "family": "ring",
+   "kind": "jewel",
+   "slot": "ring",
+   "level": 21,
+   "rarity": "common",
+   "classes": null,
+   "req": {},
+   "bonusAttrs": {
+    "vit": 6
+   },
+   "value": 650
+  },
+  "ring_t25": {
+   "id": "ring_t25",
+   "name": "Anel dos Fundadores",
+   "family": "ring",
+   "kind": "jewel",
+   "slot": "ring",
+   "level": 25,
+   "rarity": "common",
+   "classes": null,
+   "req": {},
+   "bonusAttrs": {
+    "vit": 8
+   },
+   "value": 1050
+  },
   "amulet_t20": {
    "id": "amulet_t20",
    "name": "Amuleto da Resposta",
@@ -4438,6 +5870,34 @@
    "mres": 16,
    "bonusMp": 45,
    "value": 1200
+  },
+  "amulet_t21": {
+   "id": "amulet_t21",
+   "name": "Amuleto do Chamado",
+   "family": "amulet",
+   "kind": "jewel",
+   "slot": "amulet",
+   "level": 21,
+   "rarity": "common",
+   "classes": null,
+   "req": {},
+   "mres": 15,
+   "bonusMp": 42,
+   "value": 780
+  },
+  "amulet_t25": {
+   "id": "amulet_t25",
+   "name": "Amuleto da Escuta",
+   "family": "amulet",
+   "kind": "jewel",
+   "slot": "amulet",
+   "level": 25,
+   "rarity": "common",
+   "classes": null,
+   "req": {},
+   "mres": 19,
+   "bonusMp": 54,
+   "value": 1260
   },
   "ring_furrow": {
    "id": "ring_furrow",

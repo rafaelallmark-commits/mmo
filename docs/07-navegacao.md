@@ -44,7 +44,7 @@ Da mais baixa para a mais alta. Uma camada de cima bloqueia o clique nas de baix
 | Camada | O que é | Abre / fecha |
 |---|---|---|
 | 1. Mundo 3D | câmera elevada, personagens, monstros, NPCs, portais | clique: andar, atacar, falar, coletar |
-| 2. HUD fixo | vida/mana/XP, barra de atalhos (1–5), alvo, rastreador de missões, painel de grupo, chat | sempre visível |
+| 2. HUD fixo | vida/mana/XP, barra de atalhos (1–8), alvo, rastreador de missões, painel de grupo, chat | sempre visível |
 | 3. Painéis | Inventário (**I**), Ficha (**C**), Missões (**J**), Clã (**L**) — podem ficar abertos juntos | tecla ou **Esc** |
 | 4. Diálogos | NPC (missões, loja, prova de classe, ferreiro), convites (grupo, troca, clã, duelo), janela de troca, ações sobre outro jogador | clique no NPC ou no jogador / **Esc** (fechar a troca a cancela) |
 | 5. Menu de pausa | Continuar, Opções, Trocar de personagem, Sair para o título, Sair do jogo | **Esc** sem nada aberto |
@@ -67,6 +67,8 @@ Da mais baixa para a mais alta. Uma camada de cima bloqueia o clique nas de baix
               Galerias do Eco (12–16)
                        ║ nível 16 (M3)
               Canais da Eclusa (16–20) ──► A Última Eclusa (calabouço, 2–5 jogadores)
+                       ║ nível 20 (Poço de Inspeção, pós-v1)
+              A Cava Primeira (20–25)
 
  Mestres de classe (nas cidades) ──► Arena da Prova (instância solo, nível 10)
 ```
@@ -85,7 +87,7 @@ Da mais baixa para a mais alta. Uma camada de cima bloqueia o clique nas de baix
 | Selecionar aliado (curas) e abrir as ações (Trocar, Duelar, Grupo, Clã, Sussurrar) | clique em outro jogador |
 | Atacar o oponente num duelo | clique nele (fora de duelo, jogador não é alvo) |
 | Câmera | botão direito arrastando ou Q/E gira; roda aproxima |
-| Atalhos | 1–5 habilidades (a barra mostra a recarga; depois de cada habilidade há 1 s de recarga global), 6–7 tônicos (o mais forte do seu nível) |
+| Atalhos | 1–6 habilidades (a 6ª é a do nível 25; a barra mostra a recarga; depois de cada habilidade há 1 s de recarga global), 7–8 tônicos (o mais forte do seu nível) |
 | Conjuração | habilidades com tempo de conjuração mostram a barra "Conjurando…": fique parado; andar, atacar ou usar item interrompe sem gastar mana |
 | Vender e descartar | bolsa (**I**), botão direito no item: **Vender** (com loja ou ferreiro aberto; metade do valor) ou **Descartar…** (pede confirmação) |
 | Painéis | I inventário, C ficha, J missões, L clã, Enter chat, Esc fechar/menu |

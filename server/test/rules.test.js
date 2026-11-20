@@ -12,7 +12,7 @@ test('nível por XP acumulada', () => {
   assert.equal(levelForXp(79, data), 1);
   assert.equal(levelForXp(80, data), 2);
   assert.equal(levelForXp(3610, data), 6);
-  assert.equal(levelForXp(10_000_000, data), 20);
+  assert.equal(levelForXp(10_000_000, data), data.levelCap);
 });
 
 test('bônus de item não entra nos atributos permanentes', () => {

@@ -1,4 +1,4 @@
-# 2. Abertura e campanha (níveis 1–20)
+# 2. Abertura e campanha (níveis 1–25)
 
 ## Contexto
 
@@ -21,6 +21,7 @@ Agora os condutores voltam a funcionar sozinhos: sinos tocam debaixo da terra, m
 | Joca Vedante, mecânico | Brejo das Bombas → Oficina | Conhece as bombas; quer provar que a rede pode ser segura. |
 | Ilda Varen, engenheira | Galerias do Eco | Quer religar a rede antes do inverno. Tem razão e está errada ao mesmo tempo. |
 | O Custódio da Eclusa | Última Eclusa | Máquina de segurança que fecha as saídas quando a pressão sobe. |
+| O Selador da Porta Funda | A Cava Primeira (capítulo 6) | Máquina mais velha que o Custódio: sela a passagem e responde sozinha a quem chama do outro lado. |
 
 Mestres de classe: em Pedrâmbar, **Mestre Tarrasco** (Quebraferro), **Mestra Ione do Bronze** (Bastião de Bronze), **Sargento Bel do Fosso** (Lanceiro do Fosso) e **Vigia-Mor Cássia** (Vigia do Espinhal); em Vau de Nácar, **Dama Aurélia** (Escudeiro do Alvorecer), **Sina** (Andarilha do Vento), **Mãe Nívea** (Cantora do Véu) e **Mestre Otan Cinzeiro** (Tecelão da Brasa).
 
@@ -286,7 +287,59 @@ Se a conexão cair no meio do encontro, a instância espera o jogador por 3 minu
 - **Diálogo**: ILDA (lendo o registro): "As últimas mensagens não são da Companhia. São pedidos de socorro... datados de trezentos anos atrás. Antes das cidades." · MARA: "E esta aqui? É de hoje." · Na tela do registro: **"Estamos ouvindo. A passagem continua fechada."**
 - **Recompensa**: 5.700 XP, título "Quem Ouviu o Segundo Toque".
 - **Pré-requisitos**: 5.3.
-- **Conclusão**: entregar o registro nas duas cidades (abre o gancho do arco depois do nível 20: quem enviou os pedidos e por que voltaram a circular?).
+- **Conclusão**: entregar o registro nas duas cidades (abre o gancho do arco depois do nível 20: quem enviou os pedidos e por que voltaram a circular? — respondido em parte no capítulo 6).
+
+---
+
+## Capítulo 6 — **A Passagem Fechada** (níveis 20–25, pós-v1)
+
+Área aberta: **A Cava Primeira** (Posto de Escuta, Salão das Placas, Cisterna Funda, Ruínas do Primeiro Posto, Galeria Norte, Fenda Funda, Poço Quente, Porta Funda), aberta pelo **Poço de Inspeção** ao lado da porta da Última Eclusa (nível 20). Meta de XP de missões: ~81.760 (30% de 272.530, do 20 ao 25); as cinco principais somam 81.800.
+
+**O que o capítulo revela.** O Custódio não foi instalado pela Companhia: é mais velho que ela e mantinha fechada uma passagem para obras anteriores às cidades — a Cava Primeira. Trezentos anos atrás, quem ainda não se chamava Âmbar nem Nacre trabalhava junto: a turma de cima (pedra) e a turma funda (condutores). Quando o subsolo esquentou, a turma de cima fechou a passagem com a turma funda ainda embaixo. Os pedidos de socorro subiam pelos tubos de voz e pelos sineiros de bronze; a resposta era carimbada por uma máquina do posto de escuta: *"Estamos ouvindo. A passagem continua fechada."* O carimbo tem duas marcas — um esquadro de pedreiro e um fio de condutor. As duas cidades foram fundadas por quem fechou junto, e cada uma esqueceu do seu jeito. A religação parcial da rede acordou os sineiros e a máquina do posto, que voltou a responder sozinha — inclusive a uma chamada que chegou **hoje**, de trás da Porta Funda. O capítulo não diz quem chama; diz que, desta vez, quem responde são pessoas, não máquinas. Como no resto da campanha, ninguém é o culpado sozinho: a decisão foi das duas turmas, e a escolha de agora volta para o jogador.
+
+### 6.1 O Silêncio do Custódio
+- **NPC**: Ilda Varen (Comporta Norte, Canais da Eclusa) → Mara (Posto de Escuta).
+- **Objetivo**: descer pelo Poço de Inspeção até a Cava Primeira e encontrar Mara.
+- **Diálogo**: ILDA: "Li o registro do Custódio até o fim. Ele não fechava as saídas para nos prender: fechava para segurar alguma coisa embaixo. Sem ele, a pressão dos canais desce por um poço de inspeção que não está em mapa nenhum da Companhia. A Mara já desceu. Claro que desceu." · MARA: "Olha estas escadas: talhadas na pedra, não fundidas. Isto é mais velho que a Companhia. Mais velho que as duas cidades."
+- **Recompensa**: 8.000 XP, 600 ouro, Tônicos de Vida Médios ×5.
+- **Pré-requisitos**: 5.4; nível 20 (abaixo disso o poço recusa: "Nível 20 exigido para A Cava Primeira. Seu nível atual é 19.").
+- **Conclusão**: entrar na Cava Primeira + falar com Mara (quem já desceu e aceita a missão com a Ilda do Posto de Escuta tem a entrada contada na hora). A oferta de Ilda lembra a resposta dada em 4.4.
+
+### 6.2 Os Que Pediram Socorro
+- **NPC**: Mara.
+- **Objetivo**: recuperar 5 placas de chamada dos Sineiros de Bronze (Salão das Placas) e escutar os 3 tubos de voz do salão.
+- **Diálogo**: MARA: "Os sineiros de bronze ainda carregam placas de chamada, feito carteiros que ninguém dispensou. Cada placa é um pedido: o nome da turma, quantos ainda respiram, de que lado da passagem." · (na entrega) "'Turma funda. Onze ainda respiram. A passagem foi fechada por cima.' Por cima, entendeu? Não foi desabamento. Alguém do lado de cá fechou."
+- **Recompensa**: 16.000 XP, 700 ouro, Pó de Refino ×4.
+- **Pré-requisitos**: 6.1; nível 21.
+- **Conclusão**: contador de placas (sobe ao derrotar Sineiros, 50% por abate; não ocupa a bolsa) + 3 tubos escutados (canalização de 3 s; mover, agir ou ser atingido interrompe).
+
+### 6.3 Quem Respondia
+- **NPC**: Ilda Varen (Posto de Escuta).
+- **Objetivo**: ler o carimbo da máquina do posto antigo, junto às Ruínas do Primeiro Posto, e calar 8 Vozes Soterradas na galeria ao norte.
+- **Diálogo**: ILDA: "Toda placa tem a mesma resposta carimbada no verso: 'Estamos ouvindo. A passagem continua fechada.' Alguém daqui de cima respondia." · (na entrega) "Duas marcas no carimbo: um esquadro de pedreiro e um fio de condutor. Pedra e condutor. Âmbar e Nacre, antes de terem nome. Fecharam juntos, responderam juntos e subiram para fundar as cidades. ... E a última resposta foi carimbada hoje."
+- **Recompensa**: 17.000 XP, 800 ouro, Amuleto do Chamado (faixa 21).
+- **Pré-requisitos**: 6.2; nível 22.
+- **Conclusão**: canalização de 5 s na máquina + 8 abates.
+
+### 6.4 A Mesma Escolha
+- **NPC**: Mara → Ilda.
+- **Objetivo**: examinar os 3 selos em volta da Porta Funda e dizer a Ilda o que fazer com ela.
+- **Motivo concreto para abrir**: alguém chama hoje, de trás da porta; responder com um carimbo foi exatamente o que os fundadores fizeram.
+- **Motivo concreto para esperar**: ninguém sabe o que há do outro lado, e abrir no escuro foi o erro da Companhia — o calor da Cava já sobe na direção de Vargem Funda (ver "Túneis Novos").
+- **Diálogo**: ILDA: "Trezentos anos atrás, alguém parou exatamente onde a gente está e decidiu manter fechado. Você faria diferente?" Respostas: «Abra. Se alguém chama, alguém tem que responder — com a porta, não com um carimbo.» (título *Voz que Responde*) ou «Mantenha fechada até sabermos quem chama. Abrir no escuro foi o erro da Companhia.» (título *Guarda da Porta Funda*).
+- **Recompensa**: 17.000 XP, 800 ouro, Pó de Refino ×5.
+- **Pré-requisitos**: 6.3; nível 23.
+- **Conclusão**: 3 selos (canalização de 3 s cada) + resposta gravada. Como em 4.4, a escolha muda falas (a conclusão desta missão, a oferta e a conclusão de 6.5) e o título, não a progressão; a oferta de Mara também lembra a resposta de 4.4.
+
+### 6.5 A Resposta
+- **NPC**: Ilda → Mara.
+- **Objetivo**: derrotar o **Selador da Porta Funda** (elite de nível 24, diária) e mandar a resposta pelo tubo ao lado da porta.
+- **Diálogo**: ILDA: "O Selador fecha qualquer fresta e responde no nosso lugar. Derrube a máquina — junte gente, ela é teimosa como o Custódio — e mande a nossa resposta pelo tubo ao lado da porta. A nossa. Não a dela." · MARA (se escolheu abrir): "Você escreveu 'vamos abrir'. E do outro lado da porta, um sino respondeu. Um toque só. Não é eco: é alguém." · MARA (se escolheu esperar): "Você escreveu 'não vamos embora'. E do outro lado, um sino respondeu. Um toque só. Seja quem for, agora sabe que não está sozinho. Nem nós."
+- **Recompensa**: 23.800 XP, 1.500 ouro, Anel dos Fundadores (faixa 25 — fica na bolsa até o nível 25: o ciclo "achar algo que ainda não posso usar" fecha no teto).
+- **Pré-requisitos**: 6.4; nível 24. Recomendado: grupo de 2–3.
+- **Conclusão**: participação na morte do Selador + canalização de 4 s no tubo. O sino do outro lado é o gancho do próximo arco (o "terceiro toque").
+
+**Pontos de caça da Cava** (todos com saque da faixa 21 e chance pequena da faixa 25): Salamandras de Cisterna (21, passivas, na margem norte da cisterna — solo tranquilo), Sineiros de Bronze (22, matilha no Salão das Placas), Vozes Soterradas (23, galeria ao norte das ruínas), Toupeiras de Basalto (24, Poço Quente e ao sul das ruínas — ponto de grupo) e o Selador da Porta Funda (elite diária). Mapa e números em `06-mundo-e-mapas.md`.
 
 ---
 
@@ -313,5 +366,8 @@ Missões secundárias apontam lugares bons para caçar em cada faixa e dão moti
 | Mãe do Eco | Ilda (repetível 1×/dia) | 15–17 | Ninho da Mãe (elite, grupo) | Derrotar a Mãe do Eco | 9.000 XP | Faixa 13/17 |
 | Escória | Joca | 17–19 | Bacia de Vapor (Escória Pressurizada) | 15 núcleos | 14.000 XP | Ponto de grupo com explosões em área |
 | Draga Perdida | Ilda | 17–20 | Canal Lamacento (Dragas Vivas) | 10 abates | 15.000 XP | Família de Liga Rubra (faixa 17) |
+| Badalos Soltos | Joca | 21–22 | Salão das Placas (Sineiros de Bronze, matilha) | 12 abates | 9.000 XP, Tônicos Médios ×8 | Máquinas em bando: puxar pela borda; faixa 21 |
+| Túneis Novos | Mara | 23–24 | Poço Quente e sul das ruínas (Toupeiras de Basalto) | 12 abates | 10.500 XP, Pó de Refino ×5 | Ponto de grupo; faixa 21 e chance de faixa 25 |
+| Selador da Porta Funda | — (elite diária) | 24–25 | Porta Funda (elite, grupo) | Derrotar o Selador | XP em dobro e saque extra no primeiro abate do dia | Faixa 21 (60%), faixa 25 (12%), Pó de Refino Superior e, às vezes, Selo de Proteção |
 
-As missões secundárias seguem o mesmo modelo de dados das principais (NPC, objetivo, recompensa, pré-requisitos, condição de conclusão) e entram no M2 (capítulos 1–3) e M3 (capítulos 4–5).
+As missões secundárias seguem o mesmo modelo de dados das principais (NPC, objetivo, recompensa, pré-requisitos, condição de conclusão) e entram no M2 (capítulos 1–3), M3 (capítulos 4–5) e pós-v1 (capítulo 6).

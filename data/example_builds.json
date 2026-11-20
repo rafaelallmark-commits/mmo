@@ -10,7 +10,9 @@
         "9": ["axe_1h_t9", "heavy_armor_t9", "heavy_helm_t9", "heavy_gloves_t9", "heavy_boots_t9"],
         "13": ["axe_1h_t13", "heavy_armor_t13", "heavy_helm_t13", "heavy_gloves_t13", "heavy_boots_t13"],
         "17": ["axe_1h_t17", "heavy_armor_t17", "heavy_helm_t17", "heavy_gloves_t17", "heavy_boots_t17"],
-        "20": ["axe_1h_t20", "heavy_armor_t20", "heavy_helm_t20", "heavy_gloves_t20", "heavy_boots_t20"]
+        "20": ["axe_1h_t20", "heavy_armor_t20", "heavy_helm_t20", "heavy_gloves_t20", "heavy_boots_t20"],
+        "21": ["axe_1h_t21", "heavy_armor_t21", "heavy_helm_t21", "heavy_gloves_t21", "heavy_boots_t21"],
+        "25": ["axe_1h_t25", "heavy_armor_t25", "heavy_helm_t25", "heavy_gloves_t25", "heavy_boots_t25"]
       },
       "perLevel": {
         "2": { "str": 3, "tal": 2 },
@@ -31,7 +33,12 @@
         "17": { "str": 3, "tal": 2 },
         "18": { "str": 3, "vit": 2 },
         "19": { "vit": 5 },
-        "20": { "agi": 3, "vit": 2 }
+        "20": { "agi": 3, "vit": 2 },
+        "21": { "str": 1, "tal": 1, "vit": 3 },
+        "22": { "str": 3, "tal": 2 },
+        "23": { "vit": 5 },
+        "24": { "str": 2, "tal": 1, "vit": 2 },
+        "25": { "str": 2, "vit": 3 }
       }
     },
     "emberweaver_magic": {
@@ -43,7 +50,9 @@
         "9": ["wand_t9", "focus_t9", "robe_t9", "robe_circlet_t9", "robe_gloves_t9", "robe_sandals_t9"],
         "13": ["wand_t13", "focus_t13", "robe_t13", "robe_circlet_t13", "robe_gloves_t13", "robe_sandals_t13"],
         "17": ["wand_t17", "focus_t17", "robe_t17", "robe_circlet_t17", "robe_gloves_t17", "robe_sandals_t17"],
-        "20": ["staff_2h_t20", "robe_t20", "robe_circlet_t20", "robe_gloves_t20", "robe_sandals_t20"]
+        "20": ["staff_2h_t20", "robe_t20", "robe_circlet_t20", "robe_gloves_t20", "robe_sandals_t20"],
+        "21": ["wand_t21", "focus_t21", "robe_t21", "robe_circlet_t21", "robe_gloves_t21", "robe_sandals_t21"],
+        "25": ["wand_t25", "focus_t25", "robe_t25", "robe_circlet_t25", "robe_gloves_t25", "robe_sandals_t25"]
       },
       "perLevel": {
         "2": { "spi": 3, "tal": 2 },
@@ -64,7 +73,12 @@
         "17": { "spi": 2, "tal": 2, "vit": 1 },
         "18": { "vit": 5 },
         "19": { "vit": 3, "agi": 2 },
-        "20": { "vit": 5 }
+        "20": { "vit": 5 },
+        "21": { "vit": 5 },
+        "22": { "spi": 2, "tal": 2, "vit": 1 },
+        "23": { "vit": 5 },
+        "24": { "spi": 2, "tal": 2, "agi": 1 },
+        "25": { "vit": 3, "agi": 2 }
       }
     }
   }

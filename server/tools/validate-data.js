@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { loadGameData, ATTRS, DEFAULT_DATA_DIR } from '../src/data.js';
 import { totalAttributePoints } from '../src/rules.js';
 
-export const TIERS = [1, 5, 9, 13, 17, 20];
+export const TIERS = [1, 5, 9, 13, 17, 20, 21, 25];
 export const WEAPON_FAMILIES = ['axe_1h', 'axe_2h', 'claw', 'hammer_1h', 'spear_2h', 'bow', 'sword_1h', 'sword_2h', 'javelin', 'wand', 'scepter', 'staff_2h'];
 const ARMOR_BY_WEIGHT = {
   heavy: ['heavy_armor', 'heavy_helm', 'heavy_gloves', 'heavy_boots'],

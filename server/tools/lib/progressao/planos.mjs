@@ -4,7 +4,8 @@
 import { ATTRS } from '../../../src/data.js';
 import { loadBuilds } from '../../validate-data.js';
 
-export const FAIXAS = [1, 5, 9, 13, 17];
+// faixas com peças comuns (a 20 só tem as únicas do Custódio; 21 e 25 são do pós-v1)
+export const FAIXAS = [1, 5, 9, 13, 17, 21, 25];
 
 const ARMADURA = {
   heavy: ['heavy_armor', 'heavy_helm', 'heavy_gloves', 'heavy_boots'],

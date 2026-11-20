@@ -7,13 +7,13 @@
 
 Atributos permanentes = iniciais da classe + pontos distribuídos. São os únicos que contam para requisitos: bônus de itens, tônicos e efeitos temporários nunca liberam um item. A partir do nível 2 o personagem ganha 5 pontos por nível.
 
-| Nível | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Pontos totais | 0 | 5 | 10 | 15 | 20 | 25 | 30 | 35 | 40 | 45 | 50 | 55 | 60 | 65 | 70 | 75 | 80 | 85 | 90 | 95 |
+| Nível | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Pontos totais | 0 | 5 | 10 | 15 | 20 | 25 | 30 | 35 | 40 | 45 | 50 | 55 | 60 | 65 | 70 | 75 | 80 | 85 | 90 | 95 | 100 | 105 | 110 | 115 | 120 |
 
-## 4.2 Tabela de XP acumulada (níveis 1–20)
+## 4.2 Tabela de XP acumulada (níveis 1–25)
 
-Calibração: 3 abates por minuto de caça ativa solo contra monstros do mesmo nível (inclui deslocamento e pausas curtas). Os tempos são **metas de teste** para o Marco 4 medir e ajustar, não promessas. Missões principais somam cerca de 30% do XP de cada capítulo, então quem faz caça + missões chega ao nível 20 em cerca de 70% do tempo de quem só caça.
+Calibração: 3 abates por minuto de caça ativa solo contra monstros do mesmo nível (inclui deslocamento e pausas curtas); XP para o próximo nível = meta em minutos × 3 × XP base do monstro do nível, arredondado para dezenas, com meta = 2 + 1,5 × (nível − 1). A mesma regra vale para os níveis 21–25 (pós-v1). Os tempos são **metas de teste** para o Marco 4 medir e ajustar, não promessas. Missões principais somam cerca de 30% do XP de cada capítulo, então quem faz caça + missões chega ao teto de nível em cerca de 70% do tempo de quem só caça.
 
 | Nível | XP acumulada | XP para o próximo | Monstro típico do nível (XP) | Abates solo | Meta só caça | Meta caça + missões | Acumulado só caça |
 |---|---|---|---|---|---|---|---|
@@ -36,7 +36,12 @@ Calibração: 3 abates por minuto de caça ativa solo contra monstros do mesmo n
 | 17 | 132.460 | 29.090 | Draga Viva (373) | 78 | 26 min | 18,2 min | 4 h |
 | 18 | 161.550 | 33.410 | Escória Pressurizada (405) | 83 | 27,5 min | 19,3 min | 4,4 h |
 | 19 | 194.960 | 38.020 | Escória Pressurizada (405) | 94 | 29 min | 20,3 min | 4,9 h |
-| 20 | 232.980 | — | — | — | — | — | — |
+| 20 | 232.980 | 43.010 | Salamandra de Cisterna (504) | 86 | 30,5 min | 21,3 min | 5,4 h |
+| 21 | 275.990 | 48.380 | Salamandra de Cisterna (504) | 96 | 32 min | 22,4 min | 6 h |
+| 22 | 324.370 | 54.070 | Sineiro de Bronze (538) | 101 | 33,5 min | 23,5 min | 6,5 h |
+| 23 | 378.440 | 60.270 | Voz Soterrada (574) | 105 | 35 min | 24,5 min | 7,1 h |
+| 24 | 438.710 | 66.800 | Toupeira de Basalto (610) | 110 | 36,5 min | 25,5 min | 7,7 h |
+| 25 | 505.510 | — | — | — | — | — | — |
 
 ## 4.3 XP por monstro
 
@@ -78,6 +83,11 @@ Fora da tabela vale o extremo (−6 ou menos: ×0,1; +5 ou mais: ×1,4).
 | Escória Pressurizada | Canais da Eclusa | 18 | normal | agressivo (8 m) | 351 | 29–31 | 53 | 405 | 344 |
 | Fragmento do Custódio | Canais da Eclusa | 19 | elite | agressivo (10 m) | 1476 | 47–50 | 73 | 1748 | 1486 |
 | O Custódio da Eclusa | A Última Eclusa (calabouço) | 20 | chefe | agressivo (10 m) | 9675 | 64–68 | 89 | 9400 | 7990 |
+| Salamandra de Cisterna | A Cava Primeira | 21 | normal | passivo | 405 | 34–36 | 62 | 504 | 428 |
+| Sineiro de Bronze | A Cava Primeira | 22 | normal | agressivo (8 m) | 423 | 36–38 | 65 | 538 | 457 |
+| Voz Soterrada | A Cava Primeira | 23 | normal | agressivo (8 m) | 441 | 37–39 | 68 | 574 | 488 |
+| Toupeira de Basalto | A Cava Primeira | 24 | normal | agressivo (8 m) | 459 | 39–41 | 71 | 610 | 519 |
+| Selador da Porta Funda | A Cava Primeira | 24 | elite | agressivo (10 m) | 1836 | 59–62 | 92 | 2440 | 2074 |
 | Construto de Prova | Arena da Prova | 10 | normal | agressivo (40 m) | 180 | 8–11 | 24 | 40 | 34 |
 | Sentinela de Prova | Arena da Prova | 10 | normal | agressivo (40 m) | 320 | 12–15 | 30 | 80 | 68 |
 | Trava da Comporta | A Última Eclusa (calabouço) | 20 | normal | passivo | 900 | 0–0 | 60 | 0 | 0 |
@@ -95,7 +105,7 @@ No M2, a participação também conta cura (×0,8), dano absorvido em proteção
 
 ## 4.4 Equipamento por faixa
 
-Faixas nos níveis 1, 5, 9, 13 e 17, com recompensas únicas no 20. Todo item tem nível mínimo explícito. O comum de cada faixa sustenta a evolução; incomum, raro e único têm destaque visual crescente (cinza claro, verde, azul, laranja). "Duas mãos" ocupa também a mão secundária até ser desequipada. Itens podem ser carregados e guardados antes do nível.
+Faixas nos níveis 1, 5, 9, 13, 17, 21 e 25, com recompensas únicas no 20. Todo item tem nível mínimo explícito. O comum de cada faixa sustenta a evolução; incomum, raro e único têm destaque visual crescente (cinza claro, verde, azul, laranja). "Duas mãos" ocupa também a mão secundária até ser desequipada. Itens podem ser carregados e guardados antes do nível. As faixas 21 e 25 (pós-v1) seguem as mesmas curvas; a 21 fica logo abaixo da única do 20 no atributo principal, para a recompensa do Custódio continuar valendo até o 25.
 
 
 ### Faixa 1
@@ -326,6 +336,82 @@ Faixas nos níveis 1, 5, 9, 13 e 17, com recompensas únicas no 20. Todo item te
 | Anel do Meridiano | Anel | Anel | — | +7 Vit | nv 20; — | todas |
 | Amuleto da Resposta | Amuleto | Amuleto | — | res. mág. 16, mana +45 | nv 20; — | todas |
 
+### Faixa 21 — A Cava Primeira (pós-v1)
+
+| Arma | Família | Empunhadura | Dano | Intervalo | Alcance | Poder mág. | Requisitos | Classes | Raridade |
+|---|---|---|---|---|---|---|---|---|---|
+| Machado de Poceiro | Machado (1 mão) | uma mão | 35–49 fís. | 1,1 s | 2.5 m | — | nv 21; For 51, Tal 29 | Quebraferro | comum |
+| Talhador de Basalto | Machado (2 mãos) | duas mãos | 53–74 fís. | 1,5 s | 2.5 m | — | nv 21; For 53, Tal 27 | Quebraferro | comum |
+| Garra de Sineiro | Garra mecânica | uma mão | 30–42 fís. | 1 s | 2.5 m | — | nv 21; For 41, Tal 41 | Bastião de Bronze | comum |
+| Martelo de Badalo | Martelo (1 mão) | uma mão | 34–47 fís. | 1,2 s | 2.5 m | — | nv 21; For 51, Tal 29 | Bastião de Bronze | comum |
+| Pique de Aço Fundo | Lança/pique (2 mãos) | duas mãos | 49–67 fís. | 1,3 s | 3.5 m | — | nv 21; For 51, Tal 29 | Lanceiro do Fosso | comum |
+| Arco da Sentinela Antiga | Arco | uma mão | 35–49 fís. | 1,2 s | 18 m | — | nv 21; Agi 51, Tal 29 | Vigia do Espinhal | comum |
+| Espada de Aço Fundo | Espada (1 mão) | uma mão | 35–49 fís. | 1 s | 2.5 m | — | nv 21; For 51, Esp 28 | Escudeiro do Alvorecer | comum |
+| Montante da Cava | Espada (2 mãos) | duas mãos | 52–71 fís. | 1,4 s | 2.5 m | — | nv 21; For 53, Esp 28 | Escudeiro do Alvorecer | comum |
+| Azagaia de Vento Fundo | Azagaia arremessável (1 mão) | uma mão | 37–52 fís. | 1,1 s | 14 m | — | nv 21; Agi 51, Tal 29 | Andarilha do Vento | comum |
+| Varinha do Chamado | Varinha | uma mão | 21–32 mág. | 1,2 s | 16 m | 44 | nv 21; Esp 52, Tal 28 | Cantora do Véu, Tecelão da Brasa | comum |
+| Cetro da Turma Funda | Cetro | uma mão | 23–34 mág. | 1,3 s | 14 m | 40 | nv 21; Esp 52, Tal 28 | Cantora do Véu | comum |
+| Cajado de Basalto Vivo | Cajado (2 mãos) | duas mãos | 32–48 mág. | 1,5 s | 18 m | 74 | nv 21; Esp 52, Tal 28 | Cantora do Véu, Tecelão da Brasa | comum |
+
+| Item | Família | Espaço | Defesa | Outros | Requisitos | Classes |
+|---|---|---|---|---|---|---|
+| Couraça de Aço Fundo | Armadura pesada | Corpo | 51 | res. mág. 7 | nv 21; For 49 | Quebraferro, Bastião de Bronze, Lanceiro do Fosso, Escudeiro do Alvorecer |
+| Elmo de Aço Fundo | Elmo pesado | Cabeça | 20 | res. mág. 3 | nv 21; For 47 | Quebraferro, Bastião de Bronze, Lanceiro do Fosso, Escudeiro do Alvorecer |
+| Manoplas de Aço Fundo | Manoplas pesadas | Mãos | 15 | res. mág. 2 | nv 21; For 46 | Quebraferro, Bastião de Bronze, Lanceiro do Fosso, Escudeiro do Alvorecer |
+| Grevas de Aço Fundo | Grevas pesadas | Pés | 15 | res. mág. 2 | nv 21; For 46 | Quebraferro, Bastião de Bronze, Lanceiro do Fosso, Escudeiro do Alvorecer |
+| Gibão de Couro de Toupeira | Armadura leve | Corpo | 35 | evasão +18, res. mág. 13 | nv 21; Agi 48, Tal 28 | Vigia do Espinhal, Andarilha do Vento |
+| Capuz de Couro de Toupeira | Capuz leve | Cabeça | 14 | evasão +7, res. mág. 5 | nv 21; Agi 46, Tal 26 | Vigia do Espinhal, Andarilha do Vento |
+| Luvas de Couro de Toupeira | Luvas leves | Mãos | 10 | evasão +6, res. mág. 4 | nv 21; Agi 45, Tal 25 | Vigia do Espinhal, Andarilha do Vento |
+| Botas de Couro de Toupeira | Botas leves | Pés | 10 | evasão +6, res. mág. 4 | nv 21; Agi 45, Tal 25 | Vigia do Espinhal, Andarilha do Vento |
+| Veste de Feltro de Cisterna | Veste mágica | Corpo | 22 | res. mág. 32 | nv 21; Esp 50 | Cantora do Véu, Tecelão da Brasa |
+| Diadema de Feltro de Cisterna | Diadema mágico | Cabeça | 8 | res. mág. 12 | nv 21; Esp 48 | Cantora do Véu, Tecelão da Brasa |
+| Mitenes de Feltro de Cisterna | Mitenes mágicas | Mãos | 6 | res. mág. 10 | nv 21; Esp 47 | Cantora do Véu, Tecelão da Brasa |
+| Sandálias de Feltro de Cisterna | Sandálias mágicas | Pés | 6 | res. mág. 10 | nv 21; Esp 47 | Cantora do Véu, Tecelão da Brasa |
+| Escudo de Aço Fundo | Escudo | Mão secundária | 30 | bloqueio 18% | nv 21; For 49 | Bastião de Bronze, Escudeiro do Alvorecer |
+| Broquel de Couro de Toupeira | Escudo leve | Mão secundária | 17 | evasão +12 | nv 21; Agi 48 | Andarilha do Vento |
+| Foco do Chamado | Foco | Mão secundária | — | res. mág. 26, poder mág. 24 | nv 21; Esp 50 | Cantora do Véu, Tecelão da Brasa |
+| Aljava de Couro de Toupeira | Aljava | Mão secundária | — | precisão +18 | nv 21; Agi 48 | Vigia do Espinhal |
+| Anel de Aço Fundo | Anel | Anel | — | +6 Vit | nv 21; — | todas |
+| Amuleto do Chamado | Amuleto | Amuleto | — | res. mág. 15, mana +42 | nv 21; — | todas |
+
+### Faixa 25 — teto de nível (pós-v1)
+
+| Arma | Família | Empunhadura | Dano | Intervalo | Alcance | Poder mág. | Requisitos | Classes | Raridade |
+|---|---|---|---|---|---|---|---|---|---|
+| Machado da Porta Funda | Machado (1 mão) | uma mão | 45–61 fís. | 1,1 s | 2.5 m | — | nv 25; For 58, Tal 32 | Quebraferro | comum |
+| Grande Machado dos Fundadores | Machado (2 mãos) | duas mãos | 65–89 fís. | 1,5 s | 2.5 m | — | nv 25; For 60, Tal 30 | Quebraferro | comum |
+| Garra da Porta Funda | Garra mecânica | uma mão | 39–53 fís. | 1 s | 2.5 m | — | nv 25; For 47, Tal 47 | Bastião de Bronze | comum |
+| Martelo dos Fundadores | Martelo (1 mão) | uma mão | 44–59 fís. | 1,2 s | 2.5 m | — | nv 25; For 58, Tal 32 | Bastião de Bronze | comum |
+| Pique da Passagem | Lança/pique (2 mãos) | duas mãos | 61–81 fís. | 1,3 s | 3.5 m | — | nv 25; For 58, Tal 32 | Lanceiro do Fosso | comum |
+| Arco dos Fundadores | Arco | uma mão | 45–61 fís. | 1,2 s | 18 m | — | nv 25; Agi 58, Tal 33 | Vigia do Espinhal | comum |
+| Espada da Primeira Manhã | Espada (1 mão) | uma mão | 45–61 fís. | 1 s | 2.5 m | — | nv 25; For 58, Esp 32 | Escudeiro do Alvorecer | comum |
+| Montante da Primeira Manhã | Espada (2 mãos) | duas mãos | 66–87 fís. | 1,4 s | 2.5 m | — | nv 25; For 60, Esp 32 | Escudeiro do Alvorecer | comum |
+| Azagaia dos Fundadores | Azagaia arremessável (1 mão) | uma mão | 46–63 fís. | 1,1 s | 14 m | — | nv 25; Agi 58, Tal 32 | Andarilha do Vento | comum |
+| Varinha do Primeiro Toque | Varinha | uma mão | 28–41 mág. | 1,2 s | 16 m | 55 | nv 25; Esp 59, Tal 32 | Cantora do Véu, Tecelão da Brasa | comum |
+| Cetro dos Fundadores | Cetro | uma mão | 29–43 mág. | 1,3 s | 14 m | 50 | nv 25; Esp 59, Tal 32 | Cantora do Véu | comum |
+| Cajado da Porta Funda | Cajado (2 mãos) | duas mãos | 41–60 mág. | 1,5 s | 18 m | 91 | nv 25; Esp 59, Tal 32 | Cantora do Véu, Tecelão da Brasa | comum |
+
+| Item | Família | Espaço | Defesa | Outros | Requisitos | Classes |
+|---|---|---|---|---|---|---|
+| Couraça dos Fundadores | Armadura pesada | Corpo | 63 | res. mág. 9 | nv 25; For 56 | Quebraferro, Bastião de Bronze, Lanceiro do Fosso, Escudeiro do Alvorecer |
+| Elmo dos Fundadores | Elmo pesado | Cabeça | 25 | res. mág. 4 | nv 25; For 54 | Quebraferro, Bastião de Bronze, Lanceiro do Fosso, Escudeiro do Alvorecer |
+| Manoplas dos Fundadores | Manoplas pesadas | Mãos | 19 | res. mág. 3 | nv 25; For 53 | Quebraferro, Bastião de Bronze, Lanceiro do Fosso, Escudeiro do Alvorecer |
+| Grevas dos Fundadores | Grevas pesadas | Pés | 19 | res. mág. 3 | nv 25; For 53 | Quebraferro, Bastião de Bronze, Lanceiro do Fosso, Escudeiro do Alvorecer |
+| Gibão de Couro dos Fundadores | Armadura leve | Corpo | 43 | evasão +21, res. mág. 16 | nv 25; Agi 55, Tal 32 | Vigia do Espinhal, Andarilha do Vento |
+| Capuz de Couro dos Fundadores | Capuz leve | Cabeça | 17 | evasão +9, res. mág. 6 | nv 25; Agi 53, Tal 30 | Vigia do Espinhal, Andarilha do Vento |
+| Luvas de Couro dos Fundadores | Luvas leves | Mãos | 12 | evasão +7, res. mág. 5 | nv 25; Agi 52, Tal 29 | Vigia do Espinhal, Andarilha do Vento |
+| Botas de Couro dos Fundadores | Botas leves | Pés | 12 | evasão +7, res. mág. 5 | nv 25; Agi 52, Tal 29 | Vigia do Espinhal, Andarilha do Vento |
+| Veste de Tecido dos Fundadores | Veste mágica | Corpo | 27 | res. mág. 40 | nv 25; Esp 57 | Cantora do Véu, Tecelão da Brasa |
+| Diadema de Tecido dos Fundadores | Diadema mágico | Cabeça | 10 | res. mág. 15 | nv 25; Esp 55 | Cantora do Véu, Tecelão da Brasa |
+| Mitenes de Tecido dos Fundadores | Mitenes mágicas | Mãos | 8 | res. mág. 12 | nv 25; Esp 54 | Cantora do Véu, Tecelão da Brasa |
+| Sandálias de Tecido dos Fundadores | Sandálias mágicas | Pés | 8 | res. mág. 12 | nv 25; Esp 54 | Cantora do Véu, Tecelão da Brasa |
+| Escudo dos Fundadores | Escudo | Mão secundária | 37 | bloqueio 21% | nv 25; For 56 | Bastião de Bronze, Escudeiro do Alvorecer |
+| Broquel de Couro dos Fundadores | Escudo leve | Mão secundária | 21 | evasão +15 | nv 25; Agi 55 | Andarilha do Vento |
+| Foco da Escuta | Foco | Mão secundária | — | res. mág. 32, poder mág. 30 | nv 25; Esp 57 | Cantora do Véu, Tecelão da Brasa |
+| Aljava de Couro dos Fundadores | Aljava | Mão secundária | — | precisão +22 | nv 25; Agi 55 | Vigia do Espinhal |
+| Anel dos Fundadores | Anel | Anel | — | +8 Vit | nv 25; — | todas |
+| Amuleto da Escuta | Amuleto | Amuleto | — | res. mág. 19, mana +54 | nv 25; — | todas |
+
 ### Itens nomeados de outras raridades (exemplos)
 
 | Item | Raridade | Nível | Requisitos | Efeito |
@@ -343,22 +429,22 @@ Os oito itens pedidos estão no catálogo com os requisitos originais: Machado d
 
 Conjunto = arma da família + mão secundária da classe (se a arma for de uma mão) + 4 peças de armadura do peso da classe, todos da mesma faixa, usados ao mesmo tempo. "Gasta" = soma, por atributo, de quanto o maior requisito passa do valor inicial da classe. A folga é o que sobra para Vitalidade e para a identidade da build.
 
-| Classe / família | nv 1 | nv 5 | nv 9 | nv 13 | nv 17 | nv 20 |
-|---|---|---|---|---|---|---|
-| Quebraferro / Machado (1 mão) | 0/0 | 8/20 | 22/40 | 30/60 | 42/80 | 50/95 |
-| Quebraferro / Machado (2 mãos) | 0/0 | 8/20 | 22/40 | 30/60 | 42/80 | 50/95 |
-| Bastião de Bronze / Garra mecânica | 0/0 | 10/20 | 25/40 | 35/60 | 49/80 | 59/95 |
-| Bastião de Bronze / Martelo (1 mão) | 0/0 | 8/20 | 22/40 | 30/60 | 42/80 | 50/95 |
-| Lanceiro do Fosso / Lança/pique (2 mãos) | 0/0 | 7/20 | 21/40 | 29/60 | 41/80 | 49/95 |
-| Vigia do Espinhal / Arco | 0/0 | 4/20 | 17/40 | 27/60 | 38/80 | 47/95 |
-| Escudeiro do Alvorecer / Espada (1 mão) | 0/0 | 8/20 | 20/40 | 29/60 | 42/80 | 52/95 |
-| Escudeiro do Alvorecer / Espada (2 mãos) | 0/0 | 10/20 | 22/40 | 31/60 | 44/80 | 54/95 |
-| Andarilha do Vento / Azagaia arremessável (1 mão) | 0/0 | 7/20 | 20/40 | 30/60 | 41/80 | 49/95 |
-| Cantora do Véu / Varinha | 0/0 | 8/20 | 17/40 | 27/60 | 38/80 | 52/95 |
-| Cantora do Véu / Cetro | 0/0 | 8/20 | 17/40 | 27/60 | 38/80 | 52/95 |
-| Cantora do Véu / Cajado (2 mãos) | 0/0 | 8/20 | 17/40 | 27/60 | 38/80 | 33/95 |
-| Tecelão da Brasa / Varinha | 0/0 | 7/20 | 16/40 | 26/60 | 37/80 | 51/95 |
-| Tecelão da Brasa / Cajado (2 mãos) | 0/0 | 7/20 | 16/40 | 26/60 | 37/80 | 51/95 |
+| Classe / família | nv 1 | nv 5 | nv 9 | nv 13 | nv 17 | nv 20 | nv 21 | nv 25 |
+|---|---|---|---|---|---|---|---|---|
+| Quebraferro / Machado (1 mão) | 0/0 | 8/20 | 22/40 | 30/60 | 42/80 | 50/95 | 52/100 | 62/120 |
+| Quebraferro / Machado (2 mãos) | 0/0 | 8/20 | 22/40 | 30/60 | 42/80 | 50/95 | 52/100 | 62/120 |
+| Bastião de Bronze / Garra mecânica | 0/0 | 10/20 | 25/40 | 35/60 | 49/80 | 59/95 | 62/100 | 75/120 |
+| Bastião de Bronze / Martelo (1 mão) | 0/0 | 8/20 | 22/40 | 30/60 | 42/80 | 50/95 | 52/100 | 62/120 |
+| Lanceiro do Fosso / Lança/pique (2 mãos) | 0/0 | 7/20 | 21/40 | 29/60 | 41/80 | 49/95 | 51/100 | 61/120 |
+| Vigia do Espinhal / Arco | 0/0 | 4/20 | 17/40 | 27/60 | 38/80 | 47/95 | 49/100 | 60/120 |
+| Escudeiro do Alvorecer / Espada (1 mão) | 0/0 | 8/20 | 20/40 | 29/60 | 42/80 | 52/95 | 53/100 | 64/120 |
+| Escudeiro do Alvorecer / Espada (2 mãos) | 0/0 | 10/20 | 22/40 | 31/60 | 44/80 | 54/95 | 55/100 | 66/120 |
+| Andarilha do Vento / Azagaia arremessável (1 mão) | 0/0 | 7/20 | 20/40 | 30/60 | 41/80 | 49/95 | 51/100 | 61/120 |
+| Cantora do Véu / Varinha | 0/0 | 8/20 | 17/40 | 27/60 | 38/80 | 52/95 | 49/100 | 60/120 |
+| Cantora do Véu / Cetro | 0/0 | 8/20 | 17/40 | 27/60 | 38/80 | 52/95 | 49/100 | 60/120 |
+| Cantora do Véu / Cajado (2 mãos) | 0/0 | 8/20 | 17/40 | 27/60 | 38/80 | 33/95 | 49/100 | 60/120 |
+| Tecelão da Brasa / Varinha | 0/0 | 7/20 | 16/40 | 26/60 | 37/80 | 51/95 | 48/100 | 59/120 |
+| Tecelão da Brasa / Cajado (2 mãos) | 0/0 | 7/20 | 16/40 | 26/60 | 37/80 | 51/95 | 48/100 | 59/120 |
 
 Formato: pontos que o conjunto exige / pontos disponíveis no nível. Nenhuma célula excede o disponível (✗ marcaria falha; o validador `npm run validate-data` e o teste `data.test.js` quebram se isso acontecer).
 
@@ -392,6 +478,11 @@ Começa com Força 17, Espírito 5, Talento 11, Agilidade 10, Vitalidade 17. Cad
 | 18 | +3 For, +2 Vit | 50 | 5 | 28 | 14 | 48 | 85/85 |  |
 | 19 | +5 Vit | 50 | 5 | 28 | 14 | 53 | 90/90 |  |
 | 20 | +3 Agi, +2 Vit | 50 | 5 | 28 | 17 | 55 | 95/95 | ✔ Machado do Meridiano Partido (For 50, Tal 28)<br>✔ Couraça de Meridiano (For 48)<br>✔ Elmo de Meridiano (For 46)<br>✔ Manoplas de Meridiano (For 45)<br>✔ Grevas de Meridiano (For 45) |
+| 21 | +1 For, +1 Tal, +3 Vit | 51 | 5 | 29 | 17 | 58 | 100/100 | ✔ Machado de Poceiro (For 51, Tal 29)<br>✔ Couraça de Aço Fundo (For 49)<br>✔ Elmo de Aço Fundo (For 47)<br>✔ Manoplas de Aço Fundo (For 46)<br>✔ Grevas de Aço Fundo (For 46) |
+| 22 | +3 For, +2 Tal | 54 | 5 | 31 | 17 | 58 | 105/105 |  |
+| 23 | +5 Vit | 54 | 5 | 31 | 17 | 63 | 110/110 |  |
+| 24 | +2 For, +1 Tal, +2 Vit | 56 | 5 | 32 | 17 | 65 | 115/115 |  |
+| 25 | +2 For, +3 Vit | 58 | 5 | 32 | 17 | 68 | 120/120 | ✔ Machado da Porta Funda (For 58, Tal 32)<br>✔ Couraça dos Fundadores (For 56)<br>✔ Elmo dos Fundadores (For 54)<br>✔ Manoplas dos Fundadores (For 53)<br>✔ Grevas dos Fundadores (For 53) |
 
 ### Tecelão da Brasa de varinha e foco (exemplo mágico)
 
@@ -419,6 +510,11 @@ Começa com Força 7, Espírito 20, Talento 12, Agilidade 9, Vitalidade 12. Cada
 | 18 | +5 Vit | 7 | 55 | 28 | 10 | 45 | 85/85 |  |
 | 19 | +3 Vit, +2 Agi | 7 | 55 | 28 | 12 | 48 | 90/90 |  |
 | 20 | +5 Vit | 7 | 55 | 28 | 12 | 53 | 95/95 | ✔ Cajado da Câmara Rubra (Esp 55, Tal 28)<br>✔ Veste de Tecido do Meridiano (Esp 52)<br>✔ Diadema de Tecido do Meridiano (Esp 50)<br>✔ Mitenes de Tecido do Meridiano (Esp 49)<br>✔ Sandálias de Tecido do Meridiano (Esp 49) |
+| 21 | +5 Vit | 7 | 55 | 28 | 12 | 58 | 100/100 | ✔ Varinha do Chamado (Esp 52, Tal 28)<br>✔ Foco do Chamado (Esp 50)<br>✔ Veste de Feltro de Cisterna (Esp 50)<br>✔ Diadema de Feltro de Cisterna (Esp 48)<br>✔ Mitenes de Feltro de Cisterna (Esp 47)<br>✔ Sandálias de Feltro de Cisterna (Esp 47) |
+| 22 | +2 Esp, +2 Tal, +1 Vit | 7 | 57 | 30 | 12 | 59 | 105/105 |  |
+| 23 | +5 Vit | 7 | 57 | 30 | 12 | 64 | 110/110 |  |
+| 24 | +2 Esp, +2 Tal, +1 Agi | 7 | 59 | 32 | 13 | 64 | 115/115 |  |
+| 25 | +3 Vit, +2 Agi | 7 | 59 | 32 | 15 | 67 | 120/120 | ✔ Varinha do Primeiro Toque (Esp 59, Tal 32)<br>✔ Foco da Escuta (Esp 57)<br>✔ Veste de Tecido dos Fundadores (Esp 57)<br>✔ Diadema de Tecido dos Fundadores (Esp 55)<br>✔ Mitenes de Tecido dos Fundadores (Esp 54)<br>✔ Sandálias de Tecido dos Fundadores (Esp 54) |
 
 ## 4.7 Fórmulas de combate (dados em data/formulas.json)
 

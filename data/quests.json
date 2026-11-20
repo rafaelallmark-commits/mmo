@@ -824,6 +824,263 @@
     "complete": "Quem ouviu o segundo toque não esquece. Guarde o registro: alguém mandou essas mensagens de novo."
    }
   },
+  "c6_silence": {
+   "chapter": 6,
+   "title": "O Silêncio do Custódio",
+   "npc": "ilda",
+   "turnIn": "mara",
+   "level": 20,
+   "prereq": [
+    "c5_listen"
+   ],
+   "objectives": [
+    {
+     "type": "enterMap",
+     "map": "cava_primeira",
+     "text": "Desça pelo Poço de Inspeção, ao lado da porta da Eclusa, até a Cava Primeira"
+    },
+    {
+     "type": "talk",
+     "npc": "mara",
+     "text": "Encontre Mara no Posto de Escuta"
+    }
+   ],
+   "rewards": {
+    "xp": 8000,
+    "gold": 600,
+    "items": [
+     [
+      "potion_hp_m",
+      5
+     ]
+    ]
+   },
+   "dialogue": {
+    "offer": "Li o registro do Custódio até o fim. Ele não fechava as saídas para nos prender: fechava para segurar alguma coisa embaixo. Sem ele, a pressão dos canais desce por um poço de inspeção que não está em mapa nenhum da Companhia. A Mara já desceu. Claro que desceu.",
+    "progress": "O poço fica ao lado da porta da Eclusa, no fim do canal central. Lá embaixo é mais quente que aqui: não desça antes do nível 20.",
+    "complete": "Você veio. Olha estas escadas: talhadas na pedra, não fundidas. Isto é mais velho que a Companhia. Mais velho que as duas cidades. E alguém deixou um posto de escuta bem aqui, na boca do poço."
+   },
+   "dialogueByChoice": {
+    "duas_razoes": {
+     "cautela": {
+      "offer": "Você me pediu cuidado nos Ninhos, lembra? O Custódio era cuidado puro: fechava tudo e pronto. Li o registro dele até o fim — ele segurava alguma coisa embaixo. Sem ele, a pressão desce por um poço de inspeção que não está em mapa nenhum. A Mara já desceu. Claro que desceu."
+     },
+     "inverno": {
+      "offer": "O hospital ganhou o calor que você escolheu. Agora vem a conta: li o registro do Custódio até o fim, e ele não nos prendia — segurava alguma coisa embaixo. Sem ele, a pressão desce por um poço de inspeção que não está em mapa nenhum. A Mara já desceu. Claro que desceu."
+     }
+    }
+   }
+  },
+  "c6_calls": {
+   "chapter": 6,
+   "title": "Os Que Pediram Socorro",
+   "npc": "mara",
+   "turnIn": "mara",
+   "level": 21,
+   "prereq": [
+    "c6_silence"
+   ],
+   "objectives": [
+    {
+     "type": "questDrop",
+     "monster": "bronze_bellringer",
+     "chance": 0.5,
+     "count": 5,
+     "text": "Recupere placas de chamada dos Sineiros de Bronze"
+    },
+    {
+     "type": "interact",
+     "objects": [
+      "voice_tube_1",
+      "voice_tube_2",
+      "voice_tube_3"
+     ],
+     "text": "Escute os 3 tubos de voz do Salão das Placas"
+    }
+   ],
+   "rewards": {
+    "xp": 16000,
+    "gold": 700,
+    "items": [
+     [
+      "mat_refine",
+      4
+     ]
+    ]
+   },
+   "dialogue": {
+    "offer": "Os sineiros de bronze ainda carregam placas de chamada, feito carteiros que ninguém dispensou. Cada placa é um pedido: o nome da turma, quantos ainda respiram, de que lado da passagem. Traga as placas. E escute os tubos de voz do salão: o metal guarda a última frase que passou por ele.",
+    "progress": "Os sineiros andam em bando no Salão das Placas, ao norte. Bateu em um, vêm todos. Os tubos ficam nas paredes do salão.",
+    "complete": "\"Turma funda. Onze ainda respiram. A passagem foi fechada por cima.\" Por cima, entendeu? Não foi desabamento. Alguém do lado de cá fechou. E os três tubos repetem a mesma frase, cada um com uma voz."
+   }
+  },
+  "c6_answer": {
+   "chapter": 6,
+   "title": "Quem Respondia",
+   "npc": "ilda",
+   "turnIn": "ilda",
+   "level": 22,
+   "prereq": [
+    "c6_calls"
+   ],
+   "objectives": [
+    {
+     "type": "interact",
+     "objects": [
+      "old_post"
+     ],
+     "text": "Leia o carimbo da máquina do posto antigo, junto às ruínas"
+    },
+    {
+     "type": "kill",
+     "monster": "buried_voice",
+     "count": 8,
+     "text": "Cale Vozes Soterradas na galeria ao norte das ruínas"
+    }
+   ],
+   "rewards": {
+    "xp": 17000,
+    "gold": 800,
+    "items": [
+     [
+      "amulet_t21",
+      1
+     ]
+    ]
+   },
+   "dialogue": {
+    "offer": "Toda placa tem a mesma resposta carimbada no verso: \"Estamos ouvindo. A passagem continua fechada.\" Alguém daqui de cima respondia. A máquina que carimbava fica no posto antigo, junto às ruínas. Quero saber quem assinava. E as Vozes da galeria norte não deixam ninguém trabalhar em paz: cale algumas.",
+    "progress": "A máquina fica ao sul das ruínas, no meio da cava. As Vozes rondam a galeria ao norte delas. Leia o carimbo sem se mexer: se apanhar, começa de novo.",
+    "complete": "Duas marcas no carimbo: um esquadro de pedreiro e um fio de condutor. Pedra e condutor. Âmbar e Nacre, antes de terem nome. Fecharam juntos, responderam juntos e subiram para fundar as cidades. ... E a última resposta foi carimbada hoje. A máquina respondeu sozinha a uma chamada que chegou hoje."
+   }
+  },
+  "c6_choice": {
+   "chapter": 6,
+   "title": "A Mesma Escolha",
+   "npc": "mara",
+   "turnIn": "ilda",
+   "level": 23,
+   "prereq": [
+    "c6_answer"
+   ],
+   "objectives": [
+    {
+     "type": "interact",
+     "objects": [
+      "deep_seal_1",
+      "deep_seal_2",
+      "deep_seal_3"
+     ],
+     "text": "Examine os 3 selos em volta da Porta Funda"
+    },
+    {
+     "type": "choice",
+     "npc": "ilda",
+     "key": "porta_funda",
+     "text": "Diga a Ilda o que fazer com a Porta Funda",
+     "prompt": "ILDA: \"Trezentos anos atrás, alguém parou exatamente onde a gente está e decidiu manter fechado. Você faria diferente?\"",
+     "options": [
+      {
+       "id": "abrir",
+       "text": "«Abra. Se alguém chama, alguém tem que responder — com a porta, não com um carimbo.»",
+       "title": "Voz que Responde",
+       "reply": "A Mara vai gostar. Eu não sei se gosto. Mas é a primeira vez em trezentos anos que alguém daqui de cima escolhe abrir."
+      },
+      {
+       "id": "esperar",
+       "text": "«Mantenha fechada até sabermos quem chama. Abrir no escuro foi o erro da Companhia.»",
+       "title": "Guarda da Porta Funda",
+       "reply": "Então fazemos igual a eles. ... Não. Eles fecharam e foram embora. Nós vamos ficar aqui, ouvindo."
+      }
+     ]
+    }
+   ],
+   "rewards": {
+    "xp": 17000,
+    "gold": 800,
+    "items": [
+     [
+      "mat_refine",
+      5
+     ]
+    ]
+   },
+   "dialogue": {
+    "offer": "A chamada de hoje veio de trás da Porta Funda, no fim da cava. Três selos seguram a porta, e uma máquina mais velha que o Custódio segura os selos. Antes de alguém decidir alguma coisa, quero que você veja os selos com os próprios olhos. Depois fale com a Ilda. Ela vai perguntar o que eu já sei que vou responder.",
+    "progress": "Os selos ficam em volta da Porta Funda, depois da fenda. Não chegue perto do Selador: ele não gosta de visita.",
+    "complete": "Agora é com o Selador. Enquanto ele estiver de pé, quem decide é a máquina, não a gente."
+   },
+   "dialogueByChoice": {
+    "duas_razoes": {
+     "cautela": {
+      "offer": "Nos Ninhos você mediu antes de escolher. Faça igual aqui. A chamada de hoje veio de trás da Porta Funda, no fim da cava. Três selos seguram a porta, e uma máquina mais velha que o Custódio segura os selos. Veja os selos com os próprios olhos e depois fale com a Ilda."
+     },
+     "inverno": {
+      "offer": "Da outra vez você escolheu o calor do hospital. Atrás desta porta pode ter gente com frio há trezentos anos. A chamada de hoje veio de trás da Porta Funda, no fim da cava. Três selos seguram a porta, e uma máquina mais velha que o Custódio segura os selos. Veja os selos com os próprios olhos e depois fale com a Ilda."
+     }
+    },
+    "porta_funda": {
+     "abrir": {
+      "complete": "Então vamos abrir. Mas o Selador fecha qualquer fresta que a gente abrir: primeiro ele."
+     },
+     "esperar": {
+      "complete": "Fechada, então. Mas fechada por nós, de olhos abertos, e não por uma máquina que responde sozinha. Primeiro o Selador."
+     }
+    }
+   }
+  },
+  "c6_reply": {
+   "chapter": 6,
+   "title": "A Resposta",
+   "npc": "ilda",
+   "turnIn": "mara",
+   "level": 24,
+   "prereq": [
+    "c6_choice"
+   ],
+   "objectives": [
+    {
+     "type": "kill",
+     "monster": "deep_sealer",
+     "count": 1,
+     "text": "Derrote o Selador da Porta Funda (grupo recomendado)"
+    },
+    {
+     "type": "interact",
+     "objects": [
+      "reply_tube"
+     ],
+     "text": "Mande a resposta pelo tubo da Porta Funda"
+    }
+   ],
+   "rewards": {
+    "xp": 23800,
+    "gold": 1500,
+    "items": [
+     [
+      "ring_t25",
+      1
+     ]
+    ]
+   },
+   "dialogue": {
+    "offer": "O Selador fecha qualquer fresta e responde no nosso lugar. Derrube a máquina — junte gente, ela é teimosa como o Custódio — e mande a nossa resposta pelo tubo ao lado da porta. A nossa. Não a dela.",
+    "progress": "O Selador guarda a Porta Funda, no extremo leste. O tubo de resposta fica ao lado da porta, do lado sul.",
+    "complete": "Do outro lado da porta, um sino. Um toque só. Não é eco, é resposta. Trezentos anos depois, alguém — ou alguma coisa — ainda está ouvindo."
+   },
+   "dialogueByChoice": {
+    "porta_funda": {
+     "abrir": {
+      "offer": "Você disse para abrir. O Selador discorda: fecha qualquer fresta e responde no nosso lugar. Derrube a máquina — junte gente — e mande pelo tubo ao lado da porta: \"Estamos ouvindo. Vamos abrir.\"",
+      "complete": "Você escreveu \"vamos abrir\". E do outro lado da porta, um sino respondeu. Um toque só. Não é eco: é alguém. A Ilda já está medindo os selos; eu vou mapear o que houver do outro lado. Desta vez, junto."
+     },
+     "esperar": {
+      "offer": "Você disse para esperar. Mesmo assim o Selador não pode responder por nós. Derrube a máquina — junte gente — e mande pelo tubo ao lado da porta: \"Estamos ouvindo. Ainda não podemos abrir, mas não vamos embora.\"",
+      "complete": "Você escreveu \"não vamos embora\". E do outro lado, um sino respondeu. Um toque só. Seja quem for, agora sabe que não está sozinho. Nem nós."
+     }
+    }
+   }
+  },
   "s_silk": {
    "items": [],
    "chapter": 4,
@@ -919,6 +1176,72 @@
     "offer": "A escória entope os canais e explode quando esfria. Limpa o caminho até a bacia.",
     "progress": "A bacia de vapor fica no meio dos canais.",
     "complete": "Agora a água anda. Escuta: parece até respiração."
+   }
+  },
+  "s_bells": {
+   "chapter": 6,
+   "title": "Badalos Soltos",
+   "npc": "joca",
+   "turnIn": "joca",
+   "level": 21,
+   "prereq": [
+    "c6_silence"
+   ],
+   "objectives": [
+    {
+     "type": "kill",
+     "monster": "bronze_bellringer",
+     "count": 12,
+     "text": "Desmonte Sineiros de Bronze"
+    }
+   ],
+   "rewards": {
+    "xp": 9000,
+    "gold": 600,
+    "items": [
+     [
+      "potion_hp_m",
+      8
+     ]
+    ]
+   },
+   "dialogue": {
+    "offer": "Esses sineiros tocam alarme a cada passo e acordam a cava inteira. Bronze bom, mecanismo melhor ainda: trezentos anos e as molas não cederam. Me traz uns doze desmontados e eu descubro como eles carregavam a voz.",
+    "progress": "Eles andam em bando no Salão das Placas. Puxa um por vez pela borda, senão vem o coral inteiro.",
+    "complete": "Olha esta mola: aço que a Companhia nunca conseguiu fazer. Quem construiu isso sabia o que estava fazendo. E mesmo assim fechou a porta. Dá o que pensar."
+   }
+  },
+  "s_moles": {
+   "chapter": 6,
+   "title": "Túneis Novos",
+   "npc": "mara",
+   "turnIn": "mara",
+   "level": 23,
+   "prereq": [
+    "c6_answer"
+   ],
+   "objectives": [
+    {
+     "type": "kill",
+     "monster": "basalt_mole",
+     "count": 12,
+     "text": "Derrote Toupeiras de Basalto"
+    }
+   ],
+   "rewards": {
+    "xp": 10500,
+    "gold": 700,
+    "items": [
+     [
+      "mat_refine",
+      5
+     ]
+    ]
+   },
+   "dialogue": {
+    "offer": "As toupeiras abriram túneis novos esta semana. Marquei todos no mapa: sobem, todos, na direção do calor. E o calor mais perto daqui fica embaixo de Vargem Funda. Diminua o bando antes que alguma chegue no porão de alguém.",
+    "progress": "Tem um bando no Poço Quente, a leste da fenda, e outro ao sul das ruínas.",
+    "complete": "Os túneis pararam de crescer. Por enquanto. Vou mandar o mapa para Vargem Funda: eles merecem saber o que tem embaixo do chão deles."
    }
   }
  }
