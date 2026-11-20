@@ -12,10 +12,10 @@ Como o jogador se move entre telas, painéis e mapas. Este documento manda: o cl
                        │ Jogar
                 ┌──────▼───────┐
                 │   ENTRAR     │── Voltar ──► Título
-                │ servidor,    │── Criar conta (mesma tela)
-                │ conta, senha │
-                └──────┬───────┘
-                       │ login ok
+                │ servidor,    │── Criar conta ──► [Criar conta] ──► [Confirmar e-mail]
+                │ conta, senha │── Confirmar e-mail ──► [Confirmar e-mail] (código, Reenviar)
+                └──────┬───────┘── Esqueci a senha ──► [Esqueci a senha] (código + senha nova)
+                       │ login ok   (e-mail não confirmado → [Confirmar e-mail]; termos novos → [Termos atualizados])
                 ┌──────▼───────────┐
                 │  PERSONAGENS     │── Voltar ──► Entrar (desconecta)
                 │ lista + prévia 3D│── Criar novo ──► CRIAÇÃO ──► Criar ──┐
@@ -31,12 +31,16 @@ Como o jogador se move entre telas, painéis e mapas. Este documento manda: o cl
 | Tela | Conteúdo | Saídas |
 |---|---|---|
 | **Título** | logotipo, cena 3D de fundo (ponte ao amanhecer), Jogar, Opções, Sair | Jogar → Entrar; Opções → painel; Sair → fecha |
-| **Entrar** | servidor, conta, senha; Entrar, Criar conta, Voltar; erros em vermelho | sucesso → Personagens; Voltar → Título |
-| **Personagens** | até 4 cartões (nome, classe, nível, mapa); personagem selecionado em 3D no centro, girando | Jogar → Carregando; Criar novo → Criação; Voltar → Entrar |
+| **Entrar** | servidor, conta, senha; Entrar, Criar conta, Confirmar e-mail, Esqueci a senha, Voltar; erros em vermelho | sucesso → Personagens; e-mail não confirmado → Confirmar e-mail; termos novos → Termos atualizados; Voltar → Título |
+| **Criar conta** (serviço de contas) | conta, e-mail, senha e a caixa "tenho 13 anos ou mais e aceito os Termos e a Política" (com os links) | Criar → Confirmar e-mail; Voltar → Entrar |
+| **Confirmar e-mail** | conta e o código de 6 dígitos que chegou por e-mail; Reenviar código (com limite), dica sobre lixo eletrônico, Esqueci a senha | código certo → Entrar; Voltar → Entrar |
+| **Esqueci a senha** | e-mail → código por e-mail → código + senha nova (também confirma o e-mail) | Entrar |
+| **Termos atualizados** | aparece quando os Termos ou a Política mudaram de versão: links e caixa de aceite; quem não aceita ainda pode baixar os dados ou excluir a conta | aceitar → Personagens; Voltar → Entrar |
+| **Personagens** | até 4 cartões (nome, classe, nível, mapa); personagem selecionado em 3D no centro, girando; Excluir personagem; Baixar meus dados; Excluir conta | Jogar → Carregando; Criar novo → Criação; Voltar → Entrar; Excluir conta (senha + confirmação) → Título |
 | **Criação** | 8 classes em dois grupos (Âmbar / Nacre), papel e armas da classe, prévia 3D muda ao escolher, nome | Criar → Personagens; Voltar → Personagens |
 | **Carregando** | nome do mapa, dica de jogo; aparece ao entrar no mundo e em cada troca de mapa | → Mundo (personagem novo: → Abertura) |
 | **Abertura** | ~40 s na ponte antes do amanhecer (docs/02, "Abertura"): caravana, primeiro toque, sulco vermelho, a margem que cede e Mara entregando o mapa; legendas, sem interface. Só na primeira entrada de um personagem novo neste computador | Pular (Esc, Espaço, Enter ou botão) ou fim da cena → Mundo, no Posto da Ponte |
-| **Opções** | sensibilidade da câmera, mostrar nomes, escala da interface (salvos em `user://opcoes.cfg`); volume geral, da música e dos efeitos (salvos em `user://settings.cfg`) | Fechar → tela anterior |
+| **Opções** | sensibilidade da câmera, mostrar nomes, escala da interface; gráficos: modo leve, sombras, tela cheia, limite de quadros (salvos em `user://opcoes.cfg`); volume geral, da música e dos efeitos (salvos em `user://settings.cfg`) | Fechar → tela anterior |
 
 ## 7.2 Dentro do jogo: camadas
 
