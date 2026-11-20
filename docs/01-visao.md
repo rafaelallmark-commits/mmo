@@ -53,6 +53,6 @@ A inspiração é a *experiência* clássica de MMORPG de ação com câmera ele
 
 ## Escopo da versão 1
 
-Níveis 1–20, oito classes, duas cidades, cinco áreas de caça, calabouço da Última Eclusa para 2–5 jogadores, ferreiro até +3. O design de atributos e de XP continua além do 20 (arco maior: os pedidos de socorro anteriores à fundação das cidades). **Pós-v1, já jogável**: níveis 21–25 com A Cava Primeira e o capítulo 6, que começa a responder quem mandou os pedidos de socorro (ver `02-campanha.md` e `06-mundo-e-mapas.md`). Ficam para depois: comércio entre jogadores, clãs, graus de refino superiores e PvP voluntário.
+Níveis 1–20, oito classes, duas cidades, cinco áreas de caça, calabouço da Última Eclusa para 2–5 jogadores, ferreiro até +3. O design de atributos e de XP continua além do 20 (arco maior: os pedidos de socorro anteriores à fundação das cidades). Ficaram para depois da versão 1 e **já são jogáveis no pós-v1**: comércio entre jogadores, clãs, refino +4..+6, duelos (PvP voluntário) e os níveis 21–25 com A Cava Primeira e o capítulo 6, que começa a responder quem mandou os pedidos de socorro (ver `02-campanha.md` e `06-mundo-e-mapas.md`).
 
 O estado atual do código é o **Marco 1** (ver `05-arquitetura.md` e o README).
