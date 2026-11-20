@@ -218,7 +218,7 @@ func _build_trade(root: Control) -> void:
 	sc.custom_minimum_size = Vector2(570, 120)
 	v.add_child(sc)
 	trade_bag = GridContainer.new()
-	trade_bag.columns = 3
+	trade_bag.columns = 2
 	sc.add_child(trade_bag)
 	var grow := HBoxContainer.new()
 	v.add_child(grow)
@@ -315,7 +315,7 @@ func _on_trade(t: Dictionary) -> void:
 		var on: bool = it["id"] in mine
 		b.text = ("✓ " if on else "") + ItemText.item_name(main.defs, it)
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		b.custom_minimum_size = Vector2(185, 0)
+		b.custom_minimum_size = Vector2(280, 0)
 		b.clip_text = true
 		var iid: String = it["id"]
 		b.pressed.connect(func():
