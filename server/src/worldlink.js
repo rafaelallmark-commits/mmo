@@ -3,6 +3,10 @@
 // transferência, grupos) e reconecta sozinha. Se ficar sem notícia do mundo perto do prazo em que
 // ele daria esta zona como fora do ar, salva e desconecta os jogadores: assim, quando o mundo
 // liberar as posses, ninguém mais tem o personagem carregado (nunca dois donos).
+// "Notícia" é só o que prova que o mundo via esta zona: a resposta a um sinal de vida ou a um pedido,
+// contada a partir do instante em que ele foi MANDADO. Uma mensagem qualquer do mundo não conta: depois
+// de um travamento longo do processo, as que estavam na fila chegam velhas (o mundo pode já ter dado
+// esta zona como fora do ar) e não podem liberar gravações.
 import WebSocket from 'ws';
 import { zoneAuth } from './world.js';
 
@@ -23,10 +27,15 @@ export class WorldLink {
     this.pending = new Map();
     this.hbMs = 2000;
     this.downMs = 10000;
-    this.lastHeard = 0;
+    this.lastHeard = 0;     // instante (deste processo) em que saiu o último sinal de vida ou pedido respondido
+    this.hbSeq = 0;
+    this.hbSent = new Map(); // número do sinal de vida -> instante em que saiu
+    this.helloAt = 0;
     this.fenced = false;
     this.readyWaiters = [];
   }
+
+  heard(at) { if (at > this.lastHeard) this.lastHeard = at; }
 
   // começa a perder o personagem quando passa disso sem notícia do mundo (antes de o mundo liberar)
   get fenceMs() { return Math.max(this.hbMs * 2, this.downMs * 0.6); }
@@ -55,6 +64,7 @@ export class WorldLink {
     this.ws = ws;
     ws.on('open', () => {
       const ts = Date.now();
+      this.helloAt = ts;
       // online: quem esta zona tem carregado (o mundo refaz as posses); draining: já está desligando
       ws.send(JSON.stringify({ t: 'hello', zoneId: this.zoneId, maps: this.maps, publicUrl: this.publicUrl, ts, auth: zoneAuth(this.secret, this.zoneId, ts), online: this.s.worldOnlineList(), draining: !!this.s.closing }));
     });
@@ -62,7 +72,6 @@ export class WorldLink {
       if (ws !== this.ws) return;
       let m;
       try { m = JSON.parse(buf.toString()); } catch { return; }
-      this.lastHeard = Date.now();
       this.onMessage(m);
     });
     ws.on('close', () => { if (ws === this.ws) this.onDown(); });
@@ -75,11 +84,12 @@ export class WorldLink {
         this.up = true;
         this.fenced = false;
         this.refused = null;
+        this.heard(this.helloAt); // o mundo aceitou o hello mandado neste instante
         this.hbMs = Number(m.hbMs) || this.hbMs;
         this.downMs = Number(m.downMs) || this.downMs;
         clearInterval(this.hbTimer);
-        this.hbTimer = setInterval(() => this.notify('hb', { players: this.s.playerCount() }), this.hbMs);
-        this.notify('hb', { players: this.s.playerCount() });
+        this.hbTimer = setInterval(() => this.beat(), this.hbMs);
+        this.beat();
         this.s.onWorldWelcome(m);
         for (const w of [...this.readyWaiters]) w(true);
         return;
@@ -88,12 +98,19 @@ export class WorldLink {
         if (this.refused !== m.reason) this.s.log(`o serviço de mundo recusou esta zona: ${m.reason}`);
         this.refused = m.reason;
         return;
-      case 'hb_ack': return;
+      case 'hb_ack': {
+        const at = this.hbSent.get(m.n);
+        if (at == null) return;
+        this.heard(at);
+        for (const n of this.hbSent.keys()) if (n <= m.n) this.hbSent.delete(n);
+        return;
+      }
       case 'res': {
         const p = this.pending.get(m.id);
         if (!p) return;
         this.pending.delete(m.id);
         clearTimeout(p.timer);
+        this.heard(p.at);
         const { t, id, ...rest } = m;
         p.resolve(rest);
         return;
@@ -107,6 +124,7 @@ export class WorldLink {
     this.up = false;
     clearInterval(this.hbTimer);
     this.hbTimer = null;
+    this.hbSent.clear(); // (sinais desta conexão não serão mais respondidos)
     for (const p of this.pending.values()) { clearTimeout(p.timer); p.resolve({ ...WORLD_DOWN }); }
     this.pending.clear();
     if (this.stopped) return;
@@ -115,12 +133,23 @@ export class WorldLink {
     this.retry = setTimeout(() => this.connect(), was ? 200 : Math.min(2000, Math.max(200, this.hbMs)));
   }
 
+  // sinal de vida numerado: o instante de cada um fica guardado até o mundo responder
+  beat() {
+    const n = ++this.hbSeq;
+    if (!this.notify('hb', { players: this.s.playerCount(), n })) return;
+    this.hbSent.set(n, Date.now());
+    if (this.hbSent.size > 64) this.hbSent.delete(this.hbSent.keys().next().value);
+  }
+
+  // Chamado a cada 100 ms e também no começo de cada passo da simulação e de cada comando de jogador
+  // (depois de um travamento, nada do jogo roda antes desta conferência). Sem notícia por fenceMs:
+  // salva (se ainda pode) e desconecta todos, uma vez; a notícia voltando, a cerca se desfaz.
   check() {
-    if (this.stopped || this.fenced || !this.lastHeard) return;
-    if (Date.now() - this.lastHeard > this.fenceMs) {
-      this.fenced = true;
-      this.s.onWorldLost();
-    }
+    if (this.stopped || !this.lastHeard) return;
+    if (Date.now() - this.lastHeard <= this.fenceMs) { this.fenced = false; return; }
+    if (this.fenced) return;
+    this.fenced = true;
+    this.s.onWorldLost();
   }
 
   request(t, payload = {}, timeoutMs = 8000) {
@@ -131,13 +160,16 @@ export class WorldLink {
         this.pending.delete(id);
         resolve({ ok: false, code: 'world_timeout', reason: 'O mundo não respondeu. Tente de novo.' });
       }, timeoutMs);
-      this.pending.set(id, { resolve, timer });
+      this.pending.set(id, { resolve, timer, at: Date.now() });
       this.ws.send(JSON.stringify({ t, id, ...payload }));
     });
   }
 
+  /** Aviso sem resposta; devolve false se não havia conexão para mandar. */
   notify(t, payload = {}) {
-    if (this.up && this.ws?.readyState === 1) this.ws.send(JSON.stringify({ t, ...payload }));
+    if (!this.up || this.ws?.readyState !== 1) return false;
+    this.ws.send(JSON.stringify({ t, ...payload }));
+    return true;
   }
 
   /** Desligamento: avisa o mundo (que libera o que restar desta zona) e fecha. */

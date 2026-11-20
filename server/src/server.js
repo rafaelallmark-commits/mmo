@@ -34,6 +34,8 @@ const DEFAULT_MAP = 'estrada_velha';
 // pedidos que podem mudar itens da bolsa: depois deles a troca aberta confere se a oferta mudou
 const ITEM_MUTATING = new Set(['use_item', 'enhance', 'quest_turnin', 'storage_put', 'storage_take', 'equip', 'unequip', 'buy', 'pickup', 'claim_recovery', 'gm', 'sell', 'discard', 'cast']);
 const INTEREST_R = 70; // raio de interesse dos snapshots por diferença (m)
+// várias zonas: recusados enquanto o personagem espera o token para ir a outra zona
+const TRANSFER_BLOCKED = new Set(['portal', 'gm', 'trial_start', 'dungeon_enter', 'interact', 'trade_request', 'trade_accept', 'duel_request', 'duel_accept']);
 const PRED_EPS2 = 0.1 * 0.1; // erro de posição tolerado na previsão por velocidade (m²)
 
 export class GameServer {
@@ -86,6 +88,7 @@ export class GameServer {
       this.world = new WorldLink(this, { url: this.opts.world, secret: this.opts.worldSecret });
       this.transferReplay = new ReplayGuard();
       this.arriving = new Map();       // charId -> recados que chegaram antes de o login_transfer terminar
+      this.revoked = new Map();        // época -> instante: posse que o mundo pediu de volta antes de o personagem carregar
       this.remoteMaps = new Map();     // mapId -> { zoneId, up } (mapas das outras zonas)
       this.remote = new Map();         // charId -> { name, zoneId } (on-line em outra zona)
       this.remoteByName = new Map();   // nome minúsculo -> charId (on-line em outra zona)
@@ -200,6 +203,7 @@ export class GameServer {
 
   step(dt) {
     const t0 = performance.now();
+    this.world?.check(); // várias zonas: depois de um travamento, a cerca vem antes de qualquer lógica do jogo
     for (const [key, z] of this.zones) {
       // tempo jogado (tempo de jogo, para a telemetria de progressão)
       for (const p of z.players.values()) p.char.playedS = (p.char.playedS ?? 0) + dt / 1000;
@@ -453,6 +457,7 @@ export class GameServer {
 
   onMessage(s, buf) {
     this.metrics.in(buf.length);
+    this.world?.check(); // (idem: nenhum comando de jogador roda sem a conferência da cerca)
     if (!this.sessions.has(s)) return;
     let msg;
     try { msg = JSON.parse(buf.toString()); } catch { return this.sendTo(s, { t: 'res', rid: null, ok: false, code: 'bad_json', reason: 'Mensagem inválida.' }); }
@@ -535,8 +540,8 @@ export class GameServer {
     const zone = this.zoneOfChar(s.charId);
     const p = zone?.players.get(s.charId);
     if (!p) return { ok: false, code: 'not_in_world', reason: 'Personagem fora do mundo.' };
-    // indo para outra zona (várias zonas): nada que mude de mapa até a transferência terminar
-    if (p.transferring && ['portal', 'gm', 'trial_start', 'dungeon_enter', 'interact'].includes(msg.t)) return { ok: false, code: 'busy', reason: 'Mudando de área...', cache: false };
+    // indo para outra zona (várias zonas): nada que mude de mapa nem abra troca ou duelo até a transferência terminar
+    if (p.transferring && TRANSFER_BLOCKED.has(msg.t)) return { ok: false, code: 'busy', reason: 'Mudando de área...', cache: false };
     switch (msg.t) {
       case 'move': return this.nc(zone.cmdMove(p, msg.x, msg.z));
       case 'attack': return this.nc(zone.cmdAttack(p, msg.target));
@@ -773,6 +778,8 @@ export class GameServer {
     if (prev) this.dropSession(prev); // a sessão antiga nesta zona sai antes (salva e devolve a posse)
     const r = await this.world.request('acquire', { charId, accountId: s.accountId, name: row.name, mapId: row.map_id }, this.world.downMs * 2 + 10000);
     if (!r.ok) return { ok: false, code: r.code ?? 'busy', reason: r.reason, cache: false };
+    // outra entrada (outra zona) pediu o personagem antes de ele carregar aqui: a posse já foi devolvida
+    if (this.leaseRevoked(r.epoch)) return { ok: false, code: 'kicked', reason: 'Sua conta entrou em outra conexão.', cache: false };
     const release = () => this.world.notify('release', { charId, epoch: r.epoch });
     if (!this.sessions.has(s) || s.charId != null) { release(); return undefined; } // a conexão caiu enquanto esperava
     const other = this.byChar.get(charId);
@@ -787,7 +794,7 @@ export class GameServer {
       char.mapId = mapId; char.x = sp.x; char.z = sp.z;
       this.store.saveCharacter(char);
     }
-    const t = await this.world.request('transfer', { charId, mapId, x: char.x, z: char.z, saved: true, chat: this.mod.chatLog.get(charId) ?? null });
+    const t = await this.world.request('transfer', { charId, epoch: r.epoch, mapId, x: char.x, z: char.z, saved: true, chat: this.mod.chatLog.get(charId) ?? null });
     if (!t.ok) {
       release();
       const reason = t.code === 'zone_down' ? `${this.data.maps[mapId]?.name ?? mapId} está fora do ar no momento. Tente em instantes.` : t.reason;
@@ -827,8 +834,8 @@ export class GameServer {
     };
     const b1 = banned(acc);
     if (b1) return abort(b1);
-    const prev = this.byChar.get(p.charId);
-    if (prev) this.dropSession(prev);
+    // (nenhuma sessão daqui cai antes de o mundo confirmar a transferência: um token assinado mas já
+    // ultrapassado não derruba quem entrou depois dele)
     // recados para ele que chegarem enquanto a posse é confirmada ficam guardados (saem depois da resposta)
     const early = [];
     this.arriving.set(p.charId, early);
@@ -839,14 +846,22 @@ export class GameServer {
       if (this.arriving.get(p.charId) === early) this.arriving.delete(p.charId);
     }
     if (!r.ok) return { ok: false, code: r.code ?? 'busy', reason: r.reason };
+    // outra entrada pediu o personagem antes de ele carregar aqui: a posse já foi devolvida (onWorldKick)
+    if (this.leaseRevoked(r.epoch)) return { ok: false, code: 'kicked', reason: 'Sua conta entrou em outra conexão.' };
     if (!this.sessions.has(s) || s.accountId != null) { this.world.notify('release', { charId: p.charId, epoch: r.epoch }); return undefined; }
     acc = this.store.findAccountById(acc.id) ?? acc; // dados frescos: suspensão e silêncio podem ter mudado na espera
     const b2 = banned(acc);
     if (b2) { this.world.notify('release', { charId: p.charId, epoch: r.epoch }); return b2; }
+    const other = this.byChar.get(p.charId);
+    if (other) {
+      // não deveria existir (a posse era da origem): a cópia daqui sai sem gravar por cima do que a origem gravou
+      this.log(`chegada de ${row.name}: cópia antiga nesta zona descartada sem gravar`);
+      other.noSave = true;
+      this.sendTo(other, { t: 'kicked', reason: 'Sua conta entrou em outra conexão.' });
+      this.dropSession(other);
+    }
     const old = this.byAccount.get(acc.id);
     if (old && old !== s) { this.sendTo(old, { t: 'kicked', reason: 'Sua conta entrou em outra conexão.' }); this.dropSession(old); }
-    const other = this.byChar.get(p.charId);
-    if (other) this.dropSession(other);
     s.accountId = acc.id;
     s.role = acc.role ?? 'player';
     this.mod.onLogin(s, acc); // o silêncio acompanha a conta
@@ -880,18 +895,23 @@ export class GameServer {
     p.transferring = true;
     this.trades.cancel(charId, 'Troca cancelada: troca de mapa.');
     p.zone.duels.forfeit(charId);
-    const r = await this.world.request('transfer', { charId, mapId, x, z });
+    const r = await this.world.request('transfer', { charId, epoch: s.leaseEpoch, mapId, x, z });
     p.transferring = false;
+    // sem resposta a tempo, o mundo pode ter marcado a transferência mesmo assim: desfeita na hora
+    // (senão a posse ficaria "em transferência" por 30 s, com recados guardados e grupo recusando)
+    const maybe = r.ok || r.code === 'world_timeout';
     if (this.byChar.get(charId) !== s || this.playerOf(charId) !== p) {
       // saiu ou mudou de mapa enquanto esperava: se ainda está aqui, a posse volta a ser desta zona
-      if (r.ok && this.byChar.has(charId)) this.world.notify('transfer_cancel', { charId, mapId: this.playerOf(charId)?.zone.mapId });
+      if (maybe && this.byChar.has(charId)) this.world.notify('transfer_cancel', { charId, mapId: this.playerOf(charId)?.zone.mapId });
       return false;
     }
     if (!r.ok) {
+      if (maybe) this.world.notify('transfer_cancel', { charId, mapId: p.zone.mapId });
       const name = this.data.maps[mapId]?.name ?? mapId;
       this.sendTo(s, { t: 'system', text: r.code === 'zone_down' ? `${name} está fora do ar no momento. Tente em instantes.` : r.reason });
       return false;
     }
+    this.trades.cancel(charId, 'Troca cancelada: troca de mapa.'); // (uma aberta durante a espera)
     const zone = p.zone, c = p.char;
     zone.removePlayer(charId, false);
     this.broadcastZone(zone.key, { t: 'left', eid: p.eid });
@@ -1591,9 +1611,20 @@ export class GameServer {
       this.sendTo(s, { t: 'kicked', reason: reason ?? 'Sua conta entrou em outra conexão.' });
       this.dropSession(s);
     } else {
-      this.world.notify('release', { charId, epoch }); // não está aqui: libera para o mundo seguir
+      // Não está carregado aqui: libera para o mundo seguir. A posse pode ter acabado de ser concedida
+      // a uma entrada desta zona que ainda vai carregar o personagem (a resposta e este kick lidos no
+      // mesmo instante): a época fica marcada e essa entrada desiste em vez de carregar sem posse.
+      if (epoch != null) {
+        const now = Date.now();
+        for (const [e, at] of this.revoked) if (now - at > 60000) this.revoked.delete(e);
+        this.revoked.set(epoch, now);
+      }
+      this.world.notify('release', { charId, epoch });
     }
   }
+
+  // a posse concedida (época) já foi pedida de volta pelo mundo e devolvida? (ver onWorldKick)
+  leaseRevoked(epoch) { return epoch != null && this.revoked.delete(epoch); }
 
   onWorldDeliver({ charId, msg, note }) {
     const s = this.byChar.get(charId);

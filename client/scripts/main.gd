@@ -813,6 +813,7 @@ func _on_zone(m: Dictionary) -> void:
 func leave_world(to_title: bool) -> void:
 	in_world = false
 	state = "leaving"
+	_transfer = {}  # várias zonas: sair no meio de uma transferência desiste dela (a conexão nova é a de entrada)
 	close_pause_menu()
 	if world:
 		world.queue_free()
