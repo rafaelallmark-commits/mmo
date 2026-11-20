@@ -20,6 +20,8 @@ const TIPS := [
 ]
 
 var _kicked_reason := ""  # motivo da última expulsão (mostrado no lugar do aviso genérico de queda)
+var _transfer := {}         # várias zonas: transferência em curso { url, token, mapId }
+var _after_login_note := "" # aviso mostrado na lista de personagens depois de refazer o login
 var defs := {}
 var ch := {}
 var account := ""
@@ -323,6 +325,9 @@ func connect_and_login(register: bool) -> void:
 		Net.connect_to(server_url)
 
 func _on_connected() -> void:
+	if not _transfer.is_empty():
+		_send_transfer()  # chegada na outra zona (várias zonas)
+		return
 	if autotest != null and not reconnecting and not args.has("navshots"):
 		return
 	_after_connect()
@@ -492,6 +497,9 @@ func _on_login(r: Dictionary) -> void:
 	else:
 		reconnecting = false
 		show_chars()
+		if _after_login_note != "":
+			set_status(_after_login_note, true)
+			_after_login_note = ""
 
 # ---------------- PERSONAGENS ----------------
 var _selected_char := -1
@@ -657,33 +665,86 @@ func enter_world(cid: int) -> void:
 			hide_loading()
 			set_status(r["reason"], true)
 			return
-		reconnecting = false
-		state = "world"
-		_clear_screen()
-		if menu_scene:
-			menu_scene.queue_free()
-			menu_scene = null
-		map_id = r["char"].get("mapId", "estrada_velha")
-		_rebuild_world()
-		Sfx.set_zone(map_id)
-		if hud == null:
-			hud = HudScript.new()
-			hud.main = self
-			add_child(hud)
-		hud.visible = true
-		set_char(r["char"])
-		snap_cache = {}
-		world.apply_snapshot(r["snapshot"])
-		for l in r["loot"]:
-			world.add_loot(l)
-		journal = r.get("journal", {})
-		hud.refresh_quests()
-		hud.hide_disconnect()
-		if r.get("restoredFromDeath", false):
-			hud.system("Você voltou ao posto de guarda depois de cair.")
-		hud.system("Local: %s." % map_def().get("name", "?"))
-		in_world = true
-		hide_loading(0.5))
+		if r.get("transfer") is Dictionary:
+			# várias zonas: o mapa salvo é de outra zona; a conexão segue para lá
+			_follow_transfer(r["transfer"])
+			return
+		_enter_ok(r))
+
+## Chegada ao mundo (resposta do "enter" ou do "login_transfer"): mundo novo, ficha, snapshot, saques e
+## diário. A interface (chat, painéis) e as opções continuam as mesmas.
+func _enter_ok(r: Dictionary) -> void:
+	reconnecting = false
+	state = "world"
+	_clear_screen()
+	if menu_scene:
+		menu_scene.queue_free()
+		menu_scene = null
+	map_id = r["char"].get("mapId", "estrada_velha")
+	_rebuild_world()
+	Sfx.set_zone(map_id)
+	if hud == null:
+		hud = HudScript.new()
+		hud.main = self
+		add_child(hud)
+	hud.visible = true
+	set_char(r["char"])
+	snap_cache = {}
+	world.apply_snapshot(r["snapshot"])
+	for l in r["loot"]:
+		world.add_loot(l)
+	journal = r.get("journal", {})
+	hud.refresh_quests()
+	hud.hide_disconnect()
+	if r.get("restoredFromDeath", false):
+		hud.system("Você voltou ao posto de guarda depois de cair.")
+	hud.system("Local: %s." % map_def().get("name", "?"))
+	in_world = true
+	hide_loading(0.5)
+
+## Várias zonas: o personagem vai para um mapa de outra zona (resposta do "enter" ou mensagem "transfer"
+## ao cruzar um portal). Tela Carregando, conexão nova no endereço recebido e "login_transfer"; a chegada
+## segue pelo mesmo caminho do "enter".
+func _follow_transfer(tr: Dictionary) -> void:
+	_transfer = tr.duplicate()
+	in_world = false
+	_kicked_reason = ""
+	var dest: String = defs.get("maps", {}).get(str(tr.get("mapId", "")), {}).get("name", "Cinzas do Meridiano")
+	show_loading(dest)
+	Sfx.ui("portal")
+	server_hello = {}
+	_hello_waiters.clear()
+	Net.close()
+	Net.connect_to(str(tr.get("url", "")))
+	var token := str(tr.get("token", ""))
+	get_tree().create_timer(20.0).timeout.connect(func():
+		if not _transfer.is_empty() and str(_transfer.get("token", "")) == token:
+			_transfer_failed("a outra área não respondeu."))
+
+func _send_transfer() -> void:
+	var token := str(_transfer.get("token", ""))
+	_when_hello(func():
+		if str(_transfer.get("token", "")) != token:
+			return
+		Net.request("login_transfer", {"token": token, "delta": true}, func(r):
+			if str(_transfer.get("token", "")) != token:
+				return
+			_transfer = {}
+			if not r["ok"]:
+				_transfer_failed(str(r.get("reason", "transferência recusada.")))
+				return
+			_enter_ok(r)))
+
+## A transferência falhou: volta para a lista de personagens (login refeito pelo servidor de entrada)
+## mostrando o motivo.
+func _transfer_failed(reason: String) -> void:
+	_transfer = {}
+	var msg := "Não foi possível entrar na outra área: %s" % reason
+	if autotest != null and autotest.has_method("transfer_failed"):
+		autotest.transfer_failed(msg)
+		return
+	_after_login_note = msg
+	leave_world(false)
 
 ## Snapshot por diferença → estado completo: "full" recomeça o conjunto, cada entrada traz os grupos
 ## de campos que mudaram, "gone" lista quem saiu do raio de interesse. "_u" marca quem foi
@@ -942,9 +1003,12 @@ func _on_message(m: Dictionary) -> void:
 		"hello":
 			server_hello = m
 			if int(m.get("protocol", 0)) != PROTOCOL:
-				set_status("Versão incompatível: este cliente fala o protocolo %d e o servidor, o %d. Atualize o jogo." % [PROTOCOL, int(m.get("protocol", 0))], true)
+				var why := "Versão incompatível: este cliente fala o protocolo %d e o servidor, o %d. Atualize o jogo." % [PROTOCOL, int(m.get("protocol", 0))]
+				set_status(why, true)
 				Net.close()
 				_hello_waiters.clear()
+				if not _transfer.is_empty():
+					_transfer_failed(why)
 				return
 			var waiting := _hello_waiters
 			_hello_waiters = []
@@ -1017,6 +1081,9 @@ func _on_message(m: Dictionary) -> void:
 				hud.chat_line("[color=#9a927f]%s entrou.[/color]" % m["name"])
 		"zone":
 			_on_zone(m)
+		"transfer":
+			# várias zonas: o portal (ou teleporte) leva a um mapa de outra zona
+			_follow_transfer(m)
 		"quest_update":
 			Net.request("quests", {}, func(r):
 				journal = r["journal"]
@@ -1107,6 +1174,9 @@ func _on_message(m: Dictionary) -> void:
 			in_world = false
 
 func _on_disconnected(reason: String) -> void:
+	if not _transfer.is_empty():
+		_transfer_failed("a conexão caiu (%s)" % reason)
+		return
 	if _kicked_reason != "":
 		return
 	if state == "world" and hud:

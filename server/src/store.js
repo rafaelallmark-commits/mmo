@@ -154,7 +154,7 @@ export function migrate(db) {
   let row = db.prepare('SELECT version FROM schema_version').get();
   if (!row) {
     // banco novo ou anterior ao controle de versão: a migração 1 é idempotente (CREATE IF NOT EXISTS)
-    db.prepare('INSERT INTO schema_version (version) VALUES (0)').run();
+    db.prepare('INSERT INTO schema_version (version) SELECT 0 WHERE NOT EXISTS (SELECT 1 FROM schema_version)').run();
     row = { version: 0 };
   }
   const applied = [];
@@ -162,6 +162,9 @@ export function migrate(db) {
     if (m.v <= row.version) continue;
     db.exec('BEGIN IMMEDIATE');
     try {
+      // outro processo no mesmo banco (várias zonas) pode ter migrado enquanto esperávamos a trava
+      row = db.prepare('SELECT MAX(version) AS version FROM schema_version').get();
+      if (m.v <= row.version) { db.exec('COMMIT'); continue; }
       m.up(db);
       db.prepare('UPDATE schema_version SET version = ?').run(m.v);
       db.exec('COMMIT');
@@ -181,7 +184,16 @@ function hashPassword(password, salt) {
 export class Store {
   constructor(path = ':memory:') {
     this.db = new DatabaseSync(path);
-    this.db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 3000;');
+    // vários processos no mesmo banco (várias zonas): a espera pela trava vale desde o começo, e a troca
+    // para WAL (que exige acesso exclusivo e não espera sozinha) é tentada de novo por até ~1 s
+    this.db.exec('PRAGMA busy_timeout = 3000');
+    for (let i = 0; ; i++) {
+      try { this.db.exec('PRAGMA journal_mode = WAL'); break; } catch (e) {
+        if (i >= 50 || !/locked|busy/i.test(e.message)) throw e;
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
+      }
+    }
+    this.db.exec('PRAGMA foreign_keys = ON');
     this.migrated = migrate(this.db);
     this.st = {};
   }

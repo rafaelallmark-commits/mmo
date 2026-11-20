@@ -463,6 +463,7 @@ export class WorldService {
   zoneDown(z, why) {
     if (this.zones.get(z.id) !== z) return;
     this.zones.delete(z.id);
+    z.connected = false;
     for (const [m, id] of [...this.mapOwner]) if (id === z.id) this.mapOwner.delete(m);
     let n = 0;
     for (const [charId, l] of [...this.leases]) {
