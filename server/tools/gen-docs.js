@@ -48,9 +48,10 @@ function classesDoc() {
         const ranks = [1, 2, 3, 4, 5].map((r) => {
           if (e.pct !== undefined && e.pct) return `${e.pct + (e.pctPerRank || 0) * (r - 1)}%`;
           if (e.flat !== undefined) return `${e.flat + (e.flatPerRank || 0) * (r - 1)}`;
-          for (const k of ['physDamagePct', 'defensePct', 'physDamageTakenPct', 'absorbPctMaxHp', 'healPctMaxHp', 'hpPct', 'damageTakenDownPct', 'nextAttackPct', 'evasion', 'critPct']) {
-            if (e[k] !== undefined) return `${e[k] + (e[`${k}PerRank`] || 0) * (r - 1)}${k === 'evasion' ? '' : '%'}`;
-          }
+          // o primeiro valor que sobe por grau (no Canto de Vigília é a regeneração, não a defesa fixa); sem nenhum, o primeiro presente
+          const keys = ['physDamagePct', 'defensePct', 'physDamageTakenPct', 'absorbPctMaxHp', 'healPctMaxHp', 'hpPct', 'damageTakenDownPct', 'nextAttackPct', 'evasion', 'critPct', 'regenPctMaxHpPerSec'].filter((k) => e[k] !== undefined);
+          const k = keys.find((x) => e[`${x}PerRank`]) ?? keys[0];
+          if (k) return `${e[k] + (e[`${k}PerRank`] || 0) * (r - 1)}${k === 'evasion' ? '' : k === 'regenPctMaxHpPerSec' ? '%/s' : '%'}`;
           return '—';
         }).join(' / ');
         const range = s.range === 'weapon' ? 'arma' : s.range === 0 ? 'si' : `${s.range} m`;
