@@ -25,6 +25,7 @@ const ROADS = {
   oficina_soterrada: [{ w: 4, pts: [[0, 90], [60, 90], [88, 70], [140, 58]] }, { w: 3.5, pts: [[60, 90], [110, 130], [150, 156]] }, { w: 3.5, pts: [[140, 58], [160, 80], [180, 90]] }],
   galerias_eco: [{ w: 4, pts: [[0, 80], [70, 80], [100, 74], [140, 80], [150, 80], [190, 80], [220, 80]] }, { w: 3, pts: [[40, 82], [50, 104], [84, 140], [118, 118]] }, { w: 3, pts: [[100, 74], [106, 40]] }],
   canais_eclusa: [{ w: 5, pts: [[100, 0], [100, 120], [76, 128], [76, 176], [100, 192]] }, { w: 3.5, pts: [[100, 60], [30, 60], [30, 108], [58, 108]] }, { w: 3.5, pts: [[100, 60], [160, 60], [176, 100], [142, 136], [176, 176]] }],
+  cava_primeira: [{ w: 4, pts: [[0, 80], [50, 80], [86, 72], [128, 78], [150, 79], [158, 79], [198, 80]] }, { w: 3, pts: [[50, 80], [56, 58], [62, 46]] }, { w: 3, pts: [[86, 72], [100, 100], [114, 116]] }, { w: 3, pts: [[128, 78], [126, 46]] }, { w: 3, pts: [[172, 79], [180, 100], [183, 110]] }],
 };
 
 // tipo → [raio de colisão base, escala mín, escala máx]
@@ -41,6 +42,7 @@ const MIX = {
   oficina_soterrada: { count: 240, mix: { pillar: 10, crystal: 16, rock_l: 8, rock_m: 14, rock_s: 16, gear: 12, rubble: 16, mushroom: 8 } },
   galerias_eco: { count: 300, mix: { pillar: 12, crystal: 22, rock_l: 10, rock_m: 14, rock_s: 16, mushroom: 14, rubble: 10, tree_dead: 4 } },
   canais_eclusa: { count: 260, mix: { reeds: 18, rock_m: 12, rock_s: 14, pillar: 8, gear: 10, crate: 8, barrel: 8, rubble: 10, tree_dead: 4, tree_willow: 4 } },
+  cava_primeira: { count: 300, mix: { pillar: 14, rubble: 18, rock_l: 10, rock_m: 14, rock_s: 16, crystal: 8, gear: 6, mushroom: 10, tree_dead: 2 } },
   pedrambar: { count: 46, mix: { tree_round: 30, tree_birch: 10, bush: 30, crate: 12, barrel: 12, rock_s: 6 } },
   vau_de_nacar: { count: 46, mix: { tree_birch: 22, tree_round: 18, bush: 30, crate: 12, barrel: 12, rock_s: 6 } },
 };

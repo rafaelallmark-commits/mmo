@@ -30,6 +30,7 @@ const PALETTES := {
 	"pedrambar": {"grass_a": Color("#7a8a48"), "grass_b": Color("#8a9a4e"), "grass_dry": Color("#a8925a"), "leaves": [Color("#6f8c3a"), Color("#88a040"), Color("#c58a3c")], "blade_base": Color("#627a3a"), "blade_tip": Color("#b0bc60")},
 	"galerias_eco": {"grass_a": Color("#5a6470"), "grass_b": Color("#4e5864"), "grass_dry": Color("#6a6a74"), "leaves": [Color("#6a8a8a")], "blade_base": Color("#3e4a52"), "blade_tip": Color("#7a9aa0")},
 	"canais_eclusa": {"grass_a": Color("#5e6e52"), "grass_b": Color("#52624a"), "grass_dry": Color("#74705a"), "leaves": [Color("#5f8a52"), Color("#6a7a3e")], "blade_base": Color("#3e5034"), "blade_tip": Color("#8aa060")},
+	"cava_primeira": {"grass_a": Color("#5e504a"), "grass_b": Color("#54463f"), "grass_dry": Color("#74584a"), "leaves": [Color("#6a5a4a")], "blade_base": Color("#3e322a"), "blade_tip": Color("#8a6a4a")},
 	"ultima_eclusa": {"grass_a": Color("#5a5654"), "grass_b": Color("#524e4c"), "grass_dry": Color("#625a54"), "leaves": [Color("#5a6a5a")], "blade_base": Color("#3a3a34"), "blade_tip": Color("#6a6a5a")},
 	"arena_prova": {"grass_a": Color("#c8a878"), "grass_b": Color("#bc9c6c"), "grass_dry": Color("#d0b088"), "leaves": [Color("#6f8c3a")], "blade_base": Color("#6a5a3a"), "blade_tip": Color("#a89060")},
 	"vau_de_nacar": {"grass_a": Color("#6a8a58"), "grass_b": Color("#7a9a64"), "grass_dry": Color("#9aa07a"), "leaves": [Color("#7aa070"), Color("#9ab878"), Color("#d8c27a")], "blade_base": Color("#58784e"), "blade_tip": Color("#a8c88a")},
@@ -371,6 +372,8 @@ func _build_ground_cover(pal: Dictionary) -> void:
 		density = 0.0
 	elif id == "galerias_eco":
 		density = 0.25
+	elif id == "cava_primeira":
+		density = 0.15
 	elif id == "canais_eclusa":
 		density = 0.6
 	elif map.get("city", false):
@@ -1119,6 +1122,8 @@ func _build_motes() -> void:
 	elif id == "brejo_bombas":
 		m.albedo_color = Color(0.85, 1.0, 0.6, 0.85)
 		motes_node.amount = 50
+	elif id == "cava_primeira":
+		m.albedo_color = Color(1.0, 0.62, 0.32, 0.85) # brasas subindo do fundo
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	motes_node.material_override = m
 	motes_node.local_coords = false
@@ -1149,6 +1154,7 @@ const SKIES := {
 	"vau_de_nacar": {"sun": Color("#fff8f0"), "top": Color("#5a8ac8"), "horizon": Color("#e0e8f0"), "ground": Color("#5a6068"), "fog": Color("#b0b8c4"), "fog_density": 0.0022, "ambient": Color("#a0a8b8"), "cloud_lit": Color("#ffffff"), "cloud_shade": Color("#b8c0d8"), "cover": 0.42},
 	"galerias_eco": {"sun": Color("#d8e4ff"), "top": Color("#1e2438"), "horizon": Color("#5a6a9a"), "ground": Color("#2a2e3a"), "fog": Color("#4a5478"), "fog_density": 0.007, "ambient": Color("#8a90b8"), "cloud_lit": Color("#8a9ac8"), "cloud_shade": Color("#3a4060"), "cover": 0.6},
 	"canais_eclusa": {"sun": Color("#fff0d8"), "top": Color("#4a5a70"), "horizon": Color("#c8b89a"), "ground": Color("#3a4038"), "fog": Color("#a8a894"), "fog_density": 0.006, "ambient": Color("#9a9aa0"), "cloud_lit": Color("#f0e8dc"), "cloud_shade": Color("#8a8a98"), "cover": 0.65},
+	"cava_primeira": {"sun": Color("#ffd2a8"), "top": Color("#1e1618"), "horizon": Color("#7a3c26"), "ground": Color("#2c1e1a"), "fog": Color("#5e3a2c"), "fog_density": 0.008, "ambient": Color("#9c7e7a"), "cloud_lit": Color("#c8764e"), "cloud_shade": Color("#3e2420"), "cover": 0.62},
 	"ultima_eclusa": {"sun": Color("#ffc8a0"), "top": Color("#1a1418"), "horizon": Color("#6a3020"), "ground": Color("#2a1e1a"), "fog": Color("#4a2a24"), "fog_density": 0.01, "ambient": Color("#9a7a80"), "cloud_lit": Color("#c06040"), "cloud_shade": Color("#3a1a18"), "cover": 0.7},
 	"arena_prova": {"sun": Color("#ffd0a0"), "top": Color("#3a2a48"), "horizon": Color("#e87a4a"), "ground": Color("#4a3a38"), "fog": Color("#a87a64"), "fog_density": 0.003, "ambient": Color("#9a8090"), "cloud_lit": Color("#ffc890"), "cloud_shade": Color("#7a5068"), "cover": 0.5},
 }

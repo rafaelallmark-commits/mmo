@@ -28,7 +28,7 @@
   },
   "pointsPerLevel": 5,
   "skillPointsPerLevel": 1,
-  "levelCap": 20,
+  "levelCap": 25,
   "classes": {
     "breaker": {
       "name": "Quebraferro",
@@ -58,7 +58,8 @@
         "momentum",
         "rupture",
         "gravel_carapace",
-        "seismic_rift"
+        "seismic_rift",
+        "bottomless_cut"
       ],
       "startingKit": {
         "equip": [
@@ -108,7 +109,8 @@
         "pull_pulse",
         "field_reinforcement",
         "locked_gear",
-        "living_bastille"
+        "living_bastille",
+        "bronze_toll"
       ],
       "startingKit": {
         "equip": [
@@ -156,7 +158,8 @@
         "split_line",
         "moat_charge",
         "firm_haft",
-        "pike_wall"
+        "pike_wall",
+        "moat_wheel"
       ],
       "startingKit": {
         "equip": [
@@ -201,7 +204,8 @@
         "passage_arrow",
         "thorn_rain",
         "recoil_step",
-        "spinal_shot"
+        "spinal_shot",
+        "bell_arrow"
       ],
       "startingKit": {
         "equip": [
@@ -248,7 +252,8 @@
         "dawn_guard",
         "oath",
         "noon_blade",
-        "daybreak"
+        "daybreak",
+        "dawn_sentence"
       ],
       "startingKit": {
         "equip": [
@@ -298,7 +303,8 @@
         "side_step",
         "tailwind",
         "cutting_gust",
-        "eye_of_storm"
+        "eye_of_storm",
+        "ash_whirl"
       ],
       "startingKit": {
         "equip": [
@@ -346,7 +352,8 @@
         "shared_light",
         "veil_seal",
         "clear_note",
-        "renewal_choir"
+        "renewal_choir",
+        "vigil_chant"
       ],
       "startingKit": {
         "equip": [
@@ -397,7 +404,8 @@
         "ember_ground",
         "soot_circle",
         "heat_veil",
-        "furnace_heart"
+        "furnace_heart",
+        "incandescent_thread"
       ],
       "startingKit": {
         "equip": [

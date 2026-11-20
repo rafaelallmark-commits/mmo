@@ -48,7 +48,9 @@ Refino de +0 a +3. Cada grau aumenta defesa/poder mágico em 10% (dano das armas
 | +2 | 70% | 45 × N ouro | Pó de Refino ×2 |
 | +3 | 45% | 90 × N ouro | Pó de Refino ×4 + Brasa Cristalizada ×1 |
 
-## As cinco áreas
+## As áreas de caça
+
+Cinco áreas na versão 1 e, no pós-v1, a sexta (A Cava Primeira, níveis 20–25).
 
 | Área | Níveis | Famílias | Caça solo | Caça em grupo | Rota de retorno | Motivo para voltar |
 |---|---|---|---|---|---|---|
@@ -57,6 +59,7 @@ Refino de +0 a +3. Cada grau aumenta defesa/poder mágico em 10% (dano das armas
 | **Oficina Soterrada** | 9–12 | máquinas de trabalho | Galeria dos Escavadores | Arquivo (enxames), Sala do Supervisor | Boca da Oficina (posto) | Pó de Refino, Supervisor de Turno, família Aço da Vigília |
 | **Galerias do Eco** | 12–16 | espíritos sonoros, bestas térmicas, guardiões | Ninhos Térmicos | Salão dos Sinos (Ecoantes), Ponte dos Fios, Mãe do Eco | Estação Sonhada (posto) | Seda condutora para refino, Mãe do Eco, família Liga Rubra |
 | **Canais da Eclusa** | 16–20 | máquinas da Eclusa, escória de vapor | Comporta Norte | Bacia de Vapor, Canal Lamacento, Fragmentos do Custódio | Comporta Norte (posto) | Chave de Comporta, calabouço da Última Eclusa, itens únicos de nível 20 |
+| **A Cava Primeira** (pós-v1) | 20–25 | bestas do calor fundo, máquinas dos fundadores, vozes presas no metal | Margem da Cisterna (Salamandras, passivas) | Salão das Placas (Sineiros em bando), Poço Quente (Toupeiras), Selador da Porta Funda | Posto de Escuta (posto) | Faixa 21 em toda a Cava, chance de faixa 25, Selador (elite diária), capítulo 6 |
 
 ### A Estrada Velha (implementada no M1)
 
@@ -81,6 +84,44 @@ z=100└────────────────────────
 - **Solo**: ratos e besouros perto do posto (passivos, níveis 1–2), lagartos no leito seco (lentos, nível 4).
 - **Grupo**: Curva dos Cães (agressivos, chamam os vizinhos), Capataz Rachado (elite de nível 4: dois jogadores de nível 1–2 vencem com tônicos; um jogador de nível 5 vence sozinho).
 - **Retorno**: o Posto da Ponte é o ponto de retorno ao cair e a zona segura do mapa.
+
+### A Cava Primeira (pós-v1, níveis 20–25)
+
+Obras mais velhas que a Companhia e que as duas cidades: escadas talhadas, salões de placas de bronze, tubos de voz nas paredes e uma cisterna que o calor do fundo deixou morna. Entrada pelo **Poço de Inspeção** (90, 176) dos Canais da Eclusa, ao lado da porta da Última Eclusa — nível 20 exigido ("Nível 20 exigido para A Cava Primeira. Seu nível atual é 19."). Mapa de 220 × 160 m (o mesmo porte das Galerias do Eco), cenário gerado com semente fixa (`npm run gen-scenery`: 300 peças, 141 com colisão, 5 estradas).
+
+```
+ z=0 ┌──────────────────────────────────────────────────────────────────┐
+     │ tubos de voz ·                                 ░                 │
+     │   Salão das Placas         Vozes Soterradas    ░ Fenda           │
+     │   Sineiros (64,34)         (124,32) [galeria]  ░ Funda    · selo │
+     │                 ▓▓ Ruínas do                   ░         (204,60)│
+     │                 ▓▓ Primeiro Posto              ░                 │
+ z=80│◎ Posto de Escuta ══════ galeria principal ═════════════════ ◆ ▓▓▓│ Porta
+     │ (22,80)       · máquina do posto (106,66)      ░  Selador     ▓▓▓│ Funda
+     │      Salamandras (62,102)                      ░ · selo  · tubo  │
+     │ ≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈        Toupeiras (118,130)     ░  Toupeiras      │
+     │ ≈ Cisterna Funda ≈                             ░  (184,122)      │
+z=160└──────────────────────────────────────────────────────────────────┘
+     x=0                                                             x=220
+```
+
+| Lugar | Coordenadas | O que tem |
+|---|---|---|
+| **Posto de Escuta** | (22, 80), zona segura de 12 m | Ponto de retorno; Mara, Ilda e Joca; Poço de Inspeção de volta aos Canais em (4, 80) |
+| **Margem da Cisterna** | (62, 102) | Salamandras de Cisterna, nível 21, **passivas** (8): caça solo sem susto; a Cisterna Funda (água, bloqueada) fica ao sul |
+| **Salão das Placas** | (64, 34) | Sineiros de Bronze, nível 22, agressivos e em bando (7); três tubos de voz nas bordas do salão (capítulo 6.2) |
+| **Ruínas do Primeiro Posto** | (100–112, 50–62) | Máquina do posto antigo em (106, 66) (capítulo 6.3) |
+| **Galeria Norte** | (124, 32) | Vozes Soterradas, nível 23, agressivas (6) |
+| **Fenda Funda** | x 150–158 | Leito seco bloqueado de ponta a ponta; só a galeria principal atravessa (z 64–94) |
+| **Poço Quente** e sul das ruínas | (184, 122) e (118, 130) | Toupeiras de Basalto, nível 24, agressivas (6 + 5): ponto de grupo |
+| **Porta Funda** | ruínas em x 212–220, z 70–90 | Selador da Porta Funda (elite 24, diária) em (202, 80); três selos e o tubo de resposta (capítulo 6.4 e 6.5) |
+
+- **Solo**: Salamandras (passivas) e Vozes puxadas uma por vez; os Sineiros chamam o bando inteiro quando um é atingido.
+- **Grupo**: Toupeiras no Poço Quente e o Selador (elite diária: XP em dobro e saque extra no primeiro abate do dia, como a Mãe do Eco e o Fragmento do Custódio). Os selos e o tubo de resposta ficam a ~15–20 m do Selador, fora do raio de agressão de 10 m.
+- **Saque**: todos os monstros normais rolam a faixa 21 (4%) e a 25 (0,4%); o Selador, a 21 (60%) e a 25 (12%). Os Canais da Eclusa e o Fragmento do Custódio passaram a ter chance pequena de faixa 21 (0,4% e 10%), seguindo o padrão de "próxima faixa" das outras áreas.
+- **Visual**: famílias de monstro já existentes (bestas, máquinas, espíritos) com cores próprias; céu e névoa ocre-avermelhados, chão de terra aquecida, pouca vegetação e brasas subindo no ar (`client/scripts/scenery.gd`).
+
+![A Cava Primeira](img/23_cava.png)
 
 ## Morte e resgate
 

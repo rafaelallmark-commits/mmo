@@ -22,9 +22,12 @@ const HEADER = '<!-- Arquivo gerado por `npm run gen-docs` (server/tools/gen-doc
 // ---------------------------------------------------------------- 03 classes
 function classesDoc() {
   const out = [HEADER, '# 3. Origens e classes\n'];
-  out.push('Cada classe define atributos iniciais (soma 60), famílias de arma, mão secundária e peso de armadura. Ganha **5 pontos de atributo** e **1 ponto de habilidade** por nível a partir do 2. Habilidades destravam nos níveis 1, 5, 10 (prova de classe, habilidade marcante), 15 (complementar) e 20 (avançada); desbloquear dá o grau 1 de graça, cada grau extra custa 1 ponto, até 5 graus, com teto por faixa de nível:\n');
+  out.push('Cada classe define atributos iniciais (soma 60), famílias de arma, mão secundária e peso de armadura. Ganha **5 pontos de atributo** e **1 ponto de habilidade** por nível a partir do 2. Habilidades destravam nos níveis 1, 5, 10 (prova de classe, habilidade marcante), 15 (complementar), 20 (avançada) e 25 (a da Cava Primeira, pós-v1); desbloquear dá o grau 1 de graça, cada grau extra custa 1 ponto, até 5 graus, com teto por faixa de nível:\n');
   out.push(table(['A partir do nível', 'Grau máximo'], data.skillRules.rankCapByLevel.map(([l, c]) => [l, c])));
-  out.push('\nCom 19 pontos de habilidade até o nível 20 e 20 graus extras possíveis, nenhum personagem maximiza tudo: a escolha de graus é parte da build.\n');
+  const extra = data.skillRules.maxRank - 1;
+  const pts20 = 19 * data.skillPointsPerLevel, ptsCap = (data.levelCap - 1) * data.skillPointsPerLevel;
+  const n20 = data.skillRules.unlockLevels.filter((l) => l <= 20).length, nAll = data.skillRules.unlockLevels.length;
+  out.push(`\nAté o nível 20 são ${pts20} pontos de habilidade para ${n20 * extra} graus extras possíveis: ninguém maximiza tudo e a escolha de graus é parte da build. A habilidade do nível ${data.levelCap} soma mais ${extra} graus e cada nível acima do 20 dá mais um ponto: no teto (nível ${data.levelCap}) os ${ptsCap} pontos cobrem os ${nAll * extra} graus, então a build só se completa no fim da campanha.\n`);
   out.push('Valores por grau seguem a regra "base + porGrau × (grau − 1)". Custos em mana também sobem por grau. "Arma" no alcance significa o alcance da arma equipada (corpo a corpo 2,5 m; lança 3,5 m; azagaia 14 m; arco 18 m; varinha 16 m; cetro 14 m; cajado 18 m).\n');
   out.push('Diferenças que o design preserva: **lança** (Lanceiro) é corpo a corpo de alcance longo e ataques em linha, **azagaia** (Andarilha) é arremessada a distância; **machado** (Quebraferro) é dano alto sem escudo, **garra/martelo** (Bastião) são armas mecânicas de defesa (somam defesa) com escudo; a **Cantora** protege e cura, o **Tecelão** causa dano em área e controla.\n');
   for (const [oid, o] of Object.entries(data.origins)) {
@@ -66,19 +69,22 @@ const seq = (...v) => { let i = 0; return () => v[i++ % v.length]; };
 function progressionDoc() {
   const out = [HEADER, '# 4. Níveis, XP, equipamento e fórmulas\n'];
   const cum = data.xp.cumulative;
+  const cap = data.levelCap;
   const mons = Object.entries(data.monsters);
-  const normalAt = (L) => mons.find(([, m]) => m.level === L && m.rank === 'normal');
+  // monstro de caça típico do nível: normal, que dá XP, fora de instâncias; sem nenhum no nível, o de nível mais próximo
+  const huntable = mons.filter(([, m]) => m.rank === 'normal' && m.xp > 0 && !data.maps[m.area]?.instanced);
+  const normalAt = (L) => huntable.find(([, m]) => m.level === L) ?? huntable.reduce((best, e) => (!best || Math.abs(e[1].level - L) < Math.abs(best[1].level - L) ? e : best), null);
   out.push('## 4.1 Pontos de atributo\n');
   out.push('Atributos permanentes = iniciais da classe + pontos distribuídos. São os únicos que contam para requisitos: bônus de itens, tônicos e efeitos temporários nunca liberam um item. A partir do nível 2 o personagem ganha 5 pontos por nível.\n');
-  out.push(table(['Nível', ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map(String)], [['Pontos totais', ...Array.from({ length: 20 }, (_, i) => totalAttributePoints(i + 1, data))]]));
-  out.push('\n## 4.2 Tabela de XP acumulada (níveis 1–20)\n');
-  out.push(`Calibração: ${data.xp.killsPerMinuteSolo} abates por minuto de caça ativa solo contra monstros do mesmo nível (inclui deslocamento e pausas curtas). Os tempos são **metas de teste** para o Marco 4 medir e ajustar, não promessas. Missões principais somam cerca de 30% do XP de cada capítulo, então quem faz caça + missões chega ao nível 20 em cerca de 70% do tempo de quem só caça.\n`);
+  out.push(table(['Nível', ...Array.from({ length: cap }, (_, i) => String(i + 1))], [['Pontos totais', ...Array.from({ length: cap }, (_, i) => totalAttributePoints(i + 1, data))]]));
+  out.push(`\n## 4.2 Tabela de XP acumulada (níveis 1–${cap})\n`);
+  out.push(`Calibração: ${data.xp.killsPerMinuteSolo} abates por minuto de caça ativa solo contra monstros do mesmo nível (inclui deslocamento e pausas curtas); XP para o próximo nível = meta em minutos × ${data.xp.killsPerMinuteSolo} × XP base do monstro do nível, arredondado para dezenas, com meta = 2 + 1,5 × (nível − 1). A mesma regra vale para os níveis 21–${cap} (pós-v1). Os tempos são **metas de teste** para o Marco 4 medir e ajustar, não promessas. Missões principais somam cerca de 30% do XP de cada capítulo, então quem faz caça + missões chega ao teto de nível em cerca de 70% do tempo de quem só caça.\n`);
   const rows = [];
   let total = 0;
-  for (let L = 1; L <= 20; L++) {
-    const need = L < 20 ? cum[L] - cum[L - 1] : null;
-    const m = normalAt(Math.min(L, 19)) ?? normalAt(L - 1);
-    const mins = L < 20 ? data.xp.targetMinutesToNext[L - 1] : null;
+  for (let L = 1; L <= cap; L++) {
+    const need = L < cap ? cum[L] - cum[L - 1] : null;
+    const m = L < cap ? normalAt(L) : null;
+    const mins = L < cap ? data.xp.targetMinutesToNext[L - 1] : null;
     if (mins) total += mins;
     rows.push([L, cum[L - 1].toLocaleString('pt-BR'), need ? need.toLocaleString('pt-BR') : '—', m ? `${m[1].name} (${m[1].xp})` : '—', need && m ? Math.ceil(need / m[1].xp) : '—', mins ? `${n1(mins)} min` : '—', mins ? `${n1(mins * 0.7)} min` : '—', mins ? `${n1(total / 60)} h` : '—']);
   }
@@ -103,9 +109,10 @@ function progressionDoc() {
   out.push(`No M2, a participação também conta cura (×${n1(data.formulas.xp.participation.healing)}), dano absorvido em proteção (×${n1(data.formulas.xp.participation.threatAbsorbed)}) e controle (${data.formulas.xp.participation.controlSeconds} pontos por segundo de controle), para que Bastião e Cantora recebam XP justo sem causar dano. Só recebe quem está a até ${data.formulas.xp.shareRadius} m do monstro na morte.\n`);
   // equipamento
   out.push('\n## 4.4 Equipamento por faixa\n');
-  out.push('Faixas nos níveis 1, 5, 9, 13 e 17, com recompensas únicas no 20. Todo item tem nível mínimo explícito. O comum de cada faixa sustenta a evolução; incomum, raro e único têm destaque visual crescente (cinza claro, verde, azul, laranja). "Duas mãos" ocupa também a mão secundária até ser desequipada. Itens podem ser carregados e guardados antes do nível.\n');
+  out.push('Faixas nos níveis 1, 5, 9, 13, 17, 21 e 25, com recompensas únicas no 20. Todo item tem nível mínimo explícito. O comum de cada faixa sustenta a evolução; incomum, raro e único têm destaque visual crescente (cinza claro, verde, azul, laranja). "Duas mãos" ocupa também a mão secundária até ser desequipada. Itens podem ser carregados e guardados antes do nível. As faixas 21 e 25 (pós-v1) seguem as mesmas curvas; a 21 fica logo abaixo da única do 20 no atributo principal, para a recompensa do Custódio continuar valendo até o 25.\n');
+  const tierNote = { 20: ' — recompensas especiais (chefe da Eclusa e prova final)', 21: ' — A Cava Primeira (pós-v1)', 25: ' — teto de nível (pós-v1)' };
   for (const t of TIERS) {
-    out.push(`\n### Faixa ${t}${t === 20 ? ' — recompensas especiais (chefe da Eclusa e prova final)' : ''}\n`);
+    out.push(`\n### Faixa ${t}${tierNote[t] ?? ''}\n`);
     const w = WEAPON_FAMILIES.map((f) => data.items[`${f}_t${t}`]);
     out.push(table(['Arma', 'Família', 'Empunhadura', 'Dano', 'Intervalo', 'Alcance', 'Poder mág.', 'Requisitos', 'Classes', 'Raridade'], w.map((d) => [d.name, fam(d.family), d.hands === 2 ? 'duas mãos' : 'uma mão', `${d.damage[0]}–${d.damage[1]} ${d.damageType === 'magic' ? 'mág.' : 'fís.'}`, `${n1(d.attackIntervalMs / 1000)} s`, `${d.range} m`, d.magicPower ?? '—', `nv ${d.level}; ${reqStr(d.req)}`, d.classes.map(cname).join(', '), rar(d.rarity)])));
     out.push('');

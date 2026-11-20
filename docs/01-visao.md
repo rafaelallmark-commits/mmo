@@ -10,7 +10,7 @@ O momento que o jogo inteiro serve é este:
 
 > Você derruba o Capataz Rachado com um desconhecido da outra cidade. No chão, só para você, aparece um **Machado de Pedreira**. Você passa o mouse: "Nível 5 · Força 22 · Talento 14" — tudo em vermelho. Você tem nível 2. Guarda o machado, abre a ficha, faz as contas de onde vão os próximos pontos, chama o desconhecido para caçar os Javalis de Cinza no fim da estrada. Três níveis depois você volta ao Posto da Ponte, distribui os pontos, e o machado finalmente entra na sua mão. O Brejo das Bombas, que antes parecia perigoso demais, agora é o próximo passo.
 
-Esse ciclo — **achar algo que ainda não posso usar → decidir a build → caçar com outros → voltar e equipar → ir para um lugar mais perigoso** — se repete em cada faixa de equipamento (níveis 1, 5, 9, 13, 17 e 20).
+Esse ciclo — **achar algo que ainda não posso usar → decidir a build → caçar com outros → voltar e equipar → ir para um lugar mais perigoso** — se repete em cada faixa de equipamento (níveis 1, 5, 9, 13, 17 e 20; no pós-v1, também 21 e 25).
 
 ## O laço caçar → subir de nível → equipar
 
@@ -53,6 +53,6 @@ A inspiração é a *experiência* clássica de MMORPG de ação com câmera ele
 
 ## Escopo da versão 1
 
-Níveis 1–20, oito classes, duas cidades, cinco áreas de caça, calabouço da Última Eclusa para 2–5 jogadores, ferreiro até +3. O design de atributos e de XP continua além do 20 (arco maior: os pedidos de socorro anteriores à fundação das cidades). Ficam para depois: comércio entre jogadores, clãs, graus de refino superiores e PvP voluntário.
+Níveis 1–20, oito classes, duas cidades, cinco áreas de caça, calabouço da Última Eclusa para 2–5 jogadores, ferreiro até +3. O design de atributos e de XP continua além do 20 (arco maior: os pedidos de socorro anteriores à fundação das cidades). **Pós-v1, já jogável**: níveis 21–25 com A Cava Primeira e o capítulo 6, que começa a responder quem mandou os pedidos de socorro (ver `02-campanha.md` e `06-mundo-e-mapas.md`). Ficam para depois: comércio entre jogadores, clãs, graus de refino superiores e PvP voluntário.
 
 O estado atual do código é o **Marco 1** (ver `05-arquitetura.md` e o README).

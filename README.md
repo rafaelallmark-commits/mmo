@@ -2,7 +2,7 @@
 
 MMORPG 3D de ação PvE para PC, com câmera elevada, movimento por clique, caça em grupo em mapas compartilhados e equipamento que exige nível, classe e atributos. Cliente em **Godot 4**, servidor autoritativo de zona em **Node.js**, dados do jogo em **JSON editável**.
 
-> Estado atual: **Marcos 1, 2 e 3 concluídos** — as 8 classes com todas as habilidades (níveis 1, 5, 10, 15 e 20), grupos de até 5, chat por canais, campanha dos capítulos 0 a 5 com missões secundárias, sete mapas abertos (Estrada Velha, Brejo das Bombas, Oficina Soterrada, Galerias do Eco, Canais da Eclusa e as duas cidades), prova de classe, ferreiro (+1 a +3), depósito da conta, elites diárias e o calabouço **A Última Eclusa** (Custódio em três fases para grupos de 2 a 5). Cliente em **3D estilizado com traço de anime** (personagens VRM, cenário com relevo, efeitos das habilidades, avisos do chefe), com **movimento fluido** (caminhos por A*, previsão do próprio personagem e interpolação dos outros). Próximo: Marco 4 (carga, ajuste e documentação final).
+> Estado atual: **Marcos 1, 2 e 3 concluídos** — as 8 classes com todas as habilidades (níveis 1, 5, 10, 15 e 20), grupos de até 5, chat por canais, campanha dos capítulos 0 a 5 com missões secundárias, sete mapas abertos (Estrada Velha, Brejo das Bombas, Oficina Soterrada, Galerias do Eco, Canais da Eclusa e as duas cidades), prova de classe, ferreiro (+1 a +3), depósito da conta, elites diárias e o calabouço **A Última Eclusa** (Custódio em três fases para grupos de 2 a 5). **Pós-v1, níveis acima de 20**: teto no nível 25 com a mesma calibração de XP, o mapa **A Cava Primeira** (níveis 20–25, pelo Poço de Inspeção dos Canais), quatro monstros novos e o Selador da Porta Funda (elite diária), equipamento das faixas 21 e 25 para todas as famílias, uma habilidade de nível 25 por classe e o **capítulo 6, "A Passagem Fechada"** (5 missões principais e 2 secundárias). Cliente em **3D estilizado com traço de anime** (personagens VRM, cenário com relevo, efeitos das habilidades, avisos do chefe), com **movimento fluido** (caminhos por A*, previsão do próprio personagem e interpolação dos outros). Próximo: Marco 4 (carga, ajuste e documentação final).
 
 | | |
 |---|---|
@@ -12,6 +12,7 @@ MMORPG 3D de ação PvE para PC, com câmera elevada, movimento por clique, caç
 | ![Posto da Ponte](docs/img/14_estrada_posto.png) | ![Correndo](docs/img/15_corrida.png) |
 | ![Pedrâmbar](docs/img/16_pedrambar.png) | ![Brejo das Bombas](docs/img/17_brejo.png) |
 | ![Galerias do Eco](docs/img/19_galerias.png) | ![O Custódio da Eclusa](docs/img/20_custodio.png) |
+| ![Canais da Eclusa](docs/img/22_canais.png) | ![A Cava Primeira](docs/img/23_cava.png) |
 
 Personagens: modelos VRM de anime — **Seed-san model by VirtualCast, Inc.** e amostra VRM © 2022 pixiv Inc., ambos sob a VRM Public License 1.0 (detalhes em [docs/CREDITOS.md](docs/CREDITOS.md)).
 
@@ -22,11 +23,11 @@ Personagens: modelos VRM de anime — **Seed-san model by VirtualCast, Inc.** e 
 | Documento | Conteúdo |
 |---|---|
 | [docs/01-visao.md](docs/01-visao.md) | Visão do jogo e o laço caçar → subir de nível → equipar |
-| [docs/02-campanha.md](docs/02-campanha.md) | Abertura roteirizada, tutorial, os 5 capítulos com todas as missões principais, encontro com o Custódio, missões secundárias e pontos de caça |
+| [docs/02-campanha.md](docs/02-campanha.md) | Abertura roteirizada, tutorial, os 6 capítulos com todas as missões principais (o 6º, pós-v1, nos níveis 20–25), encontro com o Custódio, missões secundárias e pontos de caça |
 | [docs/03-classes.md](docs/03-classes.md) | Fichas das 8 classes: papel, armas, atributos iniciais, kit, cada habilidade com custo, recarga, alcance, efeito e graus *(gerado dos dados)* |
-| [docs/04-progressao-e-formulas.md](docs/04-progressao-e-formulas.md) | Tabela de XP 1–20, XP por monstro, exemplos solo e em grupo, equipamento por faixa (todas as famílias de arma em todas as faixas), verificação de requisitos, dois exemplos de evolução passo a passo, fórmulas com exemplos calculados *(gerado dos dados)* |
+| [docs/04-progressao-e-formulas.md](docs/04-progressao-e-formulas.md) | Tabela de XP 1–25, XP por monstro, exemplos solo e em grupo, equipamento por faixa (todas as famílias de arma em todas as faixas), verificação de requisitos, dois exemplos de evolução passo a passo, fórmulas com exemplos calculados *(gerado dos dados)* |
 | [docs/05-arquitetura.md](docs/05-arquitetura.md) | Estrutura técnica, arquivos, protocolo, saque idempotente, reconexão, concorrência, critérios de aceitação dos 4 marcos, o que muda para teste público e múltiplas zonas |
-| [docs/06-mundo-e-mapas.md](docs/06-mundo-e-mapas.md) | Cidades, cinco áreas, regras de monstros, morte e resgate, combate legível, telas da interface |
+| [docs/06-mundo-e-mapas.md](docs/06-mundo-e-mapas.md) | Cidades, as áreas de caça (cinco da versão 1 e A Cava Primeira), regras de monstros, morte e resgate, combate legível, telas da interface |
 | [docs/07-navegacao.md](docs/07-navegacao.md) | Telas, camadas dentro do jogo, mapa do mundo, controles e direção gráfica |
 | [docs/DECISOES.md](docs/DECISOES.md) | Todas as decisões tomadas por conta própria e o motivo |
 | [docs/CREDITOS.md](docs/CREDITOS.md) | Créditos e licenças dos modelos de personagem |

@@ -475,6 +475,145 @@
       "amulet_t17"
      ],
      "chance": 0.04
+    },
+    {
+     "type": "pool",
+     "pool": [
+      "axe_1h_t21",
+      "axe_2h_t21",
+      "claw_t21",
+      "hammer_1h_t21",
+      "spear_2h_t21",
+      "bow_t21",
+      "sword_1h_t21",
+      "sword_2h_t21",
+      "javelin_t21",
+      "wand_t21",
+      "scepter_t21",
+      "staff_2h_t21",
+      "heavy_armor_t21",
+      "heavy_helm_t21",
+      "heavy_gloves_t21",
+      "heavy_boots_t21",
+      "light_armor_t21",
+      "light_hood_t21",
+      "light_gloves_t21",
+      "light_boots_t21",
+      "robe_t21",
+      "robe_circlet_t21",
+      "robe_gloves_t21",
+      "robe_sandals_t21",
+      "shield_t21",
+      "light_shield_t21",
+      "focus_t21",
+      "quiver_t21",
+      "ring_t21",
+      "amulet_t21"
+     ],
+     "chance": 0.004
+    }
+   ]
+  },
+  "lt_tier_21": {
+   "entries": [
+    {
+     "type": "gold",
+     "chance": 1,
+     "min": 45,
+     "max": 135
+    },
+    {
+     "type": "item",
+     "defId": "potion_hp_m",
+     "chance": 0.25,
+     "min": 1,
+     "max": 2
+    },
+    {
+     "type": "item",
+     "defId": "potion_mp_m",
+     "chance": 0.12,
+     "min": 1,
+     "max": 1
+    },
+    {
+     "type": "item",
+     "defId": "mat_refine",
+     "chance": 0.3,
+     "min": 1,
+     "max": 2
+    },
+    {
+     "type": "pool",
+     "pool": [
+      "axe_1h_t21",
+      "axe_2h_t21",
+      "claw_t21",
+      "hammer_1h_t21",
+      "spear_2h_t21",
+      "bow_t21",
+      "sword_1h_t21",
+      "sword_2h_t21",
+      "javelin_t21",
+      "wand_t21",
+      "scepter_t21",
+      "staff_2h_t21",
+      "heavy_armor_t21",
+      "heavy_helm_t21",
+      "heavy_gloves_t21",
+      "heavy_boots_t21",
+      "light_armor_t21",
+      "light_hood_t21",
+      "light_gloves_t21",
+      "light_boots_t21",
+      "robe_t21",
+      "robe_circlet_t21",
+      "robe_gloves_t21",
+      "robe_sandals_t21",
+      "shield_t21",
+      "light_shield_t21",
+      "focus_t21",
+      "quiver_t21",
+      "ring_t21",
+      "amulet_t21"
+     ],
+     "chance": 0.04
+    },
+    {
+     "type": "pool",
+     "pool": [
+      "axe_1h_t25",
+      "axe_2h_t25",
+      "claw_t25",
+      "hammer_1h_t25",
+      "spear_2h_t25",
+      "bow_t25",
+      "sword_1h_t25",
+      "sword_2h_t25",
+      "javelin_t25",
+      "wand_t25",
+      "scepter_t25",
+      "staff_2h_t25",
+      "heavy_armor_t25",
+      "heavy_helm_t25",
+      "heavy_gloves_t25",
+      "heavy_boots_t25",
+      "light_armor_t25",
+      "light_hood_t25",
+      "light_gloves_t25",
+      "light_boots_t25",
+      "robe_t25",
+      "robe_circlet_t25",
+      "robe_gloves_t25",
+      "robe_sandals_t25",
+      "shield_t25",
+      "light_shield_t25",
+      "focus_t25",
+      "quiver_t25",
+      "ring_t25",
+      "amulet_t25"
+     ],
+     "chance": 0.004
     }
    ]
   },
@@ -810,6 +949,42 @@
       "amulet_t17"
      ],
      "chance": 0.5
+    },
+    {
+     "type": "pool",
+     "pool": [
+      "axe_1h_t21",
+      "axe_2h_t21",
+      "claw_t21",
+      "hammer_1h_t21",
+      "spear_2h_t21",
+      "bow_t21",
+      "sword_1h_t21",
+      "sword_2h_t21",
+      "javelin_t21",
+      "wand_t21",
+      "scepter_t21",
+      "staff_2h_t21",
+      "heavy_armor_t21",
+      "heavy_helm_t21",
+      "heavy_gloves_t21",
+      "heavy_boots_t21",
+      "light_armor_t21",
+      "light_hood_t21",
+      "light_gloves_t21",
+      "light_boots_t21",
+      "robe_t21",
+      "robe_circlet_t21",
+      "robe_gloves_t21",
+      "robe_sandals_t21",
+      "shield_t21",
+      "light_shield_t21",
+      "focus_t21",
+      "quiver_t21",
+      "ring_t21",
+      "amulet_t21"
+     ],
+     "chance": 0.1
     }
    ]
   },
@@ -850,6 +1025,96 @@
      "chance": 1,
      "min": 5,
      "max": 8
+    }
+   ]
+  },
+  "lt_deep_sealer": {
+   "_doc": "Elite diária da Cava Primeira: faixa 21 com frequência e chance de faixa 25.",
+   "entries": [
+    {
+     "type": "gold",
+     "chance": 1,
+     "min": 500,
+     "max": 700
+    },
+    {
+     "type": "item",
+     "defId": "mat_refine",
+     "chance": 1,
+     "min": 4,
+     "max": 6
+    },
+    {
+     "type": "pool",
+     "pool": [
+      "axe_1h_t21",
+      "axe_2h_t21",
+      "claw_t21",
+      "hammer_1h_t21",
+      "spear_2h_t21",
+      "bow_t21",
+      "sword_1h_t21",
+      "sword_2h_t21",
+      "javelin_t21",
+      "wand_t21",
+      "scepter_t21",
+      "staff_2h_t21",
+      "heavy_armor_t21",
+      "heavy_helm_t21",
+      "heavy_gloves_t21",
+      "heavy_boots_t21",
+      "light_armor_t21",
+      "light_hood_t21",
+      "light_gloves_t21",
+      "light_boots_t21",
+      "robe_t21",
+      "robe_circlet_t21",
+      "robe_gloves_t21",
+      "robe_sandals_t21",
+      "shield_t21",
+      "light_shield_t21",
+      "focus_t21",
+      "quiver_t21",
+      "ring_t21",
+      "amulet_t21"
+     ],
+     "chance": 0.6
+    },
+    {
+     "type": "pool",
+     "pool": [
+      "axe_1h_t25",
+      "axe_2h_t25",
+      "claw_t25",
+      "hammer_1h_t25",
+      "spear_2h_t25",
+      "bow_t25",
+      "sword_1h_t25",
+      "sword_2h_t25",
+      "javelin_t25",
+      "wand_t25",
+      "scepter_t25",
+      "staff_2h_t25",
+      "heavy_armor_t25",
+      "heavy_helm_t25",
+      "heavy_gloves_t25",
+      "heavy_boots_t25",
+      "light_armor_t25",
+      "light_hood_t25",
+      "light_gloves_t25",
+      "light_boots_t25",
+      "robe_t25",
+      "robe_circlet_t25",
+      "robe_gloves_t25",
+      "robe_sandals_t25",
+      "shield_t25",
+      "light_shield_t25",
+      "focus_t25",
+      "quiver_t25",
+      "ring_t25",
+      "amulet_t25"
+     ],
+     "chance": 0.12
     }
    ]
   },

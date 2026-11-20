@@ -4,8 +4,8 @@
     "rankCapByLevel": [[1, 2], [5, 3], [10, 4], [15, 5]],
     "unlockGivesRank": 1,
     "costPerExtraRank": 1,
-    "unlockLevels": [1, 5, 10, 15, 20],
-    "note": "Desbloquear a habilidade no nível indicado concede o grau 1 de graça. Cada grau extra custa 1 ponto de habilidade e respeita o teto da faixa de nível (rankCapByLevel: a partir do nível N, teto G)."
+    "unlockLevels": [1, 5, 10, 15, 20, 25],
+    "note": "Desbloquear a habilidade no nível indicado concede o grau 1 de graça. Cada grau extra custa 1 ponto de habilidade e respeita o teto da faixa de nível (rankCapByLevel: a partir do nível N, teto G). A habilidade do nível 25 (pós-v1) usa só tipos de efeito que o servidor já executa."
   },
   "skills": {
     "deep_cut": {
@@ -43,6 +43,13 @@
       "description": "Racha o chão em linha (8 m): 300% (+25% por grau); derruba monstros normais por 1,5 s.",
       "implementedIn": "M3"
     },
+    "bottomless_cut": {
+      "classId": "breaker", "name": "Talho Sem Fundo", "unlockLevel": 25, "target": "enemy",
+      "mp": 34, "mpPerRank": 4, "cooldownMs": 18000, "range": "weapon",
+      "effect": { "kind": "strike", "damageType": "phys", "pct": 360, "pctPerRank": 30, "dot": { "dps": 12, "dpsPerRank": 4, "durationMs": 4000 }, "defenseDownPct": 25, "durationMs": 8000 },
+      "description": "Golpe que chega ao fundo da couraça: 360% do dano da arma (+30% por grau), sangramento de 12 (+4 por grau) por segundo durante 4 s e defesa do alvo −25% por 8 s.",
+      "implementedIn": "Pós-v1"
+    },
 
     "dynamic_plate": {
       "classId": "bastion", "name": "Placa Dinâmica", "unlockLevel": 1, "target": "self",
@@ -78,6 +85,13 @@
       "effect": { "kind": "taunt_area", "durationMs": 8000, "damageTakenDownPct": 30, "damageTakenDownPctPerRank": 3 },
       "description": "Provoca todos os monstros a até 8 m e reduz o dano recebido em 30% (+3% por grau) por 8 s.",
       "implementedIn": "M3"
+    },
+    "bronze_toll": {
+      "classId": "bastion", "name": "Toque de Bronze", "unlockLevel": 25, "target": "area_self",
+      "mp": 30, "mpPerRank": 3, "cooldownMs": 24000, "range": 4,
+      "effect": { "kind": "aoe_strike", "damageType": "phys", "radius": 4, "pct": 160, "pctPerRank": 12, "stunMs": 1500, "stunMsPerRank": 250 },
+      "description": "Bate a arma no chão como um badalo: 160% (+12% por grau) em todos a até 4 m e atordoamento de 1,5 s (+0,25 s por grau). Não atordoa chefes.",
+      "implementedIn": "Pós-v1"
     },
 
     "long_thrust": {
@@ -115,6 +129,13 @@
       "description": "Três estocadas em leque (6 m), 140% cada (+10% por grau).",
       "implementedIn": "M3"
     },
+    "moat_wheel": {
+      "classId": "pikeman", "name": "Roda do Fosso", "unlockLevel": 25, "target": "area_self",
+      "mp": 32, "mpPerRank": 4, "cooldownMs": 18000, "range": 4.5,
+      "effect": { "kind": "cone_strike", "damageType": "phys", "pct": 220, "pctPerRank": 18, "angleDeg": 360, "knockbackM": 2 },
+      "description": "Gira a lança em volta de si (4,5 m): 220% (+18% por grau) em todos os atingidos, que são empurrados 2 m.",
+      "implementedIn": "Pós-v1"
+    },
 
     "trail_mark": {
       "classId": "warden", "name": "Marca da Trilha", "unlockLevel": 1, "target": "enemy",
@@ -150,6 +171,13 @@
       "effect": { "kind": "strike", "damageType": "phys", "pct": 400, "pctPerRank": 30, "guaranteedCritIfMarked": true },
       "description": "Disparo carregado (1 s): 400% (+30% por grau); crítico garantido contra alvo com Marca da Trilha.",
       "implementedIn": "M3"
+    },
+    "bell_arrow": {
+      "classId": "warden", "name": "Flecha do Sino", "unlockLevel": 25, "target": "enemy",
+      "mp": 28, "mpPerRank": 3, "cooldownMs": 14000, "range": 20,
+      "effect": { "kind": "strike", "damageType": "phys", "pct": 220, "pctPerRank": 18, "bounceTargets": 3 },
+      "description": "Flecha que ressoa como um sino: 220% (+18% por grau) no alvo e ricocheteia em até 3 inimigos a até 6 m dele.",
+      "implementedIn": "Pós-v1"
     },
 
     "solar_cut": {
@@ -187,6 +215,13 @@
       "description": "Aliados a até 8 m recuperam 15% da vida máxima (+2% por grau) e perdem um efeito negativo.",
       "implementedIn": "M3"
     },
+    "dawn_sentence": {
+      "classId": "dawnshield", "name": "Sentença da Aurora", "unlockLevel": 25, "target": "enemy",
+      "mp": 30, "mpPerRank": 3, "cooldownMs": 16000, "range": "weapon",
+      "effect": { "kind": "strike", "damageType": "phys", "pct": 300, "pctPerRank": 25, "bonusSacred": 30, "bonusSacredPerRank": 8, "stunMs": 1500, "stunMsPerRank": 200 },
+      "description": "Golpe de sentença: 300% (+25% por grau) mais 30 de dano sagrado (+8 por grau) e atordoamento de 1,5 s (+0,2 s por grau). Não atordoa chefes.",
+      "implementedIn": "Pós-v1"
+    },
 
     "return_throw": {
       "classId": "windwalker", "name": "Arremesso de Retorno", "unlockLevel": 1, "target": "enemy",
@@ -222,6 +257,13 @@
       "effect": { "kind": "aura_damage", "damageType": "phys", "radius": 4, "pulses": 4, "intervalMs": 1000, "pct": 80, "pctPerRank": 6, "evasion": 30 },
       "description": "Gira por 4 s: 4 pulsos de 80% (+6% por grau) num raio de 4 m e +30 de evasão.",
       "implementedIn": "M3"
+    },
+    "ash_whirl": {
+      "classId": "windwalker", "name": "Redemoinho de Cinzas", "unlockLevel": 25, "target": "ground",
+      "mp": 32, "mpPerRank": 3, "cooldownMs": 20000, "range": 16,
+      "effect": { "kind": "ground_aoe", "damageType": "phys", "radius": 4, "pulses": 5, "intervalMs": 600, "pct": 60, "pctPerRank": 5, "slowPct": 35 },
+      "description": "Lança um redemoinho a até 16 m: área de 4 m com 5 pulsos de 60% (+5% por grau) em 3 s; quem fica dentro anda 35% mais devagar.",
+      "implementedIn": "Pós-v1"
     },
 
     "sustain_chant": {
@@ -259,6 +301,13 @@
       "description": "Levanta um aliado caído com 30% da vida (+5% por grau). Conjuração de 2 s.",
       "implementedIn": "M3"
     },
+    "vigil_chant": {
+      "classId": "veilsinger", "name": "Canto de Vigília", "unlockLevel": 25, "target": "party_area",
+      "mp": 38, "mpPerRank": 3, "cooldownMs": 40000, "range": 10,
+      "effect": { "kind": "party_buff", "durationMs": 10000, "regenPctMaxHpPerSec": 2, "regenPctMaxHpPerSecPerRank": 0.5, "defensePct": 10 },
+      "description": "Grupo a até 10 m (inclusive a Cantora): regenera 2% da vida máxima por segundo (+0,5% por grau) e ganha +10% de defesa durante 10 s.",
+      "implementedIn": "Pós-v1"
+    },
 
     "glass_spark": {
       "classId": "emberweaver", "name": "Faísca de Vidro", "unlockLevel": 1, "target": "enemy",
@@ -294,6 +343,13 @@
       "effect": { "kind": "delayed_aoe", "damageType": "magic", "radius": 6, "delayMs": 3000, "flat": 90, "flatPerRank": 30, "spiCoef": 2.0 },
       "description": "Marca uma área de 6 m que explode após 3 s: 90 (+30 por grau) + 200% do Espírito. A marcação é visível para todos.",
       "implementedIn": "M3"
+    },
+    "incandescent_thread": {
+      "classId": "emberweaver", "name": "Fio Incandescente", "unlockLevel": 25, "target": "enemy",
+      "mp": 36, "mpPerRank": 3, "cooldownMs": 12000, "range": 18,
+      "effect": { "kind": "spell", "damageType": "magic", "flat": 110, "flatPerRank": 32, "spiCoef": 1.5, "dot": { "dps": 20, "dpsPerRank": 6, "durationMs": 4000 } },
+      "description": "O Tecelão estica um fio de brasa até o alvo: dano de fogo de 110 (+32 por grau) + 150% do Espírito + poder mágico da arma, e queimadura de 20 (+6 por grau) por segundo durante 4 s.",
+      "implementedIn": "Pós-v1"
     }
   }
 }

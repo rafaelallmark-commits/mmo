@@ -378,6 +378,7 @@ const SCENE_SPOTS := [
 	["oficina_soterrada", 28.0, 93.0, "oficina"],
 	["galerias_eco", 30.0, 80.0, "galerias"],
 	["canais_eclusa", 100.0, 30.0, "canais"],
+	["cava_primeira", 50.0, 96.0, "cava"],
 	["pedrambar", 34.0, 25.0, "pedrambar"],
 	["vau_de_nacar", 25.0, 35.0, "vau"],
 ]
