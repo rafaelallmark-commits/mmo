@@ -8,7 +8,10 @@ import { createHash } from 'node:crypto';
 import { join as pathJoin, dirname as pathDirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { verifyToken, ReplayGuard } from './token.js';
-import { enhanceable, enhanceQuote, enhancePreview, rollEnhance } from './smith.js';
+import { TradeManager } from './trade.js';
+import { ClanManager } from './clans.js';
+import { Moderation, banMessage } from './moderation.js';
+import { enhanceable, enhanceQuote, enhancePreview, rollEnhance, enhanceOutcome } from './smith.js';
 import { randomUUID } from 'node:crypto';
 import { loadGameData, ATTRS } from './data.js';
 import { createStore } from './db.js';
@@ -27,6 +30,8 @@ const NAME_RE = /^[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9 _-]{2,15}$/;
 const RID_CACHE = 128;
 const PARTY_MAX = 5;
 const DEFAULT_MAP = 'estrada_velha';
+// pedidos que podem mudar itens da bolsa: depois deles a troca aberta confere se a oferta mudou
+const ITEM_MUTATING = new Set(['use_item', 'enhance', 'quest_turnin', 'storage_put', 'storage_take', 'equip', 'unequip', 'buy', 'pickup', 'claim_recovery', 'gm', 'sell', 'discard', 'cast']);
 const INTEREST_R = 70; // raio de interesse dos snapshots por diferença (m)
 const PRED_EPS2 = 0.1 * 0.1; // erro de posição tolerado na previsão por velocidade (m²)
 
@@ -49,8 +54,12 @@ export class GameServer {
     this.metrics = new Metrics();
     this.ipConns = new Map(); // ip -> conexões abertas
     this.replay = new ReplayGuard();
+    this.trades = new TradeManager(this);
+    this.clans = new ClanManager(this);
+    this.mod = new Moderation(this);
     this.closing = false;
     this.dataVersion = dataVersionOf(this.data);
+    this.serverVersion = SERVER_VERSION;
     this.byChar = new Map(); // charId -> session
     this.byAccount = new Map(); // accountId -> session
     this.byName = new Map(); // nome minúsculo -> charId (online)
@@ -162,7 +171,7 @@ export class GameServer {
     this.tickTrials();
     this.tickDungeons();
     this.tickCount++;
-    if (this.tickCount % this.opts.tickHz === 0) for (const pid of this.parties.keys()) this.sendPartyUpdate(pid);
+    if (this.tickCount % this.opts.tickHz === 0) { for (const pid of this.parties.keys()) this.sendPartyUpdate(pid); this.trades.check(); this.mod.sweep(); }
     this.metrics.recordTick(performance.now() - t0);
   }
 
@@ -248,6 +257,7 @@ export class GameServer {
       if (graceS > 5) note('O servidor reinicia em 5 s.');
       await new Promise((r) => setTimeout(r, Math.min(5, graceS) * 1000));
     }
+    this.log('salvando e encerrando...');
     this.saveAll();
     await this.stop();
   }
@@ -301,6 +311,7 @@ export class GameServer {
 
   leaveWorld(s) {
     const charId = s.charId;
+    this.trades.cancel(charId, 'O outro jogador saiu.');
     const key = this.charZone.get(charId);
     if (this.trials.has(key)) this.endTrial(key, false, 'Conexão perdida durante a prova.', true);
     const dg = this.dungeons.get(key);
@@ -410,6 +421,7 @@ export class GameServer {
     if (res === undefined) return;
     const after = res.after;
     delete res.after;
+    if (s.charId != null && ITEM_MUTATING.has(msg.t) && this.trades.byChar.has(s.charId)) this.trades.refresh(s.charId);
     const out = { t: 'res', rid, req: msg.t, ...res };
     if (rid != null && s.charId != null && res.cache !== false) {
       let m = this.ridCache.get(s.charId);
@@ -444,7 +456,7 @@ export class GameServer {
       case 'move': return this.nc(zone.cmdMove(p, msg.x, msg.z));
       case 'attack': return this.nc(zone.cmdAttack(p, msg.target));
       case 'stop': return this.nc(zone.cmdStop(p));
-      case 'cast': return this.withChar(p, zone.cmdCast(p, msg.skill, msg.target, msg.x, msg.z, msg.ally));
+      case 'cast': { const r = zone.cmdCast(p, msg.skill, msg.target, msg.x, msg.z, msg.ally); r.skill = msg.skill; return this.withChar(p, r); }
       case 'use_item': return this.withChar(p, zone.cmdUseItem(p, msg.instance));
       case 'respawn': return this.withChar(p, zone.cmdRespawn(p));
       case 'learn_skill': return this.withChar(p, zone.cmdLearnSkill(p, msg.skill));
@@ -460,6 +472,8 @@ export class GameServer {
       case 'talk': return this.hTalk(p, msg);
       case 'interact': return this.hInteract(p, msg);
       case 'buy': return this.hBuy(p, msg);
+      case 'sell': return this.hSell(p, msg);
+      case 'discard': return this.hDiscard(p, msg);
       case 'quests': return { ok: true, journal: this.quests.journal(p.char), cache: false };
       case 'quest_accept': return this.hQuestAccept(p, msg);
       case 'quest_turnin': return this.hQuestTurnIn(p, msg);
@@ -477,6 +491,36 @@ export class GameServer {
       case 'storage_take': return this.hStorageTake(p, msg);
       case 'dungeon_enter': return this.hDungeonEnter(s, p, msg);
       case 'gm': return this.hGm(p, msg);
+      case 'report': return this.mod.report(p, msg);
+      case 'bug_report': return this.mod.bugReport(p, msg);
+      // comércio
+      case 'trade_request': return this.trades.request(p, msg.name);
+      case 'trade_accept': return this.trades.accept(p, msg.from);
+      case 'trade_decline': return this.trades.decline(p);
+      case 'trade_offer': return this.nc(this.trades.offer(p, msg));
+      case 'trade_lock': return this.nc(this.trades.lock(p));
+      case 'trade_confirm': return this.nc(this.trades.confirm(p));
+      case 'trade_cancel': return this.nc(this.trades.cancel(p.char.id, `${p.char.name} cancelou a troca.`));
+      // clãs
+      case 'clan_create': return this.clans.create(p, msg);
+      case 'clan_invite': return this.clans.invite(p, msg);
+      case 'clan_accept': return this.clans.accept(p, msg);
+      case 'clan_decline': return this.clans.decline(p);
+      case 'clan_leave': return this.clans.leave(p);
+      case 'clan_kick': return this.clans.kick(p, msg);
+      case 'clan_rank': return this.clans.setRank(p, msg);
+      case 'clan_transfer': return this.clans.transfer(p, msg);
+      case 'clan_disband': return this.clans.disband(p);
+      case 'clan_motd': return this.clans.motd(p, msg);
+      case 'clan_info': return { ok: true, clan: this.clans.info(p), cache: false };
+      // duelo
+      case 'duel_request': {
+        const tid = typeof msg.name === 'string' ? this.byName.get(msg.name.trim().toLowerCase()) : null;
+        const t = tid != null ? zone.players.get(tid) : null;
+        return zone.duels.request(p, t);
+      }
+      case 'duel_accept': return zone.duels.accept(p, msg.from);
+      case 'duel_decline': return zone.duels.decline(p);
       default: return { ok: false, code: 'unknown', reason: `Comando desconhecido: ${msg.t}` };
     }
   }
@@ -547,6 +591,8 @@ export class GameServer {
   }
 
   completeLogin(s, msg, acc, via) {
+    const ban = banMessage(acc);
+    if (ban) { this.audit('login_banned', { accountId: acc.id, ip: s.ip, via }); return { ok: false, code: 'banned', reason: ban }; }
     const old = this.byAccount.get(acc.id);
     if (old) {
       // Reconexão: a sessão antiga (talvez "pendurada") é encerrada e salva antes de continuar.
@@ -555,6 +601,7 @@ export class GameServer {
     }
     s.accountId = acc.id;
     s.role = acc.role ?? 'player';
+    this.mod.onLogin(s, acc);
     s.delta = msg.delta === true; // cliente entende snapshots por diferença
     this.audit('login', { accountId: acc.id, ip: s.ip, via });
     this.byAccount.set(acc.id, s);
@@ -588,6 +635,7 @@ export class GameServer {
     if (prev) this.dropSession(prev);
     const char = this.store.loadCharacter(charId);
     this.quests.load(char);
+    this.clans.attach(char);
     const wasDead = char.dead;
     let zone = this.zones.get(char.mapId) ?? this.zones.get(DEFAULT_MAP);
     // voltou dentro do prazo: reentra no calabouço do grupo como estava (morto continua morto)
@@ -627,11 +675,15 @@ export class GameServer {
     const fromKey = this.charZone.get(charId);
     const from = this.zones.get(fromKey);
     const dest = this.zones.get(destKey);
+    this.trades.cancel(charId, 'Troca cancelada: troca de mapa.');
     from.removePlayer(charId, false);
     this.broadcastZone(fromKey, { t: 'left', eid: p.eid });
     p.char.x = x; p.char.z = z;
     const np = dest.addPlayer(p.char);
-    np.cooldowns = p.cooldowns;
+    // recargas e tônico seguem como TEMPO RESTANTE: cada zona tem o próprio relógio (uma instância nova
+    // começa em 0), então copiar os instantes absolutos travava habilidades por minutos ou dias
+    np.cooldowns = Object.fromEntries(Object.entries(p.cooldowns).map(([k, t]) => [k, dest.now + Math.max(0, t - from.now)]).filter(([, t]) => t > dest.now));
+    np.potionReadyAt = dest.now + Math.max(0, (p.potionReadyAt || 0) - from.now);
     this.charZone.set(charId, destKey);
     const sess = this.byChar.get(charId);
     if (sess) { sess.known = new Map(); sess.knownFull = true; }
@@ -656,7 +708,8 @@ export class GameServer {
     if (!n) return { ok: false, code: 'too_far', reason: 'Chegue mais perto para conversar.' };
     const changed = this.quests.onTalk(p.char, n.id);
     this.notifyQuests(p, changed);
-    const shop = n.role === 'shop' ? n.shop.map((defId) => ({ defId, price: this.priceOf(defId) })) : undefined;
+    const shop = n.role === 'armorer' ? this.armorCatalog(p.char).map((defId) => ({ defId, price: this.gearPriceOf(defId), gear: true }))
+      : (n.role === 'shop' || n.role === 'smith') && n.shop ? n.shop.map((defId) => ({ defId, price: this.priceOf(defId) })) : undefined;
     const trialAvailable = n.role === 'master' && n.classId === p.char.classId && p.char.quests.get('c3_trial')?.state === 'active' && !p.char.trialDone && p.char.level >= 10;
     const choice = this.quests.pendingChoice(p.char, n.id) ?? undefined;
     return { ok: true, npc: { id: n.id, name: n.name, role: n.role, classId: n.classId ?? null }, quests: this.quests.npcQuests(p.char, n.id), shop, trialAvailable, choice, cache: false };
@@ -694,7 +747,7 @@ export class GameServer {
   }
 
   // ---------- ferreiro ----------
-  hEnhance(p, { npc, instance }, apply) {
+  hEnhance(p, { npc, instance, protect = false }, apply) {
     const n = p.zone.npcNear(p, npc);
     if (!n || n.role !== 'smith') return { ok: false, code: 'too_far', reason: 'Chegue mais perto do ferreiro.' };
     const c = p.char;
@@ -703,32 +756,46 @@ export class GameServer {
     const def = this.data.items[it.defId];
     if (!enhanceable(def)) return { ok: false, code: 'not_enhanceable', reason: `${def.name} não pode ser refinado.` };
     const q = enhanceQuote(def, it.enh || 0, this.data);
-    if (!q) return { ok: false, code: 'max', reason: `${def.name} já está em +${it.enh}, o máximo deste ferreiro.` };
+    if (!q) return { ok: false, code: 'max', reason: `${def.name} já está em +${it.enh}, o máximo.` };
     const preview = enhancePreview(def, it.enh || 0, this.data);
-    const have = [...c.items.values()].filter((x) => x.loc === 'bag' && x.defId === q.material).reduce((s, x) => s + x.qty, 0);
-    const quote = { ...q, preview, materialHave: have, goldHave: c.gold, cache: false };
+    const countOf = (defId) => [...c.items.values()].filter((x) => x.loc === 'bag' && x.defId === defId).reduce((s, x) => s + x.qty, 0);
+    const have = countOf(q.material);
+    const protectHave = q.protectItem ? countOf(q.protectItem) : 0;
+    const quote = { ...q, preview, materialHave: have, goldHave: c.gold, protectHave, materialName: this.data.items[q.material].name, cache: false };
     if (!apply) return { ok: true, ...quote };
     if (c.gold < q.gold) return { ok: false, code: 'no_gold', reason: `Ouro insuficiente: ${q.gold} necessário, você tem ${c.gold}.`, ...quote };
     const matName = this.data.items[q.material].name;
     if (have < q.materialQty) return { ok: false, code: 'no_material', reason: `${matName} insuficiente: ${q.materialQty} necessário, você tem ${have}.`, ...quote };
+    const useProtect = !!protect && q.downgradeOnFail;
+    if (useProtect && protectHave < 1) return { ok: false, code: 'no_protect', reason: `Você não tem ${this.data.items[q.protectItem].name}.`, ...quote };
     const r = rollEnhance(p.zone.rng, q.chancePct);
-    this.store.tx(() => {
-      c.gold -= q.gold;
-      let left = q.materialQty;
+    const before = it.enh || 0;
+    const out = enhanceOutcome(before, r.success, q, useProtect);
+    const consume = (defId, qty) => {
+      let left = qty;
       for (const x of [...c.items.values()]) {
-        if (left <= 0 || x.loc !== 'bag' || x.defId !== q.material) continue;
+        if (left <= 0 || x.loc !== 'bag' || x.defId !== defId) continue;
         const take = Math.min(left, x.qty);
         x.qty -= take; left -= take;
         if (x.qty <= 0) { c.items.delete(x.id); this.store.deleteItem(c.id, x.id); } else this.store.saveItems(c.id, [x]);
       }
-      if (r.success) { it.enh = (it.enh || 0) + 1; this.store.saveItems(c.id, [it]); }
+    };
+    this.store.tx(() => {
+      c.gold -= q.gold;
+      consume(q.material, q.materialQty);
+      if (out.protectUsed) consume(q.protectItem, 1);
+      if (out.enh !== before) { it.enh = out.enh; this.store.saveItems(c.id, [it]); }
       this.store.saveCharacter(c);
     });
     if (it.loc === 'equip') p.zone.recalc(p);
-    this.audit('enhance', { charId: c.id, instance: it.id, item: it.defId, success: r.success, enh: it.enh || 0, gold: q.gold, goldAfter: c.gold });
-    return { ok: true, success: r.success, roll: r.roll, chancePct: q.chancePct, enh: it.enh || 0, instanceId: it.id,
-      message: r.success ? `${def.name} agora é +${it.enh}.` : `O refino falhou (rolagem ${r.roll} ≥ ${q.chancePct}%). ${def.name} continua em +${it.enh || 0}; ouro e materiais foram gastos.`,
-      char: p.zone.charView(p), cache: false };
+    this.audit('enhance', { charId: c.id, instance: it.id, item: it.defId, success: r.success, from: before, enh: it.enh || 0, protectUsed: out.protectUsed, gold: q.gold, goldAfter: c.gold });
+    let message;
+    if (r.success) message = `${def.name} agora é +${it.enh}.`;
+    else if (out.downgraded) message = `O refino falhou (rolagem ${r.roll} ≥ ${q.chancePct}%). ${def.name} caiu para +${it.enh || 0}; ouro e materiais foram gastos.`;
+    else if (out.protectUsed) message = `O refino falhou (rolagem ${r.roll} ≥ ${q.chancePct}%). O Selo de Proteção segurou ${def.name} em +${it.enh || 0}.`;
+    else message = `O refino falhou (rolagem ${r.roll} ≥ ${q.chancePct}%). ${def.name} continua em +${it.enh || 0}; ouro e materiais foram gastos.`;
+    return { ok: true, success: r.success, roll: r.roll, chancePct: q.chancePct, enh: it.enh || 0, instanceId: it.id, downgraded: out.downgraded, protectUsed: out.protectUsed,
+      message, char: p.zone.charView(p), cache: false };
   }
 
   // ---------- depósito da conta ----------
@@ -772,17 +839,74 @@ export class GameServer {
   }
 
   priceOf(defId) { return Math.max(1, (this.data.items[defId].value || 1) * 2); }
+  // o comerciante paga uma fração do valor (economy.sellFraction, padrão metade) por unidade
+  sellPriceOf(defId) { return Math.max(1, Math.floor((this.data.items[defId].value || 1) * (this.data.formulas.economy?.sellFraction ?? 0.5))); }
+  gearPriceOf(defId) { return Math.max(1, Math.round((this.data.items[defId].value || 1) * (this.data.formulas.economy?.gearPriceMult ?? 3))); }
+
+  // Armeiro: peças comuns (armas, armaduras, mão secundária e joias) que a classe pode usar, da faixa
+  // atual do personagem e da próxima. Raras e únicas continuam só no saque.
+  armorCatalog(char) {
+    const gear = Object.values(this.data.items).filter((d) => d.rarity === 'common' && ['weapon', 'armor', 'offhand', 'jewel'].includes(d.kind)
+      && (!d.classes || d.classes.includes(char.classId)));
+    const tiers = [...new Set(gear.map((d) => d.level || 1))].sort((a, b) => a - b);
+    const cur = tiers.filter((t) => t <= char.level).pop() ?? tiers[0];
+    const next = tiers.find((t) => t > char.level);
+    const want = new Set([cur, next].filter((t) => t != null));
+    const order = { weapon: 0, offhand: 1, armor: 2, jewel: 3 };
+    return gear.filter((d) => want.has(d.level || 1))
+      .sort((a, b) => (a.level - b.level) || (order[a.kind] - order[b.kind]) || a.name.localeCompare(b.name))
+      .map((d) => d.id);
+  }
+
+
+  // Vender ao comerciante (qualquer loja ou ferreiro por perto): só da bolsa; item de missão não.
+  hSell(p, { npc, instance, qty }) {
+    const n = p.zone.npcNear(p, npc);
+    if (!n || !['shop', 'smith', 'armorer'].includes(n.role)) return { ok: false, code: 'too_far', reason: 'Chegue mais perto de um comerciante.' };
+    const c = p.char;
+    const it = c.items.get(instance);
+    if (!it || it.loc !== 'bag') return { ok: false, code: 'not_in_bag', reason: 'Só dá para vender itens da bolsa (desequipe antes).' };
+    const def = this.data.items[it.defId];
+    if (def.questItem) return { ok: false, code: 'bound', reason: 'Itens de missão não podem ser vendidos.' };
+    const n2 = qty == null ? it.qty : qty;
+    if (!Number.isInteger(n2) || n2 < 1 || n2 > it.qty) return { ok: false, code: 'bad_request', reason: 'Quantidade inválida.' };
+    const gain = this.sellPriceOf(it.defId) * n2;
+    this.trades.dropItem?.(c.id, it.id);
+    this.store.tx(() => {
+      it.qty -= n2;
+      if (it.qty <= 0) { c.items.delete(it.id); this.store.deleteItem(c.id, it.id); } else this.store.saveItems(c.id, [it]);
+      c.gold += gain;
+      this.store.saveCharacter(c);
+    });
+    this.audit('sell', { charId: c.id, item: it.defId, qty: n2, enh: it.enh || 0, gold: gain, goldAfter: c.gold, npc: n.id });
+    return { ok: true, gold: gain, message: `Vendido: ${def.name}${n2 > 1 ? ` x${n2}` : ''} por ${gain} de ouro.`, char: p.zone.charView(p), cache: false };
+  }
+
+  // Descartar um item da bolsa (some de vez).
+  hDiscard(p, { instance }) {
+    const c = p.char;
+    const it = c.items.get(instance);
+    if (!it || it.loc !== 'bag') return { ok: false, code: 'not_in_bag', reason: 'Só dá para descartar itens da bolsa.' };
+    const def = this.data.items[it.defId];
+    if (def.questItem) return { ok: false, code: 'bound', reason: 'Itens de missão não podem ser descartados.' };
+    this.trades.dropItem?.(c.id, it.id);
+    this.store.tx(() => { c.items.delete(it.id); this.store.deleteItem(c.id, it.id); });
+    this.audit('discard', { charId: c.id, item: it.defId, qty: it.qty, enh: it.enh || 0 });
+    return { ok: true, message: `Descartado: ${def.name}${it.qty > 1 ? ` x${it.qty}` : ''}.`, char: p.zone.charView(p), cache: false };
+  }
 
   hBuy(p, { npc, item, qty = 1 }) {
     const n = p.zone.npcNear(p, npc);
-    if (!n || n.role !== 'shop') return { ok: false, code: 'too_far', reason: 'Chegue mais perto do comerciante.' };
-    if (!n.shop.includes(item)) return { ok: false, code: 'not_sold', reason: 'Este comerciante não vende isso.' };
-    if (!Number.isInteger(qty) || qty < 1 || qty > 50) return { ok: false, code: 'bad_request', reason: 'Quantidade inválida.' };
+    if (!n || !['shop', 'smith', 'armorer'].includes(n.role) || (n.role !== 'armorer' && !n.shop)) return { ok: false, code: 'too_far', reason: 'Chegue mais perto do comerciante.' };
+    const isGear = n.role === 'armorer';
+    if (isGear ? !this.armorCatalog(p.char).includes(item) : !n.shop.includes(item)) return { ok: false, code: 'not_sold', reason: 'Este comerciante não vende isso.' };
+    if (!Number.isInteger(qty) || qty < 1 || qty > (isGear ? 1 : 50)) return { ok: false, code: 'bad_request', reason: 'Quantidade inválida.' };
     const c = p.char;
     const def = this.data.items[item];
-    const cost = this.priceOf(item) * qty;
+    if (def.kind === 'consumable' && (def.level || 1) > c.level) return { ok: false, code: 'level', reason: `Nível ${def.level} exigido para ${def.name}. Seu nível atual é ${c.level}.` };
+    const cost = (isGear ? this.gearPriceOf(item) : this.priceOf(item)) * qty;
     if (c.gold < cost) return { ok: false, code: 'no_gold', reason: `Ouro insuficiente: ${cost} necessário, você tem ${c.gold}.` };
-    const stack = [...c.items.values()].find((it) => it.loc === 'bag' && it.defId === item && it.qty + qty <= (def.stack || 1));
+    const stack = [...c.items.values()].find((it) => it.loc === 'bag' && it.defId === item && it.qty + qty <= (def.stack || 1) && !this.trades.isOffered(c.id, it.id));
     if (!stack && bagCount(c) >= BAG_CAPACITY) return { ok: false, code: 'bag_full', reason: 'Inventário cheio.' };
     this.store.tx(() => {
       c.gold -= cost;
@@ -1094,7 +1218,7 @@ export class GameServer {
       if (row.def_id) {
         const def = this.data.items[row.def_id];
         let stack = null;
-        if (def.stack) for (const it of c.items.values()) if (it.loc === 'bag' && it.defId === def.id && it.qty + row.qty <= def.stack) { stack = it; break; }
+        if (def.stack) for (const it of c.items.values()) if (it.loc === 'bag' && it.defId === def.id && it.qty + row.qty <= def.stack && !this.trades.isOffered(c.id, it.id)) { stack = it; break; }
         if (stack) {
           stack.qty += row.qty; instanceId = stack.id;
           this.store.saveItems(c.id, [stack]);
@@ -1183,6 +1307,13 @@ export class GameServer {
       if (sess.chat.length >= this.opts.chatPer5s) return { ok: false, code: 'chat_flood', reason: 'Calma: mensagens demais em pouco tempo.' };
       sess.chat.push(now);
     }
+    const blocked = this.mod.chatBlocked(p, channel, text);
+    if (blocked) return blocked;
+    if (channel === 'clan') {
+      const t = typeof text === 'string' ? text.replace(/[\u0000-\u001f]/g, '').trim().slice(0, 200) : '';
+      if (!t) return { ok: false, code: 'empty', reason: 'Mensagem vazia.' };
+      return this.nc(this.clans.chat(p, t));
+    }
     if (typeof text !== 'string') return { ok: false, code: 'bad_request', reason: 'Mensagem inválida.' };
     const clean = text.replace(/[\u0000-\u001f]/g, '').trim().slice(0, 200);
     if (!clean) return { ok: false, code: 'empty', reason: 'Mensagem vazia.' };
@@ -1206,6 +1337,8 @@ export class GameServer {
     const s = this.byChar.get(p.char.id);
     if (!this.opts.dev && !['gm', 'admin'].includes(s?.role)) return { ok: false, code: 'forbidden', reason: 'Comandos de mestre desativados.' };
     this.audit('gm', { accountId: s?.accountId ?? null, charId: p.char.id, ip: s?.ip ?? null, cmd: msg.cmd, args: Object.fromEntries(Object.entries(msg).filter(([k]) => !['t', 'rid', 'cmd'].includes(k))) });
+    const modRes = this.mod.gm(p, msg, s);
+    if (modRes) return modRes;
     const c = p.char;
     if (msg.cmd === 'give') {
       const def = this.data.items[msg.defId];
@@ -1231,6 +1364,15 @@ export class GameServer {
       if (need <= 0) return { ok: false, code: 'bad_request', reason: 'Já está nesse nível.' };
       p.zone.grantXp(p, need);
       this.store.saveCharacter(c);
+      return { ok: true, char: p.zone.charView(p) };
+    }
+    if (msg.cmd === 'set_enh') {
+      // cenários: define o grau de refino de uma peça
+      const it = c.items.get(msg.instance);
+      if (!it) return { ok: false, code: 'not_found', reason: 'Item não encontrado.' };
+      it.enh = Math.max(0, Math.min(this.data.formulas.enhance.maxLevel, Math.floor(msg.enh || 0)));
+      this.store.saveItems(c.id, [it]);
+      if (it.loc === 'equip') p.zone.recalc(p);
       return { ok: true, char: p.zone.charView(p) };
     }
     if (msg.cmd === 'gold') {

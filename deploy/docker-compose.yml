@@ -1,0 +1,172 @@
+# Teste público de CINZAS DO MERIDIANO: servidor de zona + serviço de contas + proxy TLS (Caddy).
+# Ver docs/08-operacao.md §8.8 e §8.9.
+#
+#   cd deploy
+#   cat > .env <<'FIM'                                 # deploy/.env fica fora do git
+#   DOMINIO=jogo.exemplo.com.br                       # domínio real, com DNS apontando para esta máquina
+#   CINZAS_TOKEN_SECRET=<openssl rand -hex 32>         # segredo compartilhado pela zona e pelas contas
+#   CINZAS_EMAIL=smtp                                  # "arquivo" grava os e-mails em /data/emails (testes)
+#   CINZAS_SMTP_HOST=smtp.exemplo.com.br
+#   CINZAS_SMTP_PORT=587
+#   CINZAS_SMTP_USER=...
+#   CINZAS_SMTP_PASS=...
+#   CINZAS_SMTP_FROM=Cinzas do Meridiano <nao-responda@exemplo.com.br>
+#   FIM
+#   docker compose up -d --build
+#   docker compose logs -f servidor
+#
+# Os jogadores conectam em wss://jogo.exemplo.com.br (campo "Servidor" do cliente ou --server=...); o
+# cliente cria a conta e pede o token em https://jogo.exemplo.com.br/contas (serviço "contas").
+# Portas abertas na internet: só 80 e 443 (proxy). O jogo (7777) fica na rede interna do compose e as
+# métricas/saúde (9100) só no 127.0.0.1 desta máquina: curl http://127.0.0.1:9100/health
+name: cinzas
+
+services:
+  servidor:
+    # Construída a partir deste repositório. Para usar a imagem publicada pelo CI (release.yml), troque
+    # "build" por:  image: ghcr.io/<dono-do-repositório>/cinzas-servidor:<versão>
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: cinzas-servidor:local
+    restart: unless-stopped
+    init: true
+    # SIGTERM -> o servidor salva todos os personagens e fecha o banco; 45 s de prazo antes do SIGKILL
+    stop_grace_period: 45s
+    volumes:
+      - dados:/data              # cinzas.db (+ -wal/-shm) e backups/
+    environment:
+      # login só com token do serviço de contas (cadastro e senha direto na zona ficam desligados)
+      CINZAS_AUTH: ${CINZAS_AUTH:-token}
+      CINZAS_TOKEN_SECRET: ${CINZAS_TOKEN_SECRET:?defina CINZAS_TOKEN_SECRET em deploy/.env}
+      CINZAS_TRUST_PROXY: "1"    # o IP real vem do X-Forwarded-For do Caddy (limite por IP, auditoria)
+      CINZAS_MAX_CONN_PER_IP: ${CINZAS_MAX_CONN_PER_IP:-8}
+      CINZAS_LOG_FORMAT: json
+    expose:
+      - "7777"                   # alcançável só pelo proxy (rede interna)
+    ports:
+      - "127.0.0.1:9100:9100"    # métricas Prometheus e /health: só nesta máquina, nunca na internet
+    # Teste em rede local sem TLS (ws://IP:7777): descomente. Não use no teste público.
+    #   - "7777:7777"
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  proxy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      servidor:
+        condition: service_healthy
+      contas:
+        condition: service_healthy
+    ports:
+      - "80:80"                  # desafio HTTP do Let's Encrypt e redirecionamento para HTTPS
+      - "443:443"                # wss:// do jogo
+    environment:
+      DOMINIO: ${DOMINIO:-jogo.exemplo.com.br}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_dados:/data        # certificados e chaves do TLS: não apague (limites de emissão)
+      - caddy_config:/config
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  contas:
+    # Serviço de contas (cadastro com e-mail, confirmação, token de sessão de 5 min, troca de senha,
+    # exportação e exclusão de conta, termos). Mesma imagem, mesmo banco (volume "dados").
+    image: cinzas-servidor:local
+    restart: unless-stopped
+    init: true
+    depends_on:
+      servidor:
+        condition: service_healthy
+    command: ["node", "--disable-warning=ExperimentalWarning", "src/contas-main.js", "--port", "7780", "--host", "0.0.0.0", "--db", "/data/cinzas.db", "--email-dir", "/data/emails"]
+    volumes:
+      - dados:/data
+    environment:
+      CINZAS_TOKEN_SECRET: ${CINZAS_TOKEN_SECRET:?defina CINZAS_TOKEN_SECRET em deploy/.env}
+      CINZAS_TRUST_PROXY: "1"
+      CINZAS_EMAIL: ${CINZAS_EMAIL:-arquivo}
+      CINZAS_SMTP_HOST: ${CINZAS_SMTP_HOST:-}
+      CINZAS_SMTP_PORT: ${CINZAS_SMTP_PORT:-587}
+      CINZAS_SMTP_USER: ${CINZAS_SMTP_USER:-}
+      CINZAS_SMTP_PASS: ${CINZAS_SMTP_PASS:-}
+      CINZAS_SMTP_FROM: ${CINZAS_SMTP_FROM:-}
+    expose:
+      - "7780"                   # alcançável só pelo proxy (https://DOMINIO/contas/...)
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:7780/saude',{signal:AbortSignal.timeout(4000)}).then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # --- Futuro: PostgreSQL central (substitui o SQLite quando houver contas e mais de uma zona) -----
+  # banco:
+  #   image: postgres:17
+  #   restart: unless-stopped
+  #   stop_grace_period: 60s
+  #   environment:
+  #     POSTGRES_USER: cinzas
+  #     POSTGRES_DB: cinzas
+  #     POSTGRES_PASSWORD_FILE: /run/secrets/senha_banco
+  #   secrets: [senha_banco]
+  #   volumes:
+  #     - banco:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U cinzas -d cinzas"]
+  #     interval: 10s
+  #     retries: 5
+  #   # sem "ports": o banco nunca fica exposto fora da rede interna do compose
+
+# secrets:
+#   senha_banco:
+#     file: ./segredos/senha_banco.txt   # fora do git (deploy/segredos/ está no .gitignore)
+
+  # --- Monitoramento (opcional): docker compose --profile monitoramento up -d -----------------------
+  # Prometheus coleta as métricas da zona (servidor:9100) e avalia os alertas de monitoramento/alertas.yml;
+  # Grafana mostra o painel pronto em http://127.0.0.1:3000 (só nesta máquina; use um túnel SSH de fora).
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    profiles: ["monitoramento"]
+    restart: unless-stopped
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=15d"]
+    volumes:
+      - ./monitoramento/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoramento/alertas.yml:/etc/prometheus/alertas.yml:ro
+      - prometheus_dados:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+  grafana:
+    image: grafana/grafana:11.3.1
+    profiles: ["monitoramento"]
+    restart: unless-stopped
+    depends_on: [prometheus]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_SENHA:-troque-esta-senha}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    volumes:
+      - ./monitoramento/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoramento/grafana/painel-cinzas.json:/var/lib/grafana/dashboards/painel-cinzas.json:ro
+      - grafana_dados:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+
+volumes:
+  dados:
+  caddy_dados:
+  caddy_config:
+  prometheus_dados:
+  grafana_dados:
+  # banco:

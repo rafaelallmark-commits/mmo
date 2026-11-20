@@ -31,7 +31,7 @@ const server = new GameServer({
   rateLimit: Number(arg('rate-limit', 20)),
   rateBurst: Number(arg('rate-burst', 40)),
   maxConnPerIp: Number(arg('max-conn-per-ip', process.env.CINZAS_MAX_CONN_PER_IP ?? 0)),
-  trustProxy: !!arg('trust-proxy', false),
+  trustProxy: !!arg('trust-proxy', ['1', 'true', 'sim'].includes(String(process.env.CINZAS_TRUST_PROXY ?? '').toLowerCase())),
   logFormat: arg('log-format', process.env.CINZAS_LOG_FORMAT ?? 'text'),
   shutdownGraceS: Number(arg('shutdown-grace', 30)),
   auditDays: Number(arg('audit-days', 90)),
@@ -46,7 +46,7 @@ let stopping = false;
 const shutdown = (grace) => async () => {
   if (stopping) { console.log('saindo agora.'); process.exit(0); }
   stopping = true;
-  console.log(grace > 0 ? `desligamento gracioso em ${grace} s...` : 'salvando e encerrando...');
+  if (grace > 0) console.log(`desligamento gracioso em ${grace} s...`); // "salvando e encerrando..." vem do servidor
   await server.shutdown(grace);
   process.exit(0);
 };

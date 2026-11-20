@@ -2,7 +2,8 @@
 // Cria conta com e-mail e código de confirmação, emite token de sessão de curta duração (que o
 // servidor de zona aceita em "login_token"), troca senha por código e exclui conta.
 //
-//   POST /contas            { conta, email, senha }      → 201; manda o código por e-mail
+//   POST /contas            { conta, email, senha, aceite } → 201; manda o código por e-mail (aceite: true =
+//                           declara 13 anos ou mais e aceita os Termos de Uso e a Política de Privacidade)
 //   POST /contas/verificar  { conta, codigo }            → conta confirmada
 //   POST /contas/reenviar   { conta }                    → novo código (se ainda não confirmada)
 //   POST /sessoes           { conta, senha }             → { token, expiraEm } (só conta confirmada)
@@ -10,10 +11,16 @@
 //   POST /senha/redefinir   { email, codigo, senha }     → senha trocada
 //   POST /contas/dados      { conta, senha }             → tudo o que guardamos da conta (portabilidade)
 //   POST /contas/excluir    { conta, senha }             → conta excluída (dados pessoais apagados)
-//   GET  /saude
+//   GET  /saude · GET /termos · GET /privacidade (texto dos documentos, para o cliente abrir no navegador)
 import http from 'node:http';
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createStore } from './db.js';
 import { signToken } from './token.js';
+import { banMessage } from './moderation.js';
+
+export const TERMS_VERSION = 1; // versão de docs/TERMOS.md aceita no cadastro (fica na auditoria)
 import { createMailer } from './mailer.js';
 
 const ACCOUNT_RE = /^[a-zA-Z0-9_]{3,20}$/;
@@ -21,7 +28,8 @@ const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,24}$/;
 
 export class AccountsService {
   constructor(opts = {}) {
-    this.opts = { port: 7780, host: '127.0.0.1', dbPath: 'cinzas.db', tokenSecret: null, tokenTtlS: 300, minPassword: 8, perIpPerMin: 20, trustProxy: false, log: true, ...opts };
+    this.opts = { port: 7780, host: '127.0.0.1', dbPath: 'cinzas.db', tokenSecret: null, tokenTtlS: 300, minPassword: 8, perIpPerMin: 20, trustProxy: false, log: true,
+      docsDir: join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'docs'), ...opts };
     if (!this.opts.tokenSecret) throw new Error('serviço de contas precisa de --token-secret (ou CINZAS_TOKEN_SECRET)');
     this.store = opts.store ?? createStore(this.opts.dbPath); // arquivo SQLite ou postgres://...
     this.mailer = opts.mailer ?? createMailer(opts.mail ?? { kind: 'console' });
@@ -64,6 +72,14 @@ export class AccountsService {
     const send = (code, body) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(body)); };
     const url = (req.url || '/').split('?')[0];
     if (req.method === 'GET' && url === '/saude') return send(200, { ok: true });
+    if (req.method === 'GET' && (url === '/termos' || url === '/privacidade')) {
+      // texto puro (Markdown) dos documentos; o cliente abre esta página no navegador
+      try {
+        const text = readFileSync(join(this.opts.docsDir, url === '/termos' ? 'TERMOS.md' : 'PRIVACIDADE.md'), 'utf8');
+        res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
+        return res.end(text);
+      } catch { return send(404, { ok: false, erro: 'Documento indisponível.' }); }
+    }
     if (req.method !== 'POST') return send(404, { ok: false, erro: 'Rota inexistente.' });
     const ip = this.ipOf(req);
     if (this.limited(ip)) return send(429, { ok: false, erro: 'Muitas tentativas. Espere um minuto.' });
@@ -75,8 +91,8 @@ export class AccountsService {
     let b;
     try { b = JSON.parse(body || '{}'); } catch { return send(400, { ok: false, erro: 'JSON inválido.' }); }
     try {
-      const r = await this.route(url, b, ip);
-      return send(r.status ?? (r.ok ? 200 : 400), r.body ?? r);
+      const { status, ...rest } = await this.route(url, b, ip);
+      return send(status ?? (rest.ok ? 200 : 400), rest);
     } catch (e) {
       this.log('erro', url, e.message);
       return send(500, { ok: false, erro: 'Erro interno.' });
@@ -91,12 +107,13 @@ export class AccountsService {
         if (typeof conta !== 'string' || !ACCOUNT_RE.test(conta)) return { ok: false, erro: 'Conta: 3 a 20 letras, números ou _.' };
         if (typeof email !== 'string' || !EMAIL_RE.test(email)) return { ok: false, erro: 'E-mail inválido.' };
         if (typeof senha !== 'string' || senha.length < this.opts.minPassword) return { ok: false, erro: `A senha precisa de pelo menos ${this.opts.minPassword} caracteres.` };
+        if (b.aceite !== true) return { ok: false, erro: 'Para criar a conta, confirme que tem 13 anos ou mais e aceita os Termos de Uso e a Política de Privacidade.' };
         if (st.findAccount(conta)) return { ok: false, status: 409, erro: 'Essa conta já existe.' };
         if (st.findAccountByEmail(email)) return { ok: false, status: 409, erro: 'Esse e-mail já tem conta.' };
         const id = st.createAccount(conta, senha, { email, verified: false });
         const code = st.issueCode(id, 'verify');
         await this.mailer.send({ to: email, subject: 'Confirme sua conta — Cinzas do Meridiano', text: `Olá, ${conta}!\n\nSeu código de confirmação é ${code}. Ele vale por 30 minutos.\n\nSe não foi você quem criou esta conta, ignore esta mensagem.` });
-        st.audit('account_created', { accountId: id, ip });
+        st.audit('account_created', { accountId: id, ip, terms: TERMS_VERSION });
         this.log(`conta criada: ${conta}`);
         return { ok: true, status: 201, mensagem: 'Conta criada. Enviamos um código para o seu e-mail.' };
       }
@@ -121,6 +138,8 @@ export class AccountsService {
         const acc = typeof b.conta === 'string' && typeof b.senha === 'string' ? st.verifyAccount(b.conta, b.senha) : null;
         if (!acc) { st.audit('login_fail', { ip, via: 'contas' }); return { ok: false, status: 401, erro: 'Conta ou senha incorretas.' }; }
         if (!acc.verified) return { ok: false, status: 403, erro: 'Confirme seu e-mail antes de entrar.' };
+        const ban = banMessage(acc);
+        if (ban) { st.audit('login_banned', { accountId: acc.id, ip, via: 'contas' }); return { ok: false, status: 403, erro: ban }; }
         const token = signToken({ sub: acc.id, name: acc.name, role: acc.role }, this.opts.tokenSecret, this.opts.tokenTtlS);
         return { ok: true, token, expiraEm: this.opts.tokenTtlS };
       }

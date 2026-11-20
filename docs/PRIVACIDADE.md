@@ -12,11 +12,15 @@ revise com assessoria jurídica (LGPD — Lei 13.709/2018).*
 | Nome da conta, e-mail | Entrar no jogo, confirmar a conta, recuperar a senha | Enquanto a conta existir |
 | Senha | Entrar no jogo — guardamos só um resumo (scrypt com sal), nunca a senha | Enquanto a conta existir |
 | Personagens, itens, missões, ouro, tempo jogado | Fazer o jogo funcionar e medir o ritmo de progressão | Enquanto a conta existir |
-| Registros de segurança: entradas (com endereço IP), comandos de mestre, saque, compras, refino, recompensas, expulsões por excesso de comandos | Prevenir trapaça e fraude, investigar problemas | 90 dias (configurável no servidor) |
+| Registros de segurança: entradas (com endereço IP), comandos de mestre, saque, compras, refino, recompensas, trocas entre jogadores, expulsões por excesso de comandos, suspensões e silêncios | Prevenir trapaça e fraude, investigar problemas | 90 dias (configurável no servidor) |
+| Denúncias: quem denunciou, quem foi denunciado, o motivo e as **últimas 20 falas do denunciado** (só as da última hora) | Analisar a denúncia | 90 dias, como os registros de segurança |
+| Relatos de problema (`/bug`): o texto, o personagem, o mapa, a posição e as versões do jogo | Corrigir o problema relatado | 90 dias, como os registros de segurança |
+| Suspensão ou silêncio da conta (até quando e por quê) | Aplicar as regras de convivência | Enquanto valer; o histórico fica nos registros de segurança |
 | Códigos de confirmação e de troca de senha | Confirmar o e-mail e trocar a senha | 30 minutos de validade; apagados depois de 1 dia |
 | Métricas de operação (tempo de processamento, banda, número de jogadores) | Manter o servidor saudável | Sem dados pessoais |
 
-**Não guardamos** o conteúdo do chat (as mensagens só passam pelo servidor), nem dados de pagamento.
+**Não guardamos** o conteúdo do chat (as mensagens só passam pelo servidor; o servidor mantém em memória
+as últimas falas de cada personagem por até 1 hora, e só as grava se ele for denunciado), nem dados de pagamento.
 
 ## Base legal
 

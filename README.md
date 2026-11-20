@@ -27,9 +27,13 @@ Personagens: modelos VRM de anime — **Seed-san model by VirtualCast, Inc.** e 
 | [docs/04-progressao-e-formulas.md](docs/04-progressao-e-formulas.md) | Tabela de XP 1–20, XP por monstro, exemplos solo e em grupo, equipamento por faixa (todas as famílias de arma em todas as faixas), verificação de requisitos, dois exemplos de evolução passo a passo, fórmulas com exemplos calculados *(gerado dos dados)* |
 | [docs/05-arquitetura.md](docs/05-arquitetura.md) | Estrutura técnica, arquivos, protocolo, saque idempotente, reconexão, concorrência, critérios de aceitação dos 4 marcos, o que muda para teste público e múltiplas zonas |
 | [docs/06-mundo-e-mapas.md](docs/06-mundo-e-mapas.md) | Cidades, cinco áreas, regras de monstros, morte e resgate, combate legível, telas da interface |
-| [docs/07-navegacao.md](docs/07-navegacao.md) | Telas, camadas dentro do jogo, mapa do mundo, controles e direção gráfica |
+| [docs/07-navegacao.md](docs/07-navegacao.md) | Telas, camadas dentro do jogo, mapa do mundo, controles, direção gráfica e som |
+| [docs/08-operacao.md](docs/08-operacao.md) | Execução e operação: opções do servidor, métricas, banco e backup, testes e medições; implantação do teste público (CI, releases assinadas, Docker/Compose, systemd, TLS) |
+| [docs/relatorio-progressao.md](docs/relatorio-progressao.md) | Marco 4: tempo medido por nível (1→20) de cada classe caçando solo, contra as metas da tabela de XP; economia de tônicos, equipamento, mortes e problemas encontrados *(gerado pela simulação)* |
+| [docs/GUIA.md](docs/GUIA.md) | Guia do jogador do teste público: entrar, classes, controles, progressão, equipamento, mapas, grupo, troca, clã, duelo e convivência |
+| [docs/TERMOS.md](docs/TERMOS.md) · [docs/PRIVACIDADE.md](docs/PRIVACIDADE.md) | Termos de uso (regras de convivência e jogo limpo) e política de privacidade do teste público (rascunhos) |
 | [docs/DECISOES.md](docs/DECISOES.md) | Todas as decisões tomadas por conta própria e o motivo |
-| [docs/CREDITOS.md](docs/CREDITOS.md) | Créditos e licenças dos modelos de personagem |
+| [docs/CREDITOS.md](docs/CREDITOS.md) | Créditos e licenças dos modelos de personagem; som e música originais (síntese por `tools/audio/gerar_sons.py`) |
 
 ## Requisitos
 
@@ -96,7 +100,7 @@ Para já abrir com a conta preenchida:
 
 Em cada janela: **Jogar** → servidor `ws://127.0.0.1:7777`, **Criar conta** (ou **Entrar**) → **Criar novo personagem** (escolha a classe; a prévia 3D muda) → **Jogar**. **Esc** fecha painéis ou abre o menu (Opções, Trocar de personagem, Sair para o título).
 
-Controles: clique no chão anda; clique no monstro ataca; clique no NPC conversa (missões, loja, prova de classe); clique no anel de um portal muda de mapa; clique no saque coleta; **1–3** habilidades, **4/5** tônicos; **J** missões; chat com `/g` (grupo), `/s Nome` (sussurro), `/convidar Nome`, `/sair`; **I** inventário (clique no item equipa/usa; passe o mouse para ver a descrição e a comparação); **C** ficha (pontos e habilidades); **Q/E** ou botão direito arrastando giram a câmera; roda do mouse aproxima; **Enter** conversa; **Esc** fecha painéis.
+Controles: clique no chão anda; clique no monstro ataca; clique no NPC conversa (missões, loja, armeiro com as peças da sua faixa, ferreiro, prova de classe); clique no anel de um portal muda de mapa; clique no saque coleta; **1–5** habilidades (com recarga e recarga global na barra), **6/7** tônicos (o melhor que você pode usar); **J** missões; chat com `/g` (grupo), `/s Nome` (sussurro), `/convidar Nome`, `/sair`; **I** inventário (clique no item equipa/usa; botão direito vende — com loja ou ferreiro aberto — ou descarta; passe o mouse para ver a descrição e a comparação); **C** ficha (pontos e habilidades); **Q/E** ou botão direito arrastando giram a câmera; roda do mouse aproxima; **Enter** conversa; **Esc** fecha painéis.
 
 Para jogar em rede local, rode o servidor em uma máquina e use `ws://IP-DA-MÁQUINA:7777` no campo Servidor.
 
@@ -122,7 +126,7 @@ Dentro de `server/`:
 npm test
 ```
 
-Roda os testes (no SQLite): unitários (regras, equipamento, navegação, coerência dos dados, as 40 habilidades, o contrato do banco) e os **testes de aceitação dos Marcos 1, 2 e 3**, que sobem um servidor real numa porta aleatória com banco temporário e conectam clientes simulados pelo mesmo protocolo do Godot. `npm run test:pg` roda a mesma suíte no PostgreSQL (sobe um servidor temporário e o apaga no fim; precisa dos binários do PostgreSQL instalados). O do Marco 3 inclui o refino conferido em 10.000 tentativas, o depósito da conta, a elite diária e **três grupos de bots** (5 com tanque e curadora, 3 sem tanque, 2 jogadores) vencendo o Custódio reagindo aos avisos, com uma queda de conexão no meio. Só um deles, com a narração:
+Roda os testes (no SQLite): unitários (regras, equipamento, navegação, coerência dos dados, as 40 habilidades, o contrato do banco, uma rodada curta da simulação de progressão) e os **testes de aceitação dos Marcos 1, 2 e 3**, que sobem um servidor real numa porta aleatória com banco temporário e conectam clientes simulados pelo mesmo protocolo do Godot. `npm run test:pg` roda a mesma suíte no PostgreSQL (sobe um servidor temporário e o apaga no fim; precisa dos binários do PostgreSQL instalados). O do Marco 3 inclui o refino conferido em 10.000 tentativas, o depósito da conta, a elite diária e **três grupos de bots** (5 com tanque e curadora, 3 sem tanque, 2 jogadores) vencendo o Custódio reagindo aos avisos, com uma queda de conexão no meio. Só um deles, com a narração:
 
 ```bash
 node --test --test-reporter=spec test/m3.test.js
@@ -142,6 +146,13 @@ npm run validate-data
 
 ```bash
 npm run gen-docs
+```
+
+Medir a progressão (Marco 4): um bot por classe caça do nível 1 ao 20 num servidor em processo, acelerado (`server.step(100)` em laço, sem rede), e o tempo de cada nível é comparado com as metas de `data/xp_table.json`. A rodada padrão (8 classes × 8 sementes, mais o mesmo lote sem a prova de classe) leva ~5 min e regrava [docs/relatorio-progressao.md](docs/relatorio-progressao.md); o JSON completo vai para `server/relatorio-progressao.json` (fora do git):
+
+```bash
+npm run simular-progressao
+npm run simular-progressao -- --classes breaker,emberweaver --repeticoes 2 --md /tmp/rel.md
 ```
 
 Teste automático do **cliente** (headless, contra um servidor rodando), da raiz do repositório:
@@ -184,6 +195,18 @@ E, em outro terminal, da raiz do repositório:
 
 Com `--trial` no lugar de `--dungeon=...`, o mesmo modo faz a prova de classe na arena.
 
+Troca, clã, duelo e ferreiro com risco no cliente (servidor com `npm run dev`): um parceiro simulado aceita a troca (oferecendo 25 de ouro), entra no clã e aceita o duelo. Num terminal, dentro de `server/`:
+
+```bash
+node tools/parceiro-social.mjs --url ws://127.0.0.1:7777 --nome Parceira
+```
+
+E, em outro terminal, da raiz do repositório:
+
+```bash
+/Applications/Godot.app/Contents/MacOS/Godot --path client -- --sceneshots=/tmp/social --social=Parceira --server=ws://127.0.0.1:7777 --account=mercador --password=mercador123 --name=Mercador
+```
+
 ## 5. Reproduzir os cenários críticos à mão
 
 Prepare (servidor parado ou rodando):
@@ -219,6 +242,8 @@ data/     dados do jogo (classes, habilidades, itens, monstros, saque, mapas, XP
 server/   servidor autoritativo de zona (Node.js) + testes + ferramentas
 client/   projeto Godot 4
 docs/     design e arquitetura
+deploy/   implantação do teste público (Docker, Compose + Caddy, systemd)
+.github/  CI (testes, importação do cliente, imagem) e releases (exportação e assinatura)
 ```
 
 Detalhes em [docs/05-arquitetura.md](docs/05-arquitetura.md).

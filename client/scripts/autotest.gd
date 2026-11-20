@@ -35,8 +35,18 @@ func fail(why: String) -> void:
 	get_tree().quit(1)
 
 func _connected() -> void:
-	Net.request("register", {"account": main.account, "password": main.password}, func(_r):
-		Net.request("login", {"account": main.account, "password": main.password}, _logged))
+	# espera o "hello": servidor do teste público (--auth token) entra pelo serviço de contas
+	main._when_hello(func():
+		if str(main.server_hello.get("auth", "both")) == "token":
+			say("servidor pede login por token; usando o serviço de contas em %s" % main._accounts_base())
+			main._accounts_post("/sessoes", {"conta": main.account, "senha": main.password}, func(ok: bool, b: Dictionary):
+				if not ok:
+					fail(str(b.get("erro", "serviço de contas recusou")))
+					return
+				Net.request("login_token", {"token": b["token"], "delta": true}, _logged))
+			return
+		Net.request("register", {"account": main.account, "password": main.password}, func(_r):
+			Net.request("login", {"account": main.account, "password": main.password, "delta": true}, _logged)))
 
 func _logged(r: Dictionary) -> void:
 	if not r["ok"]:
@@ -394,6 +404,9 @@ func _scene_tick() -> void:
 		return
 	if main.args.has("cap4") and scene_i == 0 and not cap4_done:
 		_cap4_tick()
+		return
+	if main.args.has("social") and scene_i == 0 and not social_done:
+		_social_tick()
 		return
 	if scene_i >= SCENE_SPOTS.size() or (scene_i >= 1 and main.args.has("scenequick")):
 		say("OK")
@@ -760,3 +773,146 @@ func _dungeon_tick() -> void:
 			return
 	dungeon_step += 1
 	dungeon_until = Time.get_ticks_msec() + wait
+
+
+# ---------- pós-versão 1 no cliente (--social=NomeDoParceiro): troca, clã, duelo e refino com risco ----------
+# O parceiro é um cliente simulado (server/tools/parceiro-social.mjs) que aceita tudo e oferece ouro.
+var social_step := 0
+var social_done := false
+var social_until := 0
+var social_axe := ""
+
+func _social_partner() -> String:
+	var n: String = str(main.args.get("social", "Parceira"))
+	for eid in main.world.entities.keys():
+		var d: Dictionary = main.world.entities[eid]["data"]
+		if d.get("k", "") == "p" and str(d.get("n", "")) == n:
+			return eid
+	return ""
+
+func _social_tick() -> void:
+	if Time.get_ticks_msec() < social_until:
+		return
+	var wait := 1500
+	var soc = main.hud.social
+	var partner: String = str(main.args.get("social", "Parceira"))
+	match social_step:
+		0:
+			Net.request("gm", {"cmd": "xp", "level": 10})
+			Net.request("gm", {"cmd": "gold", "amount": 3000})
+			Net.request("gm", {"cmd": "give", "defId": "axe_1h_t5"}, func(r):
+				if r["ok"]:
+					social_axe = r["instanceId"])
+			Net.request("gm", {"cmd": "give", "defId": "mat_refine_sup", "qty": 12})
+			Net.request("gm", {"cmd": "give", "defId": "protect_seal", "qty": 2})
+			Net.request("gm", {"cmd": "teleport", "x": 22.0, "z": 50.0})
+			main.world.cam_dist = 9.0
+			main.world.cam_pitch = 0.62
+			wait = 2500
+		1:
+			if _social_partner() == "":
+				return
+			Net.request("trade_request", {"name": partner}, func(r):
+				say("pedido de troca: %s" % ("ok" if r["ok"] else r["reason"])))
+		2:
+			if not soc.trade_panel.visible:
+				return
+			Net.request("trade_offer", {"items": [social_axe], "gold": 0})
+			wait = 2000
+		3:
+			_scene_shot("social_troca_aberta")
+			Net.request("trade_lock")
+			wait = 1500
+		4:
+			_scene_shot("social_troca_travada")
+			Net.request("trade_confirm", {}, func(r):
+				say("troca: %s" % ("concluída" if r.get("done", false) else str(r.get("waiting", r.get("reason", "?"))))))
+			wait = 2000
+		5:
+			Net.request("clan_create", {"name": "Guarda do Sal", "tag": "SAL"}, func(r):
+				say("clã: %s" % ("fundado" if r["ok"] else r["reason"])))
+			wait = 1000
+		6:
+			Net.request("clan_invite", {"name": partner})
+			wait = 2000
+		7:
+			soc.toggle_clan()
+			wait = 1500
+		8:
+			_scene_shot("social_cla_painel")
+			soc.clan_panel.visible = false
+			soc.show_player_actions(partner)
+			wait = 800
+		9:
+			_scene_shot("social_acoes_jogador")
+			soc.actions_panel.visible = false
+			Net.request("duel_request", {"name": partner}, func(r):
+				say("duelo: %s" % ("pedido" if r["ok"] else r["reason"])))
+			wait = 1400
+		10:
+			_scene_shot("social_duelo_contagem")
+			wait = 2600
+		11:
+			var op := _social_partner()
+			if op != "":
+				main.world.selected = op
+				Net.request("attack", {"target": op})
+				main.hud.refresh_target()
+			wait = 1800
+		12:
+			_scene_shot("social_duelo_luta")
+			wait = 1000
+		13:
+			if soc.duel_state != "":
+				return
+			_scene_shot("social_duelo_fim")
+			Net.request("gm", {"cmd": "teleport", "mapId": "pedrambar", "x": 13.0, "z": 45.5})
+			wait = 4000
+		14:
+			if main.map_def().get("id", "") != "pedrambar":
+				return
+			Net.request("gm", {"cmd": "give", "defId": "axe_1h_t5"}, func(r):
+				if r["ok"]:
+					social_axe = r["instanceId"]
+					Net.request("gm", {"cmd": "set_enh", "instance": social_axe, "enh": 3}))
+			wait = 1500
+		15:
+			Net.request("talk", {"npc": "smith_gusmao"}, func(r):
+				if r["ok"]:
+					main.hud.show_npc(r))
+			wait = 1500
+		16:
+			var iid := social_axe
+			for c in main.hud.npc_box.get_children():
+				if c is Button and "+3" in (c as Button).text:
+					(c as Button).emit_signal("pressed")
+					break
+			wait = 1500
+		17:
+			_scene_shot("social_ferreiro_risco")
+			Net.request("talk", {"npc": "armorer_amaro"}, func(r):
+				if r["ok"]:
+					main.hud.show_npc(r))
+			wait = 1500
+		18:
+			_scene_shot("social_armeiro")
+			# bolsa aberta com o menu do botão direito (último comerciante: dá para vender)
+			main.hud.npc_panel.visible = false
+			main.hud.inv_panel.visible = true
+			main.hud._refresh_inventory()
+			wait = 600
+		19:
+			get_viewport().warp_mouse(Vector2(640, 260))
+			for it in main.ch.get("items", []):
+				if it["loc"] == "bag" and main.defs["items"].get(it["defId"], {}).get("slot", null) != null:
+					main.hud._bag_menu(it)
+					break
+			wait = 800
+		20:
+			_scene_shot("social_inventario_menu")
+			say("social OK")
+			social_done = true
+			get_tree().quit(0)
+			return
+	social_step += 1
+	social_until = Time.get_ticks_msec() + wait

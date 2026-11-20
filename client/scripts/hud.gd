@@ -4,6 +4,7 @@ extends CanvasLayer
 
 const Theme_ = preload("res://scripts/ui_theme.gd")
 const ItemText = preload("res://scripts/item_text.gd")
+const Social = preload("res://scripts/social.gd")
 
 var main
 var name_label: Label
@@ -32,7 +33,11 @@ var death_overlay: Control
 var disc_overlay: Control
 var disc_label: Label
 var pending_alloc := {}
-var cd_until := {}
+var cd_until := {}   # habilidade -> fim da recarga (Time.get_ticks_msec)
+var gcd_until := 0   # fim da recarga global
+var npc_open: Dictionary = {}  # último NPC com quem falou (venda na loja)
+var _npc_open_at := -1000000
+const HOT_SLOTS := 7  # 1–5 habilidades, 6–7 tônicos
 var npc_panel: PanelContainer
 var npc_box: VBoxContainer
 var journal_panel: PanelContainer
@@ -43,6 +48,7 @@ var party_box: VBoxContainer
 var invite_panel: PanelContainer
 var invite_label: Label
 var invite_from := -1
+var social  # comércio, clã, duelo e convites (social.gd)
 var channel_box: PanelContainer
 var channel_label: Label
 var channel_bar: ProgressBar
@@ -69,7 +75,13 @@ func _ready() -> void:
 	_build_overlays(root)
 	_build_ping(root)
 	_build_channel(root)
+	social = Social.new()
+	social.build(self, root)
 	refresh_char()
+	# som ao abrir e fechar painéis (tecla, botão Fechar ou Esc: todos passam por "visible")
+	for p in [inv_panel, sheet_panel, journal_panel, npc_panel, invite_panel]:
+		var panel: Control = p
+		panel.visibility_changed.connect(func(): Sfx.ui("ui_open" if panel.visible else "ui_close"))
 
 func _bar(parent: Control, color: Color, w := 260.0) -> ProgressBar:
 	var b := ProgressBar.new()
@@ -104,7 +116,7 @@ func _build_status(root: Control) -> void:
 	mp_bar = _bar(v, Theme_.MP)
 	mp_text = _overlay_label(mp_bar)
 	var hint := Label.new()
-	hint.text = "I inventário · C ficha · J missões · 1-5 atalhos · Q/E gira · roda zoom"
+	hint.text = "I inventário · C ficha · J missões · 1-5 habilidades · 6-7 tônicos · Q/E gira · roda zoom"
 	hint.add_theme_font_size_override("font_size", 10)
 	hint.add_theme_color_override("font_color", Theme_.MUTED)
 	v.add_child(hint)
@@ -137,16 +149,17 @@ func _build_hotbar(root: Control) -> void:
 	var p := PanelContainer.new()
 	p.add_theme_stylebox_override("panel", Theme_.panel_style(0.85))
 	p.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	p.position = Vector2(-290, -84)
+	p.position = Vector2(-364, -84)
 	root.add_child(p)
 	hotbar = HBoxContainer.new()
 	p.add_child(hotbar)
-	for i in 5:
+	for i in HOT_SLOTS:
 		var b := Button.new()
-		b.custom_minimum_size = Vector2(110, 46)
+		b.custom_minimum_size = Vector2(100, 46)
 		b.focus_mode = Control.FOCUS_NONE
 		b.autowrap_mode = TextServer.AUTOWRAP_WORD
 		b.add_theme_font_size_override("font_size", 11)
+		b.set_meta("sfx_silent", true)   # sem clique: a habilidade ou o tônico já soam
 		var idx := i
 		b.pressed.connect(func(): _hotkey(idx))
 		hotbar.add_child(b)
@@ -179,7 +192,7 @@ func _build_chat(root: Control) -> void:
 	chat_input.placeholder_text = "Enter para conversar"
 	v.add_child(chat_input)
 	chat_input.placeholder_text = "Enter: conversar (/g /s /convidar)"
-	chat_input.tooltip_text = "/g texto: grupo · /s Nome texto: sussurro · /convidar Nome · /sair: sai do grupo"
+	chat_input.tooltip_text = "/g texto: grupo · /s Nome texto: sussurro · /convidar Nome · /sair: sai do grupo\n/c texto: clã · /cla: painel do clã (L) · /troca Nome · /duelo Nome"
 	chat_input.text_submitted.connect(func(t: String):
 		_chat_command(t.strip_edges())
 		chat_input.text = ""
@@ -279,6 +292,10 @@ func refresh_char() -> void:
 		return
 	var c: Dictionary = main.ch
 	var cls: Dictionary = main.defs["classes"].get(c["classId"], {})
+	# recargas informadas pelo servidor (ao entrar no mundo, trocar de zona ou depois de uma ação)
+	var now := Time.get_ticks_msec()
+	for k in c.get("cooldowns", {}).keys():
+		cd_until[k] = now + int(c["cooldowns"][k])
 	var ttl := str(c.get("title", "")) if c.get("title") != null else ""
 	name_label.text = "%s — %s, nível %d   ·   %d ouro%s" % [c["name"], cls.get("name", ""), int(c["level"]), int(c["gold"]), ("\n«%s»" % ttl) if ttl != "" else ""]
 	hp_bar.max_value = float(c["stats"]["maxHp"])
@@ -385,6 +402,14 @@ func _tick_ping(delta: float) -> void:
 			ping_label.add_theme_color_override("font_color", c))
 
 func _process(delta: float) -> void:
+	if social:
+		social.tick(delta)
+	# recargas na barra de atalhos (a cada 0,1 s)
+	_cd_acc += delta
+	if _cd_acc >= 0.1:
+		_cd_acc = 0.0
+		if not cd_until.is_empty() or gcd_until > Time.get_ticks_msec() - 200:
+			_refresh_hotbar()
 	_tick_ping(delta)
 	_tick_channel(delta)
 	# mantém o inventário inteiro dentro da tela, qualquer que seja a largura do conteúdo
@@ -394,17 +419,27 @@ func _process(delta: float) -> void:
 
 func _hot_actions() -> Array:
 	var skills: Array = main.class_skills()
-	return [
-		{"kind": "skill", "id": skills[0] if skills.size() > 0 else ""},
-		{"kind": "skill", "id": skills[1] if skills.size() > 1 else ""},
-		{"kind": "skill", "id": skills[2] if skills.size() > 2 else ""},
-		{"kind": "potion", "id": "potion_hp_s"},
-		{"kind": "potion", "id": "potion_mp_s"},
-	]
+	var acts := []
+	for i in 5:
+		acts.append({"kind": "skill", "id": skills[i] if skills.size() > i else ""})
+	acts.append({"kind": "potion", "id": _best_potion(["potion_hp_m", "potion_hp_s"])})
+	acts.append({"kind": "potion", "id": _best_potion(["potion_mp_m", "potion_mp_s"])})
+	return acts
+
+## O tônico mais forte que o personagem pode usar e tem na bolsa (ou o pequeno, para mostrar x0).
+func _best_potion(ids: Array) -> String:
+	var lvl := int(main.ch.get("level", 1))
+	for id in ids:
+		if int(main.defs["items"].get(id, {}).get("level", 1)) > lvl:
+			continue
+		for it in main.ch.get("items", []):
+			if it["defId"] == id and it["loc"] == "bag":
+				return id
+	return ids[ids.size() - 1]
 
 func _refresh_hotbar() -> void:
 	var acts := _hot_actions()
-	for i in 5:
+	for i in HOT_SLOTS:
 		var a: Dictionary = acts[i]
 		var b: Button = hot_buttons[i]
 		if a["kind"] == "skill":
@@ -413,8 +448,13 @@ func _refresh_hotbar() -> void:
 			var locked_text := "nível %d" % int(s.get("unlockLevel", 1))
 			if int(s.get("unlockLevel", 1)) == 10 and int(main.ch.get("level", 1)) >= 10:
 				locked_text = "prova de classe"
-			b.text = "%d · %s\n%s" % [i + 1, s.get("name", "—"), ("grau %d · %d mana" % [rank, int(s.get("mp", 0))]) if rank > 0 else locked_text]
+			var left := _cd_left(a["id"])
+			var info: String = ("grau %d · %d mana" % [rank, int(s.get("mp", 0))]) if rank > 0 else locked_text
+			if rank > 0 and left > 0.05:
+				info = "recarga %.1f s" % left
+			b.text = "%d · %s\n%s" % [i + 1, s.get("name", "—"), info]
 			b.disabled = rank == 0
+			b.modulate = Color(1, 1, 1, 0.55) if rank > 0 and left > 0.05 else Color.WHITE
 		else:
 			var count := 0
 			for it in main.ch.get("items", []):
@@ -422,6 +462,45 @@ func _refresh_hotbar() -> void:
 					count += int(it["qty"])
 			b.text = "%d · %s\nx%d" % [i + 1, main.defs["items"].get(a["id"], {}).get("name", a["id"]), count]
 			b.disabled = count == 0
+
+var _cd_acc := 0.0
+
+## Segundos que faltam para a habilidade poder sair (recarga própria ou recarga global).
+func _cd_left(skill_id: String) -> float:
+	var now := Time.get_ticks_msec()
+	var end := maxi(int(cd_until.get(skill_id, 0)), gcd_until)
+	if int(cd_until.get(skill_id, 0)) <= now:
+		cd_until.erase(skill_id)
+	return maxf(0.0, (end - now) / 1000.0)
+
+## Resposta do servidor a "cast": recarga, recarga global e barra de conjuração.
+func on_cast_result(m: Dictionary) -> void:
+	var now := Time.get_ticks_msec()
+	if m.get("ok", false):
+		if m.has("gcdMs"):
+			gcd_until = now + int(m["gcdMs"])
+		if m.has("casting"):
+			show_channel("Conjurando %s" % str(m["casting"].get("name", "")), float(m["casting"]["ms"]))
+			_casting = true
+		elif m.has("cooldownMs") and m.has("skill"):
+			cd_until[str(m["skill"])] = now + int(m["cooldownMs"])
+	_refresh_hotbar()
+
+## Fim de uma conjuração (sucesso ou interrupção).
+func on_cast_end(m: Dictionary) -> void:
+	if _casting:
+		channel_box.visible = false
+		_channel_left = 0.0
+		_casting = false
+	if m.get("ok", false):
+		if m.has("cooldownMs"):
+			cd_until[str(m["skill"])] = Time.get_ticks_msec() + int(m["cooldownMs"])
+	elif str(m.get("code", "")) != "switched":  # trocar de habilidade não é erro
+		error(str(m.get("reason", "Conjuração interrompida.")))
+		gcd_until = mini(gcd_until, Time.get_ticks_msec() + 300)
+	_refresh_hotbar()
+
+var _casting := false
 
 func _hotkey(i: int) -> void:
 	var a: Dictionary = _hot_actions()[i]
@@ -431,7 +510,13 @@ func _hotkey(i: int) -> void:
 	else:
 		var it: Dictionary = main.my_item(a["id"])
 		if not it.is_empty():
-			Net.request("use_item", {"instance": it["id"]})
+			_use_item(it["id"])
+
+## Usa um consumível (tônico); o gole soa quando o servidor confirma.
+func _use_item(iid: String) -> void:
+	Net.request("use_item", {"instance": iid}, func(r):
+		if r.get("ok", false):
+			Sfx.ui("potion"))
 
 func refresh_target() -> void:
 	var w = main.world
@@ -444,6 +529,8 @@ func refresh_target() -> void:
 	var rank := ""
 	if md.get("rank", "normal") != "normal":
 		rank = " (%s)" % md["rank"]
+	if d.get("k", "") == "p":
+		rank = " (duelo)"
 	target_label.text = "%s · nível %d%s" % [md.get("name", d.get("n", "?")), int(d["lvl"]), rank]
 	target_bar.max_value = float(d["mhp"])
 	target_bar.value = float(d["hp"])
@@ -457,6 +544,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	match k:
 		KEY_I:
 			inv_panel.visible = not inv_panel.visible
+			if inv_panel.visible and npc_panel.visible:
+				npc_panel.visible = false  # a bolsa é larga: o painel do NPC sai da frente (a venda continua valendo)
 			if inv_panel.visible:
 				_refresh_inventory()
 		KEY_C:
@@ -466,18 +555,25 @@ func _unhandled_input(event: InputEvent) -> void:
 				_refresh_sheet()
 		KEY_ENTER, KEY_KP_ENTER:
 			chat_input.grab_focus()
-		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5:
+		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7:
 			_hotkey(k - KEY_1)
 		KEY_J:
 			journal_panel.visible = not journal_panel.visible
 			if journal_panel.visible:
 				refresh_quests()
+		KEY_L:
+			social.toggle_clan()
 		_:
 			return
 	get_viewport().set_input_as_handled()
 
 ## Esc: fecha o painel aberto mais alto. Retorna false se não havia nenhum (o main abre o menu).
 func close_top_panel() -> bool:
+	if _bag_menu_node and is_instance_valid(_bag_menu_node):
+		_close_bag_menu()
+		return true
+	if social and social.close_top():
+		return true
 	for p in [invite_panel, npc_panel, journal_panel, inv_panel, sheet_panel]:
 		if p and p.visible:
 			p.visible = false
@@ -497,7 +593,8 @@ func _flash(text: String, color: Color) -> void:
 	msg_box.add_child(l)
 	if msg_box.get_child_count() > 4:
 		msg_box.get_child(0).queue_free()
-	var tw := create_tween()
+	# tween preso ao rótulo: se ele sair antes (excesso de mensagens), o tween morre junto
+	var tw := l.create_tween()
 	tw.tween_interval(3.0)
 	tw.tween_property(l, "modulate:a", 0.0, 0.8)
 	tw.tween_callback(l.queue_free)
@@ -508,6 +605,7 @@ func system(text: String) -> void:
 
 func error(text: String) -> void:
 	_flash(text, Theme_.RED)
+	Sfx.ui("ui_error")
 
 func chat_line(bb: String) -> void:
 	if chat_log:
@@ -568,7 +666,9 @@ func _refresh_inventory() -> void:
 		else:
 			var b := _item_button(it, "%s: " % names[s])
 			var slot: String = s
-			b.pressed.connect(func(): Net.request("unequip", {"slot": slot}))
+			b.pressed.connect(func(): Net.request("unequip", {"slot": slot}, func(r):
+				if r.get("ok", false):
+					Sfx.ui("loot_item", -3.0)))
 			inv_equip.add_child(b)
 	var used := 0
 	for it in main.ch.get("items", []):
@@ -577,6 +677,10 @@ func _refresh_inventory() -> void:
 			var b := _item_button(it)
 			var inst: Dictionary = it
 			b.pressed.connect(func(): _bag_click(inst))
+			# botão direito: usar/equipar, vender (com a loja aberta) ou descartar
+			b.gui_input.connect(func(ev: InputEvent):
+				if ev is InputEventMouseButton and ev.pressed and (ev as InputEventMouseButton).button_index == MOUSE_BUTTON_RIGHT:
+					_bag_menu(inst))
 			inv_bag.add_child(b)
 	for it in main.ch.get("items", []):
 		if it["loc"] == "recovery":
@@ -584,15 +688,117 @@ func _refresh_inventory() -> void:
 			var iid: String = it["id"]
 			b.pressed.connect(func(): Net.request("claim_recovery", {"instance": iid}))
 			inv_bag.add_child(b)
-	inv_title.text = "Bolsa %d/%d (clique: equipar ou usar)" % [used, int(main.ch.get("bagCapacity", 30))]
+	inv_title.text = "Bolsa %d/%d (clique: equipar ou usar · botão direito: vender ou descartar)" % [used, int(main.ch.get("bagCapacity", 30))]
+
+## Último comerciante (loja ou ferreiro) com quem você falou nos últimos 5 min: dá para vender a ele
+## (o servidor confere se você ainda está perto).
+func _merchant_open() -> bool:
+	return str(npc_open.get("role", "")) in ["shop", "smith"] and Time.get_ticks_msec() - _npc_open_at < 300000
+
+func _sell_price(inst: Dictionary) -> int:
+	var d: Dictionary = main.defs["items"].get(inst["defId"], {})
+	return maxi(1, int(d.get("value", 1)) / 2) * int(inst.get("qty", 1))
+
+func _bag_menu(inst: Dictionary) -> void:
+	# menu de contexto feito com painéis do próprio HUD: um fundo transparente em tela cheia fecha ao clicar fora
+	_close_bag_menu()
+	var d: Dictionary = main.defs["items"].get(inst["defId"], {})
+	var root: Control = inv_panel.get_parent()
+	var backdrop := Control.new()
+	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
+	backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
+	backdrop.gui_input.connect(func(ev: InputEvent):
+		if ev is InputEventMouseButton and ev.pressed:
+			_close_bag_menu())
+	root.add_child(backdrop)
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", Theme_.panel_style(0.97))
+	backdrop.add_child(panel)
+	var v := VBoxContainer.new()
+	panel.add_child(v)
+	var title := Label.new()
+	title.text = ItemText.item_name(main.defs, inst)
+	title.add_theme_color_override("font_color", Theme_.AMBER)
+	v.add_child(title)
+	var usable: bool = d.get("kind", "") == "consumable" or d.get("slot", null) != null
+	if usable:
+		_menu_button(v, "Usar" if d.get("kind", "") == "consumable" else "Equipar", func(): _on_bag_menu(0, inst))
+	if _merchant_open():
+		var label := "Vender%s a %s por %d de ouro" % [" (x%d)" % int(inst["qty"]) if int(inst.get("qty", 1)) > 1 else "", str(npc_open.get("name", "comerciante")).get_slice(",", 0), _sell_price(inst)]
+		_menu_button(v, label, func(): _on_bag_menu(1, inst))
+	else:
+		var off := _menu_button(v, "Vender (fale com uma loja ou ferreiro)", func(): pass)
+		off.disabled = true
+	_menu_button(v, "Descartar…", func(): _on_bag_menu(2, inst))
+	_menu_button(v, "Cancelar", func(): pass)
+	# na posição do mouse, sem sair da tela
+	var vp := get_viewport().get_visible_rect().size
+	var mp := get_viewport().get_mouse_position()
+	panel.reset_size()
+	var sz := panel.get_combined_minimum_size()
+	panel.position = Vector2(clampf(mp.x, 8.0, vp.x - sz.x - 8.0), clampf(mp.y, 8.0, vp.y - sz.y - 8.0))
+	_bag_menu_node = backdrop
+
+var _bag_menu_node: Control = null
+
+func _menu_button(box: Container, text: String, cb: Callable) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	b.pressed.connect(func():
+		_close_bag_menu()
+		cb.call())
+	box.add_child(b)
+	return b
+
+func _close_bag_menu() -> void:
+	if _bag_menu_node and is_instance_valid(_bag_menu_node):
+		_bag_menu_node.queue_free()
+	_bag_menu_node = null
+
+func _on_bag_menu(id: int, inst: Dictionary) -> void:
+	if id == 0:
+		_bag_click(inst)
+	elif id == 1:
+		_sell_item(str(inst["id"]))
+	elif id == 2:
+		_confirm_discard(inst)
+
+func _sell_item(iid: String) -> void:
+	Net.request("sell", {"npc": npc_open.get("id", ""), "instance": iid}, func(r):
+		if r.get("ok", false):
+			Sfx.ui("loot_coins")
+			system(str(r.get("message", "Vendido.")))
+		else:
+			error(str(r.get("reason", "Não foi possível vender."))))
+
+func _confirm_discard(inst: Dictionary) -> void:
+	var dlg := ConfirmationDialog.new()
+	dlg.title = "Descartar"
+	dlg.dialog_text = "Descartar %s? Não dá para desfazer." % ItemText.item_name(main.defs, inst)
+	dlg.ok_button_text = "Descartar"
+	dlg.cancel_button_text = "Cancelar"
+	add_child(dlg)
+	var iid: String = inst["id"]
+	dlg.confirmed.connect(func():
+		Net.request("discard", {"instance": iid}, func(r):
+			if r.get("ok", false):
+				system(str(r.get("message", "Descartado.")))
+			else:
+				error(str(r.get("reason", "Não foi possível descartar.")))))
+	dlg.visibility_changed.connect(func():
+		if not dlg.visible:
+			dlg.queue_free())
+	dlg.popup_centered()
 
 func _bag_click(inst: Dictionary) -> void:
 	var d: Dictionary = main.defs["items"].get(inst["defId"], {})
 	if d.get("kind", "") == "consumable":
-		Net.request("use_item", {"instance": inst["id"]})
+		_use_item(inst["id"])
 	elif d.get("slot", null) != null:
 		Net.request("equip", {"instance": inst["id"]}, func(r):
 			if r["ok"]:
+				Sfx.ui("loot_item")
 				system("Equipado: %s" % d["name"]))
 
 # ---------------- ficha ----------------
@@ -687,6 +893,8 @@ func _refresh_sheet() -> void:
 # ---------------- M2: comandos de chat ----------------
 func _chat_command(t: String) -> void:
 	if t == "":
+		return
+	if social.chat_command(t):
 		return
 	var cb := func(r):
 		if not r["ok"]:
@@ -805,6 +1013,8 @@ func _objectives_text(q: Dictionary) -> String:
 func show_npc(r: Dictionary) -> void:
 	_clear(npc_box)
 	var npc: Dictionary = r["npc"]
+	npc_open = npc
+	_npc_open_at = Time.get_ticks_msec()
 	_title(npc_box, npc["name"], 18)
 	var quests: Dictionary = r.get("quests", {})
 	for q in quests.get("active", []):
@@ -818,6 +1028,7 @@ func show_npc(r: Dictionary) -> void:
 			b.pressed.connect(func():
 				Net.request("quest_turnin", {"quest": qid, "npc": npc["id"]}, func(res):
 					if res["ok"]:
+						Sfx.ui("quest_done")
 						system("Missão concluída: %s" % res["quest"]["title"])
 						if res.has("dialogue"):
 							chat_line("[color=#ffe39a]%s: \"%s\"[/color]" % [npc["name"], res["dialogue"]])
@@ -875,22 +1086,35 @@ func show_npc(r: Dictionary) -> void:
 			npc_panel.visible = false)
 		npc_box.add_child(tb)
 	if r.get("shop", null) != null:
-		_title(npc_box, "Loja", 14)
+		var armorer: bool = npc.get("role", "") == "armorer"
+		_title(npc_box, "Armeiro: peças da sua faixa e da próxima" if armorer else "Loja", 14)
+		_text(npc_box, "Para vender: abra a bolsa (I) e clique com o botão direito no item.", Theme_.MUTED)
 		for item in r["shop"]:
 			var row := HBoxContainer.new()
 			npc_box.add_child(row)
 			var l := Label.new()
-			l.text = "%s — %d ouro" % [main.defs["items"][item["defId"]]["name"], int(item["price"])]
+			var d: Dictionary = main.defs["items"][item["defId"]]
+			if item.get("gear", false):
+				var missing: Array = ItemText.missing_requirements(main.defs, d, main.ch)
+				l.text = "%s (nv %d) — %d ouro%s" % [d["name"], int(d.get("level", 1)), int(item["price"]), "" if missing.is_empty() else "  (requisitos)"]
+				if not missing.is_empty():
+					l.add_theme_color_override("font_color", Theme_.RED.lerp(Theme_.TEXT, 0.4))
+			else:
+				l.text = "%s — %d ouro" % [d["name"], int(item["price"])]
 			l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			l.custom_minimum_size = Vector2(250, 0)
+			l.mouse_filter = Control.MOUSE_FILTER_PASS
 			row.add_child(l)
-			for qty in [1, 5]:
+			for qty in ([1] if item.get("gear", false) else [1, 5]):
 				var b := Button.new()
-				b.text = "Comprar %d" % qty
+				b.text = "Comprar" if item.get("gear", false) else "Comprar %d" % qty
 				var def_id: String = item["defId"]
 				var q_amount: int = qty
 				b.pressed.connect(func():
 					Net.request("buy", {"npc": npc["id"], "item": def_id, "qty": q_amount}, func(res):
 						if res["ok"]:
+							Sfx.ui("loot_coins")
 							system("Comprado por %d ouro." % int(res["cost"]))
 						else:
 							error(res["reason"])))
@@ -967,9 +1191,11 @@ const ENHANCEABLE_KINDS := ["weapon", "armor", "offhand", "jewel"]
 
 ## Ferreiro: lista as peças (equipadas e na bolsa); cada uma mostra custo, chance e prévia.
 func _smith_ui(npc: Dictionary) -> void:
-	_title(npc_box, "Refino (até +3)", 14)
-	_text(npc_box, "Na falha o grau não cai, mas o ouro e o Pó de Refino são gastos.", Theme_.MUTED)
+	_title(npc_box, "Refino (até +6)", 14)
+	_text(npc_box, "Até +3, a falha só gasta o ouro e os materiais. Para ir a +4, +5 e +6, a falha derruba um grau — a menos que você use um Selo de Proteção, que só é gasto quando segura uma falha.", Theme_.MUTED)
+	# a cotação fica logo abaixo do texto, antes da lista (sempre à vista)
 	var quote_box := VBoxContainer.new()
+	npc_box.add_child(quote_box)
 	for it in main.ch.get("items", []):
 		if not it["loc"] in ["bag", "equip"]:
 			continue
@@ -982,7 +1208,6 @@ func _smith_ui(npc: Dictionary) -> void:
 		var iid: String = it["id"]
 		b.pressed.connect(func(): _smith_quote(npc, iid, quote_box))
 		npc_box.add_child(b)
-	npc_box.add_child(quote_box)
 
 func _smith_quote(npc: Dictionary, iid: String, box: VBoxContainer) -> void:
 	Net.request("enhance_quote", {"npc": npc["id"], "instance": iid}, func(r):
@@ -998,17 +1223,30 @@ func _smith_quote(npc: Dictionary, iid: String, box: VBoxContainer) -> void:
 			lines.append("%s: %s → %s" % [{"damage": "dano", "defense": "defesa", "magicPower": "poder mágico"}.get(k, k), str(pv["before"][k]), str(pv["after"][k])])
 		if not lines.is_empty():
 			_text(box, "Prévia: " + ", ".join(lines), Theme_.GREEN)
+		var seal: CheckBox = null
+		if r.get("downgradeOnFail", false):
+			_text(box, "Risco: se falhar, a peça cai para +%d." % (int(r["from"]) - 1), Theme_.RED)
+			if r.get("protectItem") != null:
+				seal = CheckBox.new()
+				var have := int(r.get("protectHave", 0))
+				seal.text = "Usar %s (você tem %d)" % [main.defs["items"].get(r["protectItem"], {}).get("name", "Selo de Proteção"), have]
+				seal.disabled = have <= 0
+				seal.button_pressed = have > 0
+				box.add_child(seal)
 		var go := Button.new()
 		go.text = "Refinar"
 		go.pressed.connect(func():
-			Net.request("enhance", {"npc": npc["id"], "instance": iid}, func(res):
+			var protect: bool = seal != null and seal.button_pressed
+			Net.request("enhance", {"npc": npc["id"], "instance": iid, "protect": protect}, func(res):
 				if res.has("char"):
 					main.set_char(res["char"])
 				if res["ok"]:
 					if res["success"]:
+						Sfx.ui("refine_ok")
 						system(res["message"])
 					else:
-						error(res["message"])
+						Sfx.ui("refine_fail")
+						_flash(res["message"], Theme_.RED)
 					_smith_quote(npc, iid, box)
 				else:
 					error(res["reason"])))
@@ -1039,6 +1277,8 @@ func _storage_refresh(npc: Dictionary, box: VBoxContainer) -> void:
 						main.set_char(res["char"])
 					if not res["ok"]:
 						error(res["reason"])
+					else:
+						Sfx.ui("loot_item")
 					_storage_refresh(npc, box)))
 			box.add_child(b)
 		_title(box, "Da bolsa", 13)
@@ -1055,6 +1295,8 @@ func _storage_refresh(npc: Dictionary, box: VBoxContainer) -> void:
 						main.set_char(res["char"])
 					if not res["ok"]:
 						error(res["reason"])
+					else:
+						Sfx.ui("loot_item", -2.0)
 					_storage_refresh(npc, box)))
 			box.add_child(b2))
 

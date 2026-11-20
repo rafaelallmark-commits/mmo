@@ -12239,7 +12239,18 @@
      "name": "Gusmão, ferreiro",
      "x": 12,
      "z": 44,
-     "role": "smith"
+     "role": "smith",
+     "shop": [
+      "protect_seal",
+      "mat_refine"
+     ]
+    },
+    {
+     "id": "armorer_amaro",
+     "name": "Amaro, armeiro",
+     "role": "armorer",
+     "x": 16,
+     "z": 48
     },
     {
      "id": "potions_resina",
@@ -12784,7 +12795,18 @@
      "name": "Tiela Martelo-Fino",
      "x": 48,
      "z": 44,
-     "role": "smith"
+     "role": "smith",
+     "shop": [
+      "protect_seal",
+      "mat_refine"
+     ]
+    },
+    {
+     "id": "armorer_ines",
+     "name": "Inês, armeira",
+     "role": "armorer",
+     "x": 48,
+     "z": 50
     },
     {
      "id": "potions_lume",

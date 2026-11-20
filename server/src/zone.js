@@ -3,6 +3,7 @@
 // simultâneas do mesmo personagem.
 import { randomUUID } from 'node:crypto';
 import { Escort } from './escort.js';
+import { DuelManager } from './duel.js';
 import {
   derivedStats, playerAttack, monsterAttack, splitKillXp, levelForXp, rankCap, totalAttributePoints, rollInt, mitigate,
 } from './rules.js';
@@ -58,6 +59,7 @@ export class Zone {
     this.monsterSeq = 0;
     this.escorts = new Map(); // eid -> Escort
     this.escortSeq = 0;
+    this.duels = new DuelManager(this);
     for (const sp of this.map.spawns ?? []) for (let i = 0; i < sp.count; i++) this.spawnMonster(sp);
   }
 
@@ -102,6 +104,7 @@ export class Zone {
   removePlayer(charId, save = true) {
     const p = this.players.get(charId);
     if (!p) return null;
+    this.duels.forfeit(charId);
     this.players.delete(charId);
     for (const m of this.monsters.values()) {
       m.threat.delete(charId);
@@ -118,6 +121,7 @@ export class Zone {
     const eq = equippedList(p.char, this.data);
     p.stats = derivedStats(p.char, eq.map((e) => ({ def: e.def, enh: e.enh })), this.data, buffs);
     p.weaponDefId = eq.find((e) => e.def.slot === 'weapon')?.def.id ?? null;
+    p.offhandDefId = eq.find((e) => e.def.slot === 'offhand')?.def.id ?? null;
     p.char.hp = Math.min(p.char.hp, p.stats.maxHp);
     p.char.mp = Math.min(p.char.mp, p.stats.maxMp);
   }
@@ -234,6 +238,7 @@ export class Zone {
     const path = this.nav.findPath(c.x, c.z, x, z);
     if (!path || !path.length) return { ok: false, code: 'blocked', reason: 'Não dá para chegar ali.' };
     if (p.channel) this.cancelChannel(p, 'Interrompido: você se moveu.');
+    if (p.casting) this.cancelCast(p, 'Conjuração interrompida: você se moveu.');
     p.path = path; p.dest = path[path.length - 1]; p.targetId = null; p.chase = null;
     // o cliente usa o caminho para prever o movimento sem esperar os snapshots
     return { ok: true, dest: { x: r2(p.dest.x), z: r2(p.dest.z) }, path: path.map((q) => [r2(q.x), r2(q.z)]) };
@@ -241,6 +246,15 @@ export class Zone {
 
   cmdAttack(p, targetId) {
     if (p.char.dead) return { ok: false, code: 'dead', reason: 'Você está caído.' };
+    if (p.casting) this.cancelCast(p, 'Conjuração interrompida: você atacou.');
+    if (typeof targetId === 'string' && targetId.startsWith('p')) {
+      // jogador só é alvo no duelo
+      const op = this.entityById(targetId);
+      if (!op || !this.duels.active(p, op)) return { ok: false, code: 'bad_target', reason: 'Só dá para atacar jogadores num duelo.' };
+      if (p.channel) this.cancelChannel(p, 'Interrompido: você atacou.');
+      p.targetId = targetId; p.dest = null; p.path = null;
+      return { ok: true };
+    }
     const m = this.monsters.get(targetId);
     if (!m || m.state === 'dead') return { ok: false, code: 'bad_target', reason: 'Alvo inválido.' };
     if (p.channel) this.cancelChannel(p, 'Interrompido: você atacou.');
@@ -259,7 +273,52 @@ export class Zone {
     return { ok: true, to: pt.to, x: pt.toX, z: pt.toZ };
   }
 
+  // Habilidade pedida pelo cliente: recarga global (globalCooldownMs, salvo habilidades com offGcd) e
+  // tempo de conjuração (castMs): parado, o alvo é conferido no começo e de novo no fim; mover-se,
+  // atacar, usar item ou outra habilidade interrompe. Sem castMs, sai na hora.
   cmdCast(p, skillId, targetId, x, z, allyId) {
+    const s = this.data.skills[skillId];
+    const gcd = this.f.skills?.globalCooldownMs ?? 1000;
+    if (p.casting) {
+      // trocar de ideia no meio da conjuração: a anterior não saiu (nada gasto) e a nova pode sair já
+      this.cancelCast(p, 'Conjuração interrompida: você usou outra habilidade.', 'switched');
+      p.gcdUntil = Math.min(p.gcdUntil || 0, this.now);
+    }
+    if (s && !s.offGcd && this.now < (p.gcdUntil || 0)) return { ok: false, code: 'gcd', reason: `Recarga global: ${((p.gcdUntil - this.now) / 1000).toFixed(1)} s.` };
+    if (s && s.castMs > 0) {
+      const chk = this.castNow(p, skillId, targetId, x, z, allyId, true);
+      if (!chk.ok) return chk;
+      p.casting = { skillId, targetId, x, z, allyId, startAt: this.now, endAt: this.now + s.castMs, sx: p.char.x, sz: p.char.z };
+      p.dest = null; p.path = null; p.char.chase = null;
+      if (!s.offGcd) p.gcdUntil = this.now + Math.max(gcd, s.castMs);
+      this.broadcast({ t: 'cast_start', eid: p.eid, skill: skillId, ms: s.castMs });
+      return { ok: true, casting: { skill: skillId, ms: s.castMs, name: s.name }, gcdMs: s.offGcd ? 0 : Math.max(gcd, s.castMs) };
+    }
+    const r = this.castNow(p, skillId, targetId, x, z, allyId);
+    if (r.ok && s && !s.offGcd) { p.gcdUntil = this.now + gcd; r.gcdMs = gcd; }
+    return r;
+  }
+
+  cancelCast(p, reason, code = 'interrupted') {
+    if (!p.casting) return;
+    const cs = p.casting;
+    p.casting = null;
+    p.gcdUntil = Math.min(p.gcdUntil || 0, this.now + 300); // interrompida: libera logo outra ação
+    this.send(p.char.id, { t: 'cast_end', ok: false, skill: cs.skillId, reason, code });
+    this.broadcast({ t: 'cast_cancel', eid: p.eid, skill: cs.skillId });
+  }
+
+  tickCast(p) {
+    const cs = p.casting;
+    if (p.char.dead) return this.cancelCast(p, 'Você caiu.');
+    if (Math.hypot(p.char.x - cs.sx, p.char.z - cs.sz) > 0.35) return this.cancelCast(p, 'Conjuração interrompida: você se moveu.');
+    if (this.now < cs.endAt) return;
+    p.casting = null;
+    const r = this.castNow(p, cs.skillId, cs.targetId, cs.x, cs.z, cs.allyId);
+    this.send(p.char.id, { t: 'cast_end', ok: !!r.ok, skill: cs.skillId, reason: r.ok ? undefined : r.reason, mp: r.mp, cooldownMs: r.cooldownMs });
+  }
+
+  castNow(p, skillId, targetId, x, z, allyId, dry = false) {
     const s = this.data.skills[skillId];
     const c = p.char;
     if (c.dead) return { ok: false, code: 'dead', reason: 'Você está caído.' };
@@ -279,6 +338,20 @@ export class Zone {
     const tol = this.f.movement.rangeTolerance;
     let target = null, ally = null;
     const needsEnemy = s.target === 'enemy' || ['charge'].includes(s.effect.kind);
+    if (needsEnemy && typeof targetId === 'string' && targetId.startsWith('p')) {
+      // duelo: habilidade de alvo único no oponente (só o dano; efeitos de controle não valem em duelo)
+      const op = this.entityById(targetId);
+      if (!op || !this.duels.active(p, op)) return { ok: false, code: 'bad_target', reason: 'Só dá para atacar jogadores num duelo.' };
+      const d = dist(c, op.char);
+      if (d > range + tol) return { ok: false, code: 'out_of_range', reason: `Alvo fora de alcance (${d.toFixed(1)} m; alcance ${range} m).` };
+      if (dry) return { ok: true, dry: true };
+      this.duels.attack(p, op, { def: s, rank }, skillId);
+      c.mp -= cost;
+      p.cooldowns[skillId] = this.now + s.cooldownMs;
+      p.targetId = op.eid;
+      this.broadcast({ t: 'cast', eid: p.eid, skill: skillId, target: op.eid });
+      return { ok: true, mp: Math.floor(c.mp), cooldownMs: s.cooldownMs, hits: 1 };
+    }
     if (needsEnemy) {
       target = this.monsters.get(targetId);
       if (!target || target.state === 'dead') return { ok: false, code: 'bad_target', reason: 'Alvo inválido.' };
@@ -299,6 +372,7 @@ export class Zone {
       if (!ally || !ally.char || ally.char.dead) return { ok: false, code: 'bad_target', reason: 'Aliado inválido.' };
       if (ally !== p && dist(c, ally.char) > range + tol) return { ok: false, code: 'out_of_range', reason: `Aliado fora de alcance (alcance ${range} m).` };
     }
+    if (dry) return { ok: true, dry: true };
     const res = executeSkill(this, p, s, rank, { target, x, z, ally });
     if (!res.ok) return res;
     c.mp -= cost;
@@ -312,11 +386,13 @@ export class Zone {
   cmdUseItem(p, instanceId) {
     const c = p.char;
     if (p.channel) this.cancelChannel(p, 'Interrompido: você usou um item.');
+    if (p.casting) this.cancelCast(p, 'Conjuração interrompida: você usou um item.');
     const it = c.items.get(instanceId);
     if (!it || it.loc !== 'bag') return { ok: false, code: 'not_in_bag', reason: 'Item não encontrado no seu inventário.' };
     const def = this.data.items[it.defId];
     if (def.kind !== 'consumable') return { ok: false, code: 'not_usable', reason: 'Este item não pode ser usado.' };
     if (c.dead) return { ok: false, code: 'dead', reason: 'Você está caído.' };
+    if ((def.level || 1) > c.level) return { ok: false, code: 'level', reason: `Nível ${def.level} exigido para usar ${def.name}. Seu nível atual é ${c.level}.` };
     if (this.now < p.potionReadyAt) return { ok: false, code: 'cooldown', reason: `Tônicos em recarga (${((p.potionReadyAt - this.now) / 1000).toFixed(1)} s).` };
     p.potionReadyAt = this.now + this.f.potions.sharedCooldownMs;
     if (def.use.healHp) c.hp = Math.min(p.stats.maxHp, c.hp + def.use.healHp);
@@ -500,6 +576,7 @@ export class Zone {
     this.lastDt = dtMs;
     const dt = dtMs / 1000;
     for (const p of this.players.values()) this.tickPlayer(p, dt);
+    this.duels.tick();
     for (const m of this.monsters.values()) this.tickMonster(m, dt);
     for (const [eid, e] of this.escorts) {
       const r = e.tick(dt);
@@ -553,6 +630,7 @@ export class Zone {
   tickPlayer(p, dt) {
     const c = p.char;
     if (p.channel) this.tickChannel(p);
+    if (p.casting) this.tickCast(p);
     if (c.dead) return;
     if (p.buffs.length) {
       const before = p.buffs.length;
@@ -563,9 +641,24 @@ export class Zone {
     if (p.shield && p.shield.until <= this.now) p.shield = null;
     const speed = this.f.movement.playerSpeed * (1 + (p.stats.moveSpeedPct || 0) / 100);
     const ox = c.x, oz = c.z;
-    if (p.stunUntil > this.now) { brake(c, dt, this.mv.decel * 2); return; } // atordoado (descarga do chefe)
+    if (p.stunUntil > this.now) { brake(c, dt, this.mv.decel * 2); if (p.casting) this.cancelCast(p, 'Conjuração interrompida: você foi atordoado.'); return; } // atordoado (descarga do chefe)
+    if (p.casting) { brake(c, dt, this.mv.decel * 2); return; } // conjurando: parado, sem ataque básico
     const opts = { accel: this.mv.accel, decel: this.mv.decel };
-    if (p.targetId) {
+    if (p.targetId && p.targetId.startsWith('p')) {
+      // duelo: persegue e golpeia o oponente
+      const op = this.entityById(p.targetId);
+      if (!op || op.char.dead || !this.duels.active(p, op)) { p.targetId = null; c.chase = null; brake(c, dt, this.mv.decel); }
+      else {
+        const range = p.stats.range;
+        const d = dist(c, op.char);
+        if (d > range) this.chase(c, op.char, Math.max(0.5, range - 0.3), speed, dt, opts);
+        else {
+          brake(c, dt, this.mv.decel * 1.5);
+          if (this.now >= p.nextAttackAt) { p.nextAttackAt = this.now + p.stats.attackIntervalMs; this.duels.attack(p, op); }
+        }
+        p.facing = { x: (op.char.x - c.x) / (d || 1), z: (op.char.z - c.z) / (d || 1) };
+      }
+    } else if (p.targetId) {
       const t = this.monsters.get(p.targetId);
       if (!t || t.state === 'dead') { p.targetId = null; c.chase = null; brake(c, dt, this.mv.decel); }
       else {
@@ -899,7 +992,7 @@ export class Zone {
     const ents = [];
     for (const p of this.players.values()) {
       const c = p.char;
-      ents.push({ id: p.eid, k: 'p', n: c.name, cls: c.classId, lvl: c.level, x: r2(c.x), z: r2(c.z), vx: r2(c.vx || 0), vz: r2(c.vz || 0), hp: Math.ceil(c.hp), mhp: p.stats.maxHp, dead: c.dead, tgt: p.targetId, w: p.weaponDefId ?? null, party: this.hooks.partyIdOf?.(c.id) ?? null, sh: p.shield ? Math.round(p.shield.amount) : 0, ttl: c.title ?? null });
+      ents.push({ id: p.eid, k: 'p', n: c.name, cls: c.classId, lvl: c.level, x: r2(c.x), z: r2(c.z), vx: r2(c.vx || 0), vz: r2(c.vz || 0), hp: Math.ceil(c.hp), mhp: p.stats.maxHp, dead: c.dead, tgt: p.targetId, w: p.weaponDefId ?? null, oh: p.offhandDefId ?? null, party: this.hooks.partyIdOf?.(c.id) ?? null, sh: p.shield ? Math.round(p.shield.amount) : 0, ttl: c.title ?? null, cl: c.clanTag ?? null });
     }
     for (const m of this.monsters.values()) {
       if (m.state === 'dead') continue;
@@ -920,7 +1013,7 @@ export class Zone {
       const px = r2(c.x), pz = r2(c.z), vx = r2(c.vx || 0), vz = r2(c.vz || 0);
       recs.push({
         id: p.eid, x: c.x, z: c.z, px, pz, vx, vz,
-        A: `"k":"p","n":${JSON.stringify(c.name)},"cls":"${c.classId}","lvl":${c.level},"mhp":${p.stats.maxHp},"w":${p.weaponDefId ? `"${p.weaponDefId}"` : 'null'},"party":${JSON.stringify(this.hooks.partyIdOf?.(c.id) ?? null)},"ttl":${JSON.stringify(c.title ?? null)}`,
+        A: `"k":"p","n":${JSON.stringify(c.name)},"cls":"${c.classId}","lvl":${c.level},"mhp":${p.stats.maxHp},"w":${p.weaponDefId ? `"${p.weaponDefId}"` : 'null'},"oh":${p.offhandDefId ? `"${p.offhandDefId}"` : 'null'},"party":${JSON.stringify(this.hooks.partyIdOf?.(c.id) ?? null)},"ttl":${JSON.stringify(c.title ?? null)},"cl":${JSON.stringify(c.clanTag ?? null)}`,
         P: `"x":${px},"z":${pz}`,
         V: `"vx":${vx},"vz":${vz}`,
         C: `"hp":${Math.ceil(c.hp)},"dead":${!!c.dead},"tgt":${p.targetId ? `"${p.targetId}"` : 'null'},"sh":${p.shield ? Math.round(p.shield.amount) : 0}`,

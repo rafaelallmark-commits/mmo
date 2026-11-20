@@ -76,7 +76,7 @@ test('refino: taxas conferem em 10.000 tentativas com RNG semeado', () => {
     log(`+${g} → +${g + 1}: ${rate.toFixed(2)}% (esperado ${f.chancePct[g]}%)`);
     assert.ok(Math.abs(rate - f.chancePct[g]) < 1.5, `taxa ${rate} longe de ${f.chancePct[g]}`);
   }
-  assert.equal(enhanceQuote(data.items.axe_1h_t9, 3, data), null, '+3 é o máximo');
+  assert.equal(enhanceQuote(data.items.axe_1h_t9, f.maxLevel, data), null, `+${f.maxLevel} é o máximo`);
 });
 
 test('ferreiro: sucesso sobe o grau; falha mantém o grau e consome ouro e materiais; depósito é da conta', async () => {
