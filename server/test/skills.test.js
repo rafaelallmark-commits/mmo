@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadGameData } from '../src/data.js';
-import { Store } from '../src/store.js';
+import { createStore } from '../src/db.js';
 import { Zone } from '../src/zone.js';
 import { makeRng } from '../src/rng.js';
 import { splitKillXp } from '../src/rules.js';
@@ -10,7 +10,7 @@ import { splitKillXp } from '../src/rules.js';
 const data = loadGameData();
 
 function setup(partyOf = () => null) {
-  const store = new Store(':memory:');
+  const store = createStore(':memory:');
   const acc = store.createAccount('t', 'senha');
   const sent = [];
   const zone = new Zone({ mapId: 'brejo_bombas', data, store, rng: makeRng(3), send: () => {}, broadcast: (m) => sent.push(m), hooks: { partyIdOf: partyOf } });

@@ -2,10 +2,11 @@
 //   node tools/conta.mjs --db cinzas.db --conta nome --papel gm|admin|player
 //   node tools/conta.mjs --db cinzas.db --conta nome --excluir
 //   node tools/conta.mjs --db cinzas.db --auditoria [--tipo gm] [--n 50]
-import { Store } from '../src/store.js';
+// --db (ou CINZAS_DB) aceita arquivo SQLite ou postgres://usuario:senha@host/banco.
+import { createStore } from '../src/db.js';
 
 const arg = (n, d) => { const i = process.argv.indexOf(`--${n}`); if (i === -1) return d; const v = process.argv[i + 1]; return v === undefined || v.startsWith('--') ? true : v; };
-const st = new Store(arg('db', process.env.CINZAS_DB ?? 'cinzas.db'));
+const st = createStore(arg('db', process.env.CINZAS_DB ?? 'cinzas.db'));
 try {
   if (arg('auditoria', false)) {
     for (const a of st.auditTail(Number(arg('n', 50)), arg('tipo', null) || null).reverse()) {

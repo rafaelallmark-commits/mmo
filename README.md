@@ -62,6 +62,8 @@ npm start
 
 O servidor ouve em `ws://0.0.0.0:7777` e grava em `server/cinzas.db`. Para parar: `Ctrl+C` (salva todos os personagens conectados).
 
+O SQLite (`cinzas.db`) é o banco de desenvolvimento. Em produção o banco é um **PostgreSQL central**, com backups (`pg_dump`) e as mesmas migrações versionadas: `CINZAS_DB='postgres://usuario:senha@host:5432/cinzas' npm start` (detalhes em [docs/08-operacao.md §8.10](docs/08-operacao.md#810-postgresql)).
+
 Variações:
 
 ```bash
@@ -120,7 +122,7 @@ Dentro de `server/`:
 npm test
 ```
 
-Roda os 37 testes: unitários (regras, equipamento, navegação, coerência dos dados, as 40 habilidades) e os **testes de aceitação dos Marcos 1, 2 e 3**, que sobem um servidor real numa porta aleatória com banco temporário e conectam clientes simulados pelo mesmo protocolo do Godot. O do Marco 3 inclui o refino conferido em 10.000 tentativas, o depósito da conta, a elite diária e **três grupos de bots** (5 com tanque e curadora, 3 sem tanque, 2 jogadores) vencendo o Custódio reagindo aos avisos, com uma queda de conexão no meio. Só um deles, com a narração:
+Roda os testes (no SQLite): unitários (regras, equipamento, navegação, coerência dos dados, as 40 habilidades, o contrato do banco) e os **testes de aceitação dos Marcos 1, 2 e 3**, que sobem um servidor real numa porta aleatória com banco temporário e conectam clientes simulados pelo mesmo protocolo do Godot. `npm run test:pg` roda a mesma suíte no PostgreSQL (sobe um servidor temporário e o apaga no fim; precisa dos binários do PostgreSQL instalados). O do Marco 3 inclui o refino conferido em 10.000 tentativas, o depósito da conta, a elite diária e **três grupos de bots** (5 com tanque e curadora, 3 sem tanque, 2 jogadores) vencendo o Custódio reagindo aos avisos, com uma queda de conexão no meio. Só um deles, com a narração:
 
 ```bash
 node --test --test-reporter=spec test/m3.test.js

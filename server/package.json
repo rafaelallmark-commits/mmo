@@ -12,6 +12,8 @@
     "dev": "node --disable-warning=ExperimentalWarning src/main.js --dev",
     "test": "node --disable-warning=ExperimentalWarning --test --test-reporter=spec test/*.test.js",
     "test:acceptance": "node --disable-warning=ExperimentalWarning --test --test-reporter=spec test/acceptance.test.js",
+    "test:pg": "node --disable-warning=ExperimentalWarning tools/test-pg.mjs",
+    "pg-temp": "node --disable-warning=ExperimentalWarning tools/pg-temp.mjs",
     "validate-data": "node --disable-warning=ExperimentalWarning tools/validate-data.js",
     "gen-docs": "node --disable-warning=ExperimentalWarning tools/gen-docs.js",
     "create-character": "node --disable-warning=ExperimentalWarning tools/create-character.js",
@@ -20,10 +22,12 @@
     "cenarios": "node --disable-warning=ExperimentalWarning tools/cenarios.mjs",
     "telemetria": "node --disable-warning=ExperimentalWarning tools/telemetria.mjs",
     "backup": "node --disable-warning=ExperimentalWarning tools/backup.mjs",
+    "sqlite-para-pg": "node --disable-warning=ExperimentalWarning tools/sqlite-para-pg.mjs",
     "contas": "node --disable-warning=ExperimentalWarning src/contas-main.js",
     "conta": "node --disable-warning=ExperimentalWarning tools/conta.mjs"
   },
   "dependencies": {
+    "pg": "8.23.1",
     "ws": "8.18.3"
   }
 }

@@ -2,9 +2,11 @@
 //
 //   node tools/carga.mjs --clientes 100 --duracao 60 [--aquecimento 15] [--mapa estrada_velha]
 //                        [--url ws://127.0.0.1:7777 --metricas http://127.0.0.1:9100] [--lag-ms 0]
-//                        [--saida relatorio.json] [--md docs/relatorio-carga.md]
+//                        [--db postgres://usuario:senha@host/banco] [--saida relatorio.json] [--md docs/relatorio-carga.md]
 //
 // Sem --url, sobe um servidor próprio (banco temporário, métricas numa porta livre) e o encerra no fim.
+// --db passa o banco para esse servidor (arquivo SQLite ou postgres://...; padrão: SQLite temporário).
+// Com PostgreSQL o relatório traz também quanto a ponte síncrona parou o laço de eventos.
 // Mede no servidor: duração do tick (p50/p95/p99/máx), ticks > 50 ms, CPU, memória e bytes enviados;
 // nos clientes: ida e volta do "ping" (p50/p95/p99), intervalo entre snapshots e banda recebida.
 import { spawn } from 'node:child_process';
@@ -13,6 +15,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
+import { isPostgresUrl, parsePgUrl } from '../src/store-pg.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 function arg(name, def) {
@@ -30,6 +33,8 @@ const RAMP = Number(arg('entradas-por-s', 20));
 const FULL = !!arg('completo', false); // snapshots completos (sem diferença/interesse), para comparar
 let URL = arg('url', null);
 let METRICS = arg('metricas', null);
+const DB = arg('db', null);
+const DB_LABEL = !DB ? 'SQLite (arquivo temporário)' : isPostgresUrl(DB) ? `PostgreSQL ${parsePgUrl(DB).label}` : `SQLite ${DB}`; // sem a senha
 const OUT = arg('saida', null);
 const MD = arg('md', null);
 const TAG = Math.random().toString(36).slice(2, 7);
@@ -37,12 +42,13 @@ const CLASSES = ['breaker', 'bastion', 'pikeman', 'warden', 'dawnshield', 'windw
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const pct = (arr, p) => { if (!arr.length) return 0; const a = [...arr].sort((x, y) => x - y); return a[Math.min(a.length - 1, Math.floor(p * a.length))]; };
 const r1 = (v) => Math.round(v * 10) / 10;
+const r2 = (v) => Math.round(v * 100) / 100;
 
 async function startOwnServer() {
   const dir = mkdtempSync(join(tmpdir(), 'cinzas-carga-'));
   const port = 7700 + Math.floor(Math.random() * 200);
   const mport = 9300 + Math.floor(Math.random() * 200);
-  const args = ['--disable-warning=ExperimentalWarning', join(here, '../src/main.js'), '--port', String(port), '--db', join(dir, 'carga.db'), '--metrics-port', String(mport)];
+  const args = ['--disable-warning=ExperimentalWarning', join(here, '../src/main.js'), '--port', String(port), '--db', DB ?? join(dir, 'carga.db'), '--metrics-port', String(mport)];
   if (LAG > 0) args.push('--lag-ms', String(LAG));
   const proc = spawn(process.execPath, args, { stdio: ['ignore', 'pipe', 'pipe'] });
   let out = '';
@@ -154,7 +160,7 @@ async function main() {
     URL = own.url;
     METRICS = own.metrics;
   }
-  console.log(`carga: ${N} clientes em ${URL} (${MAP}), aquecimento ${WARMUP}s, medição ${DURATION}s${LAG ? `, atraso ${LAG} ms` : ''}${FULL ? ', snapshots completos' : ''}`);
+  console.log(`carga: ${N} clientes em ${URL} (${MAP}), aquecimento ${WARMUP}s, medição ${DURATION}s${LAG ? `, atraso ${LAG} ms` : ''}${FULL ? ', snapshots completos' : ''}${own ? `, banco ${DB_LABEL}` : ''}`);
   const bots = [];
   const t0 = Date.now();
   for (let i = 0; i < N; i++) {
@@ -189,10 +195,12 @@ async function main() {
   const report = {
     data: new Date().toISOString(), clientes: N, conectados: joined.length, falhas: bots.filter((b) => b.failed).map((b) => b.failed).slice(0, 5),
     mapa: MAP, duracaoS: DURATION, atrasoArtificialMs: LAG, snapshots: FULL ? 'completos' : 'por diferença e interesse',
+    banco: own ? DB_LABEL : 'servidor externo',
     servidor: srv && {
       tickMs: { p50: r1(srv.tickMs.p50), p95: r1(srv.tickMs.p95), p99: r1(srv.tickMs.p99), max: r1(srv.tickMs.max), media: r1(srv.tickMs.mean), acima50ms: srv.tickMs.slow, amostras: srv.tickMs.n },
       cpuPct: r1(srv.cpuPct), rssMb: r1(srv.rssMb), jogadores: srv.players,
       kbEnviadosPorS: r1(srv.bytesOutPerS / 1024), kbSnapshotsPorS: r1(srv.snapBytesOutPerS / 1024), msgsRecebidasPorS: r1(srv.msgsInPerS),
+      ...(srv.db ? { banco: { chamadasPorS: r1(srv.db.callsPerS), msParadoPorS: r1(srv.db.waitMsPerS), chamadaMs: { media: r2(srv.db.meanMs), p50: r2(srv.db.p50Ms), p99: r2(srv.db.p99Ms), max: r2(srv.db.maxMs) }, chamadas: srv.db.calls } } : {}),
     },
     clientesMedidos: {
       pingMs: { p50: r1(pct(rtts, 0.5)), p95: r1(pct(rtts, 0.95)), p99: r1(pct(rtts, 0.99)), max: r1(pct(rtts, 1)), amostras: rtts.length },
@@ -216,15 +224,16 @@ function markdown(r) {
   const c = r.clientesMedidos;
   return `# Teste de carga — ${r.clientes} clientes (${r.data.slice(0, 10)})
 
-Comando: \`node tools/carga.mjs --clientes ${r.clientes} --duracao ${r.duracaoS}${r.atrasoArtificialMs ? ` --lag-ms ${r.atrasoArtificialMs}` : ''}\`
-(${r.conectados}/${r.clientes} conectados no mapa \`${r.mapa}\`, medição de ${r.duracaoS} s depois do aquecimento, snapshots ${r.snapshots}).
+Comando: \`node tools/carga.mjs --clientes ${r.clientes} --duracao ${r.duracaoS}${r.atrasoArtificialMs ? ` --lag-ms ${r.atrasoArtificialMs}` : ''}${r.banco.startsWith('PostgreSQL') ? ' --db postgres://…' : ''}\`
+(${r.conectados}/${r.clientes} conectados no mapa \`${r.mapa}\`, medição de ${r.duracaoS} s depois do aquecimento, snapshots ${r.snapshots}; banco: ${r.banco}).
 
 | Servidor | p50 | p95 | p99 | máx |
 |---|---|---|---|---|
 | Duração do tick (ms) | ${s.tickMs?.p50} | ${s.tickMs?.p95} | ${s.tickMs?.p99} | ${s.tickMs?.max} |
 
 Ticks acima de 50 ms: **${s.tickMs?.acima50ms}** de ${s.tickMs?.amostras}. CPU do processo: ${s.cpuPct}%. Memória: ${s.rssMb} MB.
-Banda enviada: ${s.kbEnviadosPorS} KB/s no total (${s.kbSnapshotsPorS} KB/s de snapshots).
+Banda enviada: ${s.kbEnviadosPorS} KB/s no total (${s.kbSnapshotsPorS} KB/s de snapshots).${s.banco ? `
+Ponte síncrona do banco: ${s.banco.chamadasPorS} chamadas/s, laço de eventos parado ${s.banco.msParadoPorS} ms por segundo; cada chamada: média ${s.banco.chamadaMs.media} ms, p50 ${s.banco.chamadaMs.p50}, p99 ${s.banco.chamadaMs.p99}, máx ${s.banco.chamadaMs.max} ms (${s.banco.chamadas} chamadas na medição).` : ''}
 
 | Clientes | p50 | p95 | p99 | máx |
 |---|---|---|---|---|
