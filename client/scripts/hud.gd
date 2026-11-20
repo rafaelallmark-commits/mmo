@@ -150,16 +150,17 @@ func _build_hotbar(root: Control) -> void:
 	var p := PanelContainer.new()
 	p.add_theme_stylebox_override("panel", Theme_.panel_style(0.85))
 	p.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	p.position = Vector2(-364, -84)
+	# 8 botões de 96 px: a barra fica um pouco à direita do centro para não encostar no chat (canto inferior esquerdo)
+	p.position = Vector2(-320, -84)
 	root.add_child(p)
 	hotbar = HBoxContainer.new()
 	p.add_child(hotbar)
 	for i in HOT_SLOTS:
 		var b := Button.new()
-		b.custom_minimum_size = Vector2(87, 46)  # 8 botões na largura dos 7 de antes
+		b.custom_minimum_size = Vector2(96, 46)
 		b.focus_mode = Control.FOCUS_NONE
 		b.autowrap_mode = TextServer.AUTOWRAP_WORD
-		b.add_theme_font_size_override("font_size", 11)
+		b.add_theme_font_size_override("font_size", 10)
 		b.set_meta("sfx_silent", true)   # sem clique: a habilidade ou o tônico já soam
 		var idx := i
 		b.pressed.connect(func(): _hotkey(idx))
