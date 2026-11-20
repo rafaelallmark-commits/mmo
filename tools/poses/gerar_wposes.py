@@ -13,6 +13,7 @@ CFG = {
  'spear_2h': P('spear_2h', tilt=0.4),
  'staff_2h': P('staff_2h', tilt=0.2),
  'axe_2h': P('axe_2h', tilt=0.15, roll=-1.571),
+ 'sword_2h': P('sword_2h', tilt=0.15, roll=-1.571),
  'javelin': P('javelin', tilt=0.3),
  'bow': P('bow', side='l', wfam='bow'),
  'wand': P('wand', tilt=1.3),
@@ -46,8 +47,8 @@ SPEC = {
   'run': dict(p=(-0.13,0.0,0.2), a=(-0.1,0.45,-0.89), pole=(0,-1,0.6)),
   'attack': [
     dict(t=0.35, p=(-0.12,0.18,0.02), a=(-0.15,0.45,-0.88), yaw=-0.3, lean=-0.1, pole=(-0.8,-0.3,0.3), two=-0.28),
-    dict(t=0.52, p=(0.0,-0.4,0.36), a=(0.05,0.15,0.99), yaw=0.15, lean=0.25, pole=(-0.3,-1,-0.4), two=-0.28),
-    dict(t=0.7, p=(0.04,-0.5,0.27), a=(0.05,-0.5,0.86), yaw=0.2, lean=0.25, pole=(-0.3,-1,-0.4), two=-0.28),
+    dict(t=0.52, p=(0.0,-0.08,0.44), a=(0.05,-0.3,0.95), yaw=0.15, lean=0.2, pole=(-0.3,-1,-0.6), two=-0.11, extra={'slide':-0.02}),
+    dict(t=0.7, p=(0.03,-0.36,0.28), a=(0.05,-0.9,0.42), yaw=0.2, lean=0.3, pole=(-0.3,-1,-0.4), two=-0.11, extra={'slide':-0.02}),
   ]},
  'javelin': {
   'relaxed': dict(p=(-0.24,-0.47,0.1), a=(0,0.55,0.84)),
@@ -91,6 +92,10 @@ SPEC = {
     dict(t=0.75, p=(-0.12,-0.21,0.37), a=(0,0.7,0.71), yaw=0.1, lean=0.05, pole=(-0.8,0.3,-0.3)),
   ]},
 }
+import copy
+SPEC['sword_2h'] = copy.deepcopy(SPEC['axe_2h'])
+SPEC['sword_2h']['guard']['two'] = -0.11
+SPEC['sword_2h']['attack'][0]['two'] = -0.11
 out=["const WPOSES := {"]
 for fam,sp in SPEC.items():
     c=CFG[fam]; sgn=1 if c['side']=='l' else -1

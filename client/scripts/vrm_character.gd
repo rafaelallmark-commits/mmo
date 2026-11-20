@@ -660,8 +660,8 @@ const WPOSES := {
 		"run": {"p": Vector3(-0.130, 0.000, 0.200), "a": Vector3(-0.100, 0.449, -0.888), "e": Vector3(-0.091, 0.885, 0.457), "pole": Vector3(0.000, -1.000, 0.600)},
 		"attack": [
 			{"t": 0.35, "p": Vector3(-0.120, 0.180, 0.020), "a": Vector3(-0.150, 0.450, -0.880), "e": Vector3(0.786, 0.595, 0.170), "pole": Vector3(-0.800, -0.300, 0.300), "yaw": -0.300, "lean": -0.100, "two": -0.280},
-			{"t": 0.52, "p": Vector3(0.000, -0.400, 0.360), "a": Vector3(0.050, 0.150, 0.987), "e": Vector3(0.508, -0.855, 0.104), "pole": Vector3(-0.300, -1.000, -0.400), "yaw": 0.150, "lean": 0.250, "two": -0.280},
-			{"t": 0.70, "p": Vector3(0.040, -0.500, 0.270), "a": Vector3(0.050, -0.502, 0.863), "e": Vector3(0.539, -0.714, -0.447), "pole": Vector3(-0.300, -1.000, -0.400), "yaw": 0.200, "lean": 0.250, "two": -0.280},
+			{"t": 0.52, "p": Vector3(0.000, -0.080, 0.440), "a": Vector3(0.050, -0.301, 0.952), "e": Vector3(0.493, 0.837, 0.238), "pole": Vector3(-0.300, -1.000, -0.600), "yaw": 0.150, "lean": 0.200, "two": -0.110, "slide": -0.020},
+			{"t": 0.70, "p": Vector3(0.030, -0.360, 0.280), "a": Vector3(0.050, -0.905, 0.422), "e": Vector3(0.827, 0.275, 0.491), "pole": Vector3(-0.300, -1.000, -0.400), "yaw": 0.200, "lean": 0.300, "two": -0.110, "slide": -0.020},
 		],
 	},
 	"javelin": {
@@ -707,6 +707,17 @@ const WPOSES := {
 			{"t": 0.38, "p": Vector3(-0.160, 0.220, 0.300), "a": Vector3(0.000, 0.751, 0.661), "e": Vector3(0.778, 0.415, -0.471), "pole": Vector3(-1.000, 0.600, -0.200), "yaw": -0.100},
 			{"t": 0.55, "p": Vector3(-0.120, -0.200, 0.380), "a": Vector3(0.000, 0.702, 0.712), "e": Vector3(0.781, 0.444, -0.438), "pole": Vector3(-0.800, 0.300, -0.300), "yaw": 0.100, "lean": 0.060},
 			{"t": 0.75, "p": Vector3(-0.120, -0.210, 0.370), "a": Vector3(0.000, 0.702, 0.712), "e": Vector3(0.779, 0.446, -0.440), "pole": Vector3(-0.800, 0.300, -0.300), "yaw": 0.100, "lean": 0.050},
+		],
+	},
+	"sword_2h": {
+		"relaxed": {"p": Vector3(-0.130, 0.000, 0.200), "a": Vector3(-0.100, 0.449, -0.888), "e": Vector3(-0.091, 0.885, 0.457), "pole": Vector3(0.000, -1.000, 0.600)},
+		"walk": {"p": Vector3(-0.130, 0.000, 0.200), "a": Vector3(-0.100, 0.449, -0.888), "e": Vector3(-0.091, 0.885, 0.457), "pole": Vector3(0.000, -1.000, 0.600)},
+		"guard": {"p": Vector3(-0.034, -0.194, 0.395), "a": Vector3(-0.121, 0.884, 0.452), "e": Vector3(0.469, -0.350, 0.811), "pole": Vector3(-0.500, -1.000, -0.350), "yaw": -0.200, "two": -0.110},
+		"run": {"p": Vector3(-0.130, 0.000, 0.200), "a": Vector3(-0.100, 0.449, -0.888), "e": Vector3(-0.091, 0.885, 0.457), "pole": Vector3(0.000, -1.000, 0.600)},
+		"attack": [
+			{"t": 0.35, "p": Vector3(-0.120, 0.180, 0.020), "a": Vector3(-0.150, 0.450, -0.880), "e": Vector3(0.786, 0.595, 0.170), "pole": Vector3(-0.800, -0.300, 0.300), "yaw": -0.300, "lean": -0.100, "two": -0.110},
+			{"t": 0.52, "p": Vector3(0.000, -0.080, 0.440), "a": Vector3(0.050, -0.301, 0.952), "e": Vector3(0.493, 0.837, 0.238), "pole": Vector3(-0.300, -1.000, -0.600), "yaw": 0.150, "lean": 0.200, "two": -0.110, "slide": -0.020},
+			{"t": 0.70, "p": Vector3(0.030, -0.360, 0.280), "a": Vector3(0.050, -0.905, 0.422), "e": Vector3(0.827, 0.275, 0.491), "pole": Vector3(-0.300, -1.000, -0.400), "yaw": 0.200, "lean": 0.300, "two": -0.110, "slide": -0.020},
 		],
 	},
 }
@@ -1298,17 +1309,21 @@ func _pose(delta: float) -> void:
 	# ---- camada da arma: a mão vai até onde a arma deve estar (IK) ----
 	var off_spec: Array = []
 	var two_rel := -999.0
+	var slide_now := _slide
 	_string_pt = Vector3.INF
 	if weapon_mesh and not wpd.is_empty():
 		_s0 = _shoulder_ref()
 		var tgt := _wpose_blend(wpd, sw, wside)
 		if not ik_keys.is_empty():
 			tgt = _attack_wpose(ik_keys, atk, tgt)
+		slide_now = float(tgt.get("slide", _slide))
+		if grip_node and absf(slide_now - _slide) > 1e-4:
+			grip_node.position = Vector3(0, -slide_now, 0)
 		_ik_weapon(wside, tgt)
 		off_spec = tgt.get("off", [])
 		two_rel = float(tgt.get("two", -999.0))
 	# ---- mão livre: segunda mão no cabo, corda do arco ou pose de morador ----
-	var two := (_slide + two_rel) if two_rel > -900.0 else _two_point(1)
+	var two := (slide_now + two_rel) if two_rel > -900.0 else _two_point(1)
 	if _two_w > 0.01 and two >= -0.5:
 		var wp := _weapon_point_w(two)
 		if not wp.is_empty():
@@ -1327,10 +1342,10 @@ func _pose(delta: float) -> void:
 	if string_parts.size() == 2:
 		_place_string()
 
-## Família da tabela de poses da arma.
+## Família da tabela de poses da arma (entrada própria primeiro, senão a da família parecida).
 func _wpose_family() -> String:
 	var f := weapon_family
-	if STANCE_ALIAS.has(f):
+	if not WPOSES.has(f) and STANCE_ALIAS.has(f):
 		f = STANCE_ALIAS[f]
 	return f
 
@@ -1386,7 +1401,7 @@ func _wpose_blend(wpd: Dictionary, sw: Array, wside: String) -> Dictionary:
 		tpole += (ps["pole"] as Vector3) * wgt
 		wsum += wgt
 	wsum = maxf(wsum, 1e-4)
-	var out := {"p": _s0 + tp / wsum * _arm_k, "a": ta.normalized(), "e": te.normalized(), "pole": tpole.normalized()}
+	var out := {"p": _s0 + tp / wsum * _arm_k, "a": ta.normalized(), "e": te.normalized(), "pole": tpole.normalized(), "slide": _slide}
 	var gd: Dictionary = wpd["guard"]
 	if gd.has("two"):
 		out["two"] = float(gd["two"])
@@ -1440,6 +1455,8 @@ func _attack_wpose(keys: Array, t: float, base: Dictionary) -> Dictionary:
 ## Chave do golpe no espaço do personagem (mão livre resolvida: explícita ou na corda).
 func _key_root(key: Dictionary, base: Dictionary) -> Dictionary:
 	var out := {"p": _s0 + (key["p"] as Vector3) * _arm_k, "a": key["a"], "e": key["e"], "pole": key["pole"]}
+	# ponto do cabo na mão nesta chave (a mão de cima desliza até a de baixo no golpe)
+	out["slide"] = float(key["slide"]) if key.has("slide") else float(base.get("slide", _slide))
 	if key.has("two"):
 		out["two"] = float(key["two"])
 	elif base.has("two"):
@@ -1461,6 +1478,7 @@ func _mix_wpose(a: Dictionary, b: Dictionary, f: float) -> Dictionary:
 		"a": _nlerp(a["a"], b["a"], f),
 		"e": _nlerp(a["e"], b["e"], f),
 		"pole": _nlerp(a["pole"], b["pole"], f),
+		"slide": lerpf(float(a.get("slide", _slide)), float(b.get("slide", _slide)), f),
 	}
 	if a.has("two") and b.has("two"):
 		out["two"] = lerpf(float(a["two"]), float(b["two"]), f)
