@@ -35,7 +35,7 @@ Como o jogador se move entre telas, painéis e mapas. Este documento manda: o cl
 | **Personagens** | até 4 cartões (nome, classe, nível, mapa); personagem selecionado em 3D no centro, girando | Jogar → Carregando; Criar novo → Criação; Voltar → Entrar |
 | **Criação** | 8 classes em dois grupos (Âmbar / Nacre), papel e armas da classe, prévia 3D muda ao escolher, nome | Criar → Personagens; Voltar → Personagens |
 | **Carregando** | nome do mapa, dica de jogo; aparece ao entrar no mundo e em cada troca de mapa | → Mundo |
-| **Opções** | sensibilidade da câmera, mostrar nomes, escala da interface; salvo em `user://opcoes.cfg` | Fechar → tela anterior |
+| **Opções** | sensibilidade da câmera, mostrar nomes, escala da interface (salvos em `user://opcoes.cfg`); volume geral, da música e dos efeitos (salvos em `user://settings.cfg`) | Fechar → tela anterior |
 
 ## 7.2 Dentro do jogo: camadas
 
@@ -96,6 +96,7 @@ Da mais baixa para a mais alta. Uma camada de cima bloqueia o clique nas de baix
 - **Cores**: saturadas, mas dentro da paleta de ferrugem e nácar (céu do amanhecer de violeta para pêssego, chão ocre, verde-oliva); vermelho reservado para perigo e requisitos não atendidos.
 - **Cenário**: relevo suave com colinas além da borda e cordilheira no horizonte; estradas de terra (ruas calçadas nas cidades, trilhos na Oficina); grama que balança ao vento, flores e pedrinhas; árvores, pedras, arbustos, juncos, cristais e engrenagens desenhados exatamente onde o servidor tem colisão (`data/maps.json`, gerado por `npm run gen-scenery`); lagoa com vitórias-régias, leito seco escavado, ruínas da estação com o sino rachado, casa das bombas com chaminé fumegando, esteira da oficina; acampamento com fogueira (luz tremulante e brasas), barraca e bandeira em cada posto de guarda; cidades com muralha, casas e monumento na praça; portais em arco com véu de luz; pólen no ar. Céu com nuvens e névoa por mapa (amanhecer na Estrada, neblina esverdeada no Brejo, fumaça alaranjada na Oficina).
 - **Nada esconde o personagem**: copas, casas e torres entre a câmera e quem joga ficam vazadas.
+- **Som e música** (originais, sintetizados por `tools/audio/gerar_sons.py` e tocados por `client/scripts/audio.gd`): sinos, sopros e metal percutido, sem orquestra. A música é composta na hora a partir de notas pré-gravadas — sinos de carrilhão num modo de Ré, frases de flauta de madeira, bigorna, tanque e gongo — sobre um bordão em laço de cada clima: abertura (título), cidade (calma), caça (vento e sinos esparsos; cada mapa com seu modo, ecos nas Galerias, bigorna distante na Oficina), combate (sinos graves em ostinato e percussão, até ~6 s depois da última luta), calabouço e chefe, com crossfade entre eles. O motivo da abertura — o **primeiro toque** (um sino grave) e o **segundo toque** (duas batidas mais agudas) — volta na Última Eclusa como aviso de perigo. No mundo, cada som vem do lado e da distância de onde acontece (ouvinte logo acima do personagem, virado como a câmera); os passos seguem a passada da animação, em terra ou pedra conforme o mapa, e só de quem está perto. Cliques, painéis abrindo e fechando, erros, saque, tônicos, missão concluída, refino e a fanfarra de sinos do nível novo também soam. Volumes em **Opções**.
 
 | | |
 |---|---|
@@ -116,7 +117,7 @@ Da mais baixa para a mais alta. Uma camada de cima bloqueia o clique nas de baix
 ## 7.7 Combate e chefes na tela
 
 - Cada habilidade tem efeito próprio: cortes em arco, flechas e bolas de energia (também nos ataques básicos à distância), leques, faixas, áreas no chão, colunas de cura, bolhas de escudo e espirais de enfraquecimento (`client/scripts/vfx.gd`).
-- **Avisos de perigo** vêm do servidor (`warn`): anel âmbar diante da válvula que vai ventilar, linhas vermelhas no piso antes da descarga, círculos que enchem antes de explodir.
+- **Avisos de perigo** vêm do servidor (`warn`): anel âmbar diante da válvula que vai ventilar, linhas vermelhas no piso antes da descarga, círculos que enchem antes de explodir. E soam: o primeiro toque (sino grave) e o assobio de vapor crescendo na válvula que vai ventilar, o segundo toque (duas batidas) antes das linhas; na fase 3 as comportas rangem e o apito da eclusa dispara. A música muda para a do chefe quando a luta começa.
 - No calabouço, o painel do chefe (alto da tela) diz a fase, a vida e o que fazer agora; as comportas descem de verdade na câmara e o alarme pisca na fase 3.
 
 | | |
