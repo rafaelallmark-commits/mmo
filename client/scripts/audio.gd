@@ -27,6 +27,8 @@ const HEAR_DISTANCE := 48.0           # além disso, sons do mundo nem tocam
 const POOL_UI := 10
 const POOL_WORLD := 28
 const POOL_NOTES := 14
+const POOL_DRONES := 3                # o atual, o que está saindo e um livre (trocas rápidas de clima)
+const SILENT_DB := -80.0
 
 ## nome: [volume dB, variação de tom (±), intervalo mínimo entre repetições (s), variantes, vozes ao mesmo tempo]
 const SOUNDS := {
@@ -157,8 +159,9 @@ var _phrase: Array = []
 var _phrase_t := 0
 var _ost: Array = []
 var _queue: Array = []          # [colcheia, caminho, dB, tom]: notas agendadas (ecos, motivo)
-var _drone_on := 0
+var _drone: AudioStreamPlayer = null   # bordão do clima atual
 var _drone_name := ""
+var _dirty := false             # volumes mudaram e ainda não foram salvos
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -169,16 +172,18 @@ func _ready() -> void:
 		_world.append(_player(true, "SFX"))
 	for i in POOL_NOTES:
 		_notes.append(_player(false, "Music"))
-	for i in 2:
+	for i in POOL_DRONES:
 		_drones.append(_player(false, "Music"))
 	load_settings()
 	get_tree().node_added.connect(_on_node_added)
 
-## Ao fechar o jogo: para tudo e dá ao mixer um instante para soltar os sons que estavam tocando
-## (o AudioServer libera as reproduções na thread de áudio; sem a espera o Godot acusa vazamento).
-## Os filhos saem da árvore antes do pai e já pararam sozinhos, então a espera vale sempre que
-## algum som foi carregado nesta sessão.
+## Ao fechar o jogo: salva volumes ainda não salvos (ex.: janela fechada com Opções aberta), para tudo e
+## dá ao mixer um instante para soltar os sons que estavam tocando (o AudioServer libera as reproduções
+## na thread de áudio; sem a espera o Godot acusa vazamento). Os filhos saem da árvore antes do pai e
+## já pararam sozinhos, então a espera vale sempre que algum som foi carregado nesta sessão.
 func _exit_tree() -> void:
+	if _dirty:
+		save_settings()
 	for pool in [_ui, _world, _notes, _drones]:
 		for p in pool:
 			p.stop()
@@ -187,10 +192,10 @@ func _exit_tree() -> void:
 
 # ---------------- efeitos ----------------
 ## Toca um efeito. world_pos (Vector3) = no mundo 3D; null = direto, sem posição.
-func play(name: String, world_pos = null, volume_db := 0.0, pitch := 1.0) -> void:
-	var d: Array = SOUNDS.get(name, DEFAULT_SOUND)
+func play(snd: String, world_pos = null, volume_db := 0.0, pitch := 1.0) -> void:
+	var d: Array = SOUNDS.get(snd, DEFAULT_SOUND)
 	var now := Time.get_ticks_msec()
-	if now - int(_last.get(name, -1000000)) < int(float(d[2]) * 1000.0):
+	if now - int(_last.get(snd, -1000000)) < int(float(d[2]) * 1000.0):
 		return
 	var at_world := world_pos is Vector3
 	var wp := Vector3.ZERO
@@ -199,29 +204,29 @@ func play(name: String, world_pos = null, volume_db := 0.0, pitch := 1.0) -> voi
 		if _listener_on and wp.distance_to(listener_pos) > HEAR_DISTANCE:
 			return
 	var pool: Array = _world if at_world else _ui
-	if _busy(pool, name) >= int(d[4]):
+	if _busy(pool, snd) >= int(d[4]):
 		return
-	var s := _sfx_stream(name, int(d[3]))
+	var s := _sfx_stream(snd, int(d[3]))
 	if s == null:
 		return
-	_last[name] = now
+	_last[snd] = now
 	var p = _pick(pool, "world" if at_world else "ui")
 	p.stop()
 	p.stream = s
 	p.volume_db = float(d[0]) + volume_db
 	p.pitch_scale = maxf(0.05, pitch * (1.0 + randf_range(-float(d[1]), float(d[1]))))
-	p.set_meta("snd", name)
+	p.set_meta("snd", snd)
 	if at_world:
 		(p as AudioStreamPlayer3D).global_position = wp
 	p.play()
 
 ## Como play(), mas daqui a `delay` segundos (ex.: o impacto logo depois do golpe cortar o ar).
-func play_later(delay: float, name: String, world_pos = null, volume_db := 0.0, pitch := 1.0) -> void:
-	_later.append([Time.get_ticks_msec() + int(delay * 1000.0), name, world_pos, volume_db, pitch])
+func play_later(delay: float, snd: String, world_pos = null, volume_db := 0.0, pitch := 1.0) -> void:
+	_later.append([Time.get_ticks_msec() + int(delay * 1000.0), snd, world_pos, volume_db, pitch])
 
 ## Som de interface (sem posição).
-func ui(name: String, volume_db := 0.0) -> void:
-	play(name, null, volume_db)
+func ui(snd: String, volume_db := 0.0) -> void:
+	play(snd, null, volume_db)
 
 ## Avisos de perigo do chefe (ouvidos por todos na câmara, sem posição).
 func warn(kind: String) -> void:
@@ -249,6 +254,7 @@ func set_zone(map_id: String) -> void:
 	_zone = map_id
 	_base = String(ZONES.get(map_id, {}).get("base", "explore")) if map_id != "" else ""
 	_boss = false
+	_boss_phase = 1
 	_combat_until = 0
 	_mood = "-"   # reaplica o clima: o sabor da zona pode ter mudado
 	if _reverb:
@@ -370,7 +376,9 @@ func _tick() -> void:
 	if _mood == "boss" and _boss_phase >= 3 and s == 0 and bar % 2 == 0:
 		play("alarm_pulse", null, -4.0)
 
-## Primeiro toque (um sino grave) e, meio compasso depois, o segundo toque (duas batidas mais agudas).
+## Primeiro toque (um sino grave) e depois o segundo toque (duas batidas mais agudas): na abertura,
+## com os próprios sinos de aviso, um compasso e meio depois (quando o primeiro já se apagou); no
+## calabouço e no chefe, baixinho nos sinos da música, meio compasso depois.
 func _motif(kind: String) -> void:
 	match kind:
 		"intro":
@@ -467,28 +475,51 @@ func _note_offs() -> void:
 		if off > 0 and now >= off:
 			p.set_meta("off", 0)
 			if p.playing:
-				_fade(p, -50.0, 0.18, true)
+				_fade(p, SILENT_DB, 0.18, true)
 
-## Troca o bordão com crossfade (o mesmo bordão continua tocando; só o volume se ajusta).
-func _fade_drone(name: String) -> void:
-	if name == _drone_name and name != "":
-		_fade(_drones[_drone_on], float(_cfg.get("drone_db", -14.0)), 2.0)
+## Troca o bordão com crossfade de potência constante: o atual desce enquanto o novo sobe e a soma
+## fica no mesmo volume, sem buraco no meio. Mesmo bordão: só o volume se ajusta. Um bordão que ainda
+## está saindo de uma troca recente (ex.: combate ↔ caça) volta a subir de onde está, sem recomeçar;
+## um novo começa num ponto qualquer do laço, num canal livre (ou no que já está mais baixo).
+func _fade_drone(drone: String) -> void:
+	var target := float(_cfg.get("drone_db", -14.0))
+	if drone == _drone_name and drone != "" and _drone != null:
+		_fade(_drone, target, 2.0)
 		return
-	_fade(_drones[_drone_on], -60.0, 3.0, true)
-	_drone_name = name
-	if name == "":
+	if _drone != null:
+		_fade(_drone, SILENT_DB, 3.0, true)
+	_drone = null
+	_drone_name = drone
+	if drone == "":
 		return
-	var s := _load(MUSIC_DIR + name + ".wav")
+	var s := _load(MUSIC_DIR + drone + ".wav")
 	if s == null:
 		return
 	_ensure_loop(s)
-	_drone_on = 1 - _drone_on
-	var p: AudioStreamPlayer = _drones[_drone_on]
-	_kill_tween(p)
-	p.stream = s
-	p.volume_db = -60.0
-	p.play(randf() * 4.0)
-	_fade(p, float(_cfg.get("drone_db", -14.0)), 3.0)
+	var p: AudioStreamPlayer = null
+	for d in _drones:
+		if d.playing and d.stream == s:
+			p = d
+			break
+	if p == null:
+		p = _quietest(_drones)
+		_kill_tween(p)
+		p.stop()
+		p.stream = s
+		p.volume_db = SILENT_DB
+		p.play(randf() * 4.0)
+	_drone = p
+	_fade(p, target, 3.0)
+
+## Canal livre do grupo ou, se todos estiverem tocando, o mais baixo (o que já quase sumiu).
+func _quietest(pool: Array) -> AudioStreamPlayer:
+	var best: AudioStreamPlayer = null
+	for p in pool:
+		if not p.playing:
+			return p
+		if best == null or p.volume_db < best.volume_db:
+			best = p
+	return best
 
 ## Os bordões já vêm com o ponto de laço no WAV; se o importador não o leu, liga o laço aqui.
 func _ensure_loop(s: AudioStream) -> void:
@@ -498,13 +529,22 @@ func _ensure_loop(s: AudioStream) -> void:
 		w.loop_begin = 0
 		w.loop_end = int(round(w.get_length() * float(w.mix_rate)))
 
+## Leva o volume do canal até `db` em `time` s interpolando a potência (curva seno²), não os dB: dois
+## canais que se cruzam com o mesmo tempo somam sempre a mesma potência (crossfade sem buraco).
+## db <= -60 é silêncio; stop_after para o canal no fim.
 func _fade(p: AudioStreamPlayer, db: float, time: float, stop_after := false) -> void:
 	_kill_tween(p)
+	var a := db_to_linear(p.volume_db)
+	var b := 0.0 if db <= -60.0 else db_to_linear(db)
 	var tw := create_tween()
-	tw.tween_property(p, "volume_db", db, time)
+	tw.tween_method(_set_power.bind(p, a * a, b * b), 0.0, 1.0, time)
 	if stop_after:
 		tw.tween_callback(p.stop)
 	p.set_meta("tw", tw)
+
+func _set_power(u: float, p: AudioStreamPlayer, p0: float, p1: float) -> void:
+	var w := sin(u * PI * 0.5)
+	p.volume_db = linear_to_db(sqrt(maxf(1e-8, lerpf(p0, p1, w * w))))
 
 func _kill_tween(p: Node) -> void:
 	if not p.has_meta("tw"):
@@ -518,6 +558,7 @@ func _kill_tween(p: Node) -> void:
 func set_volume(kind: String, v: float) -> void:
 	if volumes.has(kind):
 		volumes[kind] = clampf(v, 0.0, 1.0)
+		_dirty = true
 		_apply_volumes()
 
 func get_volume(kind: String) -> float:
@@ -535,7 +576,8 @@ func save_settings() -> void:
 	cfg.load(SETTINGS_PATH)   # preserva outras seções, se houver
 	for k in volumes.keys():
 		cfg.set_value("som", k, volumes[k])
-	cfg.save(SETTINGS_PATH)
+	if cfg.save(SETTINGS_PATH) == OK:
+		_dirty = false
 
 ## Curva quadrática: o meio do controle soa como "metade do volume".
 func _apply_volumes() -> void:
@@ -612,19 +654,19 @@ func _pick(pool: Array, key: String):
 	_next[key] = (start + 1) % n
 	return pool[start]
 
-func _busy(pool: Array, name: String) -> int:
+func _busy(pool: Array, snd: String) -> int:
 	var c := 0
 	for p in pool:
-		if p.playing and String(p.get_meta("snd", "")) == name:
+		if p.playing and String(p.get_meta("snd", "")) == snd:
 			c += 1
 	return c
 
-func _sfx_stream(name: String, variants: int) -> AudioStream:
-	var file := name
+func _sfx_stream(snd: String, variants: int) -> AudioStream:
+	var file := snd
 	if variants > 1:
 		var k := randi() % variants
 		if k > 0:
-			file = "%s_%d" % [name, k + 1]
+			file = "%s_%d" % [snd, k + 1]
 	return _load(SFX_DIR + file + ".wav")
 
 func _load(path: String) -> AudioStream:

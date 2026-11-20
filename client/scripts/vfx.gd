@@ -115,21 +115,21 @@ func _swing_sound(att: String, at: Vector3) -> void:
 
 ## Impacto: lâmina, contusão, flecha, magia ou mordida, conforme quem bate.
 func _impact_sound(att: String, at: Vector3, magic: bool, crit: bool, delay := 0.0) -> void:
-	var name := "hit_blunt"
+	var snd := "hit_blunt"
 	if magic or att == "m_spirit":
-		name = "spell_impact"
+		snd = "spell_impact"
 	elif att in BLADES:
-		name = "hit_blade"
+		snd = "hit_blade"
 	elif att in ["bow", "javelin"]:
-		name = "arrow_hit"
+		snd = "arrow_hit"
 	elif att == "m_beast":
-		name = "hit_flesh"
+		snd = "hit_flesh"
 	var vol := 3.0 if crit else 0.0
 	var pitch := 0.9 if crit else 1.0
 	if delay > 0.0:
-		Sfx.play_later(delay, name, at, vol, pitch)
+		Sfx.play_later(delay, snd, at, vol, pitch)
 	else:
-		Sfx.play(name, at, vol, pitch)
+		Sfx.play(snd, at, vol, pitch)
 
 # ---------------- primitivas ----------------
 ## Corte em arco (meia-lua) na frente de quem bate.

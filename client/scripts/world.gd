@@ -347,6 +347,9 @@ func _spawn_entity(d: Dictionary) -> Dictionary:
 func _sound_profile(d: Dictionary) -> Dictionary:
 	if d["k"] == "p":
 		return {"fam": "player", "step": _step_surface, "step_pitch": 1.0, "step_db": 0.0, "voice": 1.0}
+	if d["k"] != "m":
+		# outras entidades do servidor (objetos que andam ou apanham): sem passos nem voz
+		return {"fam": "object", "step": "", "step_pitch": 1.0, "step_db": 0.0, "voice": 1.0}
 	var md: Dictionary = main.defs.get("monsters", {}).get(d.get("def", ""), {})
 	var fam: String = md.get("family", "beast")
 	var rank: String = md.get("rank", "normal")
@@ -814,7 +817,7 @@ func _hit_voice(m: Dictionary, dst: Dictionary) -> void:
 		Sfx.play("player_hurt", null, 2.0 if crit else 0.0)
 	elif dst["data"]["k"] == "p":
 		Sfx.play("player_hurt", at, -4.0)
-	elif crit or randf() < 0.55:
+	elif dst["snd"]["fam"] != "object" and (crit or randf() < 0.55):
 		var snd: Dictionary = dst["snd"]
 		if snd["fam"] == "machine":
 			Sfx.play("hit_blunt", at, -3.0, float(snd["voice"]) * 0.8)
@@ -822,9 +825,9 @@ func _hit_voice(m: Dictionary, dst: Dictionary) -> void:
 			Sfx.play("monster_hurt", at, 0.0, float(snd["voice"]))
 
 ## Efeito na posição de uma entidade visível (nível de outro jogador, queda etc.).
-func sound_at(eid: String, name: String, volume_db := 0.0) -> void:
+func sound_at(eid: String, snd: String, volume_db := 0.0) -> void:
 	if entities.has(eid):
-		Sfx.play(name, entities[eid]["node"].position, volume_db)
+		Sfx.play(snd, entities[eid]["node"].position, volume_db)
 
 func on_heal(m: Dictionary) -> void:
 	var dst: Dictionary = entities.get(m["dst"], {})
