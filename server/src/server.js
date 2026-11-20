@@ -69,6 +69,8 @@ export class GameServer {
         partyIdOf: (charId) => this.charParty.get(charId) ?? null,
         onKillCredit: (p, monsterId) => this.onKillCredit(zone, p, monsterId),
         onLevelUp: (p, level) => this.store.logLevel(p.char.id, level, p.char.classId, p.char.playedS ?? 0),
+        onEscortArrived: (escort, credited) => { for (const p of credited) this.notifyQuests(p, this.quests.onEscort(p.char, escort.defId)); },
+        onChannelDone: (p, objectId) => this.notifyQuests(p, this.quests.onInteract(p.char, objectId)),
       },
     });
     this.zones.set(key, zone);
@@ -369,6 +371,7 @@ export class GameServer {
       case 'quests': return { ok: true, journal: this.quests.journal(p.char), cache: false };
       case 'quest_accept': return this.hQuestAccept(p, msg);
       case 'quest_turnin': return this.hQuestTurnIn(p, msg);
+      case 'quest_choice': return this.hQuestChoice(p, msg);
       case 'trial_start': return this.hTrialStart(s, p, msg);
       case 'party_invite': return this.hPartyInvite(p, msg);
       case 'party_accept': return this.hPartyAccept(p, msg);
@@ -532,13 +535,35 @@ export class GameServer {
     this.notifyQuests(p, changed);
     const shop = n.role === 'shop' ? n.shop.map((defId) => ({ defId, price: this.priceOf(defId) })) : undefined;
     const trialAvailable = n.role === 'master' && n.classId === p.char.classId && p.char.quests.get('c3_trial')?.state === 'active' && !p.char.trialDone && p.char.level >= 10;
-    return { ok: true, npc: { id: n.id, name: n.name, role: n.role, classId: n.classId ?? null }, quests: this.quests.npcQuests(p.char, n.id), shop, trialAvailable, cache: false };
+    const choice = this.quests.pendingChoice(p.char, n.id) ?? undefined;
+    return { ok: true, npc: { id: n.id, name: n.name, role: n.role, classId: n.classId ?? null }, quests: this.quests.npcQuests(p.char, n.id), shop, trialAvailable, choice, cache: false };
+  }
+
+  // Resposta escolhida num diálogo de missão (ex.: "Duas Razões"): muda falas futuras e dá um título.
+  hQuestChoice(p, { quest, option, npc }) {
+    const n = p.zone.npcNear(p, npc);
+    if (!n) return { ok: false, code: 'too_far', reason: 'Chegue mais perto para conversar.' };
+    const r = this.quests.choose(p.char, quest, option, n.id);
+    if (!r.ok) return r;
+    this.notifyQuests(p, [quest]);
+    return { ok: true, reply: r.option.reply, title: p.char.title ?? null, journal: this.quests.journal(p.char), char: p.zone.charView(p), cache: false };
   }
 
   hInteract(p, { object }) {
     const o = p.zone.objectNear(p, object);
     if (!o) return { ok: false, code: 'too_far', reason: 'Chegue mais perto.' };
     if (o.kind === 'dungeon') return this.hDungeonEnter(null, p, { object: o.id });
+    if (o.kind === 'escort') {
+      if (!this.quests.hasPending(p.char, 'escort', (x) => x.escort === o.escort)) return { ok: false, code: 'nothing', reason: 'A carroça está parada. Fale com quem cuida dela.' };
+      const r = p.zone.startEscort(o.escort, p);
+      if (!r.ok) return r;
+      return { ok: true, object: o.id, escort: r.escort.eid, already: !!r.already, cache: false };
+    }
+    if (o.channelMs) {
+      // interação com tempo: só começa se alguma missão avançar com ela
+      if (!this.quests.wouldProgressInteract(p.char, o.id)) return { ok: false, code: 'nothing', reason: 'Nada a fazer aqui agora.' };
+      return { ...p.zone.startChannel(p, o.id, o.channelMs, o.channelText ?? 'Trabalhando...'), cache: false };
+    }
     const changed = this.quests.onInteract(p.char, o.id);
     if (!changed.length) return { ok: false, code: 'nothing', reason: 'Nada a fazer aqui agora.' };
     this.notifyQuests(p, changed);

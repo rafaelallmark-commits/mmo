@@ -2,6 +2,7 @@
 // toda alteração de estado de personagem acontece aqui, em ordem, o que serializa operações
 // simultâneas do mesmo personagem.
 import { randomUUID } from 'node:crypto';
+import { Escort } from './escort.js';
 import {
   derivedStats, playerAttack, monsterAttack, splitKillXp, levelForXp, rankCap, totalAttributePoints, rollInt, mitigate,
 } from './rules.js';
@@ -55,6 +56,8 @@ export class Zone {
     this.isFreeFn = (x, z) => this.nav.isFree(x, z);
     this.mv = { accel: this.f.movement.accel ?? 18, decel: this.f.movement.decel ?? 24 };
     this.monsterSeq = 0;
+    this.escorts = new Map(); // eid -> Escort
+    this.escortSeq = 0;
     for (const sp of this.map.spawns ?? []) for (let i = 0; i < sp.count; i++) this.spawnMonster(sp);
   }
 
@@ -164,7 +167,49 @@ export class Zone {
 
   entityById(eid) {
     if (eid?.startsWith('p')) return this.players.get(Number(eid.slice(1))) ?? null;
+    if (eid?.startsWith('e')) return null; // carroça de escolta não é alvo de jogador
     return this.monsters.get(eid) ?? null;
+  }
+
+  // ---------- escolta ----------
+  startEscort(defId, owner) {
+    const def = this.map.escorts?.[defId];
+    if (!def) return { ok: false, code: 'bad_escort', reason: 'Nada para escoltar aqui.' };
+    const partyId = this.hooks.partyIdOf?.(owner.char.id) ?? null;
+    for (const e of this.escorts.values()) {
+      if (e.defId === defId && (e.ownerCharId === owner.char.id || (partyId && e.partyId === partyId))) return { ok: true, escort: e, already: true };
+    }
+    const e = new Escort(this, defId, def, owner, partyId, ++this.escortSeq);
+    this.escorts.set(e.eid, e);
+    e.notify(`${def.name} partiu. Fiquem perto dela até o fim da rota.`, { started: true });
+    return { ok: true, escort: e };
+  }
+
+  // ---------- canalização (interação com tempo; mover, agir ou ser atingido interrompe) ----------
+  startChannel(p, object, ms, text) {
+    if (p.char.dead) return { ok: false, code: 'dead', reason: 'Você está caído.' };
+    p.channel = { object, text, startAt: this.now, endAt: this.now + ms, sx: p.char.x, sz: p.char.z };
+    p.targetId = null; p.dest = null; p.path = null; p.chase = null;
+    return { ok: true, channel: { object, ms, text } };
+  }
+
+  cancelChannel(p, reason) {
+    if (!p.channel) return;
+    const ch = p.channel;
+    p.channel = null;
+    this.send(p.char.id, { t: 'channel_end', ok: false, object: ch.object, reason });
+  }
+
+  tickChannel(p) {
+    const ch = p.channel;
+    if (p.char.dead) return this.cancelChannel(p, 'Você caiu.');
+    if (Math.hypot(p.char.x - ch.sx, p.char.z - ch.sz) > 0.35) return this.cancelChannel(p, 'Interrompido: você se moveu.');
+    if ((p.lastHitAt ?? -1) > ch.startAt) return this.cancelChannel(p, 'Interrompido: você foi atingido.');
+    if (this.now >= ch.endAt) {
+      p.channel = null;
+      this.send(p.char.id, { t: 'channel_end', ok: true, object: ch.object });
+      this.hooks.onChannelDone?.(p, ch.object);
+    }
   }
 
   npcNear(p, npcId) {
@@ -188,6 +233,7 @@ export class Zone {
     const c = p.char;
     const path = this.nav.findPath(c.x, c.z, x, z);
     if (!path || !path.length) return { ok: false, code: 'blocked', reason: 'Não dá para chegar ali.' };
+    if (p.channel) this.cancelChannel(p, 'Interrompido: você se moveu.');
     p.path = path; p.dest = path[path.length - 1]; p.targetId = null; p.chase = null;
     // o cliente usa o caminho para prever o movimento sem esperar os snapshots
     return { ok: true, dest: { x: r2(p.dest.x), z: r2(p.dest.z) }, path: path.map((q) => [r2(q.x), r2(q.z)]) };
@@ -197,6 +243,7 @@ export class Zone {
     if (p.char.dead) return { ok: false, code: 'dead', reason: 'Você está caído.' };
     const m = this.monsters.get(targetId);
     if (!m || m.state === 'dead') return { ok: false, code: 'bad_target', reason: 'Alvo inválido.' };
+    if (p.channel) this.cancelChannel(p, 'Interrompido: você atacou.');
     p.targetId = targetId; p.dest = null; p.path = null;
     return { ok: true };
   }
@@ -216,6 +263,7 @@ export class Zone {
     const s = this.data.skills[skillId];
     const c = p.char;
     if (c.dead) return { ok: false, code: 'dead', reason: 'Você está caído.' };
+    if (p.channel) this.cancelChannel(p, 'Interrompido: você usou uma habilidade.');
     if (!s || s.classId !== c.classId) return { ok: false, code: 'bad_skill', reason: 'Habilidade desconhecida para sua classe.' };
     const rank = c.skills[skillId] || 0;
     if (rank < 1) {
@@ -263,6 +311,7 @@ export class Zone {
 
   cmdUseItem(p, instanceId) {
     const c = p.char;
+    if (p.channel) this.cancelChannel(p, 'Interrompido: você usou um item.');
     const it = c.items.get(instanceId);
     if (!it || it.loc !== 'bag') return { ok: false, code: 'not_in_bag', reason: 'Item não encontrado no seu inventário.' };
     const def = this.data.items[it.defId];
@@ -452,6 +501,13 @@ export class Zone {
     const dt = dtMs / 1000;
     for (const p of this.players.values()) this.tickPlayer(p, dt);
     for (const m of this.monsters.values()) this.tickMonster(m, dt);
+    for (const [eid, e] of this.escorts) {
+      const r = e.tick(dt);
+      if (r === 'abandoned' || r === 'done') {
+        for (const m of this.monsters.values()) if (m.escortTarget === eid && m.state !== 'dead') { m.state = 'dead'; m.hp = 0; m.removeAt = this.now; }
+        this.escorts.delete(eid);
+      }
+    }
     this.tickGround();
   }
 
@@ -496,6 +552,7 @@ export class Zone {
 
   tickPlayer(p, dt) {
     const c = p.char;
+    if (p.channel) this.tickChannel(p);
     if (c.dead) return;
     if (p.buffs.length) {
       const before = p.buffs.length;
@@ -603,6 +660,7 @@ export class Zone {
 
   killMonster(m) {
     m.state = 'dead'; m.hp = 0; m.targetId = null;
+    if (m.temp) m.removeAt = this.now + 3000;
     m.respawnAt = m.def.respawnSec > 0 && !m.noRespawn ? this.now + m.def.respawnSec * 1000 : Infinity;
     this.broadcast({ t: 'death', eid: m.eid });
     const radius = this.f.xp.shareRadius;
@@ -677,6 +735,7 @@ export class Zone {
 
   tickMonster(m, dt) {
     if (m.state === 'dead') {
+      if (m.removeAt != null && this.now >= m.removeAt) { this.monsters.delete(m.eid); return; }
       if (this.now >= m.respawnAt) { this.placeMonster(m); this.broadcast({ t: 'spawn', eid: m.eid }); }
       return;
     }
@@ -701,6 +760,13 @@ export class Zone {
     if (m.state === 'return') {
       if (!m.path) m.path = this.nav.findPath(m.x, m.z, m.home.x, m.home.z) ?? [{ x: m.home.x, z: m.home.z }];
       if (followPath(m, m.path, dt, m.def.moveSpeed * 1.5, { ...mopts, isFree: this.isFreeFn })) { m.state = 'idle'; m.hp = m.def.hp; m.score.clear(); m.path = null; }
+      return;
+    }
+    // emboscada da escolta: mira a carroça até alguém do grupo chamar a atenção (ameaça)
+    if (m.escortTarget && !m.threat.size) {
+      const esc = this.escorts.get(m.escortTarget);
+      if (esc && esc.state !== 'broken' && esc.state !== 'arrived') { esc.monsterTick(m, dt, speed, mopts); return; }
+      m.state = 'dead'; m.hp = 0; m.removeAt = this.now + 500; // carroça sumiu: a emboscada se desfaz
       return;
     }
     let target = m.targetId ? this.entityById(m.targetId) : null;
@@ -767,6 +833,7 @@ export class Zone {
 
   // Dano em jogador: guardiões (redirecionamento) → escudo → vida. Proteção conta como participação.
   damagePlayer(p, amount, m) {
+    p.lastHitAt = this.now;
     const prot = this.f.xp.participation.threatAbsorbed;
     const down = this.buffMod(p, 'damageTakenDownPct');
     if (down) amount = Math.max(1, Math.round(amount * (1 - Math.min(down, 80) / 100)));
@@ -795,6 +862,7 @@ export class Zone {
   }
 
   applyRawDamage(p, amount) {
+    p.lastHitAt = this.now;
     if (amount <= 0 || p.char.dead) return;
     p.char.hp -= amount;
     p.lastCombatAt = this.now;
@@ -831,13 +899,14 @@ export class Zone {
     const ents = [];
     for (const p of this.players.values()) {
       const c = p.char;
-      ents.push({ id: p.eid, k: 'p', n: c.name, cls: c.classId, lvl: c.level, x: r2(c.x), z: r2(c.z), vx: r2(c.vx || 0), vz: r2(c.vz || 0), hp: Math.ceil(c.hp), mhp: p.stats.maxHp, dead: c.dead, tgt: p.targetId, w: p.weaponDefId ?? null, party: this.hooks.partyIdOf?.(c.id) ?? null, sh: p.shield ? Math.round(p.shield.amount) : 0 });
+      ents.push({ id: p.eid, k: 'p', n: c.name, cls: c.classId, lvl: c.level, x: r2(c.x), z: r2(c.z), vx: r2(c.vx || 0), vz: r2(c.vz || 0), hp: Math.ceil(c.hp), mhp: p.stats.maxHp, dead: c.dead, tgt: p.targetId, w: p.weaponDefId ?? null, party: this.hooks.partyIdOf?.(c.id) ?? null, sh: p.shield ? Math.round(p.shield.amount) : 0, ttl: c.title ?? null });
     }
     for (const m of this.monsters.values()) {
       if (m.state === 'dead') continue;
       const fx = m.fx.filter((f) => f.until > this.now).map((f) => f.kind);
       ents.push({ id: m.eid, k: 'm', def: m.defId, lvl: m.def.level, x: r2(m.x), z: r2(m.z), vx: r2(m.vx || 0), vz: r2(m.vz || 0), hp: Math.ceil(m.hp), mhp: m.def.hp, st: m.state, tgt: m.targetId, fx: fx.length ? fx : undefined });
     }
+    for (const e of this.escorts.values()) ents.push(e.view());
     return { t: 'snap', now: Math.round(this.now), map: this.mapId, ents };
   }
 
@@ -851,7 +920,7 @@ export class Zone {
       const px = r2(c.x), pz = r2(c.z), vx = r2(c.vx || 0), vz = r2(c.vz || 0);
       recs.push({
         id: p.eid, x: c.x, z: c.z, px, pz, vx, vz,
-        A: `"k":"p","n":${JSON.stringify(c.name)},"cls":"${c.classId}","lvl":${c.level},"mhp":${p.stats.maxHp},"w":${p.weaponDefId ? `"${p.weaponDefId}"` : 'null'},"party":${JSON.stringify(this.hooks.partyIdOf?.(c.id) ?? null)}`,
+        A: `"k":"p","n":${JSON.stringify(c.name)},"cls":"${c.classId}","lvl":${c.level},"mhp":${p.stats.maxHp},"w":${p.weaponDefId ? `"${p.weaponDefId}"` : 'null'},"party":${JSON.stringify(this.hooks.partyIdOf?.(c.id) ?? null)},"ttl":${JSON.stringify(c.title ?? null)}`,
         P: `"x":${px},"z":${pz}`,
         V: `"vx":${vx},"vz":${vz}`,
         C: `"hp":${Math.ceil(c.hp)},"dead":${!!c.dead},"tgt":${p.targetId ? `"${p.targetId}"` : 'null'},"sh":${p.shield ? Math.round(p.shield.amount) : 0}`,
@@ -869,6 +938,16 @@ export class Zone {
         C: `"hp":${Math.ceil(m.hp)},"st":"${m.state}","tgt":${m.targetId ? `"${m.targetId}"` : 'null'},"fx":${JSON.stringify(fx)}`,
       });
     }
+    for (const e of this.escorts.values()) {
+      const px = r2(e.x), pz = r2(e.z), vx = r2(e.vx || 0), vz = r2(e.vz || 0);
+      recs.push({
+        id: e.eid, x: e.x, z: e.z, px, pz, vx, vz,
+        A: `"k":"e","def":"${e.def.model ?? 'cart'}","n":${JSON.stringify(e.def.name)},"mhp":${e.mhp}`,
+        P: `"x":${px},"z":${pz}`,
+        V: `"vx":${vx},"vz":${vz}`,
+        C: `"hp":${Math.ceil(e.hp)},"st":"${e.state}"`,
+      });
+    }
     return recs;
   }
 
@@ -878,7 +957,7 @@ export class Zone {
     return {
       id: c.id, eid: p.eid, name: c.name, classId: c.classId, level: c.level, xp: c.xp,
       xpLevelStart: cum[c.level - 1], xpNext: c.level >= this.data.levelCap ? null : cum[c.level],
-      unspent: c.unspent, skillPoints: c.skillPoints, skills: c.skills, alloc: c.alloc, trialDone: !!c.trialDone,
+      unspent: c.unspent, skillPoints: c.skillPoints, skills: c.skills, alloc: c.alloc, trialDone: !!c.trialDone, title: c.title ?? null,
       permanent: s.permanent, attrs: s.attrs, hp: Math.ceil(c.hp), mp: Math.floor(c.mp), gold: c.gold, dead: c.dead,
       x: r2(c.x), z: r2(c.z), mapId: this.mapId, instance: this.instanceId,
       stats: { maxHp: s.maxHp, maxMp: s.maxMp, defense: s.defense, mres: s.mres, evasion: s.evasion, accuracy: s.accuracy, crit: s.crit, magicCrit: s.magicCrit, magicPower: s.magicPower, attackIntervalMs: s.attackIntervalMs, range: s.range, weapon: s.weapon.id, ccResistPct: s.ccResistPct,

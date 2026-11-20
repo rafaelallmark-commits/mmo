@@ -208,7 +208,7 @@ export class Store {
       id: row.id, accountId: row.account_id, name: row.name, classId: row.class_id, level: row.level, xp: row.xp,
       alloc: JSON.parse(row.alloc_json), unspent: row.unspent, skillPoints: row.skill_points, skills: JSON.parse(row.skills_json),
       hp: row.hp, mp: row.mp, gold: row.gold, mapId: row.map_id, x: row.x, z: row.z, dead: !!row.dead, items, playedS: row.played_s ?? 0,
-      trialDone: !!JSON.parse(row.flags_json || '{}').trialDone,
+      ...(() => { const f = JSON.parse(row.flags_json || '{}'); return { trialDone: !!f.trialDone, title: f.title ?? null, choices: f.choices ?? {} }; })(),
     };
   }
 
@@ -216,7 +216,7 @@ export class Store {
     this.prep(`UPDATE characters SET level=?, xp=?, alloc_json=?, unspent=?, skill_points=?, skills_json=?, hp=?, mp=?, gold=?,
       map_id=?, x=?, z=?, dead=?, flags_json=?, played_s=?, updated_at=? WHERE id=?`).run(
       c.level, c.xp, JSON.stringify(c.alloc), c.unspent, c.skillPoints, JSON.stringify(c.skills), Math.round(c.hp), Math.round(c.mp),
-      c.gold, c.saveMapId ?? c.mapId, c.saveX ?? c.x, c.saveZ ?? c.z, c.dead ? 1 : 0, JSON.stringify({ trialDone: !!c.trialDone }), c.playedS ?? 0, Date.now(), c.id);
+      c.gold, c.saveMapId ?? c.mapId, c.saveX ?? c.x, c.saveZ ?? c.z, c.dead ? 1 : 0, JSON.stringify({ trialDone: !!c.trialDone, title: c.title ?? null, choices: c.choices ?? {} }), c.playedS ?? 0, Date.now(), c.id);
   }
 
   insertItem({ id, charId, defId, qty, enh, loc, slot, source }) {
