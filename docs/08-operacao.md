@@ -44,6 +44,13 @@ Com `--metrics-port`, o servidor expõe:
 Alertas sugeridos: `tick_ms_p99 > 30` por 5 min; `slow_ticks_total` subindo; `/health` falhando 3 vezes;
 `rss_mb` crescendo sem parar (vazamento).
 
+**Painel pronto**: `docker compose --profile monitoramento up -d` (em `deploy/`) sobe Prometheus (coleta a cada 15 s,
+retenção de 15 dias, alertas acima em `deploy/monitoramento/alertas.yml`) e Grafana com o painel "Cinzas do Meridiano —
+servidor de zona" (jogadores, duração do tick com as linhas de 30 e 50 ms, ticks lentos, banda, mensagens, CPU e
+memória) em `http://127.0.0.1:3000` — só nesta máquina; de fora, `ssh -L 3000:127.0.0.1:3000 servidor`. Senha do
+admin do Grafana em `GRAFANA_SENHA` no `deploy/.env`. Para receber os alertas por e-mail ou chat, ligue um
+Alertmanager ao Prometheus.
+
 Referência medida (100 clientes juntos no mesmo mapa, 10 Hz): tick p50 4,8 ms, p99 10,2 ms, máximo 22 ms,
 nenhum acima de 50 ms; CPU do processo ~7% de um núcleo; 144 MB de memória.
 
