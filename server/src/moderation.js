@@ -5,6 +5,7 @@
 export const PERMANENT = 253402300799000; // 31/12/9999: suspensão sem data para acabar
 const CHAT_KEEP = 20;          // últimas falas por personagem guardadas para dar contexto às denúncias
 const REPORTS_PER_HOUR = 5;
+const BUGS_PER_HOUR = 10;
 const MAX_GM_BAN_H = 72;       // mestre suspende até 72 h; acima disso (ou permanente), só admin
 
 const fmt = (ms) => new Date(ms).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' });
@@ -21,6 +22,7 @@ export class Moderation {
     this.s = server;
     this.chatLog = new Map();   // charId -> [{ at, channel, text }]
     this.reports = new Map();   // charId denunciante -> [instantes]
+    this.bugs = new Map();      // charId -> [instantes] (relatos de problema)
     this.lastSweep = 0;
   }
 
@@ -138,6 +140,23 @@ export class Moderation {
         return { ok: true, message: `${t.name} pode falar de novo.`, cache: false };
     }
     return null;
+  }
+
+  // /bug texto: relato de problema do teste público, com mapa, posição e versões (cliente, servidor e dados)
+  bugReport(p, { text, client }) {
+    const now = Date.now();
+    const recent = (this.bugs.get(p.char.id) ?? []).filter((t) => now - t < 3600_000);
+    if (recent.length >= BUGS_PER_HOUR) return { ok: false, code: 'too_many', reason: 'Você já mandou muitos relatos nesta hora. Obrigado pela paciência!' };
+    const t = typeof text === 'string' ? text.replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 500) : '';
+    if (t.length < 5) return { ok: false, code: 'bad_request', reason: 'Descreva o problema: /bug o que aconteceu.' };
+    recent.push(now);
+    this.bugs.set(p.char.id, recent);
+    const sess = this.s.byChar.get(p.char.id);
+    const c = p.char;
+    this.st.audit('bug_report', { accountId: sess?.accountId ?? null, charId: c.id, ip: sess?.ip ?? null, text: t, map: p.zone.mapId, instance: p.zone.instanceId ?? null,
+      x: Math.round(c.x * 10) / 10, z: Math.round(c.z * 10) / 10, level: c.level, classId: c.classId, client: typeof client === 'string' ? client.slice(0, 40) : null,
+      server: this.s.serverVersion ?? null, data: this.s.dataVersion ?? null });
+    return { ok: true, message: 'Obrigado! O problema foi registrado com o lugar e a hora em que você está.', cache: false };
   }
 
   // /denunciar Nome motivo: grava na auditoria com as últimas falas do denunciado

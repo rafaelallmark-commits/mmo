@@ -315,7 +315,8 @@ recompensas de missão, criação/confirmação/exclusão de conta, troca de sen
 Jogadores denunciam com `/denunciar Nome motivo` (5 por hora); a denúncia grava as últimas falas do denunciado.
 Pela ferramenta, fora do jogo: `npm run conta -- --db cinzas.db --personagem Nome --suspender --horas 24 --motivo "..."`
 (ou `--permanente`, `--retirar-suspensao`, `--silenciar --minutos 60`, `--retirar-silencio`) e
-`npm run conta -- --db cinzas.db --denuncias --n 50`. O servidor confere o banco a cada minuto: uma suspensão feita pela
+`npm run conta -- --db cinzas.db --denuncias --n 50`; relatos de problema dos testadores (`/bug texto` no jogo, com mapa,
+posição, nível e versões do cliente, do servidor e dos dados): `npm run conta -- --db cinzas.db --bugs --n 50`. O servidor confere o banco a cada minuto: uma suspensão feita pela
 ferramenta derruba quem estiver on-line em até 60 s.
 
 **Anti-trapaça (o que o servidor já impede)**: o cliente só pede destinos, alvos e habilidades — posição, velocidade,

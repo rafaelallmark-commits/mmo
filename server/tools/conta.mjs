@@ -7,6 +7,7 @@
 //   node tools/conta.mjs --db cinzas.db --conta nome --silenciar --minutos 60 [--motivo "..."]
 //   node tools/conta.mjs --db cinzas.db --conta nome --retirar-silencio
 //   node tools/conta.mjs --db cinzas.db --denuncias [--n 50]
+//   node tools/conta.mjs --db cinzas.db --bugs [--n 50]        (relatos de problema do /bug)
 // (--personagem Nome no lugar de --conta acha a conta pelo personagem)
 // Suspensões e silêncios valem no servidor em até 1 minuto (ele confere o banco a cada minuto).
 import { Store } from '../src/store.js';
@@ -15,7 +16,13 @@ import { PERMANENT } from '../src/moderation.js';
 const arg = (n, d) => { const i = process.argv.indexOf(`--${n}`); if (i === -1) return d; const v = process.argv[i + 1]; return v === undefined || v.startsWith('--') ? true : v; };
 const st = new Store(arg('db', process.env.CINZAS_DB ?? 'cinzas.db'));
 try {
-  if (arg('denuncias', false)) {
+  if (arg('bugs', false)) {
+    for (const a of st.auditTail(Number(arg('n', 50)), 'bug_report').reverse()) {
+      const d = JSON.parse(a.data_json);
+      console.log(`${new Date(a.at).toISOString()}  pers=${a.char_id} (${d.classId} nv ${d.level}) ${d.map}${d.instance ? ' [instância]' : ''} (${d.x}, ${d.z}) cliente=${d.client ?? '?'} servidor=${d.server ?? '?'} dados=${d.data ?? '?'}`);
+      console.log(`    ${d.text}`);
+    }
+  } else if (arg('denuncias', false)) {
     for (const a of st.auditTail(Number(arg('n', 50)), 'report').reverse()) {
       const d = JSON.parse(a.data_json);
       console.log(`${new Date(a.at).toISOString()}  de pers=${a.char_id} contra ${d.targetName} (pers=${d.target}, conta=${d.targetAccount}) em ${d.map}: ${d.reason}`);

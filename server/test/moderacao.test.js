@@ -70,6 +70,16 @@ test('moderação: silêncio, denúncia, suspensão, ferramenta, onde está e an
     for (let i = 0; i < 4; i++) await P.request('report', { name: 'Quezilento', reason: `de novo ${i}` });
     assert.equal((await P.request('report', { name: 'Quezilento', reason: 'mais uma' })).code, 'too_many');
 
+    // relato de problema (/bug) com lugar e versões
+    r = await P.request('bug_report', { text: 'a carroça travou no marco 2', client: '0.4.0' });
+    assert.equal(r.ok, true, r.reason);
+    const bug = JSON.parse(server.store.auditTail(5, 'bug_report')[0].data_json);
+    assert.equal(bug.text, 'a carroça travou no marco 2');
+    assert.equal(bug.map, 'estrada_velha');
+    assert.equal(bug.client, '0.4.0');
+    assert.ok(bug.server && bug.data, 'versões do servidor e dos dados');
+    assert.equal((await P.request('bug_report', { text: 'oi' })).code, 'bad_request');
+
     // onde está e anúncio
     r = await G.request('gm', { cmd: 'where', name: 'Peregrino' });
     assert.match(r.message, /estrada_velha/);

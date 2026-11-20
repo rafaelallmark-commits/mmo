@@ -56,6 +56,7 @@ export class GameServer {
     this.mod = new Moderation(this);
     this.closing = false;
     this.dataVersion = dataVersionOf(this.data);
+    this.serverVersion = SERVER_VERSION;
     this.byChar = new Map(); // charId -> session
     this.byAccount = new Map(); // accountId -> session
     this.byName = new Map(); // nome minúsculo -> charId (online)
@@ -482,6 +483,7 @@ export class GameServer {
       case 'dungeon_enter': return this.hDungeonEnter(s, p, msg);
       case 'gm': return this.hGm(p, msg);
       case 'report': return this.mod.report(p, msg);
+      case 'bug_report': return this.mod.bugReport(p, msg);
       // comércio
       case 'trade_request': return this.trades.request(p, msg.name);
       case 'trade_accept': return this.trades.accept(p, msg.from);
