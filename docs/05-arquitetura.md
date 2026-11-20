@@ -52,7 +52,14 @@ mmo/
 │   │   ├── nav.js                 grade de ocupação, A* + suavização, seguidor com aceleração/frenagem
 │   │   ├── skills.js              execução das 40 habilidades (formas e efeitos)
 │   │   ├── quests.js              motor de missões (falar, matar, coletar, interagir, entrar no mapa...)
-│   │   ├── smith.js               ferreiro: custo, chance, prévia e rolagem do refino
+│   │   ├── smith.js               ferreiro: custo, chance, risco (+4..+6), selo e rolagem do refino
+│   │   ├── escort.js              escolta da carroça (capítulo 4): rota, marcos, emboscadas, quebra
+│   │   ├── trade.js               comércio entre jogadores: ofertas, travas, confirmação, troca numa transação
+│   │   ├── clans.js               clãs: fundar, convidar, cargos, liderança, mensagem do dia, chat do clã
+│   │   ├── duel.js                duelos sem morte: pedido, contagem, dano até 1 de vida, fuga e empate
+│   │   ├── moderation.js          suspensão, silêncio, expulsão, anúncio e denúncias com contexto
+│   │   ├── contas.js              serviço de contas (HTTP, processo separado): cadastro, e-mail, token, senha
+│   │   ├── token.js · mailer.js · metrics.js   token HMAC de uso único · SMTP mínimo · métricas/saúde
 │   │   ├── dungeon.js             A Última Eclusa: o Custódio em três fases, avisos, comportas
 │   │   ├── rules.js               regras puras: atributos, estatísticas, dano, acerto, crítico, XP
 │   │   ├── equipment.js           validação de nível/classe/atributos/espaço/empunhadura
@@ -69,6 +76,11 @@ mmo/
 │   │   ├── skills.test.js         as 40 habilidades numa zona real
 │   │   ├── m2.test.js             aceitação do Marco 2 (grupo de 5, prova de classe, missões)
 │   │   ├── m3.test.js             aceitação do Marco 3 (refino, depósito, elite diária, Custódio com bots)
+│   │   ├── ch4.test.js            capítulo 4: canalização, escolta, escolha de diálogo
+│   │   ├── snapshots.test.js · store.test.js   snapshots por diferença · migrações
+│   │   ├── publico.test.js        contas, token, limites, papéis, desligamento, TLS, SMTP
+│   │   ├── social.test.js         refino +4..+6, troca atômica, clãs, duelos
+│   │   ├── moderacao.test.js      silêncio, denúncia, suspensão, ferramenta, anúncio
 │   │   └── helpers/client.js      cliente simulado (mesmo protocolo do Godot)
 │   └── tools/
 │       ├── validate-data.js       validador (também usado nos testes)
@@ -95,6 +107,7 @@ mmo/
 │       ├── art.gd / gear.gd / rig.gd  monstros e NPCs procedurais, equipamento, animação dos monstros
 │       ├── vfx.gd                 efeitos de combate: cortes, projéteis, áreas, curas, escudos, avisos
 │       ├── hud.gd                 interface em jogo (barras, atalhos, inventário, ficha, chat, avisos)
+│       ├── social.gd              troca, painel do clã, convites, aviso de duelo, ações sobre outro jogador
 │       ├── item_text.gd           descrição de itens com requisitos em vermelho e comparação
 │       ├── ui_theme.gd            paleta
 │       └── autotest.gd            modos --autotest (headless), --navshots e --sceneshots (capturas)
