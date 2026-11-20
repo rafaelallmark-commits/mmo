@@ -332,8 +332,11 @@ decisões D111–D118 em [DECISOES.md](DECISOES.md).
 - **Posse** (`charId → zona, estado, época`): uma zona só carrega personagem de que tem a posse. O `enter`
   pede a posse; se o personagem está em outra zona, o mundo manda ela **gravar e soltar** (`kick`) e espera
   a liberação. A zona que perde contato com o mundo salva e desconecta todos antes de o mundo liberar as
-  posses (cerca a 60% do prazo; para de gravar a 80%). Ao reconectar — ou quando o mundo reinicia — a zona
-  diz quem tem carregado e o mundo refaz as posses.
+  posses (cerca a 60% do prazo; para de gravar a 80%). Contato é só **sinal de vida ou pedido respondido**,
+  contado do instante em que saiu: mensagens velhas lidas depois de um travamento do processo não seguram
+  a zona, e a conferência roda antes de cada passo da simulação e de cada comando. Um `kick` que chega antes
+  de a entrada terminar de carregar marca a época concedida, e a entrada desiste em vez de carregar sem
+  posse. Ao reconectar — ou quando o mundo reinicia — a zona diz quem tem carregado e o mundo refaz as posses.
 - **Transferência** (portal, teleporte de mestre ou `enter` de quem está salvo num mapa de outra zona):
 
 ```

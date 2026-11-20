@@ -383,7 +383,8 @@ de posses e grupos. Cada zona continua com as próprias métricas (`--metrics-po
   dela recebe "*Mapa* está fora do ar no momento" e os portais para lá recusam com a mesma frase. Ao subir de
   novo (mesmo `--zone-id` e mapas, mesmo banco), ela volta ao registro; o progresso vale até o último salvamento
   (posição a cada 10 s; itens, ouro e XP na hora).
-- **Zona perde o mundo** (rede ou mundo parado): com 6 s sem notícia ela salva e desconecta os jogadores
+- **Zona perde o mundo** (rede, mundo parado ou o próprio processo travado): com 6 s sem resposta aos sinais
+  de vida ela salva e desconecta os jogadores
   ("Conexão com o mundo perdida. Seu progresso foi salvo"); com 8 s para de gravar. Assim nada dela é escrito
   depois de o mundo dar as posses a outra zona. Novas entradas esperam o mundo voltar.
 - **Mundo reinicia**: as zonas reconectam sozinhas e dizem quem têm carregado; o mundo refaz as posses e o

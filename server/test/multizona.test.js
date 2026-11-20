@@ -4,7 +4,9 @@
 // (uso único, vencido, para outra zona, falsificado), posse única (o login derruba e salva na outra
 // zona primeiro, inclusive no meio de uma transferência), sussurro, grupo e clã entre zonas, zona que
 // cai e volta, mundo que reinicia, desligamento, troca cancelada e moderação (suspensão e silêncio
-// valem na chegada por transferência; expulsão, silêncio, "onde está" e anúncio entre zonas).
+// valem na chegada por transferência; expulsão, silêncio, "onde está" e anúncio entre zonas). E as
+// janelas de corrida: posse pedida de volta antes de o personagem carregar, zona que o mundo não ouve
+// (só o sinal de vida respondido conta), token ultrapassado na chegada e resposta de transferência perdida.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -636,4 +638,136 @@ test('várias zonas: mundo que reinicia recebe as posses de volta das zonas; des
     for (const c of [x, y0, y, viaB, z]) c.ws.close();
     void halt;
   }, { downAfterMs: 2000 });
+});
+
+test('várias zonas: posse pedida de volta antes de o personagem carregar (resposta e kick juntos) não deixa cópia sem posse', { timeout: 60000 }, async () => {
+  await withCluster(async ({ world, A, B }) => {
+    // mesma conta logada em A e em B; o personagem (na Estrada Velha, de A) ainda fora do mundo
+    const a = await login(A.url, 'mz_gemeo', 'gemeo-a');
+    const id = (await a.request('create_char', { name: 'Gemeo', classId: 'breaker' })).char.id;
+    const b = await login(B.url, 'mz_gemeo', 'gemeo-b');
+    // o ws entrega quadros que chegam juntos no mesmo instante: A lê a concessão da posse e, logo em
+    // seguida, o kick que a entrada por B provocou, antes de o carregamento continuar
+    const orig = A.world.onMessage.bind(A.world);
+    let held = null;
+    A.world.onMessage = (m) => {
+      if (m.t === 'res' && m.ok && m.epoch && !held) { held = m; return; }
+      if (m.t === 'kick' && held && held !== 'done') { const r = held; held = 'done'; orig(r); orig(m); return; }
+      orig(m);
+    };
+    const ea = a.request('enter', { charId: id });
+    await waitUntil(() => world.leases.get(id)?.zoneId === 'A' && held, 'posse concedida a A (resposta retida)');
+    const eb = b.request('enter', { charId: id });
+    const [ra, rb] = await Promise.all([ea, eb]);
+    A.world.onMessage = orig;
+    assert.equal(ra.ok, false, 'A desiste: a posse já foi pedida de volta');
+    assert.equal(ra.code, 'kicked');
+    assert.equal(A.playerOf(id), null, 'A não carregou o personagem sem posse');
+    assert.equal(rb.ok, true, rb.reason);
+    assert.equal(rb.transfer?.url, A.url, 'a Estrada é de A: B manda para lá com token');
+    const { c, r } = await follow(rb.transfer, 'gemeo-a2');
+    assert.equal(r.ok, true, r.reason);
+    assert.ok(A.playerOf(id) && !B.playerOf(id));
+    assert.deepEqual([world.leases.get(id).zoneId, world.leases.get(id).state, world.leases.get(id).epoch], ['A', 'online', A.byChar.get(id).leaseEpoch], 'uma cópia só, com a posse atual');
+    log('resposta da posse e kick lidos juntos: A desistiu de carregar; o personagem entrou com a posse nova');
+    for (const x of [a, b, c]) x.ws.close();
+  });
+});
+
+test('várias zonas: zona que o mundo não ouve se cerca antes do prazo, mesmo recebendo mensagens dele', { timeout: 60000 }, async () => {
+  await withCluster(async ({ world, A, B }) => {
+    const c0 = await hero(A, 'Isolado');
+    const id = c0.char.id;
+    await c0.request('gm', { cmd: 'xp', level: 5 });
+    const c = await goRemote(c0, 'brejo_bombas', 20, 70, 'isolado-b');
+    assert.equal((await c.request('move', { x: 24, z: 70 })).ok, true);
+    await waitUntil(() => { const q = B.playerOf(id); return q && Math.hypot(q.char.x - 24, q.char.z - 70) < 0.3; }, 'andou em B');
+    // o mundo deixa de ouvir B (nada do que B manda chega), mas continua mandando coisas para B: só o
+    // sinal de vida respondido conta como notícia, então B se cerca antes de o mundo liberar a posse
+    B.world.ws.send = () => {};
+    const chatter = setInterval(() => world.broadcast({ t: 'zones', zones: world.zoneList() }), 50);
+    const kicked = c.waitFor((m) => m.t === 'kicked', 5000, 'B se cercou');
+    const t0 = Date.now();
+    let fencedAt = 0, downAt = 0;
+    try {
+      await waitUntil(() => {
+        if (!fencedAt && !B.playerOf(id)) fencedAt = Date.now();
+        if (!downAt && !world.zones.has('B')) downAt = Date.now();
+        return fencedAt && downAt;
+      }, 'cerca em B e queda no mundo', 6000);
+    } finally { clearInterval(chatter); }
+    assert.match((await kicked).reason, /Conexão com o mundo perdida/);
+    assert.ok(fencedAt < downAt, `B soltou o personagem (${fencedAt - t0} ms) antes de o mundo liberar a posse (${downAt - t0} ms)`);
+    const s = B.store.loadCharacter(id);
+    assert.ok(Math.hypot(s.x - 24, s.z - 70) < 0.3, 'B gravou ao se cercar (ainda dentro do prazo)');
+    log(`mundo surdo para B: B se cercou em ${fencedAt - t0} ms, o mundo deu B como fora do ar em ${downAt - t0} ms`);
+    c0.ws.close(); c.ws.close();
+  }, { downAfterMs: 2000 });
+});
+
+test('várias zonas: token ultrapassado não derruba quem já chegou ao destino', { timeout: 60000 }, async () => {
+  await withCluster(async ({ world, A, B }) => {
+    const c = await hero(A, 'Precavido');
+    const id = c.char.id;
+    await c.request('gm', { cmd: 'xp', level: 5 });
+    await c.request('gm', { cmd: 'teleport', x: 148.5, z: 92 });
+    const pushed = c.waitFor((m) => m.t === 'transfer', 5000, 'transferência');
+    assert.equal((await c.request('portal', { portal: 'to_brejo' })).ok, true);
+    const old = await pushed;
+    await waitUntil(() => world.leases.get(id)?.saved === true, 'origem gravou');
+    // em vez de usar o token, entra de novo direto por A: vai para B com um token novo e chega lá
+    const again = await login(A.url, 'mz_precavido', 'precavido-a2');
+    const e = await again.request('enter', { charId: id });
+    assert.equal(e.transfer?.mapId, 'brejo_bombas', e.reason);
+    const { c: fresh, r } = await follow(e.transfer, 'precavido-b');
+    assert.equal(r.ok, true, r.reason);
+    // o token antigo (assinatura válida, dentro do prazo, nunca usado em B) não serve e não derruba ninguém
+    const stale = await follow(old, 'token-antigo');
+    assert.equal(stale.r.ok, false);
+    assert.equal(stale.r.code, 'stale_transfer');
+    stale.c.ws.close();
+    await sleep(100);
+    assert.ok(B.playerOf(id), 'quem chegou continua em B');
+    assert.equal(B.byChar.get(id)?.ws.readyState, 1);
+    assert.deepEqual([world.leases.get(id).zoneId, world.leases.get(id).state], ['B', 'online']);
+    assert.equal((await fresh.request('move', { x: 12, z: 70 })).ok, true);
+    log('token ultrapassado apresentado em B depois da chegada: recusado, sessão de quem chegou intacta');
+    for (const x of [c, again, fresh]) x.ws.close();
+  });
+});
+
+test('várias zonas: resposta da transferência que não chega a tempo devolve a posse na hora; troca e duelo esperam', { timeout: 60000 }, async () => {
+  await withCluster(async ({ world, A }) => {
+    const x = await hero(A, 'Paciente');
+    const y = await hero(A, 'Vizinha');
+    const id = x.char.id;
+    await x.request('gm', { cmd: 'xp', level: 5 });
+    await x.request('gm', { cmd: 'teleport', x: 148.5, z: 92 });
+    await y.request('gm', { cmd: 'teleport', x: 146.5, z: 92 });
+    // o mundo marca a transferência, mas a resposta "se perde": A recebe o tempo esgotado depois de 400 ms
+    const orig = A.world.request.bind(A.world);
+    A.world.request = async (t, payload, ms) => {
+      const r = await orig(t, payload, ms);
+      if (t !== 'transfer' || payload.charId !== id) return r;
+      await sleep(400);
+      return { ok: false, code: 'world_timeout', reason: 'O mundo não respondeu. Tente de novo.' };
+    };
+    const told = x.waitFor((m) => m.t === 'system' && /não respondeu/.test(m.text), 3000, 'aviso ao jogador');
+    assert.equal((await x.request('portal', { portal: 'to_brejo' })).ok, true);
+    await waitUntil(() => world.leases.get(id)?.state === 'transferring', 'mundo marcou a transferência');
+    // enquanto espera o token, não abre troca nem duelo
+    assert.equal((await x.request('trade_request', { name: 'Vizinha' })).code, 'busy');
+    assert.equal((await x.request('duel_request', { name: 'Vizinha' })).code, 'busy');
+    await told;
+    A.world.request = orig;
+    await waitUntil(() => world.leases.get(id)?.state === 'online' && world.leases.get(id)?.zoneId === 'A', 'posse de volta a A sem esperar os 30 s', 1500);
+    assert.ok(A.playerOf(id), 'continua em A');
+    assert.equal(world.online.get(id)?.zoneId, 'A', 'diretório aponta para A de novo');
+    // e recado pelo mundo chega direto (sem ficar guardado como "em trânsito")
+    const got = x.waitFor((m) => m.t === 'system' && m.text === 'ainda aí?', 3000, 'recado pelo mundo em A');
+    assert.equal(world.deliver(id, { t: 'system', text: 'ainda aí?' }), true);
+    await got;
+    log('resposta da transferência perdida: posse de volta a A na hora; troca e duelo recusados durante a espera');
+    x.ws.close(); y.ws.close();
+  });
 });
