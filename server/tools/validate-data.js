@@ -123,7 +123,8 @@ export function validate(data, builds) {
   }
   for (const [cid, c] of Object.entries(data.classes)) for (const [def, n] of c.startingKit.bag) int(`kit ${cid}: ${def}`, n);
   int('pointsPerLevel', data.pointsPerLevel); int('skillPointsPerLevel', data.skillPointsPerLevel);
-  const smith = data.formulas.smith ?? {};
+  // ferreiro: as regras ficam em formulas.enhance (smith.js); ouro = goldBase × (grau+1) × nível do item
+  const smith = data.formulas.enhance ?? {};
   int('ferreiro: goldBase', smith.goldBase);
   for (const n of smith.materials ?? []) int('ferreiro: materials', n);
   for (const [mid, m] of Object.entries(data.monsters)) if (!data.lootTables[m.lootTable]) errors.push(`monstro ${mid}: tabela ${m.lootTable}`);

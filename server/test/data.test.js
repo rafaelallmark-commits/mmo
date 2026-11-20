@@ -10,6 +10,17 @@ test('arquivos de dados são coerentes (classes, itens, saque, mapas, XP)', () =
   assert.deepEqual(errors, []);
 });
 
+test('fração em valor que vai para coluna inteira do banco é recusada (o PostgreSQL não grava, o SQLite gravaria)', () => {
+  const d = structuredClone(data);
+  d.formulas.enhance.goldBase = 12.5; // ouro do ferreiro
+  d.formulas.enhance.materials[0] = 1.5; // materiais gastos
+  d.items.potion_hp_s.value = 7.25; // preço de compra e venda
+  const { errors } = validate(d, loadBuilds());
+  for (const what of ['ferreiro: goldBase', 'ferreiro: materials', 'item potion_hp_s: value']) {
+    assert.ok(errors.some((e) => e.startsWith(what)), `${what} recusado: ${JSON.stringify(errors)}`);
+  }
+});
+
 test('todo conjunto de classe/faixa cabe nos pontos disponíveis', () => {
   const rows = reachability(data);
   assert.ok(rows.length >= 8 * 6);

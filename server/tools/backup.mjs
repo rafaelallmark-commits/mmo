@@ -11,7 +11,7 @@
 //   quando não estão no PATH (a versão precisa ser igual ou mais nova que a do servidor).
 import { DatabaseSync } from 'node:sqlite';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { isPostgresUrl, parsePgUrl, PgStore } from '../src/store-pg.js';
 
@@ -32,24 +32,25 @@ function prune(prefix, ext) {
 if (isPostgresUrl(db)) {
   const p = parsePgUrl(db);
   const u = new URL(p.connectionString); // já sem ?schema=
-  const password = decodeURIComponent(u.password);
+  // decodificada como o 'pg' faz (a do arquivo de senha vem codificada por parsePgUrl); "%" solto na URL fica
+  let password = u.password;
+  try { password = decodeURIComponent(password); } catch { /* "%" sem dois dígitos hex: a senha é o texto como está */ }
   u.password = '';
   const prefix = `${p.database}${p.schema ? `-${p.schema}` : ''}`.replace(/[^A-Za-z0-9_.-]/g, '_');
   const out = join(dir, `${prefix}-${stamp}.dump`);
+  // grava com outro nome e só dá o nome final depois de conferido: uma falha (ou o processo morto no meio)
+  // não apaga um backup bom com o mesmo nome (duas execuções no mesmo segundo) nem deixa um arquivo pela
+  // metade que pareceria um backup e entraria na conta dos N mantidos
+  const partial = `${out}.parcial`;
+  const fail = (msg) => { rmSync(partial, { force: true }); console.error(msg); process.exit(1); };
   const binDir = arg('pg-bin', process.env.CINZAS_PG_BIN ?? null);
   const exe = (name) => (binDir ? join(binDir, name) : name);
   const env = { ...process.env, ...(password ? { PGPASSWORD: password } : {}) };
-  const dump = spawnSync(exe('pg_dump'), ['--format=custom', '--file', out, ...(p.schema ? ['--schema', p.schema] : []), '--dbname', u.toString()], { env, encoding: 'utf8' });
-  if (dump.error || dump.status !== 0) {
-    rmSync(out, { force: true });
-    console.error(`backup falhou: pg_dump ${dump.error ? dump.error.message : `saiu com ${dump.status}`}\n${(dump.stderr || '').trim()}`);
-    process.exit(1);
-  }
-  const list = spawnSync(exe('pg_restore'), ['--list', out], { encoding: 'utf8' });
-  if (list.error || list.status !== 0) {
-    console.error(`backup gerado mas ilegível para o pg_restore: ${list.error?.message ?? list.stderr}`);
-    process.exit(1);
-  }
+  const dump = spawnSync(exe('pg_dump'), ['--format=custom', '--file', partial, ...(p.schema ? ['--schema', p.schema] : []), '--dbname', u.toString()], { env, encoding: 'utf8' });
+  if (dump.error || dump.status !== 0) fail(`backup falhou: pg_dump ${dump.error ? dump.error.message : `saiu com ${dump.status}`}\n${(dump.stderr || '').trim()}`);
+  const list = spawnSync(exe('pg_restore'), ['--list', partial], { encoding: 'utf8' });
+  if (list.error || list.status !== 0) fail(`backup gerado mas ilegível para o pg_restore: ${list.error?.message ?? list.stderr}`);
+  renameSync(partial, out);
   const tables = list.stdout.split('\n').filter((l) => / TABLE DATA /.test(l)).length;
   let chars = '?';
   try {
@@ -59,6 +60,11 @@ if (isPostgresUrl(db)) {
   console.log(`backup: ${out} (${(statSync(out).size / 1048576).toFixed(1)} MB, pg_dump -Fc de ${p.label}${p.schema ? ` esquema ${p.schema}` : ''}, ${tables} tabelas com dados, ${chars} personagens no banco, conferido com pg_restore --list, ${Date.now() - t0} ms)`);
   prune(prefix, '.dump');
 } else {
+  // --db de um arquivo SQLite com o servidor no PostgreSQL (CINZAS_DB): quase sempre a linha antiga do cron
+  // depois de ligar o perfil "postgres" — a cópia sairia "certa", mas de um banco que ninguém mais usa
+  if (isPostgresUrl(process.env.CINZAS_DB)) {
+    console.error(`aviso: o banco do servidor é o PostgreSQL (CINZAS_DB), mas este backup é do arquivo SQLite ${db}: os dados do jogo não estão nele (backup do PostgreSQL: docs/08-operacao.md §8.10)`);
+  }
   const out = join(dir, `${basename(db, '.db')}-${stamp}.db`);
   const conn = new DatabaseSync(db);
   conn.exec(`VACUUM INTO '${out.replace(/'/g, "''")}'`);

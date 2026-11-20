@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import pg from 'pg';
 import { createStore, isPostgresUrl, testSchemaFor } from '../src/db.js';
 import { Store, MIGRATIONS } from '../src/store.js';
 import { PgStore, PG_MIGRATIONS, parsePgUrl, questionToDollar } from '../src/store-pg.js';
@@ -51,6 +52,12 @@ test('senha do PostgreSQL num arquivo (CINZAS_DB_PASSWORD_FILE): entra na conex�
     // senha na própria URL vence o arquivo; sem arquivo, nada muda
     assert.equal(new URL(parsePgUrl('postgres://u:na-url@h/db', { passwordFile: file }).connectionString).password, 'na-url');
     assert.equal(new URL(parsePgUrl('postgres://u@h/db', { passwordFile: null }).connectionString).password, '');
+    // qualquer caractere chega intacto ao 'pg' (que decodifica a senha da URL: "%41" viraria "A")
+    for (const pw of ['ab%41cd', '50%off', '%', 'é ç#?&=+/@:']) {
+      writeFileSync(file, `${pw}\n`);
+      const cs = parsePgUrl('postgres://cinzas@banco:5432/cinzas', { passwordFile: file }).connectionString;
+      assert.equal(new pg.Client({ connectionString: cs }).password, pw, `senha ${JSON.stringify(pw)} como o 'pg' lê`);
+    }
     writeFileSync(file, '\n');
     assert.throws(() => parsePgUrl('postgres://u@h/db', { passwordFile: file }), /vazio/);
     assert.throws(() => parsePgUrl('postgres://u@h/db', { passwordFile: join(dir, 'nao-existe') }), /CINZAS_DB_PASSWORD_FILE/);

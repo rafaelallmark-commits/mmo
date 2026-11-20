@@ -226,7 +226,9 @@ docker compose logs -f servidor
   `deploy/segredos/senha_banco.txt` (fora do git) e chega aos três como segredo do compose. Sem o perfil nada muda
   (SQLite no volume `dados`). Como ligar, backup, restauração e como levar um banco SQLite que já existe para o
   PostgreSQL: [§8.10, "No Docker Compose"](#810-postgresql). No PostgreSQL o backup é com o `pg_dump` do contêiner
-  `banco`, não com o `npm run backup` da zona (a imagem do jogo não traz o `pg_dump`).
+  `banco`, não com o `npm run backup` da zona (a imagem do jogo não traz o `pg_dump`): **troque a linha do cron**
+  ao ligar o perfil — a antiga continuaria copiando o `/data/cinzas.db`, que ninguém mais usa (o backup avisa no
+  erro padrão quando o `CINZAS_DB` do contêiner é o PostgreSQL).
 
 ### TLS pelo proxy
 
@@ -379,9 +381,13 @@ npm run contas -- --token-secret "$CINZAS_TOKEN_SECRET"        # serviço de con
 - O log de início mostra o banco em uso, sem a senha (`banco: PostgreSQL cinzas@db.interno:5432/cinzas`).
 - **Senha num arquivo**: sem senha na URL, `CINZAS_DB_PASSWORD_FILE=/caminho/senha` faz o servidor, o serviço de
   contas e as ferramentas lerem a senha desse arquivo (o conteúdo inteiro, sem as quebras de linha do fim — o mesmo
-  formato do `POSTGRES_PASSWORD_FILE` da imagem oficial). É assim no Docker Compose (abaixo). Arquivo vazio ou
-  ilegível é erro na hora de subir; com senha no arquivo e banco SQLite, o log avisa (faltou `CINZAS_DB`?).
-- `?schema=nome` no fim da URL usa um esquema próprio em vez de `public` (criado se faltar).
+  formato do `POSTGRES_PASSWORD_FILE` da imagem oficial; qualquer caractere vale, `%`, `@` e `:` inclusive). É assim
+  no Docker Compose (abaixo). Arquivo vazio ou ilegível é erro na hora de subir; com senha no arquivo e banco
+  SQLite, o log avisa (faltou `CINZAS_DB`?). Senha **na própria URL** segue a regra das URLs: `%`, `@`, `:` e `/`
+  codificados (`%25`, `%40`, `%3A`, `%2F`).
+- `?schema=nome` no fim da URL usa um esquema próprio em vez de `public` (criado se faltar). Para um papel de
+  menor privilégio, o administrador cria o esquema antes (`CREATE SCHEMA nome AUTHORIZATION cinzas`) e o papel não
+  precisa de `CREATE` no banco: esquema que já existe não é criado de novo.
 - Os outros parâmetros da URL vão para o driver `pg` (ex.: `sslmode=verify-full` para TLS até o banco). Para
   usar a mesma URL no `pg_dump`/`pg_restore`, fique nos parâmetros que o libpq também entende (`sslmode`, `host`, `port`...).
 - Banco na mesma rede do servidor: cada chamada espera a ida e volta (abaixo).
@@ -453,6 +459,8 @@ npm run backup -- --db "$CINZAS_DB" --para backups --manter 14
 
 Roda `pg_dump -Fc` (formato custom: comprimido, foto consistente de uma transação, sem parar o jogo), confere o
 arquivo com `pg_restore --list` e mantém só as 14 cópias mais recentes (`backups/cinzas-AAAA-MM-DDTHH-MM-SS.dump`).
+O arquivo é gravado como `.dump.parcial` e só ganha o nome final depois de conferido: um backup que falha ou é
+interrompido não apaga outro nem fica parecendo um backup bom (sobra de uma execução morta: `.parcial`, apague).
 A senha vai por `PGPASSWORD`, não pela linha de comando; com `?schema=` o dump é só daquele esquema. O `pg_dump`
 precisa ser da versão do servidor ou mais novo (`--pg-bin` ou `CINZAS_PG_BIN` apontam a pasta dos binários).
 Para perder menos de uma hora num desastre, some o arquivamento contínuo de WAL do próprio PostgreSQL
@@ -476,7 +484,8 @@ Uma tabela só (ex.: auditoria): `pg_restore -t audit_log ...`. As sequências d
 consistente do arquivo (pode ser com o servidor rodando; o arquivo não é alterado), migra a foto, exige as
 tabelas do PostgreSQL vazias, copia tudo numa transação com os mesmos ids (clãs e membros inclusive), acerta as
 sequências e confere as contagens. Os nomes valem igual nos dois bancos (`nocase()` = `NOCASE`): o que o SQLite
-aceitou, os índices únicos do PostgreSQL aceitam.
+aceitou, os índices únicos do PostgreSQL aceitam. Fração guardada numa coluna inteira do SQLite (que aceita; ex.
+fim de suspensão gravado por versões anteriores ao arredondamento) é arredondada, e a contagem aparece no log.
 
 **Testes**: `npm run test:pg` sobe um PostgreSQL temporário (`initdb` num diretório temporário, só soquete Unix,
 sem TCP), roda a suíte inteira com `CINZAS_TEST_PG=<url>` e apaga tudo no fim. Com essa variável, cada banco que
@@ -522,7 +531,9 @@ PostgreSQL) mostram isso em produção; alerta sugerido: `db_call_ms_p99 > 5` ou
   e nunca há um desfazer silencioso. A auditoria dentro de transação roda num `SAVEPOINT`: a falha dela não desfaz
   o resto (como no SQLite).
 - Worker com defeito que morre no meio de um pedido responde o erro antes de sair (a thread principal não espera o
-  prazo); o pedido seguinte troca o worker. `close()` encerra o worker.
+  prazo); o pedido seguinte troca o worker. `close()` encerra o worker. Um worker que morre **fora** de um pedido
+  sem passar por esse caminho (falta de memória, por exemplo) só é percebido pelo prazo da ponte: a chamada
+  seguinte espera os 15 s e falha, e a outra (depois do recuo) já sobe worker e conexão novos.
 - Migrações: quem sobe junto com outro processo que está migrando espera a trava consultiva o tempo que for
   preciso (sem `lock_timeout` nem `statement_timeout`); o `ALTER TABLE` em si continua com o `lock_timeout`
   normal, para não ficar na fila travando as consultas das zonas antigas.

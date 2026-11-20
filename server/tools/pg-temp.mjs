@@ -68,7 +68,7 @@ export async function startTempPostgres({ durable = false, maxConnections = 300 
     const init = ['-D', data, '-U', 'cinzas', '--auth=trust', '--encoding=UTF8', ...(durable ? [] : ['--no-sync'])];
     try { run('initdb', [...init, '--locale=C.UTF-8']); } catch {
       rmSync(data, { recursive: true, force: true });
-      run('initdb', [...init, '--locale=C']); // sistemas sem C.UTF-8 (lower() só em ASCII)
+      run('initdb', [...init, '--locale=C']); // sistemas sem C.UTF-8 (nocase() e as ordens COLLATE "C" não dependem do locale)
     }
     const opts = [`-k ${sock}`, `-p ${port}`, "-c listen_addresses=''", `-c max_connections=${maxConnections}`,
       ...(durable ? [] : ['-c fsync=off', '-c synchronous_commit=off', '-c full_page_writes=off'])].join(' ');

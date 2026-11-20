@@ -4,7 +4,8 @@
 //   store.test.js, que só existe no SQLite);
 // - três processos subindo juntos no mesmo esquema aplicam cada migração uma vez só (trava consultiva);
 // - duas conexões no mesmo esquema: isolamento da transação e espera de trava limitada (lock_timeout).
-// - um banco SQLite importado (tools/sqlite-para-pg.mjs) responde igual nos dois bancos.
+// - um banco SQLite importado (tools/sqlite-para-pg.mjs) responde igual nos dois bancos (fração em coluna
+//   inteira é arredondada); papel de menor privilégio, dono só do próprio esquema, sobe e migra.
 // - falhas da ponte: conexão derrubada parada ou no meio da transação, prazo esgotado com o erro engolido
 //   dentro de tx(fn), comando que falha dentro da transação, banco recusando conexões (falha na hora em
 //   vez de esperar), migração esperando outro processo além do lock_timeout, close() encerrando o worker.
@@ -215,6 +216,48 @@ test('PostgreSQL: banco SQLite importado (sqlite-para-pg) responde igual nos doi
       assert.ok(pg.verifyAccount('bento', 'senha'), 'senha importada confere');
     } finally { src.close(); }
   } finally { pg?.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('PostgreSQL: importação arredonda fração guardada numa coluna inteira do SQLite (o BIGINT recusaria)', { skip }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cinzas-import-'));
+  const pg = new PgStore(PG_URL, { schema: schemaOf('fracao'), dropSchemaOnClose: true });
+  try {
+    const lite = new Store(join(dir, 'origem.db'));
+    const acc = lite.createAccount('fracao', 'senha');
+    const until = Date.now() + 0.123456789 * 3600_000; // "/gm suspender Nome 0.123456789 ...", antes do arredondamento
+    lite.db.prepare('UPDATE accounts SET banned_until = ?, ban_reason = ? WHERE id = ?').run(until, 'teste', acc);
+    assert.equal(lite.db.prepare('SELECT typeof(banned_until) AS t FROM accounts').get().t, 'real', 'o SQLite guarda a fração');
+    lite.close();
+    const log = [];
+    assert.equal(importSqliteToPg(join(dir, 'origem.db'), pg, { log: (l) => log.push(l) }).accounts, 1);
+    assert.deepEqual([pg.findAccount('FRACAO').banned_until, pg.findAccount('fracao').ban_reason], [Math.round(until), 'teste']);
+    assert.ok(log.some((l) => /1 valor/.test(l)), 'a importação conta o que arredondou');
+  } finally { pg.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('PostgreSQL: papel de menor privilégio (dono só do próprio esquema, sem CREATE no banco) sobe, migra e reabre', { skip }, () => {
+  const role = `cz_papel_${process.pid}`;
+  const admin = new PgStore(PG_URL, { migrate: false });
+  try {
+    // senha para o CI (TCP com scram-sha-256); o servidor temporário do test:pg confia no soquete
+    admin.exec(`CREATE ROLE ${role} LOGIN PASSWORD 'senha-do-teste'; CREATE SCHEMA ${role} AUTHORIZATION ${role}`);
+    assert.equal(admin.query("SELECT has_database_privilege($1, current_database(), 'CREATE') AS pode", [role])[0].pode, false, 'o papel não cria esquemas no banco');
+    const u = new URL(PG_URL);
+    u.username = role;
+    u.password = 'senha-do-teste';
+    u.searchParams.set('schema', role);
+    const st = new PgStore(u.toString());
+    try {
+      assert.deepEqual(st.migrated, MIGRATIONS.map((m) => m.v));
+      const acc = st.createAccount('Menor', 'senha');
+      assert.equal(st.findAccount('MENOR').id, acc);
+    } finally { st.close(); }
+    const again = new PgStore(u.toString());
+    try { assert.deepEqual(again.migrated, [], 'reabrir não reaplica'); } finally { again.close(); }
+  } finally {
+    admin.exec(`DROP SCHEMA IF EXISTS ${role} CASCADE; DROP ROLE IF EXISTS ${role}`);
+    admin.close();
+  }
 });
 
 test('PostgreSQL: conexão derrubada parada reconecta sozinha; derrubada no meio da transação desfaz tudo', { skip }, async () => {

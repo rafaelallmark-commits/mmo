@@ -183,12 +183,13 @@ export function readPasswordFile(path) {
 
 // postgres://usuario:senha@host:5432/banco?schema=cinzas  (schema é nosso; o resto vai para o 'pg')
 // Sem senha na URL e com passwordFile (padrão: CINZAS_DB_PASSWORD_FILE), a senha vem do arquivo e entra
-// na string de conexão (nunca no rótulo dos logs).
+// na string de conexão (nunca no rótulo dos logs). Ela entra codificada (encodeURIComponent): o setter da
+// URL não codifica "%", e o 'pg' (como o pg_dump) decodifica a senha da URL — "ab%41" viraria "abA".
 export function parsePgUrl(url, { passwordFile = process.env.CINZAS_DB_PASSWORD_FILE } = {}) {
   const u = new URL(url);
   const schema = u.searchParams.get('schema');
   u.searchParams.delete('schema');
-  if (!u.password && passwordFile) u.password = readPasswordFile(passwordFile);
+  if (!u.password && passwordFile) u.password = encodeURIComponent(readPasswordFile(passwordFile));
   const user = decodeURIComponent(u.username);
   const host = u.searchParams.get('host') || u.hostname || 'localhost';
   const port = u.searchParams.get('port') || u.port || '5432';
@@ -376,7 +377,11 @@ export class PgStore {
     this.exec(`SET LOCAL lock_timeout = ${Math.round(this.lockTimeoutMs)}`);
   }
 
+  // Esquema que já existe não é criado de novo: o CREATE SCHEMA IF NOT EXISTS confere o privilégio de criar
+  // no banco ANTES de ver que o esquema existe, e um papel de menor privilégio (dono só do próprio esquema,
+  // criado pelo administrador, sem CREATE no banco) não subiria.
   ensureSchema() {
+    if (this.get('SELECT 1 AS ok FROM pg_namespace WHERE nspname = $1', this.schema)) return;
     this.tx(() => {
       this.lockMigrations(lockKey(`schema:${this.schema}`));
       this.exec(`CREATE SCHEMA IF NOT EXISTS ${ident(this.schema)}`);

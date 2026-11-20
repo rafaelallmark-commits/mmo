@@ -5,7 +5,8 @@
 //    até a última versão — o arquivo original não é alterado.
 // 2. Abre o PostgreSQL (migrações rodam se faltar) e exige as tabelas do jogo vazias.
 // 3. Copia tudo numa transação só, na ordem das chaves estrangeiras, com os mesmos ids; acerta as
-//    sequências de identidade; confere a contagem de linhas de cada tabela.
+//    sequências de identidade; confere a contagem de linhas de cada tabela. Fração guardada numa coluna
+//    INTEGER do SQLite (que aceita) é arredondada (o BIGINT do PostgreSQL recusaria).
 // Os nomes valem igual nos dois bancos (nocase() do PostgreSQL = COLLATE NOCASE do SQLite, só no ASCII):
 // o que o SQLite aceitou, os índices únicos do PostgreSQL aceitam.
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -34,17 +35,29 @@ export function importSqliteToPg(sqlitePath, pg, { log = () => {} } = {}) {
         if (pg.query(`SELECT EXISTS (SELECT 1 FROM ${t}) AS cheio`)[0].cheio) throw new Error(`a tabela ${t} do PostgreSQL não está vazia: importe num banco (ou esquema) novo`);
       }
       const counts = {};
+      let rounded = 0;
       pg.tx(() => {
         for (const t of TABLES) {
-          const cols = lite.db.prepare(`PRAGMA table_info(${t})`).all().map((c) => c.name);
+          const info = lite.db.prepare(`PRAGMA table_info(${t})`).all();
+          const cols = info.map((c) => c.name);
+          // Coluna INTEGER do SQLite pode guardar fração (afinidade de tipo: ex. banned_until de "/gm suspender
+          // Nome 0.123456789", gravado antes do arredondamento); o BIGINT do PostgreSQL a recusaria e a
+          // importação inteira voltaria. Arredonda, como o jogo faz hoje ao gravar.
+          const intCol = info.map((c) => /INT/i.test(c.type));
+          const value = (r, c, j) => {
+            const v = r[c];
+            if (intCol[j] && typeof v === 'number' && !Number.isInteger(v)) { rounded++; return Math.round(v); }
+            return v;
+          };
           const sql = `INSERT INTO ${t} (${cols.join(', ')}) VALUES (${cols.map((_, i) => `$${i + 1}`).join(', ')})`;
           const rows = lite.db.prepare(`SELECT ${cols.join(', ')} FROM ${t} ORDER BY rowid`).all();
-          for (let i = 0; i < rows.length; i += CHUNK) pg.batch(rows.slice(i, i + CHUNK).map((r) => [sql, cols.map((c) => r[c])]));
+          for (let i = 0; i < rows.length; i += CHUNK) pg.batch(rows.slice(i, i + CHUNK).map((r) => [sql, cols.map((c, j) => value(r, c, j))]));
           if (IDENTITY[t]) pg.query(`SELECT setval(pg_get_serial_sequence('${t}', '${IDENTITY[t]}'), COALESCE((SELECT MAX(${IDENTITY[t]}) FROM ${t}), 0) + 1, false)`);
           counts[t] = rows.length;
           log(`  ${t}: ${rows.length}`);
         }
       });
+      if (rounded) log(`  ${rounded} valor(es) com fração em coluna inteira arredondado(s)`);
       for (const t of TABLES) {
         const n = pg.query(`SELECT COUNT(*) AS n FROM ${t}`)[0].n;
         if (n !== counts[t]) throw new Error(`contagem não confere em ${t}: SQLite ${counts[t]}, PostgreSQL ${n}`);
