@@ -28,7 +28,7 @@ Personagens: modelos VRM de anime — **Seed-san model by VirtualCast, Inc.** e 
 | [docs/05-arquitetura.md](docs/05-arquitetura.md) | Estrutura técnica, arquivos, protocolo, saque idempotente, reconexão, concorrência, critérios de aceitação dos 4 marcos, o que muda para teste público e múltiplas zonas |
 | [docs/06-mundo-e-mapas.md](docs/06-mundo-e-mapas.md) | Cidades, cinco áreas, regras de monstros, morte e resgate, combate legível, telas da interface |
 | [docs/07-navegacao.md](docs/07-navegacao.md) | Telas, camadas dentro do jogo, mapa do mundo, controles, direção gráfica e som |
-| [docs/08-operacao.md](docs/08-operacao.md) | Execução e operação: opções do servidor, métricas, banco e backup, testes e medições; implantação do teste público (CI, releases assinadas, Docker/Compose, systemd, TLS) |
+| [docs/08-operacao.md](docs/08-operacao.md) | Execução e operação: opções do servidor, métricas, banco e backup, testes e medições; implantação do teste público (CI, releases assinadas, Docker/Compose, systemd, TLS); várias zonas |
 | [docs/relatorio-progressao.md](docs/relatorio-progressao.md) | Marco 4: tempo medido por nível (1→20) de cada classe caçando solo, contra as metas da tabela de XP; economia de tônicos, equipamento, mortes e problemas encontrados *(gerado pela simulação)* |
 | [docs/DECISOES.md](docs/DECISOES.md) | Todas as decisões tomadas por conta própria e o motivo |
 | [docs/CREDITOS.md](docs/CREDITOS.md) | Créditos e licenças dos modelos de personagem; som e música originais (síntese por `tools/audio/gerar_sons.py`) |
@@ -75,6 +75,16 @@ liga os comandos de mestre (`--dev`). Argumentos diretos (depois de `--`):
 ```bash
 npm start -- --port 7777 --db outro.db --xp-rate 1 --time-scale 1
 ```
+
+### Várias zonas (opcional)
+
+Os mapas também podem ser divididos entre vários processos de zona, coordenados por um **serviço de mundo**: cada personagem tem um único dono, quem cruza um portal para um mapa de outra zona é transferido com um token de uso único (o cliente reconecta sozinho), e grupo, clã, sussurro e moderação funcionam entre zonas. Para experimentar na mesma máquina (mundo + 2 zonas no mesmo banco):
+
+```bash
+npm run multizona -- --zonas 2 --dev
+```
+
+O cliente entra por `ws://127.0.0.1:7777` (Estrada Velha e cidades) e passa para a segunda zona no portal do Brejo. Opções, falhas e implantação em [docs/08-operacao.md §8.10](docs/08-operacao.md#810-múltiplas-zonas); desenho em [docs/05-arquitetura.md](docs/05-arquitetura.md#múltiplas-zonas).
 
 ## 2. Rodar dois clientes Godot na mesma máquina
 

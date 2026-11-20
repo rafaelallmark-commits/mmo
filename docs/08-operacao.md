@@ -81,7 +81,9 @@ nenhum acima de 50 ms; CPU do processo ~7% de um núcleo; 144 MB de memória.
 - **Cliente não conecta**: confira a porta e `--host`; `curl http://127.0.0.1:9100/health`.
 - **Ticks lentos**: veja `cinzas_tick_ms_p99` e o número de jogadores/zonas; zonas sem jogadores continuam
   simulando monstros.
-- **Banco travado** (`database is locked`): só um processo de servidor pode usar o arquivo.
+- **Banco travado** (`database is locked`): o arquivo aceita vários processos do jogo ao mesmo tempo (serviço de
+  contas e, em várias zonas, cada zona — §8.10), mas não um segundo servidor de um processo só nem uma cópia aberta
+  por outra ferramenta que segure a trava por mais de 3 s.
 - **Godot headless** imprime `Parameter "m" is null` e `SHADER ERROR: Global uniform '...' does not exist`
   (renderizador dummy, sem uniformes globais): inofensivos. O CI só falha com `SCRIPT ERROR` ou `Parse Error`.
 
@@ -334,3 +336,56 @@ pasta, padrão `docs/` do repositório).
 **Privacidade**: política em [PRIVACIDADE.md](PRIVACIDADE.md). Exclusão de conta pelo jogo (tela de
 personagens) ou pelo serviço de contas apaga e-mail, senha, itens e missões na hora e anonimiza os nomes.
 
+## 8.10 Múltiplas zonas
+
+Opcional: os mapas abertos se dividem entre processos de zona, coordenados por um **serviço de mundo** interno
+(desenho em [05-arquitetura.md](05-arquitetura.md#múltiplas-zonas), decisões D93–D100). Sem `--world`, nada muda.
+Todos os processos usam **o mesmo banco** e o **mesmo segredo do mundo**, só por variável de ambiente:
+
+```bash
+export CINZAS_WORLD_SECRET="$(openssl rand -hex 32)"   # o mesmo no mundo e em todas as zonas
+npm run mundo -- --port 7790 --host 127.0.0.1
+npm start -- --port 7777 --db cinzas.db --world ws://127.0.0.1:7790 --zone-id zona-a \
+  --maps estrada_velha,pedrambar,vau_de_nacar --public-url wss://jogo.exemplo.com/a
+npm start -- --port 7778 --db cinzas.db --world ws://127.0.0.1:7790 --zone-id zona-b \
+  --maps brejo_bombas,oficina_soterrada,galerias_eco,canais_eclusa --public-url wss://jogo.exemplo.com/b
+```
+
+Para testar na máquina: `npm run multizona -- --zonas 2 --dev` sobe o mundo e as zonas (portas 7777, 7778, …;
+`--porta`, `--porta-mundo`, `--db`, `--mapas "a,b;c,d"`; o resto vai para as zonas) e `Ctrl+C` desliga tudo
+salvando. O cliente entra por qualquer zona (`--server=ws://127.0.0.1:7777`) e é levado à zona do mapa salvo.
+
+| Onde | Opção | Padrão | Para quê |
+|---|---|---|---|
+| mundo | `--port` (ou `CINZAS_WORLD_PORT`), `--host` | 7790, 127.0.0.1 | Porta interna das zonas. **Nunca na internet**: só as zonas falam com ela. |
+| mundo | `--secret` (ou `CINZAS_WORLD_SECRET`) | — | Segredo do HMAC do hello das zonas e dos tokens de transferência. Prefira a variável (a opção aparece no `ps`). |
+| mundo | `--heartbeat-ms`, `--down-after-ms` | 2000, 10000 | Sinal de vida das zonas e silêncio que dá uma zona como fora do ar. |
+| zona | `--world` (ou `CINZAS_WORLD`) | desligado | Endereço do mundo; liga o modo de várias zonas. |
+| zona | `--world-secret` (ou `CINZAS_WORLD_SECRET`) | — | O mesmo segredo do mundo (obrigatório com `--world`). |
+| zona | `--zone-id` (ou `CINZAS_ZONE_ID`) | `zona-<porta>` | Nome da zona no mundo (letras, números, `.`, `_`, `-`). |
+| zona | `--maps` (ou `CINZAS_MAPS`) | todos | Mapas abertos desta zona, separados por vírgula. Dois processos não podem pedir o mesmo mapa. |
+| zona | `--public-url` (ou `CINZAS_PUBLIC_URL`) | `ws://host:porta` | Endereço que os **clientes** usam para chegar a esta zona (vai no token de transferência). Atrás do Caddy, um caminho ou subdomínio por zona. |
+
+`GET http://127.0.0.1:7790/saude` mostra as zonas (mapas, endereço, jogadores, conectada, silêncio) e o número
+de posses e grupos. Cada zona continua com as próprias métricas (`--metrics-port` diferente por processo).
+
+**Quando algo falha**:
+
+- **Zona cai sem avisar**: depois de 10 s sem sinal o mundo libera as posses dela; quem tenta entrar num mapa
+  dela recebe "*Mapa* está fora do ar no momento" e os portais para lá recusam com a mesma frase. Ao subir de
+  novo (mesmo `--zone-id` e mapas, mesmo banco), ela volta ao registro; o progresso vale até o último salvamento
+  (posição a cada 10 s; itens, ouro e XP na hora).
+- **Zona perde o mundo** (rede ou mundo parado): com 6 s sem notícia ela salva e desconecta os jogadores
+  ("Conexão com o mundo perdida. Seu progresso foi salvo"); com 8 s para de gravar. Assim nada dela é escrito
+  depois de o mundo dar as posses a outra zona. Novas entradas esperam o mundo voltar.
+- **Mundo reinicia**: as zonas reconectam sozinhas e dizem quem têm carregado; o mundo refaz as posses e o
+  diretório. Nos primeiros 10 s depois de subir, entradas de personagens sem posse esperam as zonas se
+  reapresentarem. **Grupos se desfazem** (moram na memória do mundo); clãs não (estão no banco).
+- **Desligamento** (`SIGTERM`): a zona avisa o mundo, que para de mandar transferências para ela; depois do
+  prazo ela salva, solta as posses e se despede. Os portais para os mapas dela recusam enquanto isso.
+- **Transferência que não completa** (token de 30 s vencido, destino caiu no meio): o cliente volta para a lista
+  de personagens com o motivo; o personagem já foi gravado pela origem e entra de novo normalmente.
+- **Login com o personagem aberto em outra zona**: a outra zona grava e derruba ("Sua conta entrou em outra
+  conexão") antes de a nova entrada carregar o personagem; nunca há duas cópias.
+- **Moderação** vale em todas as zonas: suspensão e silêncio na chegada por transferência e os comandos de
+  mestre (`expulsar`, `suspender`, `silenciar`, `onde`, `anunciar`) alcançam quem está em outra zona.
