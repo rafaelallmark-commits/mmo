@@ -338,7 +338,8 @@ test('duelo: contagem, luta até 1 de vida, fuga e desistência', async () => {
     assert.ok(cast.ok || cast.code === 'bad_target', cast.reason);
     const e = await end;
     assert.equal(e.won, false);
-    assert.equal(pb.char.hp, 1, 'ninguém morre em duelo');
+    // perdeu com 1 de vida (a regeneração pode somar uma fração antes desta leitura)
+    assert.ok(pb.char.hp >= 1 && pb.char.hp < 3, `ninguém morre em duelo (vida ${pb.char.hp})`);
     assert.equal(pb.char.dead, false);
     assert.equal(zone.duels.duels.size, 0);
     log(`duelo terminou: ${e.text}`);
