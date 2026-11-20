@@ -278,7 +278,7 @@ Feito: métricas do servidor e HTTP de métricas, snapshots por diferença e int
 - Medição de latência no cliente (indicador na interface) e tolerância a 150 ms.
 - Revisão da progressão com telemetria de tempo por nível contra as metas da tabela de XP; ajuste de economia (ouro de entrada/saída, preço de tônicos, equipamento do armeiro e refino).
 - Documentação de execução, operação e cenários críticos atualizada.
-- **Aceitação**: relatório com p50/p95/p99 de tick e de latência; nenhum tick > 50 ms com 100 clientes; tempo médio por nível dentro de ±25% da meta; script de cenários críticos reproduzível. **Resultado**: com 100 clientes, tick p50/p95/p99 de 5/9/16,9 ms e nenhum acima de 50 ms (~9,6 KB/s por cliente); com 150 ms de atraso, todos conectados e sem erros; na simulação do 1 ao 25, a média das classes fica dentro de ±25% da meta em todos os níveis (7,4 h contra 7,7 h no total) e cada classe a até ±25% do total (de −16% a +11%); `npm run cenarios` reproduz tudo.
+- **Aceitação**: relatório com p50/p95/p99 de tick e de latência; nenhum tick > 50 ms com 100 clientes; tempo médio por nível dentro de ±25% da meta; script de cenários críticos reproduzível. **Resultado**: com 100 clientes, tick p50/p95/p99 de 4,5/7,8/14,1 ms e nenhum acima de 50 ms (~9,5 KB/s por cliente); com 150 ms de atraso, todos conectados e sem erros; na simulação do 1 ao 25, a média das classes fica dentro de ±25% da meta em todos os níveis (7,4 h contra 7,7 h no total) e cada classe a até ±25% do total (de −16% a +11%); `npm run cenarios` reproduz tudo.
 
 ### Pós-v1 — Níveis 21–25
 
