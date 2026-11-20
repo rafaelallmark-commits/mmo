@@ -31,6 +31,8 @@ const NAME_RE = /^[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9 _-]{2,15}$/;
 const RID_CACHE = 128;
 const PARTY_MAX = 5;
 const DEFAULT_MAP = 'estrada_velha';
+// pedidos que podem mudar itens da bolsa: depois deles a troca aberta confere se a oferta mudou
+const ITEM_MUTATING = new Set(['use_item', 'enhance', 'quest_turnin', 'storage_put', 'storage_take', 'equip', 'unequip', 'buy', 'pickup', 'claim_recovery', 'gm', 'sell', 'discard', 'cast']);
 const INTEREST_R = 70; // raio de interesse dos snapshots por diferença (m)
 const PRED_EPS2 = 0.1 * 0.1; // erro de posição tolerado na previsão por velocidade (m²)
 
@@ -60,6 +62,7 @@ export class GameServer {
     this.mod = new Moderation(this);
     this.closing = false;
     this.dataVersion = dataVersionOf(this.data);
+    this.serverVersion = SERVER_VERSION;
     this.byChar = new Map(); // charId -> session
     this.byAccount = new Map(); // accountId -> session
     this.byName = new Map(); // nome minúsculo -> charId (online)
@@ -500,6 +503,7 @@ export class GameServer {
   reply(s, msg, rid, res) {
     const after = res.after;
     delete res.after;
+    if (s.charId != null && ITEM_MUTATING.has(msg.t) && this.trades.byChar.has(s.charId)) this.trades.refresh(s.charId);
     const out = { t: 'res', rid, req: msg.t, ...res };
     if (rid != null && s.charId != null && res.cache !== false) {
       let m = this.ridCache.get(s.charId);
@@ -573,6 +577,7 @@ export class GameServer {
       case 'dungeon_enter': return this.hDungeonEnter(s, p, msg);
       case 'gm': return this.hGm(p, msg);
       case 'report': return this.mod.report(p, msg);
+      case 'bug_report': return this.mod.bugReport(p, msg);
       // comércio
       case 'trade_request': return this.trades.request(p, msg.name);
       case 'trade_accept': return this.trades.accept(p, msg.from);
@@ -1165,7 +1170,7 @@ export class GameServer {
     if (def.kind === 'consumable' && (def.level || 1) > c.level) return { ok: false, code: 'level', reason: `Nível ${def.level} exigido para ${def.name}. Seu nível atual é ${c.level}.` };
     const cost = (isGear ? this.gearPriceOf(item) : this.priceOf(item)) * qty;
     if (c.gold < cost) return { ok: false, code: 'no_gold', reason: `Ouro insuficiente: ${cost} necessário, você tem ${c.gold}.` };
-    const stack = [...c.items.values()].find((it) => it.loc === 'bag' && it.defId === item && it.qty + qty <= (def.stack || 1));
+    const stack = [...c.items.values()].find((it) => it.loc === 'bag' && it.defId === item && it.qty + qty <= (def.stack || 1) && !this.trades.isOffered(c.id, it.id));
     if (!stack && bagCount(c) >= BAG_CAPACITY) return { ok: false, code: 'bag_full', reason: 'Inventário cheio.' };
     this.store.tx(() => {
       c.gold -= cost;
@@ -1689,7 +1694,7 @@ export class GameServer {
       if (row.def_id) {
         const def = this.data.items[row.def_id];
         let stack = null;
-        if (def.stack) for (const it of c.items.values()) if (it.loc === 'bag' && it.defId === def.id && it.qty + row.qty <= def.stack) { stack = it; break; }
+        if (def.stack) for (const it of c.items.values()) if (it.loc === 'bag' && it.defId === def.id && it.qty + row.qty <= def.stack && !this.trades.isOffered(c.id, it.id)) { stack = it; break; }
         if (stack) {
           stack.qty += row.qty; instanceId = stack.id;
           this.store.saveItems(c.id, [stack]);

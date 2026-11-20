@@ -14,6 +14,7 @@ revise com assessoria jurídica (LGPD — Lei 13.709/2018).*
 | Personagens, itens, missões, ouro, tempo jogado | Fazer o jogo funcionar e medir o ritmo de progressão | Enquanto a conta existir |
 | Registros de segurança: entradas (com endereço IP), comandos de mestre, saque, compras, refino, recompensas, trocas entre jogadores, expulsões por excesso de comandos, suspensões e silêncios | Prevenir trapaça e fraude, investigar problemas | 90 dias (configurável no servidor) |
 | Denúncias: quem denunciou, quem foi denunciado, o motivo e as **últimas 20 falas do denunciado** (só as da última hora) | Analisar a denúncia | 90 dias, como os registros de segurança |
+| Relatos de problema (`/bug`): o texto, o personagem, o mapa, a posição e as versões do jogo | Corrigir o problema relatado | 90 dias, como os registros de segurança |
 | Suspensão ou silêncio da conta (até quando e por quê) | Aplicar as regras de convivência | Enquanto valer; o histórico fica nos registros de segurança |
 | Códigos de confirmação e de troca de senha | Confirmar o e-mail e trocar a senha | 30 minutos de validade; apagados depois de 1 dia |
 | Métricas de operação (tempo de processamento, banda, número de jogadores) | Manter o servidor saudável | Sem dados pessoais |

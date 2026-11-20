@@ -133,8 +133,40 @@ services:
 #   senha_banco:
 #     file: ./segredos/senha_banco.txt   # fora do git (deploy/segredos/ está no .gitignore)
 
+  # --- Monitoramento (opcional): docker compose --profile monitoramento up -d -----------------------
+  # Prometheus coleta as métricas da zona (servidor:9100) e avalia os alertas de monitoramento/alertas.yml;
+  # Grafana mostra o painel pronto em http://127.0.0.1:3000 (só nesta máquina; use um túnel SSH de fora).
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    profiles: ["monitoramento"]
+    restart: unless-stopped
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=15d"]
+    volumes:
+      - ./monitoramento/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoramento/alertas.yml:/etc/prometheus/alertas.yml:ro
+      - prometheus_dados:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+  grafana:
+    image: grafana/grafana:11.3.1
+    profiles: ["monitoramento"]
+    restart: unless-stopped
+    depends_on: [prometheus]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_SENHA:-troque-esta-senha}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    volumes:
+      - ./monitoramento/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoramento/grafana/painel-cinzas.json:/var/lib/grafana/dashboards/painel-cinzas.json:ro
+      - grafana_dados:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+
 volumes:
   dados:
   caddy_dados:
   caddy_config:
+  prometheus_dados:
+  grafana_dados:
   # banco:

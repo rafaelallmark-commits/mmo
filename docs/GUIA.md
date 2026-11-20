@@ -4,7 +4,8 @@ Bem-vindo a Várdia. Este guia cobre o que você precisa para começar; as regra
 [Termos de uso](TERMOS.md) e o que guardamos dos seus dados está na [Política de privacidade](PRIVACIDADE.md).
 
 > É um **teste**: pode haver erros, quedas e reinícios avisados no jogo, e o progresso pode ser apagado ao
-> fim do teste. Encontrou um problema? Conte para a equipe — quem reporta falhas de boa-fé não é punido.
+> fim do teste. Encontrou um problema? Digite **`/bug o que aconteceu`** no chat (ou *Reportar um problema* no
+> menu do Esc): o relato vai com o mapa, a posição e as versões. Quem reporta falhas de boa-fé não é punido.
 
 ## 1. Entrar
 

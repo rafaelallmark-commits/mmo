@@ -300,7 +300,7 @@ reservado no compose), limites de taxa por conexão, papéis de mestre e privaci
 
 Modo **opcional** (`--world`): os mapas abertos se dividem entre processos de zona e um **serviço de mundo**
 coordena. Sem `--world`, um processo hospeda tudo, como antes. Operação em [08-operacao.md §8.10](08-operacao.md#810-múltiplas-zonas);
-decisões D100–D107 em [DECISOES.md](DECISOES.md).
+decisões D101–D108 em [DECISOES.md](DECISOES.md).
 
 ```
                      ┌──────────────────────────────────────────────┐

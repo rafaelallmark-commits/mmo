@@ -556,7 +556,13 @@ func _msg_or_err(r) -> void:
 ## /troca Nome · /duelo Nome · /c texto · /cla · /cla criar Nome SIGLA · /cla convidar Nome · /cla sair
 ## /denunciar Nome motivo · equipe: /gm expulsar|suspender|silenciar|liberar|desbloquear|onde|anunciar
 func chat_command(t: String) -> bool:
-	if t.begins_with("/denunciar "):
+	if t.begins_with("/bug ") or t == "/bug":
+		var text := t.substr(5).strip_edges() if t.length() > 5 else ""
+		if text.length() < 5:
+			hud.error("Use: /bug o que aconteceu (vai junto o lugar e a hora)")
+		else:
+			Net.request("bug_report", {"text": text, "client": str(ProjectSettings.get_setting("application/config/version", "dev"))}, _msg_or_err)
+	elif t.begins_with("/denunciar "):
 		var rest := t.substr(11).strip_edges()
 		var sp := rest.find(" ")
 		if sp <= 0:

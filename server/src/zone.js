@@ -279,7 +279,11 @@ export class Zone {
   cmdCast(p, skillId, targetId, x, z, allyId) {
     const s = this.data.skills[skillId];
     const gcd = this.f.skills?.globalCooldownMs ?? 1000;
-    if (p.casting) this.cancelCast(p, 'Conjuração interrompida: você usou outra habilidade.');
+    if (p.casting) {
+      // trocar de ideia no meio da conjuração: a anterior não saiu (nada gasto) e a nova pode sair já
+      this.cancelCast(p, 'Conjuração interrompida: você usou outra habilidade.', 'switched');
+      p.gcdUntil = Math.min(p.gcdUntil || 0, this.now);
+    }
     if (s && !s.offGcd && this.now < (p.gcdUntil || 0)) return { ok: false, code: 'gcd', reason: `Recarga global: ${((p.gcdUntil - this.now) / 1000).toFixed(1)} s.` };
     if (s && s.castMs > 0) {
       const chk = this.castNow(p, skillId, targetId, x, z, allyId, true);
@@ -288,19 +292,19 @@ export class Zone {
       p.dest = null; p.path = null; p.char.chase = null;
       if (!s.offGcd) p.gcdUntil = this.now + Math.max(gcd, s.castMs);
       this.broadcast({ t: 'cast_start', eid: p.eid, skill: skillId, ms: s.castMs });
-      return { ok: true, casting: { skill: skillId, ms: s.castMs, name: s.name }, gcdMs: gcd };
+      return { ok: true, casting: { skill: skillId, ms: s.castMs, name: s.name }, gcdMs: s.offGcd ? 0 : Math.max(gcd, s.castMs) };
     }
     const r = this.castNow(p, skillId, targetId, x, z, allyId);
     if (r.ok && s && !s.offGcd) { p.gcdUntil = this.now + gcd; r.gcdMs = gcd; }
     return r;
   }
 
-  cancelCast(p, reason) {
+  cancelCast(p, reason, code = 'interrupted') {
     if (!p.casting) return;
     const cs = p.casting;
     p.casting = null;
     p.gcdUntil = Math.min(p.gcdUntil || 0, this.now + 300); // interrompida: libera logo outra ação
-    this.send(p.char.id, { t: 'cast_end', ok: false, skill: cs.skillId, reason });
+    this.send(p.char.id, { t: 'cast_end', ok: false, skill: cs.skillId, reason, code });
     this.broadcast({ t: 'cast_cancel', eid: p.eid, skill: cs.skillId });
   }
 
