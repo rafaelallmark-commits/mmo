@@ -6,8 +6,8 @@
 // 2. Abre o PostgreSQL (migrações rodam se faltar) e exige as tabelas do jogo vazias.
 // 3. Copia tudo numa transação só, na ordem das chaves estrangeiras, com os mesmos ids; acerta as
 //    sequências de identidade; confere a contagem de linhas de cada tabela.
-// Nomes que o SQLite aceitava e o PostgreSQL não (só diferem em maiúsculas fora do ASCII, como "Élan" e
-// "élan") fazem a importação inteira falhar com a mensagem do índice único, sem copiar nada.
+// Os nomes valem igual nos dois bancos (nocase() do PostgreSQL = COLLATE NOCASE do SQLite, só no ASCII):
+// o que o SQLite aceitou, os índices únicos do PostgreSQL aceitam.
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -17,8 +17,8 @@ import { Store } from '../src/store.js';
 import { PgStore, isPostgresUrl } from '../src/store-pg.js';
 
 // ordem das chaves estrangeiras; schema_version não vai (o PostgreSQL já está na última versão)
-export const TABLES = ['accounts', 'characters', 'item_instances', 'loot_drops', 'daily_claims', 'quest_progress', 'level_log', 'account_codes', 'audit_log'];
-const IDENTITY = { accounts: 'id', characters: 'id', audit_log: 'id' };
+export const TABLES = ['accounts', 'characters', 'clans', 'clan_members', 'item_instances', 'loot_drops', 'daily_claims', 'quest_progress', 'level_log', 'account_codes', 'audit_log'];
+const IDENTITY = { accounts: 'id', characters: 'id', clans: 'id', audit_log: 'id' };
 const CHUNK = 500;
 
 export function importSqliteToPg(sqlitePath, pg, { log = () => {} } = {}) {

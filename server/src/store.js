@@ -257,6 +257,12 @@ export class Store {
     return this.prep('SELECT * FROM accounts WHERE id = ? AND deleted_at IS NULL').get(id);
   }
 
+  // várias contas de uma vez (conferência periódica da moderação), em ordem de id; no PostgreSQL é uma
+  // consulta só, para não parar o tick com uma ida e volta por jogador
+  findAccountsByIds(ids) {
+    return [...new Set(ids)].sort((a, b) => a - b).map((id) => this.findAccountById(id)).filter(Boolean);
+  }
+
   findAccountByEmail(email) {
     return this.prep('SELECT * FROM accounts WHERE email = ? COLLATE NOCASE AND deleted_at IS NULL').get(email);
   }

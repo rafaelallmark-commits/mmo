@@ -19,6 +19,18 @@
 # cliente cria a conta e pede o token em https://jogo.exemplo.com.br/contas (serviço "contas").
 # Portas abertas na internet: só 80 e 443 (proxy). O jogo (7777) fica na rede interna do compose e as
 # métricas/saúde (9100) só no 127.0.0.1 desta máquina: curl http://127.0.0.1:9100/health
+#
+# Banco: sem nada a mais, SQLite no volume "dados". PostgreSQL central (perfil "postgres", docs §8.10):
+#   install -d -m 0700 segredos
+#   openssl rand -hex 24 > segredos/senha_banco.txt                # senha do banco, fora do git
+#   sudo chown 10001:10001 segredos/senha_banco.txt && chmod 0600 segredos/senha_banco.txt
+#   cat >> .env <<'FIM'
+#   COMPOSE_PROFILES=postgres                          # sobe o serviço "banco" (postgres:17)
+#   CINZAS_DB=postgres://cinzas@banco:5432/cinzas      # zona e contas usam o banco; a senha vem do arquivo
+#   CINZAS_DB_SENHA_ARQUIVO=./segredos/senha_banco.txt
+#   FIM
+#   docker compose up -d --build
+# Backup no PostgreSQL: docker compose exec -T banco pg_dump -U cinzas -Fc cinzas > cinzas-AAAA-MM-DD.dump
 name: cinzas
 
 services:
@@ -35,7 +47,16 @@ services:
     stop_grace_period: 45s
     volumes:
       - dados:/data              # cinzas.db (+ -wal/-shm) e backups/
+    # perfil "postgres": espera o banco aceitar conexões (sem o perfil a dependência é ignorada)
+    depends_on:
+      banco:
+        condition: service_healthy
+        required: false
+    secrets: [senha_banco]
     environment:
+      # arquivo SQLite no volume ou postgres://cinzas@banco:5432/cinzas (perfil "postgres", senha do arquivo)
+      CINZAS_DB: ${CINZAS_DB:-/data/cinzas.db}
+      CINZAS_DB_PASSWORD_FILE: /run/secrets/senha_banco
       # login só com token do serviço de contas (cadastro e senha direto na zona ficam desligados)
       CINZAS_AUTH: ${CINZAS_AUTH:-token}
       CINZAS_TOKEN_SECRET: ${CINZAS_TOKEN_SECRET:?defina CINZAS_TOKEN_SECRET em deploy/.env}
@@ -86,10 +107,16 @@ services:
     depends_on:
       servidor:
         condition: service_healthy
-    command: ["node", "--disable-warning=ExperimentalWarning", "src/contas-main.js", "--port", "7780", "--host", "0.0.0.0", "--db", "/data/cinzas.db", "--email-dir", "/data/emails"]
+      banco:
+        condition: service_healthy
+        required: false
+    command: ["node", "--disable-warning=ExperimentalWarning", "src/contas-main.js", "--port", "7780", "--host", "0.0.0.0", "--email-dir", "/data/emails"]
     volumes:
       - dados:/data
+    secrets: [senha_banco]
     environment:
+      CINZAS_DB: ${CINZAS_DB:-/data/cinzas.db}      # o mesmo banco da zona
+      CINZAS_DB_PASSWORD_FILE: /run/secrets/senha_banco
       CINZAS_TOKEN_SECRET: ${CINZAS_TOKEN_SECRET:?defina CINZAS_TOKEN_SECRET em deploy/.env}
       CINZAS_TRUST_PROXY: "1"
       CINZAS_EMAIL: ${CINZAS_EMAIL:-arquivo}
@@ -111,27 +138,37 @@ services:
         max-size: "20m"
         max-file: "5"
 
-  # --- Futuro: PostgreSQL central (substitui o SQLite quando houver contas e mais de uma zona) -----
-  # banco:
-  #   image: postgres:17
-  #   restart: unless-stopped
-  #   stop_grace_period: 60s
-  #   environment:
-  #     POSTGRES_USER: cinzas
-  #     POSTGRES_DB: cinzas
-  #     POSTGRES_PASSWORD_FILE: /run/secrets/senha_banco
-  #   secrets: [senha_banco]
-  #   volumes:
-  #     - banco:/var/lib/postgresql/data
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U cinzas -d cinzas"]
-  #     interval: 10s
-  #     retries: 5
-  #   # sem "ports": o banco nunca fica exposto fora da rede interna do compose
-
-# secrets:
-#   senha_banco:
-#     file: ./segredos/senha_banco.txt   # fora do git (deploy/segredos/ está no .gitignore)
+  # --- PostgreSQL central (opcional): perfil "postgres" — ver o cabeçalho e docs/08-operacao.md §8.10 ----
+  # Zona e contas passam a usar este banco com CINZAS_DB=postgres://cinzas@banco:5432/cinzas no .env; a
+  # senha (segredo senha_banco) vem de deploy/segredos/senha_banco.txt, que fica fora do git.
+  banco:
+    image: postgres:17
+    profiles: ["postgres"]
+    restart: unless-stopped
+    stop_grace_period: 60s     # desligamento "fast": desfaz transações abertas e grava o checkpoint
+    environment:
+      POSTGRES_USER: cinzas
+      POSTGRES_DB: cinzas
+      POSTGRES_PASSWORD_FILE: /run/secrets/senha_banco
+      # C.UTF-8: ordem por código (como o SQLite) e índices que não mudam quando a glibc da imagem muda
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C.UTF-8"
+    secrets: [senha_banco]
+    volumes:
+      - banco:/var/lib/postgresql/data
+    healthcheck:
+      # por TCP: na primeira inicialização o servidor temporário só escuta no soquete local, e um
+      # pg_isready pelo soquete daria "pronto" antes da hora
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U cinzas -d cinzas"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    # sem "ports": o banco nunca fica exposto fora da rede interna do compose
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
 
   # --- Monitoramento (opcional): docker compose --profile monitoramento up -d -----------------------
   # Prometheus coleta as métricas da zona (servidor:9100) e avalia os alertas de monitoramento/alertas.yml;
@@ -169,4 +206,10 @@ volumes:
   caddy_config:
   prometheus_dados:
   grafana_dados:
-  # banco:
+  banco:                         # dados do PostgreSQL (perfil "postgres")
+
+secrets:
+  senha_banco:
+    # perfil "postgres": CINZAS_DB_SENHA_ARQUIVO=./segredos/senha_banco.txt no .env (deploy/segredos/ está
+    # no .gitignore). Sem o perfil não é usado: /dev/null, para o SQLite não exigir o arquivo.
+    file: ${CINZAS_DB_SENHA_ARQUIVO:-/dev/null}

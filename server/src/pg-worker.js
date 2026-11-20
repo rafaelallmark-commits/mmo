@@ -7,6 +7,10 @@
 // Pedido { id, op:'run', begin?, items:[{ sql, params, mode:'get'|'all'|'run', prepare?, simple?, savepoint? }], end?:'commit'|'rollback' }
 // Resposta { id, result | error, tx } — tx é o estado da transação nesta conexão depois do pedido:
 // 'idle', 'open' ou 'failed' (um comando falhou dentro dela; o COMMIT vira erro em vez de desfazer calado).
+//
+// Conexão perdida fora de transação: o pedido seguinte reconecta (prazo curto, reconnectTimeoutMs); se
+// não conseguir, os pedidos falham na hora por um recuo crescente (0,5 s → 10 s), sem esperar o prazo de
+// conexão inteiro a cada um. Dentro de transação, a transação falha (nada roda fora dela).
 import { workerData } from 'node:worker_threads';
 import pg from 'pg';
 
@@ -15,28 +19,31 @@ pg.types.setTypeParser(1700, (v) => Number(v)); // numeric (SUM/AVG em consultas
 
 const { port, signal, config } = workerData;
 let client = null; // conexão viva; null depois de cair (a próxima operação fora de transação reconecta)
-let lost = null; // por que a conexão caiu
+let lost = null; // por que a conexão caiu (ou por que a última tentativa de reconectar falhou)
 let names = new Map(); // sql -> nome do comando preparado nesta conexão
 let tx = 'idle';
 let txFailure = null;
+let retryAt = 0; // depois de uma reconexão que falhou: até quando recusar na hora
+let backoffMs = 0;
+let current = null; // id do pedido em andamento (para responder se o worker morrer no meio dele)
 
 const ident = (s) => `"${String(s).replace(/"/g, '""')}"`;
 
-async function connect() {
+async function connect(timeoutMs) {
   const c = new pg.Client({
     connectionString: config.connectionString,
     application_name: config.appName,
     keepAlive: true,
-    connectionTimeoutMillis: config.connectTimeoutMs,
+    connectionTimeoutMillis: timeoutMs,
   });
   c.on('error', (e) => { if (client === c) { client = null; lost = e; } });
   c.on('end', () => { if (client === c) { client = null; lost ??= new Error('conexão encerrada pelo servidor'); } });
-  await c.connect();
   try {
+    await c.connect();
     // search_path: o esquema do jogo (ou o de teste); lock_timeout espelha o busy_timeout do SQLite
     await c.query(`SET search_path TO ${ident(config.schema)}; SET lock_timeout = ${Number(config.lockTimeoutMs)}; SET statement_timeout = ${Number(config.statementTimeoutMs)}`);
   } catch (e) {
-    c.end().catch(() => {});
+    try { c.end().catch(() => {}); } catch { /* nem chegou a conectar */ }
     throw e;
   }
   client = c;
@@ -54,7 +61,19 @@ async function ensureClient() {
     e.code = '08006';
     throw e;
   }
-  await connect();
+  const left = retryAt - Date.now();
+  if (left > 0) {
+    throw Object.assign(new Error(`PostgreSQL indisponível (${lost?.message ?? 'conexão perdida'}); nova tentativa em ${left} ms`), { code: '08001' });
+  }
+  try {
+    await connect(config.reconnectTimeoutMs ?? config.connectTimeoutMs);
+  } catch (e) {
+    lost = e;
+    backoffMs = Math.min(Math.max(backoffMs * 2, 500), 10000);
+    retryAt = Date.now() + backoffMs;
+    throw e;
+  }
+  backoffMs = 0;
   return client;
 }
 
@@ -92,6 +111,7 @@ async function runContained(c, it) {
     await c.query('RELEASE SAVEPOINT cz_sp');
     return r;
   } catch (e) {
+    // (se a conexão caiu, o ROLLBACK TO falha e o erro dele sobe sem "contained": a transação falha)
     await c.query('ROLLBACK TO SAVEPOINT cz_sp');
     await c.query('RELEASE SAVEPOINT cz_sp');
     e.contained = true;
@@ -148,7 +168,7 @@ async function close() {
 async function dispatch(req) {
   switch (req.op) {
     case 'open': {
-      await connect();
+      await connect(req.timeoutMs ?? config.connectTimeoutMs);
       const r = await client.query('SHOW server_version');
       return { server: r.rows[0].server_version };
     }
@@ -170,10 +190,30 @@ function reply(msg) {
   Atomics.notify(signal, 0);
 }
 
+async function handle(req) {
+  current = req.id;
+  try {
+    let msg;
+    try { msg = { id: req.id, result: await dispatch(req), tx }; } catch (e) { msg = { id: req.id, error: errorInfo(e), tx }; }
+    try { reply(msg); } catch (e) { reply({ id: req.id, error: errorInfo(e), tx }); } // resultado que não passa pela porta
+  } finally {
+    current = null;
+  }
+}
+
+// Erro que escapou de tudo (defeito): responde ao pedido em andamento, para a thread principal não
+// esperar o prazo inteiro, e encerra o worker; a ponte troca de worker no pedido seguinte.
+function fatal(e) {
+  try {
+    if (current != null) reply({ id: current, error: { ...errorInfo(e), fatal: true }, tx: 'idle' });
+  } finally {
+    process.exit(1);
+  }
+}
+process.on('uncaughtException', fatal);
+process.on('unhandledRejection', fatal);
+
 let chain = Promise.resolve();
 port.on('message', (req) => {
-  chain = chain.then(() => dispatch(req)).then(
-    (result) => reply({ id: req.id, result, tx }),
-    (e) => reply({ id: req.id, error: errorInfo(e), tx }),
-  );
+  chain = chain.then(() => handle(req)).catch(fatal);
 });

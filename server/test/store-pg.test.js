@@ -5,12 +5,16 @@
 // - três processos subindo juntos no mesmo esquema aplicam cada migração uma vez só (trava consultiva);
 // - duas conexões no mesmo esquema: isolamento da transação e espera de trava limitada (lock_timeout).
 // - um banco SQLite importado (tools/sqlite-para-pg.mjs) responde igual nos dois bancos.
+// - falhas da ponte: conexão derrubada parada ou no meio da transação, prazo esgotado com o erro engolido
+//   dentro de tx(fn), comando que falha dentro da transação, banco recusando conexões (falha na hora em
+//   vez de esperar), migração esperando outro processo além do lock_timeout, close() encerrando o worker.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { Store, MIGRATIONS } from '../src/store.js';
 import { PgStore } from '../src/store-pg.js';
 import { importSqliteToPg } from '../tools/sqlite-para-pg.mjs';
@@ -20,6 +24,11 @@ const skip = PG_URL ? false : 'só no PostgreSQL: rode `npm run test:pg` (sobe u
 const schemaOf = (tag) => `t_pgmig_${tag}_${process.pid}`;
 const PG_TYPE = { INTEGER: 'bigint', REAL: 'double precision', TEXT: 'text' };
 const KIT = { equip: [], bag: [] };
+const newChar = (st, acc, name) => st.createCharacter({ accountId: acc, name, classId: 'breaker', hp: 100, mp: 20, mapId: 'estrada_velha', x: 1, z: 2, kit: KIT, slotFor: () => null });
+const bagItem = (charId, id) => ({ id, charId, defId: 'potion_hp_s', qty: 1, enh: 0, loc: 'bag', slot: null, source: 'teste' });
+// espera síncrona (a thread principal parada, como numa chamada da ponte; o worker segue rodando)
+const block = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+const pidOf = (st) => st.query('SELECT pg_backend_pid() AS pid')[0].pid;
 
 test('PostgreSQL: banco novo vai à última versão, reabrir não reaplica, esquema igual ao do SQLite', { skip }, () => {
   const schema = schemaOf('novo');
@@ -48,7 +57,7 @@ test('PostgreSQL: banco novo vai à última versão, reabrir não reaplica, esqu
       }
     }
     // índices com nome no SQLite existem no PostgreSQL com a mesma unicidade e o mesmo filtro;
-    // os UNIQUE COLLATE NOCASE viram índices únicos em lower(name)
+    // os UNIQUE COLLATE NOCASE viram índices únicos em nocase(...) (o NOCASE do SQLite: só A-Z)
     const pgIdx = new Map(st.query('SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = $1', [schema]).map((r) => [r.indexname, r.indexdef]));
     for (const ix of lite.db.prepare("SELECT name, tbl_name, sql FROM sqlite_master WHERE type = 'index' AND sql IS NOT NULL").all()) {
       const def = pgIdx.get(ix.name);
@@ -56,9 +65,12 @@ test('PostgreSQL: banco novo vai à última versão, reabrir não reaplica, esqu
       assert.equal(/^CREATE UNIQUE/.test(def), /^CREATE UNIQUE/i.test(ix.sql), `${ix.name}: unicidade`);
       assert.equal(/ WHERE /.test(def), / WHERE /i.test(ix.sql), `${ix.name}: filtro`);
     }
-    for (const [ix, table] of [['idx_accounts_name', 'accounts'], ['idx_characters_name', 'characters']]) {
-      assert.match(pgIdx.get(ix) ?? '', new RegExp(`^CREATE UNIQUE INDEX ${ix} ON ${schema}\\.${table} USING btree \\(lower\\(name\\)\\)$`));
+    for (const [ix, table, col] of [['idx_accounts_name', 'accounts', 'name'], ['idx_characters_name', 'characters', 'name'], ['idx_clans_name', 'clans', 'name'], ['idx_clans_tag', 'clans', 'tag']]) {
+      assert.match(pgIdx.get(ix) ?? '', new RegExp(`^CREATE UNIQUE INDEX ${ix} ON ${schema}\\.${table} USING btree \\((?:${schema}\\.)?nocase\\(${col}\\)\\)$`));
     }
+    assert.match(pgIdx.get('idx_accounts_email') ?? '', /nocase\(email\)\) WHERE \(email IS NOT NULL\)$/);
+    // nocase() troca só A-Z (fora do ASCII as maiúsculas contam, como no SQLite) e é imutável (serve para índice)
+    assert.deepEqual(st.query("SELECT nocase('ÉLAN Zé') AS n")[0], Object.assign(Object.create(null), { n: 'Élan zé' }));
   } finally { st.close(); lite.close(); }
 });
 
@@ -168,11 +180,17 @@ test('PostgreSQL: banco SQLite importado (sqlite-para-pg) responde igual nos doi
     lite.issueCode(a1, 'verify');
     lite.audit('login', { accountId: a1, ip: '10.0.0.1' });
     lite.audit('loot', { charId: c1, loot: 'loot-b', gold: 12 });
+    let clan;
+    lite.tx(() => { clan = lite.createClan('Guarda do Sal', 'SAL', c1); });
+    lite.addClanMember(clan, c2, 'officer');
+    lite.setClanMotd(clan, 'Reunião na eclusa');
+    lite.setBan(a2, 253402300799000, 'teste de importação');
+    lite.setMute(a1, now + 3600_000);
     lite.close();
 
     pg = new PgStore(PG_URL, { schema, dropSchemaOnClose: true });
     const counts = importSqliteToPg(join(dir, 'origem.db'), pg);
-    assert.deepEqual(counts, { accounts: 2, characters: 3, item_instances: 3, loot_drops: 2, daily_claims: 1, quest_progress: 3, level_log: 2, account_codes: 1, audit_log: 2 });
+    assert.deepEqual(counts, { accounts: 2, characters: 3, clans: 1, clan_members: 2, item_instances: 3, loot_drops: 2, daily_claims: 1, quest_progress: 3, level_log: 2, account_codes: 1, audit_log: 2 });
     assert.throws(() => importSqliteToPg(join(dir, 'origem.db'), pg), /não está vazia/, 'não importa por cima de dados');
 
     const src = new Store(join(dir, 'origem.db'));
@@ -185,10 +203,160 @@ test('PostgreSQL: banco SQLite importado (sqlite-para-pg) responde igual nos doi
         ['loadQuests', (s) => s.loadQuests(c1)], ['unclaimedLoot', (s) => s.unclaimedLoot(c1, now)], ['getLoot', (s) => s.getLoot('loot-b')],
         ['levelLog', (s) => s.levelLog()], ['auditTail', (s) => s.auditTail(10)], ['listAccountStorage', (s) => s.listAccountStorage(a1)],
         ['countItems', (s) => s.countItems(c1)], ['characterNameTaken', (s) => s.characterNameTaken('zed')], ['exportAccount', (s) => sortItems(s.exportAccount(a1))],
+        ['clanOfChar', (s) => s.clanOfChar(c2)], ['clanMembers', (s) => s.clanMembers(s.clanOfChar(c1).id)], ['clanByNameOrTag', (s) => s.clanByNameOrTag('guarda do sal', 'x')],
+        ['characterByName', (s) => s.characterByName('YARA')], ['findAccountsByIds', (s) => s.findAccountsByIds([a2, a1])], ['findAccount banida', (s) => s.findAccount('bento')],
       ]) assert.deepStrictEqual(f(pg), f(src), `${what}: mesmo resultado nos dois bancos`);
+      assert.throws(() => pg.tx(() => pg.createClan('GUARDA DO SAL', 'NOVA', c2)), 'nome importado continua único');
+      let novo;
+      pg.tx(() => { novo = pg.createClan('Outro Clã', 'OUT', pg.characterByName('bento').id); });
+      assert.ok(novo > pg.clanOfChar(c1).id, 'identidade dos clãs continua depois dos ids importados');
       assert.equal(pg.claimDaily(c1, 'elite:x', '2026-11-20'), false, 'recompensa diária já tirada continua tirada');
       assert.ok(pg.createAccount('nova', 'x') > a2, 'identidade continua depois dos ids importados');
       assert.ok(pg.verifyAccount('bento', 'senha'), 'senha importada confere');
     } finally { src.close(); }
   } finally { pg?.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('PostgreSQL: conexão derrubada parada reconecta sozinha; derrubada no meio da transação desfaz tudo', { skip }, async () => {
+  const schema = schemaOf('queda');
+  const st = new PgStore(PG_URL, { schema });
+  const admin = new PgStore(PG_URL, { schema, migrate: false, dropSchemaOnClose: true });
+  try {
+    const acc = st.createAccount('queda', 'senha');
+    const id = newChar(st, acc, 'Queda');
+    // parada (entre um pedido e outro): o seguinte reconecta, sem erro
+    const pid1 = pidOf(st);
+    assert.equal(admin.query('SELECT pg_terminate_backend($1) AS ok', [pid1])[0].ok, true);
+    await sleep(300);
+    assert.equal(st.countItems(id), 0);
+    const pid2 = pidOf(st);
+    assert.notEqual(pid2, pid1, 'conexão nova');
+    // no meio da transação: o comando seguinte falha, a transação inteira é desfeita, o banco segue usável
+    assert.throws(() => st.tx(() => {
+      st.insertItem(bagItem(id, 'antes-da-queda'));
+      admin.query('SELECT pg_terminate_backend($1)', [pid2]);
+      block(300);
+      st.insertItem(bagItem(id, 'depois-da-queda'));
+    }), (e) => ['08006', '57P01'].includes(e.code) || /conex|terminat/i.test(e.message));
+    assert.equal(st.countItems(id), 0, 'nada da transação ficou');
+    st.insertItem(bagItem(id, 'de-novo'));
+    assert.equal(st.countItems(id), 1);
+  } finally { st.close(); admin.close(); }
+});
+
+test('PostgreSQL: prazo esgotado no meio da transação, com o erro engolido dentro de tx(fn), não grava a metade', { skip }, () => {
+  const schema = schemaOf('prazo');
+  const st = new PgStore(PG_URL, { schema, bridgeTimeoutMs: 300 });
+  try {
+    const acc = st.createAccount('prazo', 'senha');
+    const id = newChar(st, acc, 'Prazo');
+    const gen = st.bridge.gen;
+    let swallowed = null;
+    assert.throws(() => st.tx(() => {
+      st.insertItem(bagItem(id, 'antes'));
+      try { st.query('SELECT pg_sleep(1.5)'); } catch (e) { swallowed = e; } // como o audit() do servidor engole o erro
+      assert.throws(() => st.insertItem(bagItem(id, 'depois')), (e) => e.code === '08006', 'nada roda numa conexão nova');
+    }), (e) => e.code === '08006', 'tx() não finge que gravou');
+    assert.equal(swallowed?.code, 'CINZAS_PG_TIMEOUT');
+    // logo depois: falha na hora (recuo), sem parar a thread principal pelo prazo inteiro
+    const t0 = performance.now();
+    assert.throws(() => st.countItems(id), (e) => e.code === '08001');
+    assert.ok(performance.now() - t0 < 100, 'falhou na hora');
+    block(700);
+    assert.equal(st.countItems(id), 0, 'worker e conexão novos; nada da transação ficou');
+    assert.equal(st.bridge.gen, gen + 1);
+    st.insertItem(bagItem(id, 'normal'));
+    assert.equal(st.countItems(id), 1);
+  } finally {
+    st.close();
+    block(1500); // a conexão antiga só desiste depois do pg_sleep; aí o esquema pode ser apagado
+    new PgStore(PG_URL, { schema, migrate: false, dropSchemaOnClose: true }).close();
+  }
+});
+
+test('PostgreSQL: comando que falha dentro da transação (erro engolido) desfaz a transação inteira e o COMMIT avisa', { skip }, () => {
+  const st = new PgStore(PG_URL, { schema: schemaOf('falha'), dropSchemaOnClose: true });
+  try {
+    const acc = st.createAccount('falha', 'senha');
+    const id = newChar(st, acc, 'Falha');
+    assert.throws(() => st.tx(() => {
+      st.insertItem(bagItem(id, 'x1'));
+      assert.throws(() => st.insertItem(bagItem(id, 'x1')), (e) => e.code === '23505');
+      assert.throws(() => st.insertItem(bagItem(id, 'x2')), (e) => e.code === '25P02');
+    }), (e) => e.code === '25P02');
+    assert.equal(st.countItems(id), 0, 'no PostgreSQL a transação inteira volta (no SQLite, só o comando que falhou)');
+    // a auditoria dentro da transação é a exceção: falha dela não desfaz o resto (SAVEPOINT)
+    st.tx(() => {
+      st.insertItem(bagItem(id, 'com-auditoria'));
+      assert.throws(() => st.audit('x'.repeat(10), { charId: 'não é número' }));
+      st.insertItem(bagItem(id, 'depois-da-auditoria'));
+    });
+    assert.equal(st.countItems(id), 2);
+  } finally { st.close(); }
+});
+
+test('PostgreSQL: banco recusando conexões — os pedidos falham na hora (recuo) e voltam sozinhos', { skip }, async () => {
+  const db = `cz_queda_${process.pid}`;
+  const admin = new PgStore(PG_URL, { schema: schemaOf('adm'), dropSchemaOnClose: true });
+  admin.query(`CREATE DATABASE ${db}`);
+  const u = new URL(PG_URL);
+  u.pathname = `/${db}`;
+  const st = new PgStore(u.toString(), { connectTimeoutMs: 3000, reconnectTimeoutMs: 1000 });
+  try {
+    const acc = st.createAccount('fora', 'senha');
+    admin.query(`ALTER DATABASE ${db} ALLOW_CONNECTIONS false`);
+    admin.query('SELECT pg_terminate_backend($1)', [pidOf(st)]);
+    await sleep(300);
+    assert.throws(() => st.findAccountById(acc), (e) => e.code === '55000', 'primeira tentativa de reconectar: o erro do banco');
+    const t0 = performance.now();
+    for (let i = 0; i < 20; i++) assert.throws(() => st.findAccountById(acc), (e) => e.code === '08001');
+    assert.ok(performance.now() - t0 < 200, `20 pedidos durante o recuo falham na hora (${(performance.now() - t0).toFixed(0)} ms)`);
+    // dentro de tx(fn), um primeiro comando que falha por isso (erro engolido) derruba a transação inteira
+    assert.throws(() => st.tx(() => {
+      assert.throws(() => st.setRole(acc, 'gm'), (e) => e.code === '08001');
+      assert.throws(() => st.setRole(acc, 'admin'), (e) => e.code === '08006');
+    }), (e) => e.code === '08006');
+    admin.query(`ALTER DATABASE ${db} ALLOW_CONNECTIONS true`);
+    await sleep(1200);
+    assert.equal(st.findAccountById(acc).name, 'fora', 'voltou sozinho depois do recuo');
+    assert.equal(st.findAccountById(acc).role, 'player', 'nada da transação que falhou');
+  } finally {
+    st.close();
+    try { admin.query(`DROP DATABASE IF EXISTS ${db} WITH (FORCE)`); } finally { admin.close(); }
+  }
+});
+
+test('PostgreSQL: migração espera o outro processo migrando, mesmo além do lock_timeout', { skip }, async () => {
+  const schema = schemaOf('espera');
+  const code = `import { PgStore, lockKey } from ${JSON.stringify(new URL('../src/store-pg.js', import.meta.url).href)};
+    import { writeSync } from 'node:fs';
+    const s = new PgStore(process.env.PG_URL, { schema: process.env.PG_SCHEMA, migrate: false });
+    s.exec('CREATE SCHEMA IF NOT EXISTS ' + process.env.PG_SCHEMA);
+    s.tx(() => { s.lockMigrations(lockKey(process.env.PG_SCHEMA)); writeSync(1, 'travado\\n'); s.query('SELECT pg_sleep(1.2)'); });
+    s.close();`;
+  const child = spawn(process.execPath, ['--input-type=module', '-e', code], { env: { ...process.env, PG_URL, PG_SCHEMA: schema } });
+  let err = '';
+  child.stderr.on('data', (d) => { err += d; });
+  const exited = new Promise((r) => child.on('exit', r));
+  await new Promise((resolve, reject) => {
+    child.stdout.on('data', (d) => { if (String(d).includes('travado')) resolve(); });
+    child.on('exit', (c) => reject(new Error(`o processo que segura a trava saiu antes (${c}): ${err}`)));
+  });
+  const t0 = performance.now();
+  const st = new PgStore(PG_URL, { schema, lockTimeoutMs: 200, bridgeTimeoutMs: 500, dropSchemaOnClose: true });
+  try {
+    assert.ok(performance.now() - t0 > 600, 'esperou o outro processo');
+    assert.deepEqual(st.migrated, MIGRATIONS.map((m) => m.v));
+  } finally { st.close(); }
+  assert.equal(await exited, 0, err);
+});
+
+test('PostgreSQL: close() encerra o worker; depois dele o banco recusa pedidos', { skip }, async () => {
+  const st = new PgStore(PG_URL, { schema: schemaOf('fecha'), dropSchemaOnClose: true });
+  const worker = st.bridge.worker;
+  const exited = new Promise((r) => worker.once('exit', r));
+  st.close();
+  st.close(); // de novo: nada
+  await Promise.race([exited, sleep(5000).then(() => { throw new Error('o worker não terminou'); })]);
+  assert.throws(() => st.findAccount('x'), /fechado/);
 });

@@ -48,7 +48,7 @@ try {
       const horas = Number(arg('horas', 0));
       if (!perm && !(horas > 0 && horas <= 24 * 365 * 5)) { console.error('use --horas N (até 5 anos) ou --permanente'); process.exit(1); }
       if (typeof motivo !== 'string') { console.error('informe --motivo'); process.exit(1); }
-      const until = perm ? PERMANENT : Date.now() + horas * 3600_000;
+      const until = perm ? PERMANENT : Date.now() + Math.round(horas * 3600_000);
       st.setBan(acc.id, until, motivo);
       st.audit('mod_ban', { targetAccount: acc.id, until, reason: motivo, by: 'ferramenta' });
       console.log(`conta ${name} suspensa ${perm ? 'sem data para acabar' : `até ${new Date(until).toISOString()}`}`);
@@ -57,7 +57,7 @@ try {
     if (arg('silenciar', false)) {
       const min = Number(arg('minutos', 0));
       if (!(min > 0 && min <= 60 * 24 * 30)) { console.error('use --minutos N (até 30 dias)'); process.exit(1); }
-      const until = Date.now() + min * 60_000;
+      const until = Date.now() + Math.round(min * 60_000);
       st.setMute(acc.id, until);
       st.audit('mod_mute', { targetAccount: acc.id, until, reason: typeof motivo === 'string' ? motivo : '', by: 'ferramenta' });
       console.log(`conta ${name} silenciada até ${new Date(until).toISOString()}`);

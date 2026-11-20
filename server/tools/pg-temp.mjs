@@ -93,7 +93,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   let code = 0;
   if (!cmd.length) {
     console.log('No ar. Ctrl+C para parar e apagar.');
+    // ouvinte de sinal não segura o laço de eventos: sem o timer o processo sairia na hora, com o cluster no ar
+    const keep = setInterval(() => {}, 1 << 30);
     await new Promise((r) => { process.on('SIGINT', r); process.on('SIGTERM', r); });
+    clearInterval(keep);
   } else {
     const child = spawn(cmd[0], cmd.slice(1).map((a) => a.replaceAll('{url}', pg.url)), { stdio: 'inherit', env: { ...process.env, CINZAS_PG_URL: pg.url } });
     for (const s of ['SIGINT', 'SIGTERM']) process.on(s, () => child.kill(s));

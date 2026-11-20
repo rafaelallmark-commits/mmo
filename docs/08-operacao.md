@@ -108,6 +108,7 @@ Roda em todo push e pull request (e à mão, em *Actions → CI → Run workflow
 | Job | O que faz | Falha quando |
 |---|---|---|
 | `servidor` | Node 22 (cache do npm), `npm ci`, `npm run validate-data`, `npm test` (~3 min). | Dado inválido ou teste quebrado. |
+| `servidor-postgres` | A mesma suíte no PostgreSQL 17: contêiner de serviço do job (`postgres:17`, só em localhost) e `npm test` com `CINZAS_TEST_PG` apontando para ele, um esquema isolado por banco de teste (§8.10). | Teste quebrado no PostgreSQL (SQL que diverge do SQLite, migração que falta num dos bancos). |
 | `cliente` | Baixa o Godot 4.3 oficial (SHA-512 conferido, guardado em cache) e roda `--headless --import` em `client/`. | A saída tem `SCRIPT ERROR` ou `Parse Error` (o Godot sai com código 0 mesmo assim; o registro fica como artefato). |
 | `docker` | `docker build -f deploy/Dockerfile .` (sem publicar) e um teste rápido do contêiner: saúde, usuário sem privilégios, `hello` no WebSocket, backup e parada graciosa. | A imagem não constrói ou o contêiner não passa no teste. |
 
@@ -220,6 +221,12 @@ docker compose logs -f servidor
   `CINZAS_AUTH=token`: cadastro e senha só pelo serviço de contas. `deploy/.env` precisa de `CINZAS_TOKEN_SECRET`
   (`openssl rand -hex 32`; o compose não sobe sem ele) e, para enviar e-mail de verdade, `CINZAS_EMAIL=smtp` e os
   `CINZAS_SMTP_*` (modelo no cabeçalho do `docker-compose.yml`). Sem SMTP, os e-mails ficam em `/data/emails`.
+- **PostgreSQL** (perfil `postgres`, opcional): o serviço `banco` (`postgres:17`, só na rede interna, dados no volume
+  `banco`) e `CINZAS_DB=postgres://cinzas@banco:5432/cinzas` na zona e nas contas; a senha fica em
+  `deploy/segredos/senha_banco.txt` (fora do git) e chega aos três como segredo do compose. Sem o perfil nada muda
+  (SQLite no volume `dados`). Como ligar, backup, restauração e como levar um banco SQLite que já existe para o
+  PostgreSQL: [§8.10, "No Docker Compose"](#810-postgresql). No PostgreSQL o backup é com o `pg_dump` do contêiner
+  `banco`, não com o `npm run backup` da zona (a imagem do jogo não traz o `pg_dump`).
 
 ### TLS pelo proxy
 
@@ -370,10 +377,53 @@ npm run contas -- --token-secret "$CINZAS_TOKEN_SECRET"        # serviço de con
 ```
 
 - O log de início mostra o banco em uso, sem a senha (`banco: PostgreSQL cinzas@db.interno:5432/cinzas`).
+- **Senha num arquivo**: sem senha na URL, `CINZAS_DB_PASSWORD_FILE=/caminho/senha` faz o servidor, o serviço de
+  contas e as ferramentas lerem a senha desse arquivo (o conteúdo inteiro, sem as quebras de linha do fim — o mesmo
+  formato do `POSTGRES_PASSWORD_FILE` da imagem oficial). É assim no Docker Compose (abaixo). Arquivo vazio ou
+  ilegível é erro na hora de subir; com senha no arquivo e banco SQLite, o log avisa (faltou `CINZAS_DB`?).
 - `?schema=nome` no fim da URL usa um esquema próprio em vez de `public` (criado se faltar).
 - Os outros parâmetros da URL vão para o driver `pg` (ex.: `sslmode=verify-full` para TLS até o banco). Para
   usar a mesma URL no `pg_dump`/`pg_restore`, fique nos parâmetros que o libpq também entende (`sslmode`, `host`, `port`...).
 - Banco na mesma rede do servidor: cada chamada espera a ida e volta (abaixo).
+
+**No Docker Compose** (perfil `postgres` do `deploy/docker-compose.yml`): o serviço `banco` é a imagem oficial
+`postgres:17` (UTF-8, locale `C.UTF-8`), sem porta publicada, com dados no volume `banco` e verificação de saúde
+(`pg_isready` por TCP); zona e contas esperam o banco ficar saudável antes de subir. Para ligar, em `deploy/`:
+
+```bash
+install -d -m 0700 segredos
+openssl rand -hex 24 > segredos/senha_banco.txt
+sudo chown 10001:10001 segredos/senha_banco.txt && sudo chmod 0600 segredos/senha_banco.txt
+cat >> .env <<'FIM'
+COMPOSE_PROFILES=postgres
+CINZAS_DB=postgres://cinzas@banco:5432/cinzas
+CINZAS_DB_SENHA_ARQUIVO=./segredos/senha_banco.txt
+FIM
+docker compose up -d --build
+docker compose logs servidor | grep banco:          # "banco: PostgreSQL cinzas@banco:5432/cinzas"
+```
+
+- As três linhas do `.env` andam juntas: `COMPOSE_PROFILES` sobe o `banco`, `CINZAS_DB` aponta zona e contas para
+  ele e `CINZAS_DB_SENHA_ARQUIVO` entrega o arquivo como segredo `senha_banco` (em `/run/secrets/senha_banco`, que
+  a zona e as contas leem por `CINZAS_DB_PASSWORD_FILE` e o PostgreSQL por `POSTGRES_PASSWORD_FILE`). Sem o perfil o
+  segredo é `/dev/null` e nada muda. O arquivo fica com o uid 10001 (o usuário da imagem do jogo) e modo 0600; o
+  PostgreSQL o lê como root ao iniciar. A senha só é usada na **primeira** inicialização do volume `banco`: para
+  trocá-la depois, `ALTER ROLE cinzas PASSWORD '...'` no banco e o arquivo novo, juntos.
+- **Backup**: `docker compose exec -T banco pg_dump -U cinzas -Fc cinzas > backups/cinzas-$(date +%F-%H%M).dump`
+  (formato custom, foto consistente com o jogo rodando). No cron do host, como o backup do SQLite em §8.8. Confira
+  com `pg_restore --list` e leve as cópias para fora da máquina.
+- **Restaurar**: `docker compose stop servidor contas`, depois
+  `docker compose exec -T banco pg_restore -U cinzas -d cinzas --clean --if-exists --no-owner < backups/arquivo.dump`
+  e `docker compose start servidor contas`.
+- **Levar o SQLite que já existe** (volume `dados`) para o PostgreSQL, com a zona parada:
+  `docker compose stop servidor contas && docker compose up -d banco`, depois
+  `docker compose run --rm --no-deps servidor npm run sqlite-para-pg -- --de /data/cinzas.db` (o destino é o
+  `CINZAS_DB` do contêiner; o arquivo SQLite não é alterado) e `docker compose up -d`.
+
+**Com systemd** (`deploy/cinzas.service` e `cinzas-contas.service`): tire o `--db /var/lib/cinzas/cinzas.db` do
+`ExecStart` dos dois e ponha em `/etc/cinzas/cinzas.env` o `CINZAS_DB=postgres://...` (com a senha na URL, já que o
+arquivo é só do root, ou `CINZAS_DB_PASSWORD_FILE`). O `backup.service` passa a precisar do `pg_dump` da versão do
+servidor na máquina e de `--db "$CINZAS_DB"` (tire o `ConditionPathExists`).
 
 **Migrações**: as mesmas versões do SQLite (tabela `schema_version`), aplicadas sozinhas ao subir, cada uma
 numa transação; uma trava consultiva por esquema impede que a zona e o serviço de contas, subindo juntos,
@@ -389,7 +439,7 @@ SQLite, e que um banco importado responde igual nos dois.
 | `REAL` (posição, tempo jogado) | `DOUBLE PRECISION` |
 | `TEXT` (inclusive os JSON) | `TEXT` |
 | `INTEGER PRIMARY KEY AUTOINCREMENT` | `BIGINT GENERATED BY DEFAULT AS IDENTITY` |
-| `UNIQUE COLLATE NOCASE` (nomes), e-mail `COLLATE NOCASE` | índice único em `lower(...)`; buscas por `lower(coluna) = lower($1)` |
+| `UNIQUE COLLATE NOCASE` (nomes de conta, personagem e clã, sigla do clã), e-mail `COLLATE NOCASE` | índice único em `nocase(...)`; buscas por `nocase(coluna) = nocase($1)`; ordem por `nocase(coluna) COLLATE "C"`. `nocase()` é uma função do esquema que troca só A-Z por a-z — o mesmo do `NOCASE` do SQLite, que não mexe em letras fora do ASCII, e sem depender do locale do banco (`lower()` dependeria) |
 | `INSERT OR IGNORE`, `lastInsertRowid` | `ON CONFLICT DO NOTHING`, `RETURNING id` |
 | `BEGIN IMMEDIATE` | `BEGIN` na conexão dedicada; `FOR UPDATE` ao pegar saque e tirar do depósito |
 | `busy_timeout = 3000` | `lock_timeout = 3s`; `statement_timeout = 10s` |
@@ -424,8 +474,9 @@ Uma tabela só (ex.: auditoria): `pg_restore -t audit_log ...`. As sequências d
 
 **Do SQLite para o PostgreSQL**: `npm run sqlite-para-pg -- --de cinzas.db --para "$CINZAS_DB"` tira uma foto
 consistente do arquivo (pode ser com o servidor rodando; o arquivo não é alterado), migra a foto, exige as
-tabelas do PostgreSQL vazias, copia tudo numa transação com os mesmos ids, acerta as sequências e confere as
-contagens. Nomes que só diferem em maiúsculas fora do ASCII (abaixo) fazem a importação falhar sem copiar nada.
+tabelas do PostgreSQL vazias, copia tudo numa transação com os mesmos ids (clãs e membros inclusive), acerta as
+sequências e confere as contagens. Os nomes valem igual nos dois bancos (`nocase()` = `NOCASE`): o que o SQLite
+aceitou, os índices únicos do PostgreSQL aceitam.
 
 **Testes**: `npm run test:pg` sobe um PostgreSQL temporário (`initdb` num diretório temporário, só soquete Unix,
 sem TCP), roda a suíte inteira com `CINZAS_TEST_PG=<url>` e apaga tudo no fim. Com essa variável, cada banco que
@@ -450,23 +501,44 @@ cluster temporário para outras medições (`{url}` nos argumentos vira a URL; `
 
 Ponte: 5,4 chamadas/s, laço parado 2,7 ms por segundo; por chamada, p50 0,23 ms, p99 4,0 ms, máx 11,9 ms (o
 máximo do tick, maior que no SQLite, é um `COMMIT` esperando o fsync no meio de um abate). CPU igual (~7,7% de
-um núcleo); memória ~30 MB maior (o worker e o `pg`). As
+um núcleo); memória ~30 MB maior (o worker e o `pg`). Medido de novo depois de comércio, clãs, duelo e moderação
+entrarem (mesmo comando, servidor próprio nas portas 7762/7763 com `--url`/`--metricas`): tick p50 4,5, p95 9,9,
+p99 13,9, máx 34,8 ms, 0 de 599 acima de 50 ms; ponte 5,5 chamadas/s, 2,0 ms parados por segundo, chamada p99
+3,4 ms e máx 4,7 ms. A conferência de suspensões e silêncios (a cada minuto, no tick) busca todas as contas
+on-line numa consulta só (`findAccountsByIds`), não uma ida e volta por jogador. As
 métricas `cinzas_db_calls_per_s`, `cinzas_db_wait_ms_per_s` e `cinzas_db_call_ms_p50|p99|max` (só com
 PostgreSQL) mostram isso em produção; alerta sugerido: `db_call_ms_p99 > 5` ou `db_wait_ms_per_s > 50` por 5 min.
 
-**Falhas**:
+**Falhas** (conferidas em `store-pg.test.js`):
 - Espera de trava acima de 3 s ou comando acima de 10 s viram erro (o pedido falha, o jogo segue). A ponte
-  desiste em 15 s e troca worker e conexão; a transação em andamento morre com a conexão antiga.
-- Conexão caída fora de transação: o comando em andamento falha e os seguintes reconectam sozinhos. Dentro de
-  uma transação, ela falha inteira (nada é gravado pela metade) e o `COMMIT` vira erro — nunca um desfazer
-  silencioso.
+  desiste em 15 s, encerra o worker e a conexão e o pedido seguinte começa com worker e conexão novos.
+- Conexão caída fora de transação: o comando em andamento falha e os seguintes reconectam sozinhos (até 2 s para
+  conectar). Se a reconexão falha — ou depois de um prazo esgotado —, os pedidos falham **na hora** por um recuo
+  crescente (0,5 s até 10 s) e então tentam de novo: com o banco fora do ar, o jogo não fica parado o tempo inteiro
+  de conexão a cada chamada.
+- Dentro de `tx(fn)`, a transação vale numa conexão só: se ela cai ou é trocada no meio, os comandos seguintes da
+  mesma transação falham e o `tx()` lança (`08006`) — mesmo que o erro tenha sido engolido dentro de `fn`; um
+  comando que falha dentro dela faz o resto falhar e o `COMMIT` virar erro (`25P02`). Nada é gravado pela metade
+  e nunca há um desfazer silencioso. A auditoria dentro de transação roda num `SAVEPOINT`: a falha dela não desfaz
+  o resto (como no SQLite).
+- Worker com defeito que morre no meio de um pedido responde o erro antes de sair (a thread principal não espera o
+  prazo); o pedido seguinte troca o worker. `close()` encerra o worker.
+- Migrações: quem sobe junto com outro processo que está migrando espera a trava consultiva o tempo que for
+  preciso (sem `lock_timeout` nem `statement_timeout`); o `ALTER TABLE` em si continua com o `lock_timeout`
+  normal, para não ficar na fila travando as consultas das zonas antigas.
 - Banco fora do ar: o que gravar no meio do tick lança erro e derruba a zona, como um disco cheio no SQLite; o
   supervisor (systemd/Docker) a reinicia e, enquanto o banco não volta, o servidor sai logo ao subir. Perde-se
-  no máximo o progresso desde o último salvamento (10 s); saque, compras e missões são transações inteiras.
+  no máximo o progresso desde o último salvamento (10 s). Um pedido de jogador que falha no banco recebe "Erro
+  interno" e a transação dele é desfeita no banco, mas o que a lógica do jogo já tinha mudado na memória antes da
+  falha não volta, e o salvamento seguinte (ou a saída do jogador) grava o personagem como está na memória: numa
+  queda do banco no meio de um saque, por exemplo, o ouro já somado fica e o saque continua no banco, por pegar.
+  É assim também no SQLite, onde a falha é rara (disco cheio); no PostgreSQL uma queda ou reinício do banco torna
+  isso possível. Pendente: desconectar sem salvar o jogador cujo pedido falhou no banco.
 
 **Diferenças conhecidas** (o resto é igual, conferido pelos testes nos dois bancos):
-- `lower()` segue o `LC_CTYPE` do banco: num locale UTF-8, "Élan" e "élan" são o mesmo nome; o `NOCASE` do
-  SQLite só ignora maiúsculas no ASCII.
+- Comando que falha dentro de uma transação (erro engolido pelo código) desfaz a transação inteira no PostgreSQL;
+  no SQLite só aquele comando volta e o resto é gravado. O jogo não depende disso (a auditoria, que pode falhar sem
+  desfazer o saque, roda num `SAVEPOINT`).
 - Saques do mesmo abate (mesmo instante de criação) saem por id no PostgreSQL e na ordem de inserção no SQLite
   (só muda a ordem de exibição).
 - Colunas inteiras recusam fração no PostgreSQL (o SQLite guardaria o número com fração): os dados do jogo

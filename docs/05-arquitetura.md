@@ -291,8 +291,9 @@ Feito até aqui: métricas do servidor e HTTP de métricas, snapshots por difere
 Já preparado ([08-operacao.md §8.8](08-operacao.md)): `wss://` atrás de um proxy Caddy com certificado automático,
 serviço gerenciado (Docker com verificação de saúde e reinício, ou systemd endurecido) com desligamento gracioso,
 backup de hora em hora, CI com o validador de dados e os testes, e executáveis exportados para Linux, Windows e macOS,
-assinados e notarizados quando houver certificados. Continua pendente: serviço de contas e PostgreSQL (com lugar
-reservado no compose), limites de taxa por conexão, papéis de mestre e privacidade.
+assinados e notarizados quando houver certificados. Também prontos: serviço de contas, limites por conexão, papéis de
+mestre e privacidade ([§8.9](08-operacao.md#89-contas-segurança-e-privacidade-teste-público)) e o PostgreSQL central
+no compose (perfil `postgres`, [§8.10](08-operacao.md#810-postgresql)).
 
 ## O que muda para múltiplas zonas
 
