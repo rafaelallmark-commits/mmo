@@ -697,7 +697,8 @@ export class GameServer {
     if (!n) return { ok: false, code: 'too_far', reason: 'Chegue mais perto para conversar.' };
     const changed = this.quests.onTalk(p.char, n.id);
     this.notifyQuests(p, changed);
-    const shop = (n.role === 'shop' || n.role === 'smith') && n.shop ? n.shop.map((defId) => ({ defId, price: this.priceOf(defId) })) : undefined;
+    const shop = n.role === 'armorer' ? this.armorCatalog(p.char).map((defId) => ({ defId, price: this.gearPriceOf(defId), gear: true }))
+      : (n.role === 'shop' || n.role === 'smith') && n.shop ? n.shop.map((defId) => ({ defId, price: this.priceOf(defId) })) : undefined;
     const trialAvailable = n.role === 'master' && n.classId === p.char.classId && p.char.quests.get('c3_trial')?.state === 'active' && !p.char.trialDone && p.char.level >= 10;
     const choice = this.quests.pendingChoice(p.char, n.id) ?? undefined;
     return { ok: true, npc: { id: n.id, name: n.name, role: n.role, classId: n.classId ?? null }, quests: this.quests.npcQuests(p.char, n.id), shop, trialAvailable, choice, cache: false };
@@ -827,13 +828,30 @@ export class GameServer {
   }
 
   priceOf(defId) { return Math.max(1, (this.data.items[defId].value || 1) * 2); }
-  // o comerciante paga um quarto do preço de venda (metade do valor) por unidade
-  sellPriceOf(defId) { return Math.max(1, Math.floor((this.data.items[defId].value || 1) / 2)); }
+  // o comerciante paga uma fração do valor (economy.sellFraction, padrão metade) por unidade
+  sellPriceOf(defId) { return Math.max(1, Math.floor((this.data.items[defId].value || 1) * (this.data.formulas.economy?.sellFraction ?? 0.5))); }
+  gearPriceOf(defId) { return Math.max(1, Math.round((this.data.items[defId].value || 1) * (this.data.formulas.economy?.gearPriceMult ?? 3))); }
+
+  // Armeiro: peças comuns (armas, armaduras, mão secundária e joias) que a classe pode usar, da faixa
+  // atual do personagem e da próxima. Raras e únicas continuam só no saque.
+  armorCatalog(char) {
+    const gear = Object.values(this.data.items).filter((d) => d.rarity === 'common' && ['weapon', 'armor', 'offhand', 'jewel'].includes(d.kind)
+      && (!d.classes || d.classes.includes(char.classId)));
+    const tiers = [...new Set(gear.map((d) => d.level || 1))].sort((a, b) => a - b);
+    const cur = tiers.filter((t) => t <= char.level).pop() ?? tiers[0];
+    const next = tiers.find((t) => t > char.level);
+    const want = new Set([cur, next].filter((t) => t != null));
+    const order = { weapon: 0, offhand: 1, armor: 2, jewel: 3 };
+    return gear.filter((d) => want.has(d.level || 1))
+      .sort((a, b) => (a.level - b.level) || (order[a.kind] - order[b.kind]) || a.name.localeCompare(b.name))
+      .map((d) => d.id);
+  }
+
 
   // Vender ao comerciante (qualquer loja ou ferreiro por perto): só da bolsa; item de missão não.
   hSell(p, { npc, instance, qty }) {
     const n = p.zone.npcNear(p, npc);
-    if (!n || !['shop', 'smith'].includes(n.role)) return { ok: false, code: 'too_far', reason: 'Chegue mais perto de um comerciante.' };
+    if (!n || !['shop', 'smith', 'armorer'].includes(n.role)) return { ok: false, code: 'too_far', reason: 'Chegue mais perto de um comerciante.' };
     const c = p.char;
     const it = c.items.get(instance);
     if (!it || it.loc !== 'bag') return { ok: false, code: 'not_in_bag', reason: 'Só dá para vender itens da bolsa (desequipe antes).' };
@@ -868,13 +886,14 @@ export class GameServer {
 
   hBuy(p, { npc, item, qty = 1 }) {
     const n = p.zone.npcNear(p, npc);
-    if (!n || !n.shop || !['shop', 'smith'].includes(n.role)) return { ok: false, code: 'too_far', reason: 'Chegue mais perto do comerciante.' };
-    if (!n.shop.includes(item)) return { ok: false, code: 'not_sold', reason: 'Este comerciante não vende isso.' };
-    if (!Number.isInteger(qty) || qty < 1 || qty > 50) return { ok: false, code: 'bad_request', reason: 'Quantidade inválida.' };
+    if (!n || !['shop', 'smith', 'armorer'].includes(n.role) || (n.role !== 'armorer' && !n.shop)) return { ok: false, code: 'too_far', reason: 'Chegue mais perto do comerciante.' };
+    const isGear = n.role === 'armorer';
+    if (isGear ? !this.armorCatalog(p.char).includes(item) : !n.shop.includes(item)) return { ok: false, code: 'not_sold', reason: 'Este comerciante não vende isso.' };
+    if (!Number.isInteger(qty) || qty < 1 || qty > (isGear ? 1 : 50)) return { ok: false, code: 'bad_request', reason: 'Quantidade inválida.' };
     const c = p.char;
     const def = this.data.items[item];
     if (def.kind === 'consumable' && (def.level || 1) > c.level) return { ok: false, code: 'level', reason: `Nível ${def.level} exigido para ${def.name}. Seu nível atual é ${c.level}.` };
-    const cost = this.priceOf(item) * qty;
+    const cost = (isGear ? this.gearPriceOf(item) : this.priceOf(item)) * qty;
     if (c.gold < cost) return { ok: false, code: 'no_gold', reason: `Ouro insuficiente: ${cost} necessário, você tem ${c.gold}.` };
     const stack = [...c.items.values()].find((it) => it.loc === 'bag' && it.defId === item && it.qty + qty <= (def.stack || 1));
     if (!stack && bagCount(c) >= BAG_CAPACITY) return { ok: false, code: 'bag_full', reason: 'Inventário cheio.' };

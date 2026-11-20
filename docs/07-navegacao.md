@@ -148,4 +148,5 @@ Da mais baixa para a mais alta. Uma camada de cima bloqueia o clique nas de baix
 ![Painel do clã](img/social_cla.png)
 ![Duelo](img/social_duelo.png)
 ![Ferreiro com risco](img/social_ferreiro.png)
+![Armeiro: peças da faixa atual e da próxima](img/armeiro.png)
 ![Bolsa: menu do botão direito (vender ao último comerciante, descartar) e a barra com 5 habilidades](img/inventario_menu.png)

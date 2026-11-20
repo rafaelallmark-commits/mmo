@@ -159,6 +159,7 @@ Decisões tomadas por conta própria durante a sessão que criou o Marco 1. Cada
 | D96 | **Nível dos consumíveis conferido** na compra e no uso. | Tônico médio (nível 9) era comprado e bebido no nível 1. |
 | D97 | **Barra com as 5 habilidades** (teclas 1–5) e tônicos em 6–7, com recarga e recarga global visíveis; o atalho de tônico usa o mais forte permitido para o nível. | As habilidades dos níveis 15 e 20 não tinham atalho na interface. |
 | D98 | **Rajada Cortante com projéteis de verdade**: 3 azagaias em leque (60°), cada uma acerta o primeiro monstro no caminho. | O campo `projectiles` não era lido e todo alvo no cone levava um único golpe. |
+| D99 | **Armeiro nas duas cidades** (Amaro em Pedrâmbar, Inês no Vau de Nácar): vende as peças **comuns** que a classe pode usar, só da faixa atual do personagem e da próxima, a 3× o valor (`formulas.economy.gearPriceMult`), uma por vez; raras e únicas continuam só no saque e nos chefes. | A simulação mostrou que, de ~23 peças comuns por faixa, em média 0,4 caíam antes do nível da faixa (o conjunto sai de um sorteio de 4% entre peças de todas as classes) e as missões não dão equipamento: o ciclo caçar → subir → equipar não se sustentava. As compras também dão destino ao ouro que sobrava (12 a 28 mil no nível 20 para 7 das 8 classes). |
 
 ## Teste público: CI, exportação e implantação
 
