@@ -3,9 +3,10 @@
 // Uso:
 //   npm run create-character -- --account teste1 --password teste123 --name Brakka --class breaker [--level 2] [--trial] [--give axe_1h_t5 --give ring_furrow] [--db cinzas.db]
 // --trial (nível 10+): marca a prova de classe como vencida e libera a habilidade do nível 10.
+// --db (ou CINZAS_DB) aceita arquivo SQLite ou postgres://usuario:senha@host/banco.
 import { randomUUID } from 'node:crypto';
 import { loadGameData } from '../src/data.js';
-import { Store } from '../src/store.js';
+import { createStore } from '../src/db.js';
 import { derivedStats, totalAttributePoints, totalSkillPoints } from '../src/rules.js';
 
 const argv = process.argv.slice(2);
@@ -21,7 +22,7 @@ if (!account || !name) {
 }
 const cls = data.classes[classId];
 if (!cls) { console.log(`Classe inexistente: ${classId}. Opções: ${Object.keys(data.classes).join(', ')}`); process.exit(1); }
-const store = new Store(opt('db', 'cinzas.db'));
+const store = createStore(opt('db', process.env.CINZAS_DB ?? 'cinzas.db'));
 let acc = store.findAccount(account);
 if (!acc) { store.createAccount(account, password); acc = store.findAccount(account); console.log(`conta criada: ${account} / ${password}`); }
 if (store.characterNameTaken(name)) { console.log(`nome em uso: ${name}`); process.exit(1); }

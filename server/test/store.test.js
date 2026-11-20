@@ -8,7 +8,12 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Store, MIGRATIONS } from '../src/store.js';
 
-test('banco do M1 sem controle de versão é migrado uma única vez', () => {
+// Monta um arquivo SQLite "antigo" com node:sqlite e abre com o Store do SQLite: não tem equivalente
+// direto no PostgreSQL. A migração equivalente lá (banco parado numa versão antiga sobe sem perder
+// dados) está em store-pg.test.js.
+const SQLITE_ONLY = process.env.CINZAS_TEST_PG ? 'só SQLite: abre um arquivo .db antigo direto com node:sqlite; no PostgreSQL o caso equivalente é store-pg.test.js' : false;
+
+test('banco do M1 sem controle de versão é migrado uma única vez', { skip: SQLITE_ONLY }, () => {
   const dir = mkdtempSync(join(tmpdir(), 'cinzas-store-'));
   try {
     const path = join(dir, 'antigo.db');

@@ -81,6 +81,8 @@ async function stop() {
 }
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);
+// a ferramenta saiu por outro motivo (erro, sinal só para ela): nenhum processo filho fica para trás
+process.on('exit', () => { for (const { child } of children) if (child.exitCode == null && child.signalCode == null) child.kill('SIGTERM'); });
 
 run('mundo', 'world-main.js', ['--port', String(worldPort), '--host', host]);
 await new Promise((r) => setTimeout(r, 400));

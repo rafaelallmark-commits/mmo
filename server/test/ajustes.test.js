@@ -55,6 +55,9 @@ test('tônico acima do nível: não compra nem usa; venda e descarte; item vendi
     await zw;
     const pa = server.playerOf(A.char.id);
     await A.request('gm', { cmd: 'gold', amount: 500 });
+    // uma compra cabe numa pilha: 5 a mais que a pilha de tônicos é recusado
+    const stackHp = server.data.items.potion_hp_s.stack;
+    assert.equal((await A.request('buy', { npc: 'potions_resina', item: 'potion_hp_s', qty: stackHp + 1 })).code, 'bad_request');
     // tônico médio é do nível 9
     let r = await A.request('buy', { npc: 'potions_resina', item: 'potion_hp_m', qty: 1 });
     assert.equal(r.code, 'level');

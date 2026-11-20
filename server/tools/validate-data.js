@@ -111,6 +111,22 @@ export function validate(data, builds) {
     if (!data.rarities[d.rarity]) errors.push(`item ${id}: raridade ${d.rarity}`);
   }
   for (const fam of WEAPON_FAMILIES) for (const t of TIERS) if (!items[`${fam}_t${t}`]) errors.push(`falta ${fam} na faixa ${t}`);
+  // Valores que viram ouro, quantidade ou XP no banco têm de ser inteiros: o PostgreSQL recusa fração numa
+  // coluna inteira (o SQLite guardaria calado) e o salvamento falharia em produção.
+  const int = (where, v) => { if (v != null && !Number.isInteger(v)) errors.push(`${where}: ${v} não é inteiro (vai para coluna inteira no banco)`); };
+  for (const [id, d] of Object.entries(items)) { int(`item ${id}: value`, d.value); int(`item ${id}: stack`, d.stack); }
+  for (const [mid, m] of Object.entries(data.monsters)) int(`monstro ${mid}: xp`, m.xp);
+  for (const [tid, t] of Object.entries(data.lootTables)) for (const e of t.entries) { int(`tabela ${tid}: min`, e.min); int(`tabela ${tid}: max`, e.max); }
+  for (const [qid, q] of Object.entries(data.quests || {})) {
+    int(`missão ${qid}: ouro`, q.rewards?.gold); int(`missão ${qid}: xp`, q.rewards?.xp);
+    for (const [def, n] of q.rewards?.items ?? []) int(`missão ${qid}: ${def}`, n);
+  }
+  for (const [cid, c] of Object.entries(data.classes)) for (const [def, n] of c.startingKit.bag) int(`kit ${cid}: ${def}`, n);
+  int('pointsPerLevel', data.pointsPerLevel); int('skillPointsPerLevel', data.skillPointsPerLevel);
+  // ferreiro: as regras ficam em formulas.enhance (smith.js); ouro = goldBase × (grau+1) × nível do item
+  const smith = data.formulas.enhance ?? {};
+  int('ferreiro: goldBase', smith.goldBase);
+  for (const n of smith.materials ?? []) int('ferreiro: materials', n);
   for (const [mid, m] of Object.entries(data.monsters)) if (!data.lootTables[m.lootTable]) errors.push(`monstro ${mid}: tabela ${m.lootTable}`);
   for (const [tid, t] of Object.entries(data.lootTables)) {
     for (const e of t.entries) {

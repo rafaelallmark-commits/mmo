@@ -67,6 +67,8 @@ npm start
 
 O servidor ouve em `ws://0.0.0.0:7777` e grava em `server/cinzas.db`. Para parar: `Ctrl+C` (salva todos os personagens conectados).
 
+O SQLite (`cinzas.db`) é o banco de desenvolvimento. Em produção o banco é um **PostgreSQL central**, com backups (`pg_dump`) e as mesmas migrações versionadas: `CINZAS_DB='postgres://usuario:senha@host:5432/cinzas' npm start` (detalhes em [docs/08-operacao.md §8.11](docs/08-operacao.md#811-postgresql)).
+
 Variações:
 
 ```bash
@@ -109,7 +111,7 @@ Para já abrir com a conta preenchida:
 
 Em cada janela: **Jogar** → servidor `ws://127.0.0.1:7777`, **Criar conta** (ou **Entrar**) → **Criar novo personagem** (escolha a classe; a prévia 3D muda) → **Jogar**. **Esc** fecha painéis ou abre o menu (Opções, Trocar de personagem, Sair para o título).
 
-Controles: clique no chão anda; clique no monstro ataca; clique no NPC conversa (missões, loja, armeiro com as peças da sua faixa, ferreiro, prova de classe); clique no anel de um portal muda de mapa; clique no saque coleta; **1–6** habilidades (com recarga e recarga global na barra; a 6ª é a do nível 25), **7/8** tônicos (o melhor que você pode usar); **J** missões; chat com `/g` (grupo), `/s Nome` (sussurro), `/convidar Nome`, `/sair`; **I** inventário (clique no item equipa/usa; botão direito vende — com loja ou ferreiro aberto — ou descarta; passe o mouse para ver a descrição e a comparação); **C** ficha (pontos e habilidades); **Q/E** ou botão direito arrastando giram a câmera; roda do mouse aproxima; **Enter** conversa; **Esc** fecha painéis.
+Controles: clique no chão anda; clique no monstro ataca; clique no NPC conversa (missões, loja, armeiro com as peças da sua faixa, ferreiro, prova de classe); clique no anel de um portal muda de mapa; clique no saque coleta; **1–6** habilidades (com recarga e recarga global na barra; a 6ª é a do nível 25), **7/8** tônicos (o melhor que você pode usar); **J** missões; chat com `/g` (grupo), `/s Nome` (sussurro), `/convidar Nome`, `/sair`; **I** inventário (clique no item equipa/usa; botão direito vende — com loja, ferreiro ou armeiro aberto — ou descarta; passe o mouse para ver a descrição e a comparação); **C** ficha (pontos e habilidades); **Q/E** ou botão direito arrastando giram a câmera; roda do mouse aproxima; **Enter** conversa; **Esc** fecha painéis.
 
 Para jogar em rede local, rode o servidor em uma máquina e use `ws://IP-DA-MÁQUINA:7777` no campo Servidor.
 
@@ -135,7 +137,7 @@ Dentro de `server/`:
 npm test
 ```
 
-Roda os 39 testes: unitários (regras, equipamento, navegação, coerência dos dados, as 40 habilidades, uma rodada curta da simulação de progressão) e os **testes de aceitação dos Marcos 1, 2 e 3**, que sobem um servidor real numa porta aleatória com banco temporário e conectam clientes simulados pelo mesmo protocolo do Godot. O do Marco 3 inclui o refino conferido em 10.000 tentativas, o depósito da conta, a elite diária e **três grupos de bots** (5 com tanque e curadora, 3 sem tanque, 2 jogadores) vencendo o Custódio reagindo aos avisos, com uma queda de conexão no meio. Só um deles, com a narração:
+Roda os testes (no SQLite): unitários (regras, equipamento, navegação, coerência dos dados, as 40 habilidades, o contrato do banco, uma rodada curta da simulação de progressão) e os **testes de aceitação dos Marcos 1, 2 e 3**, que sobem um servidor real numa porta aleatória com banco temporário e conectam clientes simulados pelo mesmo protocolo do Godot. `npm run test:pg` roda a mesma suíte no PostgreSQL (sobe um servidor temporário e o apaga no fim; precisa dos binários do PostgreSQL instalados). O do Marco 3 inclui o refino conferido em 10.000 tentativas, o depósito da conta, a elite diária e **três grupos de bots** (5 com tanque e curadora, 3 sem tanque, 2 jogadores) vencendo o Custódio reagindo aos avisos, com uma queda de conexão no meio. Só um deles, com a narração:
 
 ```bash
 node --test --test-reporter=spec test/m3.test.js

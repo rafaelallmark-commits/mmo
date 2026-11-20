@@ -124,7 +124,7 @@ export class BotProgressao {
     this.cli.pedir('register', { account: conta, password: 'simulacao' });
     const l = this.cli.pedir('login', { account: conta, password: 'simulacao', delta: true });
     if (!l.ok) throw new Error(`login: ${l.reason}`);
-    const nome = `Sim ${this.classId}`.slice(0, 16);
+    const nome = `Sim_${this.classId}`.slice(0, 16); // nomes de personagem não têm espaço (D125)
     const c = this.cli.pedir('create_char', { name: nome, classId: this.classId });
     if (!c.ok) throw new Error(`create_char: ${c.reason}`);
     const e = this.cli.pedir('enter', { charId: c.char.id });

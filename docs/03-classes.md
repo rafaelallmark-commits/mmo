@@ -167,7 +167,7 @@ Cidade de condutores que atravessam montanhas e rios.
 | **Selo do Véu** | 10 | 20 (+2/grau) | 12 s | 16 m | Escudo que absorve 30 (+15 por grau) + 80% do Espírito por 10 s; ao se romper, afasta inimigos próximos. Habilidade marcante. | 30 / 45 / 60 / 75 / 90 | M2 |
 | **Nota Clara** | 15 | 12 (+1/grau) | 4 s | 16 m | Dano sagrado de 25 (+10 por grau) + 70% do Espírito; +50% contra máquinas. | 25 / 35 / 45 / 55 / 65 | M3 |
 | **Coro do Recomeço** | 20 | 40 (+3/grau) | 90 s | 12 m | Levanta um aliado caído com 30% da vida (+5% por grau). Conjuração de 2 s. | 30% / 35% / 40% / 45% / 50% | M3 |
-| **Canto de Vigília** | 25 | 38 (+3/grau) | 40 s | 10 m | Grupo a até 10 m (inclusive a Cantora): regenera 2% da vida máxima por segundo (+0,5% por grau) e ganha +10% de defesa durante 10 s. | 10% / 10% / 10% / 10% / 10% | Pós-v1 |
+| **Canto de Vigília** | 25 | 38 (+3/grau) | 40 s | 10 m | Grupo a até 10 m (inclusive a Cantora): regenera 2% da vida máxima por segundo (+0,5% por grau) e ganha +10% de defesa durante 10 s. | 2%/s / 2.5%/s / 3%/s / 3.5%/s / 4%/s | Pós-v1 |
 
 ### Tecelão da Brasa (jogável no Marco 1)
 

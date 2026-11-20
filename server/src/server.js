@@ -4,7 +4,7 @@
 import { WebSocketServer } from 'ws';
 import https from 'node:https';
 import { readFileSync, readdirSync } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { createHash, randomInt } from 'node:crypto';
 import { join as pathJoin, dirname as pathDirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { verifyToken, ReplayGuard } from './token.js';
@@ -14,7 +14,7 @@ import { Moderation, banMessage } from './moderation.js';
 import { enhanceable, enhanceQuote, enhancePreview, rollEnhance, enhanceOutcome } from './smith.js';
 import { randomUUID } from 'node:crypto';
 import { loadGameData, ATTRS } from './data.js';
-import { Store } from './store.js';
+import { createStore } from './db.js';
 import { Zone, lootView } from './zone.js';
 import { makeRng } from './rng.js';
 import { QuestEngine } from './quests.js';
@@ -27,13 +27,31 @@ import { Metrics, startMetricsServer } from './metrics.js';
 
 export const PROTOCOL_VERSION = 3; // 3: snapshots por diferença, login por token, escolta, canalização
 const SERVER_VERSION = JSON.parse(readFileSync(pathJoin(pathDirname(fileURLToPath(import.meta.url)), '../package.json'), 'utf8')).version;
-const NAME_RE = /^[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9 _-]{2,15}$/;
+// Nome de personagem: sem espaços (comandos de chat como /s Nome e /denunciar Nome terminam o nome no
+// primeiro espaço) e sem × ÷. Nomes antigos com espaço continuam valendo (o cliente aceita "entre aspas").
+const NAME_RE = /^[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ0-9_-]{2,15}$/;
+// prefixos que a exclusão de conta usa para renomear (store.deleteAccount): reservados
+const RESERVED_NAME_RE = /^exclu[ií]d[oa]_/i;
+// Variantes de maiúsculas das letras acentuadas: o banco compara sem diferença de maiúsculas só em A-Z
+// (NOCASE), mas o jogo procura nomes em minúsculas Unicode (byName); "Ângela" e "ângela" não podem coexistir.
+function accentCaseVariants(name) {
+  let out = [''];
+  for (const ch of name) {
+    const lo = ch.toLowerCase(), up = ch.toUpperCase();
+    const alts = ch.charCodeAt(0) > 127 && lo !== up && lo.length === 1 && up.length === 1 ? [lo, up] : [ch];
+    out = out.flatMap((pre) => alts.map((a) => pre + a));
+    if (out.length > 16) return [name, name.toLowerCase(), name.toUpperCase()]; // muitos acentos: os extremos bastam
+  }
+  return out;
+}
 const RID_CACHE = 128;
 const PARTY_MAX = 5;
 const DEFAULT_MAP = 'estrada_velha';
 // pedidos que podem mudar itens da bolsa: depois deles a troca aberta confere se a oferta mudou
 const ITEM_MUTATING = new Set(['use_item', 'enhance', 'quest_turnin', 'storage_put', 'storage_take', 'equip', 'unequip', 'buy', 'pickup', 'claim_recovery', 'gm', 'sell', 'discard', 'cast']);
 const INTEREST_R = 70; // raio de interesse dos snapshots por diferença (m)
+// várias zonas: recusados enquanto o personagem espera o token para ir a outra zona
+const TRANSFER_BLOCKED = new Set(['portal', 'gm', 'trial_start', 'dungeon_enter', 'interact', 'trade_request', 'trade_accept', 'duel_request', 'duel_accept']);
 const PRED_EPS2 = 0.1 * 0.1; // erro de posição tolerado na previsão por velocidade (m²)
 
 export class GameServer {
@@ -50,7 +68,8 @@ export class GameServer {
       ...Object.fromEntries(Object.entries(opts).filter(([, v]) => v !== undefined)),
     };
     this.data = opts.data ?? loadGameData(opts.dataDir);
-    this.store = new Store(this.opts.dbPath);
+    // arquivo SQLite (desenvolvimento) ou postgres://... (produção); veja db.js
+    this.store = createStore(this.opts.dbPath);
     this.rng = makeRng(this.opts.seed);
     this.quests = new QuestEngine({ data: this.data, store: this.store });
     this.sessions = new Set();
@@ -60,6 +79,9 @@ export class GameServer {
     this.trades = new TradeManager(this);
     this.clans = new ClanManager(this);
     this.mod = new Moderation(this);
+    // Sorteio do refino com RNG criptográfico: o RNG semeado da zona (mulberry32, 32 bits) dá para
+    // reconstruir a partir das rolagens que o jogador vê e prever um +4..+6. Os testes trocam esta função.
+    this.refineRng = () => randomInt(0, 1_000_000) / 1_000_000;
     this.closing = false;
     this.dataVersion = dataVersionOf(this.data);
     this.serverVersion = SERVER_VERSION;
@@ -86,6 +108,7 @@ export class GameServer {
       this.world = new WorldLink(this, { url: this.opts.world, secret: this.opts.worldSecret });
       this.transferReplay = new ReplayGuard();
       this.arriving = new Map();       // charId -> recados que chegaram antes de o login_transfer terminar
+      this.revoked = new Map();        // época -> instante: posse que o mundo pediu de volta antes de o personagem carregar
       this.remoteMaps = new Map();     // mapId -> { zoneId, up } (mapas das outras zonas)
       this.remote = new Map();         // charId -> { name, zoneId } (on-line em outra zona)
       this.remoteByName = new Map();   // nome minúsculo -> charId (on-line em outra zona)
@@ -142,7 +165,7 @@ export class GameServer {
     return new Promise((resolve) => {
       const onListening = (addr) => {
         this.port = addr.port;
-        this.log(`CINZAS DO MERIDIANO ${SERVER_VERSION} — servidor ouvindo em ${this.tls ? 'wss' : 'ws'}://${this.opts.host}:${this.port} (${this.zones.size} zonas, tick ${this.opts.tickHz} Hz, escala ${this.opts.timeScale}x, XP ${this.opts.xpRate}x, protocolo ${PROTOCOL_VERSION}, dados ${this.dataVersion}${this.opts.dev ? ', modo dev' : ''}, login: ${this.opts.auth})`);
+        this.log(`CINZAS DO MERIDIANO ${SERVER_VERSION} — servidor ouvindo em ${this.tls ? 'wss' : 'ws'}://${this.opts.host}:${this.port} (${this.zones.size} zonas, tick ${this.opts.tickHz} Hz, escala ${this.opts.timeScale}x, XP ${this.opts.xpRate}x, protocolo ${PROTOCOL_VERSION}, dados ${this.dataVersion}${this.opts.dev ? ', modo dev' : ''}, login: ${this.opts.auth}, banco: ${this.store.describe()})`);
         resolve(this.port);
       };
       if (this.opts.tlsCert && this.opts.tlsKey) {
@@ -170,7 +193,7 @@ export class GameServer {
       if (this.opts.metricsPort != null && this.opts.metricsPort !== false) {
         this.metricsSrv = await startMetricsServer({
           port: Number(this.opts.metricsPort), host: this.opts.metricsHost,
-          collect: () => this.collectMetrics(), onReset: () => this.metrics.reset(),
+          collect: () => this.collectMetrics(), onReset: () => { this.metrics.reset(); this.store.resetDbStats?.(); },
         });
         this.metricsPort = this.metricsSrv.address().port;
         this.log(`métricas em http://${this.opts.metricsHost}:${this.metricsPort}/metrics`);
@@ -195,11 +218,13 @@ export class GameServer {
   collectMetrics() {
     let players = 0;
     for (const z of this.zones.values()) players += z.players.size;
-    return this.metrics.snapshot({ players, sessions: this.sessions.size, zones: this.zones.size, tickHz: this.opts.tickHz });
+    const db = this.store.dbStats?.(); // só no PostgreSQL: tempo parado na ponte síncrona
+    return this.metrics.snapshot({ players, sessions: this.sessions.size, zones: this.zones.size, tickHz: this.opts.tickHz, ...(db ? { db } : {}) });
   }
 
   step(dt) {
     const t0 = performance.now();
+    this.world?.check(); // várias zonas: depois de um travamento, a cerca vem antes de qualquer lógica do jogo
     for (const [key, z] of this.zones) {
       // tempo jogado (tempo de jogo, para a telemetria de progressão)
       for (const p of z.players.values()) p.char.playedS = (p.char.playedS ?? 0) + dt / 1000;
@@ -279,9 +304,13 @@ export class GameServer {
     }
   }
 
+  // A cada 10 s e no desligamento. Um lote só (uma transação no SQLite; um UPDATE numa ida e volta no
+  // PostgreSQL): com a ponte síncrona, salvar um a um pararia o laço de eventos por N idas e voltas.
   saveAll() {
     if (this.world && !this.world.canSave()) return; // sem o mundo há tempo demais: as posses podem já ter sido liberadas
-    for (const z of this.zones.values()) for (const p of z.players.values()) this.store.saveCharacter(p.char);
+    const chars = [];
+    for (const z of this.zones.values()) for (const p of z.players.values()) chars.push(p.char);
+    if (chars.length) this.store.saveCharacters(chars);
   }
 
   // Desligamento gracioso: avisa todos, recusa novos logins, espera o prazo, salva e fecha.
@@ -453,6 +482,7 @@ export class GameServer {
 
   onMessage(s, buf) {
     this.metrics.in(buf.length);
+    this.world?.check(); // (idem: nenhum comando de jogador roda sem a conferência da cerca)
     if (!this.sessions.has(s)) return;
     let msg;
     try { msg = JSON.parse(buf.toString()); } catch { return this.sendTo(s, { t: 'res', rid: null, ok: false, code: 'bad_json', reason: 'Mensagem inválida.' }); }
@@ -535,8 +565,8 @@ export class GameServer {
     const zone = this.zoneOfChar(s.charId);
     const p = zone?.players.get(s.charId);
     if (!p) return { ok: false, code: 'not_in_world', reason: 'Personagem fora do mundo.' };
-    // indo para outra zona (várias zonas): nada que mude de mapa até a transferência terminar
-    if (p.transferring && ['portal', 'gm', 'trial_start', 'dungeon_enter', 'interact'].includes(msg.t)) return { ok: false, code: 'busy', reason: 'Mudando de área...', cache: false };
+    // indo para outra zona (várias zonas): nada que mude de mapa nem abra troca ou duelo até a transferência terminar
+    if (p.transferring && TRANSFER_BLOCKED.has(msg.t)) return { ok: false, code: 'busy', reason: 'Mudando de área...', cache: false };
     switch (msg.t) {
       case 'move': return this.nc(zone.cmdMove(p, msg.x, msg.z));
       case 'attack': return this.nc(zone.cmdAttack(p, msg.target));
@@ -696,12 +726,13 @@ export class GameServer {
   }
 
   hCreateChar(s, { name, classId }) {
-    if (typeof name !== 'string' || !NAME_RE.test(name.trim())) return { ok: false, code: 'bad_name', reason: 'Nome: 3 a 16 caracteres, começando por letra.' };
+    if (typeof name !== 'string' || !NAME_RE.test(name.trim())) return { ok: false, code: 'bad_name', reason: 'Nome: 3 a 16 letras, números, _ ou -, começando por letra e sem espaços.' };
     name = name.trim();
+    if (RESERVED_NAME_RE.test(name)) return { ok: false, code: 'bad_name', reason: 'Esse nome não pode ser usado.' };
     const cls = this.data.classes[classId];
     if (!cls) return { ok: false, code: 'bad_class', reason: 'Classe inexistente.' };
     if (!['M1', 'M2'].includes(cls.implementedIn)) return { ok: false, code: 'class_locked', reason: `${cls.name} ainda não está disponível.` };
-    if (this.store.characterNameTaken(name)) return { ok: false, code: 'name_taken', reason: 'Esse nome já está em uso.' };
+    if (accentCaseVariants(name).some((v) => this.store.characterNameTaken(v))) return { ok: false, code: 'name_taken', reason: 'Esse nome já está em uso.' };
     if (this.store.listCharacters(s.accountId).length >= 4) return { ok: false, code: 'too_many', reason: 'Limite de 4 personagens por conta.' };
     const map = this.data.maps[DEFAULT_MAP];
     const st = derivedStats({ classId, level: 1, alloc: {} }, cls.startingKit.equip.map((id) => ({ def: this.data.items[id] })), this.data);
@@ -773,6 +804,8 @@ export class GameServer {
     if (prev) this.dropSession(prev); // a sessão antiga nesta zona sai antes (salva e devolve a posse)
     const r = await this.world.request('acquire', { charId, accountId: s.accountId, name: row.name, mapId: row.map_id }, this.world.downMs * 2 + 10000);
     if (!r.ok) return { ok: false, code: r.code ?? 'busy', reason: r.reason, cache: false };
+    // outra entrada (outra zona) pediu o personagem antes de ele carregar aqui: a posse já foi devolvida
+    if (this.leaseRevoked(r.epoch)) return { ok: false, code: 'kicked', reason: 'Sua conta entrou em outra conexão.', cache: false };
     const release = () => this.world.notify('release', { charId, epoch: r.epoch });
     if (!this.sessions.has(s) || s.charId != null) { release(); return undefined; } // a conexão caiu enquanto esperava
     const other = this.byChar.get(charId);
@@ -787,7 +820,7 @@ export class GameServer {
       char.mapId = mapId; char.x = sp.x; char.z = sp.z;
       this.store.saveCharacter(char);
     }
-    const t = await this.world.request('transfer', { charId, mapId, x: char.x, z: char.z, saved: true, chat: this.mod.chatLog.get(charId) ?? null });
+    const t = await this.world.request('transfer', { charId, epoch: r.epoch, mapId, x: char.x, z: char.z, saved: true, chat: this.mod.chatLog.get(charId) ?? null });
     if (!t.ok) {
       release();
       const reason = t.code === 'zone_down' ? `${this.data.maps[mapId]?.name ?? mapId} está fora do ar no momento. Tente em instantes.` : t.reason;
@@ -827,8 +860,8 @@ export class GameServer {
     };
     const b1 = banned(acc);
     if (b1) return abort(b1);
-    const prev = this.byChar.get(p.charId);
-    if (prev) this.dropSession(prev);
+    // (nenhuma sessão daqui cai antes de o mundo confirmar a transferência: um token assinado mas já
+    // ultrapassado não derruba quem entrou depois dele)
     // recados para ele que chegarem enquanto a posse é confirmada ficam guardados (saem depois da resposta)
     const early = [];
     this.arriving.set(p.charId, early);
@@ -839,14 +872,22 @@ export class GameServer {
       if (this.arriving.get(p.charId) === early) this.arriving.delete(p.charId);
     }
     if (!r.ok) return { ok: false, code: r.code ?? 'busy', reason: r.reason };
+    // outra entrada pediu o personagem antes de ele carregar aqui: a posse já foi devolvida (onWorldKick)
+    if (this.leaseRevoked(r.epoch)) return { ok: false, code: 'kicked', reason: 'Sua conta entrou em outra conexão.' };
     if (!this.sessions.has(s) || s.accountId != null) { this.world.notify('release', { charId: p.charId, epoch: r.epoch }); return undefined; }
     acc = this.store.findAccountById(acc.id) ?? acc; // dados frescos: suspensão e silêncio podem ter mudado na espera
     const b2 = banned(acc);
     if (b2) { this.world.notify('release', { charId: p.charId, epoch: r.epoch }); return b2; }
+    const other = this.byChar.get(p.charId);
+    if (other) {
+      // não deveria existir (a posse era da origem): a cópia daqui sai sem gravar por cima do que a origem gravou
+      this.log(`chegada de ${row.name}: cópia antiga nesta zona descartada sem gravar`);
+      other.noSave = true;
+      this.sendTo(other, { t: 'kicked', reason: 'Sua conta entrou em outra conexão.' });
+      this.dropSession(other);
+    }
     const old = this.byAccount.get(acc.id);
     if (old && old !== s) { this.sendTo(old, { t: 'kicked', reason: 'Sua conta entrou em outra conexão.' }); this.dropSession(old); }
-    const other = this.byChar.get(p.charId);
-    if (other) this.dropSession(other);
     s.accountId = acc.id;
     s.role = acc.role ?? 'player';
     this.mod.onLogin(s, acc); // o silêncio acompanha a conta
@@ -880,18 +921,23 @@ export class GameServer {
     p.transferring = true;
     this.trades.cancel(charId, 'Troca cancelada: troca de mapa.');
     p.zone.duels.forfeit(charId);
-    const r = await this.world.request('transfer', { charId, mapId, x, z });
+    const r = await this.world.request('transfer', { charId, epoch: s.leaseEpoch, mapId, x, z });
     p.transferring = false;
+    // sem resposta a tempo, o mundo pode ter marcado a transferência mesmo assim: desfeita na hora
+    // (senão a posse ficaria "em transferência" por 30 s, com recados guardados e grupo recusando)
+    const maybe = r.ok || r.code === 'world_timeout';
     if (this.byChar.get(charId) !== s || this.playerOf(charId) !== p) {
       // saiu ou mudou de mapa enquanto esperava: se ainda está aqui, a posse volta a ser desta zona
-      if (r.ok && this.byChar.has(charId)) this.world.notify('transfer_cancel', { charId, mapId: this.playerOf(charId)?.zone.mapId });
+      if (maybe && this.byChar.has(charId)) this.world.notify('transfer_cancel', { charId, mapId: this.playerOf(charId)?.zone.mapId });
       return false;
     }
     if (!r.ok) {
+      if (maybe) this.world.notify('transfer_cancel', { charId, mapId: p.zone.mapId });
       const name = this.data.maps[mapId]?.name ?? mapId;
       this.sendTo(s, { t: 'system', text: r.code === 'zone_down' ? `${name} está fora do ar no momento. Tente em instantes.` : r.reason });
       return false;
     }
+    this.trades.cancel(charId, 'Troca cancelada: troca de mapa.'); // (uma aberta durante a espera)
     const zone = p.zone, c = p.char;
     zone.removePlayer(charId, false);
     this.broadcastZone(zone.key, { t: 'left', eid: p.eid });
@@ -1032,7 +1078,7 @@ export class GameServer {
     if (have < q.materialQty) return { ok: false, code: 'no_material', reason: `${matName} insuficiente: ${q.materialQty} necessário, você tem ${have}.`, ...quote };
     const useProtect = !!protect && q.downgradeOnFail;
     if (useProtect && protectHave < 1) return { ok: false, code: 'no_protect', reason: `Você não tem ${this.data.items[q.protectItem].name}.`, ...quote };
-    const r = rollEnhance(p.zone.rng, q.chancePct);
+    const r = rollEnhance(this.refineRng, q.chancePct);
     const before = it.enh || 0;
     const out = enhanceOutcome(before, r.success, q, useProtect);
     const consume = (defId, qty) => {
@@ -1164,9 +1210,11 @@ export class GameServer {
     if (!n || !['shop', 'smith', 'armorer'].includes(n.role) || (n.role !== 'armorer' && !n.shop)) return { ok: false, code: 'too_far', reason: 'Chegue mais perto do comerciante.' };
     const isGear = n.role === 'armorer';
     if (isGear ? !this.armorCatalog(p.char).includes(item) : !n.shop.includes(item)) return { ok: false, code: 'not_sold', reason: 'Este comerciante não vende isso.' };
-    if (!Number.isInteger(qty) || qty < 1 || qty > (isGear ? 1 : 50)) return { ok: false, code: 'bad_request', reason: 'Quantidade inválida.' };
-    const c = p.char;
     const def = this.data.items[item];
+    // uma compra cabe numa pilha (Selo de Proteção: 20; tônicos: 50)
+    const maxQty = isGear ? 1 : Math.min(50, def.stack || 1);
+    if (!Number.isInteger(qty) || qty < 1 || qty > maxQty) return { ok: false, code: 'bad_request', reason: `Quantidade inválida (até ${maxQty} por compra).` };
+    const c = p.char;
     if (def.kind === 'consumable' && (def.level || 1) > c.level) return { ok: false, code: 'level', reason: `Nível ${def.level} exigido para ${def.name}. Seu nível atual é ${c.level}.` };
     const cost = (isGear ? this.gearPriceOf(item) : this.priceOf(item)) * qty;
     if (c.gold < cost) return { ok: false, code: 'no_gold', reason: `Ouro insuficiente: ${cost} necessário, você tem ${c.gold}.` };
@@ -1591,17 +1639,29 @@ export class GameServer {
       this.sendTo(s, { t: 'kicked', reason: reason ?? 'Sua conta entrou em outra conexão.' });
       this.dropSession(s);
     } else {
-      this.world.notify('release', { charId, epoch }); // não está aqui: libera para o mundo seguir
+      // Não está carregado aqui: libera para o mundo seguir. A posse pode ter acabado de ser concedida
+      // a uma entrada desta zona que ainda vai carregar o personagem (a resposta e este kick lidos no
+      // mesmo instante): a época fica marcada e essa entrada desiste em vez de carregar sem posse.
+      if (epoch != null) {
+        const now = Date.now();
+        for (const [e, at] of this.revoked) if (now - at > 60000) this.revoked.delete(e);
+        this.revoked.set(epoch, now);
+      }
+      this.world.notify('release', { charId, epoch });
     }
   }
+
+  // a posse concedida (época) já foi pedida de volta pelo mundo e devolvida? (ver onWorldKick)
+  leaseRevoked(epoch) { return epoch != null && this.revoked.delete(epoch); }
 
   onWorldDeliver({ charId, msg, note }) {
     const s = this.byChar.get(charId);
     const early = s ? null : this.arriving.get(charId);
     if (early) { if (early.length < 32) early.push({ msg, note }); return; } // chegando: entrega depois do login_transfer
     if (note?.kind === 'clan_invite' && Number.isInteger(note.clanId)) this.clans.invites.set(charId, { clanId: note.clanId, from: note.from, at: Date.now() });
-    // fala de quem está em outra zona (sussurro, grupo): guardada para dar contexto a denúncias daqui
-    if (note?.kind === 'chat' && Number.isInteger(note.from) && msg?.t === 'chat' && typeof msg.text === 'string') this.mod.remember(note.from, msg.channel, msg.text);
+    // fala de quem está em outra zona (sussurro, grupo): guardada para dar contexto a denúncias daqui, com
+    // quem a recebeu (este personagem)
+    if (note?.kind === 'chat' && Number.isInteger(note.from) && msg?.t === 'chat' && typeof msg.text === 'string') this.mod.remember(note.from, msg.channel, msg.text, [charId]);
     if (s && msg) this.sendTo(s, msg);
   }
 
@@ -1630,9 +1690,11 @@ export class GameServer {
   }
 
   onWorldClan({ clanId, msg, except, attach, direct, from }) {
-    if (Number.isInteger(from) && msg?.t === 'chat' && typeof msg.text === 'string') this.mod.remember(from, 'clan', msg.text);
     if (msg && clanId != null) {
-      for (const m of this.store.clanMembers(clanId)) {
+      const members = this.store.clanMembers(clanId);
+      // fala de clã de outra zona: contexto de denúncia, com os membros do clã como quem recebeu
+      if (Number.isInteger(from) && msg.t === 'chat' && typeof msg.text === 'string') this.mod.remember(from, 'clan', msg.text, members.map((m) => m.char_id));
+      for (const m of members) {
         if (m.char_id === except) continue;
         const s = this.byChar.get(m.char_id);
         if (s) this.sendTo(s, msg);
@@ -1783,28 +1845,36 @@ export class GameServer {
       if (sess.chat.length >= this.opts.chatPer5s) return { ok: false, code: 'chat_flood', reason: 'Calma: mensagens demais em pouco tempo.' };
       sess.chat.push(now);
     }
-    const blocked = this.mod.chatBlocked(p, channel, text);
+    const blocked = this.mod.chatBlocked(p);
     if (blocked) return blocked;
     if (channel === 'clan') {
       const t = typeof text === 'string' ? text.replace(/[\u0000-\u001f]/g, '').trim().slice(0, 200) : '';
       if (!t) return { ok: false, code: 'empty', reason: 'Mensagem vazia.' };
-      return this.nc(this.clans.chat(p, t));
+      const { to, ...r } = this.clans.chat(p, t);
+      if (r.ok) this.mod.remember(p.char.id, 'clan', t, to); // contexto de denúncia: quem recebeu
+      return this.nc(r);
     }
     if (typeof text !== 'string') return { ok: false, code: 'bad_request', reason: 'Mensagem inválida.' };
     const clean = text.replace(/[\u0000-\u001f]/g, '').trim().slice(0, 200);
     if (!clean) return { ok: false, code: 'empty', reason: 'Mensagem vazia.' };
     const msg = { t: 'chat', channel, from: p.char.name, eid: p.eid, text: clean };
-    if (channel === 'zone') this.broadcastZone(p.zone.key, msg);
+    // depois de entregue, a fala vira contexto de denúncia com quem a recebeu (null = mapa, pública)
+    const said = (to) => this.mod.remember(p.char.id, channel, clean, to);
+    if (channel === 'zone') { this.broadcastZone(p.zone.key, msg); said(null); }
     else if (channel === 'party' && this.world) {
       // várias zonas: entrega aqui aos membros desta zona; o mundo leva aos das outras
       const pid = this.partyIdOf(p.char.id);
       if (!pid) return { ok: false, code: 'no_party', reason: 'Você não está em um grupo.' };
-      for (const m of this.partyMemberIds(pid)) this.sendTo(this.byChar.get(m), msg);
+      const members = this.partyMemberIds(pid);
+      for (const m of members) this.sendTo(this.byChar.get(m), msg);
       this.world.notify('party_chat', { charId: p.char.id, msg });
+      said(members);
     } else if (channel === 'party') {
       const pid = this.charParty.get(p.char.id);
       if (!pid) return { ok: false, code: 'no_party', reason: 'Você não está em um grupo.' };
-      for (const m of this.parties.get(pid).members) this.sendTo(this.byChar.get(m), msg);
+      const members = [...this.parties.get(pid).members];
+      for (const m of members) this.sendTo(this.byChar.get(m), msg);
+      said(members);
     } else if (channel === 'whisper') {
       const targetId = typeof to === 'string' ? this.byName.get(to.trim().toLowerCase()) : null;
       const remote = !targetId && this.world ? this.remoteChar(to) : null;
@@ -1812,11 +1882,13 @@ export class GameServer {
         // várias zonas: a pessoa está em outra zona; o mundo entrega
         this.world.notify('send', { to: remote.charId, msg: { ...msg, to: remote.name }, note: { kind: 'chat', from: p.char.id } });
         this.sendTo(this.byChar.get(p.char.id), { ...msg, to: remote.name });
+        said([remote.charId]);
         return { ok: true, cache: false };
       }
       if (!targetId) return { ok: false, code: 'offline', reason: `${to} não está conectado.` };
       this.sendTo(this.byChar.get(targetId), { ...msg, to: this.playerOf(targetId).char.name });
       this.sendTo(this.byChar.get(p.char.id), { ...msg, to: this.playerOf(targetId).char.name });
+      said([targetId]);
     } else return { ok: false, code: 'bad_channel', reason: 'Canal inválido.' };
     return { ok: true, cache: false };
   }

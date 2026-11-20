@@ -35,13 +35,16 @@ export class ClanManager {
   }
 
   // fromCharId: quem falou (chat do clã), para as outras zonas guardarem a fala como contexto de denúncia
+  // devolve os ids dos membros (quem recebeu; o chat guarda isso para o contexto de denúncias)
   notifyClan(clanId, msg, exceptCharId = null, fromCharId = null) {
-    for (const m of this.st.clanMembers(clanId)) {
+    const members = this.st.clanMembers(clanId);
+    for (const m of members) {
       if (m.char_id === exceptCharId) continue;
       const s = this.s.byChar.get(m.char_id);
       if (s) this.s.sendTo(s, msg);
     }
     this.s.clanRemote({ clanId, msg, except: exceptCharId, from: fromCharId }); // várias zonas: membros nas outras
+    return members.map((m) => m.char_id).filter((id) => id !== exceptCharId);
   }
 
   create(p, { name, tag }) {
@@ -210,7 +213,7 @@ export class ClanManager {
   // canal de chat do clã: todos os membros on-line
   chat(p, text) {
     if (!p.char.clanId) return { ok: false, code: 'no_clan', reason: 'Você não tem clã.' };
-    this.notifyClan(p.char.clanId, { t: 'chat', channel: 'clan', from: p.char.name, eid: p.eid, text, tag: p.char.clanTag }, null, p.char.id);
-    return { ok: true };
+    const to = this.notifyClan(p.char.clanId, { t: 'chat', channel: 'clan', from: p.char.name, eid: p.eid, text, tag: p.char.clanTag }, null, p.char.id);
+    return { ok: true, to };
   }
 }

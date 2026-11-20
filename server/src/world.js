@@ -13,7 +13,9 @@
 //
 // Protocolo interno (WebSocket + JSON), só para as zonas. A primeira mensagem da zona é
 //   { t:'hello', zoneId, maps, publicUrl, ts, auth, online, draining }   auth = HMAC-SHA256(segredo, `${zoneId}:${ts}`)
-// Pedidos { t, id, ... } recebem { t:'res', id, ok, ... }; o resto são avisos sem resposta.
+// Pedidos { t, id, ... } recebem { t:'res', id, ok, ... }; o resto são avisos sem resposta. O sinal de
+// vida { t:'hb', n } volta como { t:'hb_ack', n }: para a zona, só o hb respondido (e as respostas aos
+// pedidos) provam que o mundo ainda a via quando ela os mandou.
 // Pedidos: acquire, transfer, party_invite/accept/decline/leave/kick, where.
 // Avisos da zona: hb, release, transfer_saved, transfer_cancel, transfer_abort, online, moved, send,
 //   party_chat, party_state, clan, mod, announce, draining, bye.
@@ -234,7 +236,8 @@ export class WorldService {
   async onZoneMessage(z, m) {
     const reply = (r) => { if (m.id != null) this.send(z, { t: 'res', id: m.id, ...r }); };
     switch (m.t) {
-      case 'hb': z.players = Number(m.players) || 0; return this.send(z, { t: 'hb_ack' });
+      // o número volta na resposta: a zona só conta como notícia do mundo o sinal de vida respondido
+      case 'hb': z.players = Number(m.players) || 0; return this.send(z, { t: 'hb_ack', n: m.n });
       case 'acquire': return reply(await this.acquire(z, m)); // (na chegada, leva os recados guardados)
       case 'release': return this.release(z, m);
       case 'transfer': return reply(this.transfer(z, m));
@@ -365,7 +368,8 @@ export class WorldService {
   // grava, solta e avisa com transfer_saved antes de mandar o token ao cliente.
   transfer(z, m) {
     const l = this.leases.get(m.charId);
-    if (!l || l.state !== 'online' || l.zoneId !== z.id) return { ok: false, code: 'no_lease', reason: 'Seu personagem não está nesta zona.' };
+    // (com a época: um pedido de uma posse antiga desta mesma zona não move a posse atual)
+    if (!l || l.state !== 'online' || l.zoneId !== z.id || (m.epoch != null && l.epoch !== m.epoch)) return { ok: false, code: 'no_lease', reason: 'Seu personagem não está nesta zona.' };
     const toId = this.mapOwner.get(m.mapId);
     const to = toId ? this.zones.get(toId) : null;
     if (!to || !to.connected || to.draining) return { ok: false, code: 'zone_down', reason: 'Essa área está fora do ar no momento. Tente em instantes.' };

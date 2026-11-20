@@ -93,6 +93,44 @@ func duel_opponent_name() -> String:
 func in_duel_with(eid: String) -> bool:
 	return duel_state == "active" and eid == duel_opponent
 
+## Entrou no mundo (inclusive ao reconectar): troca, duelo e convites da conexão anterior acabaram no
+## servidor, mas o aviso foi para o soquete morto. Começa limpo.
+func reset() -> void:
+	ask_seq += 1
+	ask_panel.visible = false
+	ask_yes = Callable()
+	ask_no = Callable()
+	trade = {}
+	trade_panel.visible = false
+	actions_panel.visible = false
+	duel_state = ""
+	duel_opponent = ""
+	duel_label.visible = false
+
+## Nome de personagem no começo de um comando: "Nome resto", ou entre aspas para nomes com espaço
+## (criados antes da regra sem espaços): "\"Ana Maria\" resto". Devolve [nome, resto].
+static func split_name(rest: String) -> Array:
+	rest = rest.strip_edges()
+	if rest.begins_with("\""):
+		var close := rest.find("\"", 1)
+		if close > 1:
+			return [rest.substr(1, close - 1).strip_edges(), rest.substr(close + 1).strip_edges()]
+	var sp := rest.find(" ")
+	if sp < 0:
+		return [rest, ""]
+	return [rest.substr(0, sp), rest.substr(sp + 1).strip_edges()]
+
+## Comando que só leva um nome (/troca, /duelo, /convidar): o resto inteiro, sem as aspas.
+static func name_arg(rest: String) -> String:
+	rest = rest.strip_edges()
+	if rest.begins_with("\"") and rest.ends_with("\"") and rest.length() > 2:
+		return rest.substr(1, rest.length() - 2).strip_edges()
+	return rest
+
+## Nome pronto para um comando de chat: entre aspas se tiver espaço.
+static func quote_name(n: String) -> String:
+	return "\"%s\"" % n if n.contains(" ") else n
+
 # ---------------- mensagens do servidor ----------------
 func on_message(m: Dictionary) -> bool:
 	match str(m.get("t", "")):
@@ -183,8 +221,9 @@ func _ask(text: String, yes: Callable, no: Callable) -> void:
 	ask_no = no
 	ask_panel.visible = true
 	# o convite vence no servidor em 30 s
+	# (o temporizador é da árvore: se o HUD já saiu, por troca de personagem, não mexe em nada)
 	hud.get_tree().create_timer(30.0).timeout.connect(func():
-		if ask_seq == my_seq and ask_panel.visible:
+		if ask_seq == my_seq and is_instance_valid(ask_panel) and ask_panel.visible:
 			ask_panel.visible = false)
 
 func _answer(yes: bool) -> void:
@@ -541,7 +580,7 @@ func _act(what: String) -> void:
 		"clan":
 			Net.request("clan_invite", {"name": n}, _msg_or_err)
 		"whisper":
-			hud.chat_input.text = "/s %s " % n
+			hud.chat_input.text = "/s %s " % quote_name(n)
 			hud.chat_input.grab_focus()
 			hud.chat_input.caret_column = hud.chat_input.text.length()
 
@@ -563,18 +602,17 @@ func chat_command(t: String) -> bool:
 		else:
 			Net.request("bug_report", {"text": text, "client": str(ProjectSettings.get_setting("application/config/version", "dev"))}, _msg_or_err)
 	elif t.begins_with("/denunciar "):
-		var rest := t.substr(11).strip_edges()
-		var sp := rest.find(" ")
-		if sp <= 0:
-			hud.error("Use: /denunciar Nome motivo")
+		var nr := split_name(t.substr(11))
+		if nr[0] == "" or nr[1] == "":
+			hud.error("Use: /denunciar Nome motivo (nome com espaço entre aspas)")
 		else:
-			Net.request("report", {"name": rest.substr(0, sp), "reason": rest.substr(sp + 1)}, _msg_or_err)
+			Net.request("report", {"name": nr[0], "reason": nr[1]}, _msg_or_err)
 	elif t.begins_with("/gm "):
 		_gm_command(t.substr(4).strip_edges())
 	elif t.begins_with("/troca "):
-		Net.request("trade_request", {"name": t.substr(7).strip_edges()}, _msg_or_err)
+		Net.request("trade_request", {"name": name_arg(t.substr(7))}, _msg_or_err)
 	elif t.begins_with("/duelo "):
-		Net.request("duel_request", {"name": t.substr(7).strip_edges()}, _msg_or_err)
+		Net.request("duel_request", {"name": name_arg(t.substr(7))}, _msg_or_err)
 	elif t.begins_with("/c "):
 		Net.request("chat", {"channel": "clan", "text": t.substr(3)}, _err)
 	elif t == "/cla" or t == "/clã":
@@ -589,7 +627,7 @@ func chat_command(t: String) -> bool:
 			else:
 				Net.request("clan_create", {"name": args.substr(0, sp), "tag": args.substr(sp + 1)}, _clan_res)
 		elif rest.begins_with("convidar "):
-			Net.request("clan_invite", {"name": rest.substr(9).strip_edges()}, _msg_or_err)
+			Net.request("clan_invite", {"name": name_arg(rest.substr(9))}, _msg_or_err)
 		elif rest == "sair":
 			Net.request("clan_leave", {}, _clan_res)
 		else:
@@ -600,32 +638,35 @@ func chat_command(t: String) -> bool:
 
 ## Moderação (só contas da equipe): /gm expulsar Nome motivo · /gm suspender Nome horas|perm motivo ·
 ## /gm desbloquear Nome · /gm silenciar Nome minutos motivo · /gm liberar Nome · /gm onde Nome · /gm anunciar texto
+## Nome com espaço (de antes da regra) vai entre aspas: /gm expulsar "Ana Maria" flood.
 func _gm_command(rest: String) -> void:
-	var parts := rest.split(" ", false)
-	if parts.is_empty():
+	rest = rest.strip_edges()
+	if rest == "":
 		return
-	var cmd := parts[0]
-	var name := parts[1] if parts.size() > 1 else ""
-	var tail := func(from: int) -> String:
-		return " ".join(parts.slice(from)) if parts.size() > from else ""
+	var sp := rest.find(" ")
+	var cmd := rest if sp < 0 else rest.substr(0, sp)
+	var after := "" if sp < 0 else rest.substr(sp + 1).strip_edges()
+	var nr := split_name(after)
+	var name: String = nr[0]
+	var args := split_name(nr[1])  # [primeira palavra, resto]: horas/minutos e motivo
 	match cmd:
 		"expulsar":
-			Net.request("gm", {"cmd": "kick", "name": name, "reason": tail.call(2)}, _msg_or_err)
+			Net.request("gm", {"cmd": "kick", "name": name, "reason": nr[1]}, _msg_or_err)
 		"suspender":
-			var h := parts[2] if parts.size() > 2 else ""
+			var h: String = args[0]
 			var hours: Variant = h.to_float()
 			if h == "perm":
 				hours = "perm"
-			Net.request("gm", {"cmd": "ban", "name": name, "hours": hours, "reason": tail.call(3)}, _msg_or_err)
+			Net.request("gm", {"cmd": "ban", "name": name, "hours": hours, "reason": args[1]}, _msg_or_err)
 		"desbloquear":
 			Net.request("gm", {"cmd": "unban", "name": name}, _msg_or_err)
 		"silenciar":
-			Net.request("gm", {"cmd": "mute", "name": name, "minutes": (parts[2] if parts.size() > 2 else "0").to_float(), "reason": tail.call(3)}, _msg_or_err)
+			Net.request("gm", {"cmd": "mute", "name": name, "minutes": str(args[0]).to_float(), "reason": args[1]}, _msg_or_err)
 		"liberar":
 			Net.request("gm", {"cmd": "unmute", "name": name}, _msg_or_err)
 		"onde":
 			Net.request("gm", {"cmd": "where", "name": name}, _msg_or_err)
 		"anunciar":
-			Net.request("gm", {"cmd": "announce", "text": tail.call(1)}, _msg_or_err)
+			Net.request("gm", {"cmd": "announce", "text": after}, _msg_or_err)
 		_:
 			hud.error("Comandos da equipe: expulsar, suspender, desbloquear, silenciar, liberar, onde, anunciar")
