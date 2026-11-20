@@ -97,3 +97,14 @@ Decisões tomadas por conta própria durante a sessão que criou o Marco 1. Cada
 | D64 | Braços balançam **na fase das pernas** (o direito à frente quando o pé esquerdo pisa); metade do giro da mão passa para o antebraço; a lança e o cajado **deslizam na mão até o pé tocar o chão** quando parados. | Fase errada fazia os braços irem à frente com as pernas juntas; sem dividir o giro, o pulso torcia como um pano; arma fincada precisa encostar no chão em qualquer altura de quadril. |
 | D65 | Corda do arco em **dois segmentos** que seguem a mão durante a puxada, e a cabeça compensa todo o giro do tronco em guarda e golpe. | Com a corda reta parada, a puxada não parecia puxada; arqueiro e lanceiro viram o tronco de lado, mas olham para o alvo. |
 
+## Marco 4
+
+| # | Decisão | Motivo |
+|---|---|---|
+| D66 | **Snapshots por diferença e interesse**, pedidos pelo cliente no login (`delta: true`): raio de 70 m, entidade completa ao aparecer, depois só os grupos de campos que mudaram (identidade, posição+velocidade, combate) e `gone` para quem saiu; o snapshot completo continua para clientes antigos. | Medido com 100 clientes juntos: o snapshot completo custava ~195 KB/s por cliente (156 Mbit/s no total); por diferença, ~28 KB/s. JSON continua (D3): a troca para binário não foi necessária. |
+| D67 | **Previsão por velocidade (dead reckoning)** nos snapshots por diferença: o servidor só reenvia posição quando a previsão do cliente (última posição + velocidade × tempo) erraria mais que 10 cm, quando a velocidade muda ou a cada 2 s. O cliente faz a mesma conta para quem não veio no snapshot. | Corta a banda de ~28 para ~9 KB/s por cliente com 100 jogadores; o teste confere erro de posição < 2 cm contra o snapshot completo. |
+| D68 | **Métricas em HTTP separado** (`--metrics-port`, local por padrão): percentis do tick numa janela de 10 min, bytes/mensagens por segundo, CPU, memória; texto do Prometheus e JSON; `/health`. | Observar o servidor em operação e no teste de carga sem mexer no protocolo do jogo. |
+| D69 | **Atraso artificial com fila por conexão** (`--lag-ms`, `--jitter-ms`) que preserva a ordem das mensagens. | A primeira versão (um temporizador por mensagem) entregava fora de ordem e quebrou o login do cliente no teste de 150 ms — o TCP nunca faria isso. |
+| D70 | **Migrações versionadas** do banco (`schema_version`, passos em ordem, um por transação) e **telemetria de progressão**: tempo jogado por personagem e registro de cada subida de nível (`level_log`), com relatório contra as metas (±25%). | Mudanças de esquema seguras para bancos já em uso; medir o tempo por nível com jogadores reais, não só na simulação. |
+| D71 | **Backup a quente com `VACUUM INTO`** e verificação de integridade, mantendo as N cópias mais recentes. | Foto consistente do banco sem parar o servidor. |
+

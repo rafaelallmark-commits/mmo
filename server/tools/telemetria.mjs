@@ -13,6 +13,10 @@ const dbPath = arg('db', 'cinzas.db');
 const md = arg('md', null);
 const xp = JSON.parse(readFileSync(join(here, '../../data/xp_table.json'), 'utf8'));
 const db = new DatabaseSync(dbPath, { readOnly: true });
+if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='level_log'").get()) {
+  console.log(`O banco ${dbPath} ainda não tem telemetria (tabela level_log). Ela é criada quando o servidor sobe com esta versão.`);
+  process.exit(0);
+}
 const rows = db.prepare('SELECT char_id, level, class_id, played_s FROM level_log ORDER BY char_id, level').all();
 const byChar = new Map();
 for (const r of rows) {
