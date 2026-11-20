@@ -85,7 +85,9 @@ Da mais baixa para a mais alta. Uma camada de cima bloqueia o clique nas de baix
 | Selecionar aliado (curas) e abrir as ações (Trocar, Duelar, Grupo, Clã, Sussurrar) | clique em outro jogador |
 | Atacar o oponente num duelo | clique nele (fora de duelo, jogador não é alvo) |
 | Câmera | botão direito arrastando ou Q/E gira; roda aproxima |
-| Atalhos | 1–3 habilidades, 4–5 tônicos |
+| Atalhos | 1–5 habilidades (a barra mostra a recarga; depois de cada habilidade há 1 s de recarga global), 6–7 tônicos (o mais forte do seu nível) |
+| Conjuração | habilidades com tempo de conjuração mostram a barra "Conjurando…": fique parado; andar, atacar ou usar item interrompe sem gastar mana |
+| Vender e descartar | bolsa (**I**), botão direito no item: **Vender** (com loja ou ferreiro aberto; metade do valor) ou **Descartar…** (pede confirmação) |
 | Painéis | I inventário, C ficha, J missões, L clã, Enter chat, Esc fechar/menu |
 | Chat | `/g` grupo · `/s Nome` sussurro · `/c` clã · `/convidar Nome` · `/troca Nome` · `/duelo Nome` · `/cla criar Nome SIGLA` · `/cla convidar Nome` · `/cla sair` |
 
@@ -146,3 +148,5 @@ Da mais baixa para a mais alta. Uma camada de cima bloqueia o clique nas de baix
 ![Painel do clã](img/social_cla.png)
 ![Duelo](img/social_duelo.png)
 ![Ferreiro com risco](img/social_ferreiro.png)
+![Armeiro: peças da faixa atual e da próxima](img/armeiro.png)
+![Bolsa: menu do botão direito (vender ao último comerciante, descartar) e a barra com 5 habilidades](img/inventario_menu.png)

@@ -238,6 +238,7 @@ export class Zone {
     const path = this.nav.findPath(c.x, c.z, x, z);
     if (!path || !path.length) return { ok: false, code: 'blocked', reason: 'Não dá para chegar ali.' };
     if (p.channel) this.cancelChannel(p, 'Interrompido: você se moveu.');
+    if (p.casting) this.cancelCast(p, 'Conjuração interrompida: você se moveu.');
     p.path = path; p.dest = path[path.length - 1]; p.targetId = null; p.chase = null;
     // o cliente usa o caminho para prever o movimento sem esperar os snapshots
     return { ok: true, dest: { x: r2(p.dest.x), z: r2(p.dest.z) }, path: path.map((q) => [r2(q.x), r2(q.z)]) };
@@ -245,6 +246,7 @@ export class Zone {
 
   cmdAttack(p, targetId) {
     if (p.char.dead) return { ok: false, code: 'dead', reason: 'Você está caído.' };
+    if (p.casting) this.cancelCast(p, 'Conjuração interrompida: você atacou.');
     if (typeof targetId === 'string' && targetId.startsWith('p')) {
       // jogador só é alvo no duelo
       const op = this.entityById(targetId);
@@ -271,7 +273,48 @@ export class Zone {
     return { ok: true, to: pt.to, x: pt.toX, z: pt.toZ };
   }
 
+  // Habilidade pedida pelo cliente: recarga global (globalCooldownMs, salvo habilidades com offGcd) e
+  // tempo de conjuração (castMs): parado, o alvo é conferido no começo e de novo no fim; mover-se,
+  // atacar, usar item ou outra habilidade interrompe. Sem castMs, sai na hora.
   cmdCast(p, skillId, targetId, x, z, allyId) {
+    const s = this.data.skills[skillId];
+    const gcd = this.f.skills?.globalCooldownMs ?? 1000;
+    if (p.casting) this.cancelCast(p, 'Conjuração interrompida: você usou outra habilidade.');
+    if (s && !s.offGcd && this.now < (p.gcdUntil || 0)) return { ok: false, code: 'gcd', reason: `Recarga global: ${((p.gcdUntil - this.now) / 1000).toFixed(1)} s.` };
+    if (s && s.castMs > 0) {
+      const chk = this.castNow(p, skillId, targetId, x, z, allyId, true);
+      if (!chk.ok) return chk;
+      p.casting = { skillId, targetId, x, z, allyId, startAt: this.now, endAt: this.now + s.castMs, sx: p.char.x, sz: p.char.z };
+      p.dest = null; p.path = null; p.char.chase = null;
+      if (!s.offGcd) p.gcdUntil = this.now + Math.max(gcd, s.castMs);
+      this.broadcast({ t: 'cast_start', eid: p.eid, skill: skillId, ms: s.castMs });
+      return { ok: true, casting: { skill: skillId, ms: s.castMs, name: s.name }, gcdMs: gcd };
+    }
+    const r = this.castNow(p, skillId, targetId, x, z, allyId);
+    if (r.ok && s && !s.offGcd) { p.gcdUntil = this.now + gcd; r.gcdMs = gcd; }
+    return r;
+  }
+
+  cancelCast(p, reason) {
+    if (!p.casting) return;
+    const cs = p.casting;
+    p.casting = null;
+    p.gcdUntil = Math.min(p.gcdUntil || 0, this.now + 300); // interrompida: libera logo outra ação
+    this.send(p.char.id, { t: 'cast_end', ok: false, skill: cs.skillId, reason });
+    this.broadcast({ t: 'cast_cancel', eid: p.eid, skill: cs.skillId });
+  }
+
+  tickCast(p) {
+    const cs = p.casting;
+    if (p.char.dead) return this.cancelCast(p, 'Você caiu.');
+    if (Math.hypot(p.char.x - cs.sx, p.char.z - cs.sz) > 0.35) return this.cancelCast(p, 'Conjuração interrompida: você se moveu.');
+    if (this.now < cs.endAt) return;
+    p.casting = null;
+    const r = this.castNow(p, cs.skillId, cs.targetId, cs.x, cs.z, cs.allyId);
+    this.send(p.char.id, { t: 'cast_end', ok: !!r.ok, skill: cs.skillId, reason: r.ok ? undefined : r.reason, mp: r.mp, cooldownMs: r.cooldownMs });
+  }
+
+  castNow(p, skillId, targetId, x, z, allyId, dry = false) {
     const s = this.data.skills[skillId];
     const c = p.char;
     if (c.dead) return { ok: false, code: 'dead', reason: 'Você está caído.' };
@@ -297,6 +340,7 @@ export class Zone {
       if (!op || !this.duels.active(p, op)) return { ok: false, code: 'bad_target', reason: 'Só dá para atacar jogadores num duelo.' };
       const d = dist(c, op.char);
       if (d > range + tol) return { ok: false, code: 'out_of_range', reason: `Alvo fora de alcance (${d.toFixed(1)} m; alcance ${range} m).` };
+      if (dry) return { ok: true, dry: true };
       this.duels.attack(p, op, { def: s, rank }, skillId);
       c.mp -= cost;
       p.cooldowns[skillId] = this.now + s.cooldownMs;
@@ -324,6 +368,7 @@ export class Zone {
       if (!ally || !ally.char || ally.char.dead) return { ok: false, code: 'bad_target', reason: 'Aliado inválido.' };
       if (ally !== p && dist(c, ally.char) > range + tol) return { ok: false, code: 'out_of_range', reason: `Aliado fora de alcance (alcance ${range} m).` };
     }
+    if (dry) return { ok: true, dry: true };
     const res = executeSkill(this, p, s, rank, { target, x, z, ally });
     if (!res.ok) return res;
     c.mp -= cost;
@@ -337,11 +382,13 @@ export class Zone {
   cmdUseItem(p, instanceId) {
     const c = p.char;
     if (p.channel) this.cancelChannel(p, 'Interrompido: você usou um item.');
+    if (p.casting) this.cancelCast(p, 'Conjuração interrompida: você usou um item.');
     const it = c.items.get(instanceId);
     if (!it || it.loc !== 'bag') return { ok: false, code: 'not_in_bag', reason: 'Item não encontrado no seu inventário.' };
     const def = this.data.items[it.defId];
     if (def.kind !== 'consumable') return { ok: false, code: 'not_usable', reason: 'Este item não pode ser usado.' };
     if (c.dead) return { ok: false, code: 'dead', reason: 'Você está caído.' };
+    if ((def.level || 1) > c.level) return { ok: false, code: 'level', reason: `Nível ${def.level} exigido para usar ${def.name}. Seu nível atual é ${c.level}.` };
     if (this.now < p.potionReadyAt) return { ok: false, code: 'cooldown', reason: `Tônicos em recarga (${((p.potionReadyAt - this.now) / 1000).toFixed(1)} s).` };
     p.potionReadyAt = this.now + this.f.potions.sharedCooldownMs;
     if (def.use.healHp) c.hp = Math.min(p.stats.maxHp, c.hp + def.use.healHp);
@@ -579,6 +626,7 @@ export class Zone {
   tickPlayer(p, dt) {
     const c = p.char;
     if (p.channel) this.tickChannel(p);
+    if (p.casting) this.tickCast(p);
     if (c.dead) return;
     if (p.buffs.length) {
       const before = p.buffs.length;
@@ -589,7 +637,8 @@ export class Zone {
     if (p.shield && p.shield.until <= this.now) p.shield = null;
     const speed = this.f.movement.playerSpeed * (1 + (p.stats.moveSpeedPct || 0) / 100);
     const ox = c.x, oz = c.z;
-    if (p.stunUntil > this.now) { brake(c, dt, this.mv.decel * 2); return; } // atordoado (descarga do chefe)
+    if (p.stunUntil > this.now) { brake(c, dt, this.mv.decel * 2); if (p.casting) this.cancelCast(p, 'Conjuração interrompida: você foi atordoado.'); return; } // atordoado (descarga do chefe)
+    if (p.casting) { brake(c, dt, this.mv.decel * 2); return; } // conjurando: parado, sem ataque básico
     const opts = { accel: this.mv.accel, decel: this.mv.decel };
     if (p.targetId && p.targetId.startsWith('p')) {
       // duelo: persegue e golpeia o oponente

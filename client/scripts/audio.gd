@@ -344,7 +344,7 @@ func _apply_mood(m: String) -> void:
 func _tick() -> void:
 	var c := _cfg
 	var s := _step % 8
-	var bar := _step / 8
+	var bar := floori(_step / 8.0)  # compasso (divisão inteira explícita)
 	for q in _queue.duplicate():
 		if int(q[0]) <= _step:
 			_queue.erase(q)

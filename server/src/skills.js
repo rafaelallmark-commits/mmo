@@ -75,6 +75,25 @@ export function executeSkill(zone, p, s, rank, { target, x, z, ally }) {
     }
     case 'cone_strike': {
       const dir = facing(p, target, x, z);
+      if (eff.projectiles) {
+        // projéteis em leque (ex.: Rajada Cortante): cada um segue a sua direção dentro do ângulo e acerta
+        // o primeiro monstro no caminho (faixa de 1 m para cada lado); um alvo grande ou perto pode levar mais de um
+        const n = eff.projectiles, spread = ((eff.angleDeg || 60) * Math.PI) / 180, base = Math.atan2(dir.z, dir.x);
+        for (let i = 0; i < n; i++) {
+          const a = base + (n === 1 ? 0 : -spread / 2 + (spread * i) / (n - 1));
+          const d = { x: Math.cos(a), z: Math.sin(a) };
+          let best = null, bt = Infinity;
+          for (const m of zone.monstersInCircle(c.x, c.z, range)) {
+            if (m.state === 'dead') continue;
+            const rx = m.x - c.x, rz = m.z - c.z;
+            const along = rx * d.x + rz * d.z;
+            if (along < 0 || along > range || Math.abs(rx * d.z - rz * d.x) > 1.0) continue;
+            if (along < bt) { bt = along; best = m; }
+          }
+          if (best) hitAll([best]);
+        }
+        break;
+      }
       // "hits": golpes seguidos na mesma área (ex.: Tempestade de Lanças)
       for (let i = 0; i < (eff.hits || 1); i++) hitAll(zone.monstersInCircle(c.x, c.z, range).filter((m) => m.state !== 'dead' && inCone(c, dir, m, range, eff.angleDeg || 90)));
       break;

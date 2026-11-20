@@ -149,6 +149,18 @@ Decisões tomadas por conta própria durante a sessão que criou o Marco 1. Cada
 |---|---|---|
 | D87 | **Escudo e aljava seguem o equipamento**, não a classe: o snapshot leva a mão secundária (`oh`) e o cliente refaz o modelo quando ela muda; arma de duas mãos nunca mostra escudo (a mão esquerda vai ao cabo). Espada de duas mãos ganha preparo "do teto" (lâmina em pé acima do ombro). | Uma Escudeira com espada de duas mãos aparecia com escudo (o servidor já o tirava) e a mão esquerda presa a ele; no preparo copiado do machado a lâmina deitava atrás da cabeça e, de frente, só se via a mão junto ao rosto. |
 
+## Marco 4: ajustes apontados pela simulação
+
+| # | Decisão | Motivo |
+|---|---|---|
+| D93 | **Recargas atravessam a troca de zona como tempo restante** (habilidades e tônico). | Cada zona tem o próprio relógio e uma instância nova começa em 0: copiar os instantes absolutos travava habilidades por minutos (ou dias, num servidor ligado há dias) na prova de classe e no calabouço — achado da simulação (64 de 64 execuções). |
+| D94 | **Recarga global de 1 s** entre habilidades (`formulas.skills.globalCooldownMs`; exceções com `offGcd`) e **tempo de conjuração** (`castMs`) de verdade: conjura parado, o alvo é conferido no começo e no fim; mover, atacar, usar item ou ser atordoado interrompe sem gastar mana nem recarga. | Sem recarga global um cliente automatizado despejava todas as habilidades no mesmo tick; `castMs` existia nos dados (Tiro do Espinhal, Coração da Fornalha, Coro do Recomeço) mas saía instantâneo. |
+| D95 | **Venda ao comerciante** (qualquer loja ou ferreiro, metade do valor do item) e **descarte** de itens da bolsa; item vendido ou descartado sai de uma troca aberta e destrava os dois lados. | A bolsa enchia com as peças substituídas a cada faixa sem saída (média de 373 saques ignorados por classe na simulação); a venda dá destino ao saque sem criar ouro demais (metade do valor, um quarto do preço de compra). |
+| D96 | **Nível dos consumíveis conferido** na compra e no uso. | Tônico médio (nível 9) era comprado e bebido no nível 1. |
+| D97 | **Barra com as 5 habilidades** (teclas 1–5) e tônicos em 6–7, com recarga e recarga global visíveis; o atalho de tônico usa o mais forte permitido para o nível. | As habilidades dos níveis 15 e 20 não tinham atalho na interface. |
+| D98 | **Rajada Cortante com projéteis de verdade**: 3 azagaias em leque (60°), cada uma acerta o primeiro monstro no caminho. | O campo `projectiles` não era lido e todo alvo no cone levava um único golpe. |
+| D99 | **Armeiro nas duas cidades** (Amaro em Pedrâmbar, Inês no Vau de Nácar): vende as peças **comuns** que a classe pode usar, só da faixa atual do personagem e da próxima, a 3× o valor (`formulas.economy.gearPriceMult`), uma por vez; raras e únicas continuam só no saque e nos chefes. | A simulação mostrou que, de ~23 peças comuns por faixa, em média 0,4 caíam antes do nível da faixa (o conjunto sai de um sorteio de 4% entre peças de todas as classes) e as missões não dão equipamento: o ciclo caçar → subir → equipar não se sustentava. As compras também dão destino ao ouro que sobrava (12 a 28 mil no nível 20 para 7 das 8 classes). |
+
 ## Teste público: CI, exportação e implantação
 
 | # | Decisão | Motivo |
