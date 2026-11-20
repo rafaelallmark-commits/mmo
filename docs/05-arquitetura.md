@@ -33,6 +33,16 @@ Movimento válido (destino dentro do mapa e fora de áreas bloqueadas e de peça
 ```
 mmo/
 ├── README.md                      como rodar servidor, dois clientes, testes e cenários
+├── .github/workflows/
+│   ├── ci.yml                     a cada push/PR: dados + testes, importação do cliente, build da imagem
+│   └── release.yml                a cada tag v*: exporta e assina o cliente, publica a release e a imagem
+├── deploy/                        implantação do teste público (docs/08 §8.8)
+│   ├── Dockerfile                 imagem do servidor (node:22-bookworm-slim, usuário sem privilégios)
+│   ├── docker-compose.yml         servidor + proxy TLS (Caddy); "contas" e "banco" reservados
+│   ├── Caddyfile                  wss://domínio -> servidor:7777 (métricas não passam)
+│   ├── cinzas.service             systemd sem Docker (endurecido)
+│   └── backup.service/.timer      backup a quente de hora em hora
+├── .dockerignore                  contexto da imagem: só server/ e data/
 ├── data/                          dados do jogo (fonte de verdade, editáveis)
 │   ├── classes.json               atributos, classes, origens, kits iniciais
 │   ├── skills.json                40 habilidades + regras de graus
@@ -79,6 +89,7 @@ mmo/
 ├── tools/poses/                   modelo do braço e gerador da tabela WPOSES (poses guiadas pela arma)
 ├── client/                        projeto Godot 4.3
 │   ├── project.godot              autoload Net; cena principal
+│   ├── export_presets.cfg         presets "Linux", "Windows Desktop" e "macOS" (saída em build/)
 │   ├── scenes/main.tscn
 │   ├── shaders/                   cel shading, contorno, terreno, grama, folhagem, água, céu, "vazado"
 │   └── scripts/
@@ -231,7 +242,7 @@ Critérios (todos cobertos por `server/test/acceptance.test.js`, exceto onde ind
 
 ### Marco 4 — Testes de carga, ajuste e documentação (em andamento)
 
-Feito até aqui: métricas do servidor e HTTP de métricas, snapshots por diferença e interesse, teste de carga com 100 clientes ([relatorio-carga.md](relatorio-carga.md): nenhum tick acima de 50 ms; ~9 KB/s por cliente), atraso artificial e indicador de ping, telemetria de nível, migrações versionadas, backup a quente, cenários críticos reproduzíveis ([relatorio-cenarios.md](relatorio-cenarios.md)) e o guia de operação ([08-operacao.md](08-operacao.md)).
+Feito até aqui: métricas do servidor e HTTP de métricas, snapshots por diferença e interesse, teste de carga com 100 clientes ([relatorio-carga.md](relatorio-carga.md): nenhum tick acima de 50 ms; ~9 KB/s por cliente), atraso artificial e indicador de ping, telemetria de nível, migrações versionadas, backup a quente, cenários críticos reproduzíveis ([relatorio-cenarios.md](relatorio-cenarios.md)) e o guia de operação ([08-operacao.md](08-operacao.md)), com CI, exportação do cliente e implantação do teste público (§8.8).
 
 
 - Testes com múltiplos clientes (meta: 100 clientes simulados numa zona, 10 Hz) medindo tempo de tick, latência de ida e volta (ping) e uso de banda por cliente.
@@ -255,6 +266,12 @@ Feito até aqui: métricas do servidor e HTTP de métricas, snapshots por difere
 | Cliente | rodado pelo editor | executáveis exportados e assinados (macOS notarizado), verificação de versão do protocolo no `hello` |
 | Dados | lidos do disco no início | versionados; mudanças de balanceamento publicadas com o servidor; validador roda no CI |
 | Privacidade | — | política de privacidade, exclusão de conta, retenção de logs |
+
+Já preparado ([08-operacao.md §8.8](08-operacao.md)): `wss://` atrás de um proxy Caddy com certificado automático,
+serviço gerenciado (Docker com verificação de saúde e reinício, ou systemd endurecido) com desligamento gracioso,
+backup de hora em hora, CI com o validador de dados e os testes, e executáveis exportados para Linux, Windows e macOS,
+assinados e notarizados quando houver certificados. Continua pendente: serviço de contas e PostgreSQL (com lugar
+reservado no compose), limites de taxa por conexão, papéis de mestre e privacidade.
 
 ## O que muda para múltiplas zonas
 

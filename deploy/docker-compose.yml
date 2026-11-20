@@ -1,0 +1,101 @@
+# Teste público de CINZAS DO MERIDIANO: servidor de zona + proxy TLS (Caddy). Ver docs/08-operacao.md §8.8.
+#
+#   cd deploy
+#   echo "DOMINIO=jogo.exemplo.com.br" > .env        # domínio real, com DNS apontando para esta máquina
+#   docker compose up -d --build
+#   docker compose logs -f servidor
+#
+# Os jogadores conectam em wss://jogo.exemplo.com.br (campo "Servidor" do cliente ou --server=...).
+# Portas abertas na internet: só 80 e 443 (proxy). O jogo (7777) fica na rede interna do compose e as
+# métricas/saúde (9100) só no 127.0.0.1 desta máquina: curl http://127.0.0.1:9100/health
+name: cinzas
+
+services:
+  servidor:
+    # Construída a partir deste repositório. Para usar a imagem publicada pelo CI (release.yml), troque
+    # "build" por:  image: ghcr.io/<dono-do-repositório>/cinzas-servidor:<versão>
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: cinzas-servidor:local
+    restart: unless-stopped
+    init: true
+    # SIGTERM -> o servidor salva todos os personagens e fecha o banco; 45 s de prazo antes do SIGKILL
+    stop_grace_period: 45s
+    volumes:
+      - dados:/data              # cinzas.db (+ -wal/-shm) e backups/
+    expose:
+      - "7777"                   # alcançável só pelo proxy (rede interna)
+    ports:
+      - "127.0.0.1:9100:9100"    # métricas Prometheus e /health: só nesta máquina, nunca na internet
+    # Teste em rede local sem TLS (ws://IP:7777): descomente. Não use no teste público.
+    #   - "7777:7777"
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  proxy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      servidor:
+        condition: service_healthy
+    ports:
+      - "80:80"                  # desafio HTTP do Let's Encrypt e redirecionamento para HTTPS
+      - "443:443"                # wss:// do jogo
+    environment:
+      DOMINIO: ${DOMINIO:-jogo.exemplo.com.br}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_dados:/data        # certificados e chaves do TLS: não apague (limites de emissão)
+      - caddy_config:/config
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # --- Futuro: serviço de contas (docs/05, "O que muda para um teste público") ---------------------
+  # Cadastro com e-mail verificado, recuperação de senha e emissão de tokens de sessão curtos que o
+  # servidor de zona valida. O proxy passaria a encaminhar https://DOMINIO/contas/* para ele.
+  # contas:
+  #   image: ghcr.io/<dono-do-repositório>/cinzas-contas:<versão>
+  #   restart: unless-stopped
+  #   environment:
+  #     BANCO_URL: postgres://cinzas@banco:5432/cinzas
+  #     BANCO_SENHA_ARQUIVO: /run/secrets/senha_banco
+  #   secrets: [senha_banco]
+  #   depends_on:
+  #     banco:
+  #       condition: service_healthy
+  #   expose: ["8080"]
+
+  # --- Futuro: PostgreSQL central (substitui o SQLite quando houver contas e mais de uma zona) -----
+  # banco:
+  #   image: postgres:17
+  #   restart: unless-stopped
+  #   stop_grace_period: 60s
+  #   environment:
+  #     POSTGRES_USER: cinzas
+  #     POSTGRES_DB: cinzas
+  #     POSTGRES_PASSWORD_FILE: /run/secrets/senha_banco
+  #   secrets: [senha_banco]
+  #   volumes:
+  #     - banco:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U cinzas -d cinzas"]
+  #     interval: 10s
+  #     retries: 5
+  #   # sem "ports": o banco nunca fica exposto fora da rede interna do compose
+
+# secrets:
+#   senha_banco:
+#     file: ./segredos/senha_banco.txt   # fora do git (deploy/segredos/ está no .gitignore)
+
+volumes:
+  dados:
+  caddy_dados:
+  caddy_config:
+  # banco:

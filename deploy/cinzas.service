@@ -1,0 +1,63 @@
+# Servidor de zona de CINZAS DO MERIDIANO como serviço do systemd (sem Docker).
+# Instalação resumida (passo a passo em docs/08-operacao.md §8.8):
+#   useradd --system --home-dir /var/lib/cinzas --shell /usr/sbin/nologin cinzas
+#   repositório em /opt/cinzas (server/ e data/);  cd /opt/cinzas/server && npm ci --omit=dev
+#   cp deploy/cinzas.service /etc/systemd/system/ && systemctl daemon-reload && systemctl enable --now cinzas
+#   journalctl -u cinzas -f
+[Unit]
+Description=CINZAS DO MERIDIANO - servidor de zona
+Documentation=file:///opt/cinzas/docs/08-operacao.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cinzas
+Group=cinzas
+WorkingDirectory=/opt/cinzas/server
+Environment=NODE_ENV=production
+# Mesmas opções da imagem Docker, com uma diferença deliberada: aqui as métricas escutam só em
+# 127.0.0.1. (No contêiner o 0.0.0.0 é o da rede interna dele; numa máquina sem Docker exporia as
+# métricas para a internet.) Ajuste o caminho do node se não for /usr/bin/node (`command -v node`).
+ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning src/main.js --port 7777 --db /var/lib/cinzas/cinzas.db --metrics-port 9100 --metrics-host 127.0.0.1
+Restart=always
+RestartSec=5
+# SIGTERM: o servidor salva todos os personagens e fecha o banco antes de sair.
+KillSignal=SIGTERM
+TimeoutStopSec=45
+# /var/lib/cinzas: banco (cinzas.db, -wal, -shm) e backups/. Criado pelo systemd com o dono certo.
+StateDirectory=cinzas
+StateDirectoryMode=0750
+UMask=0027
+LimitNOFILE=65536
+SyslogIdentifier=cinzas
+
+# --- Endurecimento ---
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/cinzas
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+RemoveIPC=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# Sem MemoryDenyWriteExecute=true de propósito: o JIT do V8 (Node) precisa de páginas graváveis e executáveis.
+
+[Install]
+WantedBy=multi-user.target

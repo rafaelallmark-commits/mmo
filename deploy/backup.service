@@ -1,0 +1,51 @@
+# Backup a quente do banco de CINZAS DO MERIDIANO (VACUUM INTO: cópia consistente com o servidor rodando,
+# confere a integridade e mantém as 14 mais recentes). Disparado de hora em hora por backup.timer.
+#   cp deploy/backup.service deploy/backup.timer /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now backup.timer
+#   systemctl start backup.service      # backup imediato;  journalctl -u backup.service
+# Se a máquina tiver outro "backup.service", instale os dois com outro nome igual
+# (ex.: cinzas-backup.service + cinzas-backup.timer): o timer aciona o serviço de mesmo nome.
+[Unit]
+Description=CINZAS DO MERIDIANO - backup do banco
+Documentation=file:///opt/cinzas/docs/08-operacao.md
+After=cinzas.service
+ConditionPathExists=/var/lib/cinzas/cinzas.db
+
+[Service]
+Type=oneshot
+User=cinzas
+Group=cinzas
+WorkingDirectory=/opt/cinzas/server
+# npm sem verificação de atualização e sem arquivos de log; HOME no diretório gravável do serviço.
+Environment=NODE_ENV=production HOME=/var/lib/cinzas NPM_CONFIG_UPDATE_NOTIFIER=false NPM_CONFIG_LOGS_MAX=0
+ExecStart=/usr/bin/npm run backup -- --db /var/lib/cinzas/cinzas.db --para /var/lib/cinzas/backups
+UMask=0027
+Nice=10
+IOSchedulingClass=idle
+SyslogIdentifier=cinzas-backup
+
+# --- Endurecimento (o mesmo do cinzas.service) ---
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/cinzas
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+PrivateNetwork=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM

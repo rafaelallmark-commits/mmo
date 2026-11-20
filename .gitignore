@@ -1,1 +1,6 @@
 .claude/worktrees/
+# saídas de exportação do cliente e de builds locais (client/build/, build/)
+build/
+# configuração local da implantação (domínio, senhas): nunca versionar
+deploy/.env
+deploy/segredos/

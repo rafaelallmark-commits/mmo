@@ -1,0 +1,147 @@
+# Integração contínua de CINZAS DO MERIDIANO (docs/08-operacao.md §8.8):
+#   servidor  - valida os dados do jogo e roda todas as suítes de teste (Node 22)
+#   cliente   - importa o projeto Godot 4.3 em modo headless e falha com qualquer erro de script
+#   docker    - constrói a imagem do servidor (sem publicar) e faz um teste rápido do contêiner
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: 4.3-stable
+  # SHA-512 publicado pelo Godot em .../releases/download/4.3-stable/SHA512-SUMS.txt
+  GODOT_ZIP_SHA512: fd52bb4ba8acc30ca5accd1c566d470ad7282f891ccc0995dfafabcf92bcf76280ce182bf9d80ebd885f3ed2165d01e1fc3f2928436b15498dfbd98656c2a45a
+
+jobs:
+  servidor:
+    name: Servidor (dados e testes)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci --no-audit --no-fund
+
+      - name: Validar os dados do jogo (data/*.json)
+        run: npm run validate-data
+
+      - name: Testes (todas as suítes, ~3 min)
+        run: npm test
+
+  cliente:
+    name: Cliente Godot (importação headless)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Cache do Godot
+        id: cache-godot
+        uses: actions/cache@v6
+        with:
+          path: ~/godot
+          key: godot-${{ env.GODOT_VERSION }}-linux-x86_64
+
+      - name: Baixar o Godot ${{ env.GODOT_VERSION }} (só sem cache)
+        if: steps.cache-godot.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/godot "$RUNNER_TEMP/godot-dl"
+          cd "$RUNNER_TEMP/godot-dl"
+          curl -fsSL --retry 3 -o godot.zip \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+          echo "${GODOT_ZIP_SHA512}  godot.zip" | sha512sum -c -
+          unzip -q godot.zip
+          mv "Godot_v${GODOT_VERSION}_linux.x86_64" ~/godot/godot
+          chmod +x ~/godot/godot
+
+      - name: Importar o projeto
+        run: |
+          # O Godot sai com código 0 mesmo com erro de script; quem decide é o texto da saída.
+          # ("Parameter "m" is null" e "Global uniform ... does not exist" vêm do renderizador
+          # dummy do modo headless e são inofensivos.)
+          status=0
+          ~/godot/godot --headless --path client --import 2>&1 | tee importacao.log || status=$?
+          if grep -nE 'SCRIPT ERROR|Parse Error' importacao.log; then
+            echo "::error title=Cliente Godot::a importação encontrou erros de script (linhas acima)"
+            exit 1
+          fi
+          if [ "$status" -ne 0 ]; then
+            echo "::error title=Cliente Godot::o Godot saiu com código $status"
+            exit "$status"
+          fi
+          echo "Importação sem erros de script."
+
+      - name: Guardar o registro da importação
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: importacao-cliente
+          path: importacao.log
+          retention-days: 7
+          if-no-files-found: ignore
+
+  docker:
+    name: Imagem do servidor (build, sem publicar)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Construir a imagem
+        run: docker build -f deploy/Dockerfile -t cinzas-servidor:ci .
+
+      - name: Teste rápido do contêiner (saúde, usuário, WebSocket, backup, parada graciosa)
+        run: |
+          docker run -d --name cinzas-ci -p 127.0.0.1:9100:9100 cinzas-servidor:ci
+          estado=starting
+          for _ in $(seq 1 45); do
+            estado=$(docker inspect -f '{{.State.Health.Status}}' cinzas-ci)
+            [ "$estado" = healthy ] && break
+            sleep 2
+          done
+          if [ "$estado" != healthy ]; then
+            docker logs cinzas-ci
+            echo "::error title=Imagem do servidor::o contêiner não ficou saudável (estado: $estado)"
+            exit 1
+          fi
+          curl -fsS http://127.0.0.1:9100/health; echo
+          uid=$(docker exec cinzas-ci id -u)
+          if [ "$uid" = 0 ]; then echo "::error::o servidor está rodando como root"; exit 1; fi
+          echo "usuário do serviço: uid $uid"
+          # o WebSocket do jogo responde com "hello" (cliente WebSocket nativo do Node 22, no contêiner)
+          docker exec cinzas-ci node -e '
+            const ws = new WebSocket("ws://127.0.0.1:7777");
+            const fim = (ok, msg) => { console.log(msg); process.exit(ok ? 0 : 1); };
+            setTimeout(() => fim(false, "sem resposta do WebSocket"), 5000);
+            ws.onerror = () => fim(false, "erro no WebSocket");
+            ws.onmessage = (e) => { const m = JSON.parse(e.data); fim(m.t === "hello", "WebSocket: " + e.data); };'
+          # backup a quente dentro do contêiner (mesmo comando do guia de operação)
+          docker exec cinzas-ci npm run --silent backup -- --db /data/cinzas.db --para /data/backups
+          # parada graciosa: SIGTERM, o servidor salva e sai com código 0
+          docker stop -t 45 cinzas-ci > /dev/null
+          docker logs cinzas-ci > servidor-docker.log 2>&1
+          cat servidor-docker.log
+          grep -q "salvando e encerrando" servidor-docker.log \
+            || { echo "::error::o servidor não encerrou de forma graciosa"; exit 1; }
+          codigo=$(docker inspect -f '{{.State.ExitCode}}' cinzas-ci)
+          if [ "$codigo" != 0 ]; then echo "::error::o servidor saiu com código $codigo"; exit 1; fi
+          echo "Teste do contêiner: ok"

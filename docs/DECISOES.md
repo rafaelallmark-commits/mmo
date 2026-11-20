@@ -115,3 +115,13 @@ Decisões tomadas por conta própria durante a sessão que criou o Marco 1. Cada
 | D72 | **Capítulo 4 como desenhado**: recalibração com canalização de 4 s (mover, agir ou ser atingido interrompe); escolta da carroça com emboscadas nos três marcos, quebra ou queda geral volta ao último marco com a mesma emboscada, chegada conta para o grupo por perto; resposta escolhida em "Duas Razões" grava a escolha, dá um título (Voz de Vargem Funda / Guarda do Inverno) e troca falas de missões seguintes (`dialogueByChoice`). | Fecha as simplificações da D55 com os sistemas que faltavam (canalização, entidade de escolta mirada pelos monstros, escolhas persistentes). A escolha muda falas e título, não a progressão (docs/02). |
 | D73 | Emboscados **miram a carroça até alguém do grupo gerar ameaça**; a carroça para enquanto há monstro encostado nela. | Dá o que fazer a quem protege (puxar os monstros) e impede a carroça de "fugir" da luta. |
 
+## Teste público: CI, exportação e implantação
+
+| # | Decisão | Motivo |
+|---|---|---|
+| D74 | **`export_presets.cfg` versionado**, no formato exato que o editor 4.3 grava e sem segredos; a assinatura acontece **depois** da exportação, no CI (osslsigncode no Linux para o Windows; codesign + notarytool num runner macOS). | O CI precisa dos presets; no 4.3 as opções secretas ficam em `.godot/export_credentials.cfg`, e assinar fora do Godot deixa certificados e senhas só nos segredos do GitHub. |
+| D75 | **Importar ETC2/ASTC** (`import_etc2_astc=true`) para exportar o macOS **universal**. | O Godot 4.3 recusa exportar universal ou arm64 sem isso; só x86_64 faria o Apple Silicon rodar pelo Rosetta. As texturas atuais não usam compressão de VRAM, então a importação não fica mais lenta. |
+| D76 | **Notarização com `xcrun notarytool` num runner macOS** (Apple ID + senha de app), e não com `rcodesign` no Linux. | Os segredos são de Apple ID, e o `rcodesign` só notariza com chave de API do App Store Connect. Exportar no Linux e só assinar no macOS usa poucos minutos do runner mais caro. |
+| D77 | **Métricas em `0.0.0.0` só dentro do contêiner** (publicadas no 127.0.0.1 do host) e em `127.0.0.1` no systemd; o proxy só conhece a porta do jogo. | O healthcheck e um Prometheus local precisam da porta 9100, mas ela nunca pode ficar aberta na internet. |
+| D78 | **Caddy como proxy TLS** (certificado automático, `stream_close_delay`) em vez de nginx + certbot. | Um arquivo de configuração e nenhuma manutenção de certificado; recarregar o proxy não derruba quem está jogando. |
+

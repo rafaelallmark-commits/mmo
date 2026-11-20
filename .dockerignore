@@ -1,0 +1,22 @@
+# Contexto do build da imagem do servidor: docker build -f deploy/Dockerfile .  (na raiz)
+# A imagem só usa server/ e data/. O resto fica de fora para o contexto ser pequeno e para nada
+# sensível (bancos, cópias de segurança, certificados, .env) acabar numa camada da imagem.
+.git
+.github
+.claude
+client
+build
+**/build
+docs/img
+tools
+**/node_modules
+**/*.db
+**/*.db-*
+**/backups
+server/test
+.env
+**/.env
+**/*.pfx
+**/*.p12
+**/*.pem
+**/*.key
