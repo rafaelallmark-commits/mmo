@@ -248,6 +248,7 @@ export class GameServer {
       if (graceS > 5) note('O servidor reinicia em 5 s.');
       await new Promise((r) => setTimeout(r, Math.min(5, graceS) * 1000));
     }
+    this.log('salvando e encerrando...');
     this.saveAll();
     await this.stop();
   }

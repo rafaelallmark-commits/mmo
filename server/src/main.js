@@ -46,7 +46,7 @@ let stopping = false;
 const shutdown = (grace) => async () => {
   if (stopping) { console.log('saindo agora.'); process.exit(0); }
   stopping = true;
-  console.log(grace > 0 ? `desligamento gracioso em ${grace} s...` : 'salvando e encerrando...');
+  if (grace > 0) console.log(`desligamento gracioso em ${grace} s...`); // "salvando e encerrando..." vem do servidor
   await server.shutdown(grace);
   process.exit(0);
 };
