@@ -16,7 +16,7 @@ Complementa os itens 2 e 5. Os números de monstros (vida, dano, XP, agressão, 
 
 ## As duas cidades
 
-Ambas têm os mesmos serviços para que nenhuma origem fique em desvantagem: **mestre(s) de classe**, **ferreiro** (refino até +3), **comerciante de tônicos**, **depósito** (guarda-volumes compartilhado pelos personagens da conta, M3), **posto de guarda** (ponto de retorno) e **saída para a Estrada Velha**.
+Ambas têm os mesmos serviços para que nenhuma origem fique em desvantagem: **mestre(s) de classe**, **ferreiro** (refino até +6, Selo de Proteção), **armeiro** (peças comuns da faixa atual e da próxima, para a sua classe), **comerciante de tônicos** (qualquer comerciante compra itens da bolsa pela metade do valor), **depósito** (guarda-volumes compartilhado pelos personagens da conta, M3), **posto de guarda** (ponto de retorno) e **saída para a Estrada Velha**.
 
 ### Pedrâmbar (Âmbar) — oeste
 
@@ -24,7 +24,7 @@ Cidade de pedra cortada e vigas escuras, construída em terraços ao redor de um
 
 - **Praça das Balanças** (centro): depósito, quadro de missões.
 - **Pátio dos Mestres**: Mestre Tarrasco (Quebraferro), Mestra Ione do Bronze (Bastião), Sargento Bel do Fosso (Lanceiro), Vigia-Mor Cássia (Vigia).
-- **Forja do Gusmão**: ferreiro.
+- **Forja do Gusmão**: ferreiro; ao lado, **Amaro**, o armeiro.
 - **Botica da Dona Resina**: tônicos.
 - **Portão Leste** → Estrada Velha (Posto da Ponte a 2 minutos de caminhada).
 
@@ -34,7 +34,7 @@ Cidade sobre pontes e plataformas acima de um rio, atravessada por condutores de
 
 - **Plataforma do Relógio** (centro): depósito, quadro de missões.
 - **Claustro dos Mestres**: Dama Aurélia (Escudeiro), Sina (Andarilha), Mãe Nívea (Cantora), Mestre Otan Cinzeiro (Tecelão).
-- **Oficina de Tiela Martelo-Fino**: ferreira.
+- **Oficina de Tiela Martelo-Fino**: ferreira; ao lado, **Inês**, a armeira.
 - **Boticário Lume**: tônicos.
 - **Ponte Oeste** → Estrada Velha.
 

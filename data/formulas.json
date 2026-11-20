@@ -191,5 +191,10 @@
   "skills": {
     "_doc": "Recarga global: depois de usar uma habilidade, nenhuma outra (exceto as marcadas offGcd) sai antes de globalCooldownMs. Habilidades com castMs conjuram parado (mover, atacar ou usar item interrompe) e a recarga global cobre a conjuração.",
     "globalCooldownMs": 1000
+  },
+  "economy": {
+    "_doc": "Comércio com NPCs: lojas vendem a 2× o valor do item; o armeiro vende as peças comuns da faixa atual e da próxima a gearPriceMult × valor; qualquer comerciante compra itens da bolsa a sellFraction × valor (por unidade).",
+    "gearPriceMult": 3,
+    "sellFraction": 0.5
   }
 }

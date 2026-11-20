@@ -496,7 +496,7 @@ func on_cast_end(m: Dictionary) -> void:
 	if m.get("ok", false):
 		if m.has("cooldownMs"):
 			cd_until[str(m["skill"])] = Time.get_ticks_msec() + int(m["cooldownMs"])
-	else:
+	elif str(m.get("code", "")) != "switched":  # trocar de habilidade não é erro
 		error(str(m.get("reason", "Conjuração interrompida.")))
 		gcd_until = mini(gcd_until, Time.get_ticks_msec() + 300)
 	_refresh_hotbar()
@@ -1087,18 +1087,29 @@ func show_npc(r: Dictionary) -> void:
 			npc_panel.visible = false)
 		npc_box.add_child(tb)
 	if r.get("shop", null) != null:
-		_title(npc_box, "Loja", 14)
+		var armorer: bool = npc.get("role", "") == "armorer"
+		_title(npc_box, "Armeiro: peças da sua faixa e da próxima" if armorer else "Loja", 14)
 		_text(npc_box, "Para vender: abra a bolsa (I) e clique com o botão direito no item.", Theme_.MUTED)
 		for item in r["shop"]:
 			var row := HBoxContainer.new()
 			npc_box.add_child(row)
 			var l := Label.new()
-			l.text = "%s — %d ouro" % [main.defs["items"][item["defId"]]["name"], int(item["price"])]
+			var d: Dictionary = main.defs["items"][item["defId"]]
+			if item.get("gear", false):
+				var missing: Array = ItemText.missing_requirements(main.defs, d, main.ch)
+				l.text = "%s (nv %d) — %d ouro%s" % [d["name"], int(d.get("level", 1)), int(item["price"]), "" if missing.is_empty() else "  (requisitos)"]
+				if not missing.is_empty():
+					l.add_theme_color_override("font_color", Theme_.RED.lerp(Theme_.TEXT, 0.4))
+			else:
+				l.text = "%s — %d ouro" % [d["name"], int(item["price"])]
 			l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			l.custom_minimum_size = Vector2(250, 0)
+			l.mouse_filter = Control.MOUSE_FILTER_PASS
 			row.add_child(l)
-			for qty in [1, 5]:
+			for qty in ([1] if item.get("gear", false) else [1, 5]):
 				var b := Button.new()
-				b.text = "Comprar %d" % qty
+				b.text = "Comprar" if item.get("gear", false) else "Comprar %d" % qty
 				var def_id: String = item["defId"]
 				var q_amount: int = qty
 				b.pressed.connect(func():

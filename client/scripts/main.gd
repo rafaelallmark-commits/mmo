@@ -808,6 +808,13 @@ func toggle_pause_menu() -> void:
 	v.add_child(t)
 	_button(v, "Continuar", close_pause_menu, true)
 	_button(v, "Opções", show_options)
+	_button(v, "Reportar um problema", func():
+		close_pause_menu()
+		if hud:
+			hud.chat_input.text = "/bug "
+			hud.chat_input.grab_focus()
+			hud.chat_input.caret_column = 5
+			hud.system("Descreva o problema depois de /bug e aperte Enter (vai junto o lugar e a hora)."))
 	_button(v, "Trocar de personagem", func(): leave_world(false))
 	_button(v, "Sair para o título", func(): leave_world(true))
 	_button(v, "Sair do jogo", func(): get_tree().quit())
@@ -979,6 +986,12 @@ func _on_message(m: Dictionary) -> void:
 		"cast_end":
 			if hud:
 				hud.on_cast_end(m)
+		"cast_start":
+			if world and world.vfx:
+				world.vfx.on_cast_start(m)
+		"cast_cancel":
+			if world and world.vfx:
+				world.vfx.on_cast_cancel(m)
 		"escort":
 			if hud:
 				hud.on_escort(m)

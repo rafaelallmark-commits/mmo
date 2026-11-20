@@ -891,19 +891,25 @@ func _social_tick() -> void:
 			wait = 1500
 		17:
 			_scene_shot("social_ferreiro_risco")
-			# bolsa aberta com o menu do botão direito (ferreiro aberto: dá para vender)
+			Net.request("talk", {"npc": "armorer_amaro"}, func(r):
+				if r["ok"]:
+					main.hud.show_npc(r))
+			wait = 1500
+		18:
+			_scene_shot("social_armeiro")
+			# bolsa aberta com o menu do botão direito (último comerciante: dá para vender)
 			main.hud.npc_panel.visible = false
 			main.hud.inv_panel.visible = true
 			main.hud._refresh_inventory()
 			wait = 600
-		18:
+		19:
 			get_viewport().warp_mouse(Vector2(640, 260))
 			for it in main.ch.get("items", []):
 				if it["loc"] == "bag" and main.defs["items"].get(it["defId"], {}).get("slot", null) != null:
 					main.hud._bag_menu(it)
 					break
 			wait = 800
-		19:
+		20:
 			_scene_shot("social_inventario_menu")
 			say("social OK")
 			social_done = true

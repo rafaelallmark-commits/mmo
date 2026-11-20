@@ -104,3 +104,39 @@ test('tônico acima do nível: não compra nem usa; venda e descarte; item vendi
     A.ws.close(); B.ws.close();
   });
 });
+
+test('armeiro: peças comuns da classe, faixa atual e próxima; compra a 3× o valor; vende de volta', async () => {
+  await withServer(async (server, url) => {
+    const c = await hero(url, 'Fregues', 'warden');
+    const zw = c.waitFor((m) => m.t === 'zone' && m.mapId === 'pedrambar', 5000, 'pedrâmbar');
+    await c.request('gm', { cmd: 'teleport', mapId: 'pedrambar', x: 17, z: 48 });
+    await zw;
+    await c.request('gm', { cmd: 'xp', level: 10 });
+    await c.request('gm', { cmd: 'gold', amount: 5000 });
+    const t = await c.request('talk', { npc: 'armorer_amaro' });
+    assert.equal(t.ok, true, t.reason);
+    assert.ok(t.shop.length > 3, 'tem peças à venda');
+    const items = server.data.items;
+    for (const s of t.shop) {
+      const d = items[s.defId];
+      assert.equal(d.rarity, 'common');
+      assert.ok(!d.classes || d.classes.includes('warden'), `${d.name} serve para a Vigia`);
+      assert.ok([9, 13].includes(d.level), `${d.name}: faixa 9 (atual) ou 13 (próxima)`);
+      assert.equal(s.price, Math.round(d.value * 3));
+    }
+    assert.ok(t.shop.some((s) => items[s.defId].family === 'bow' && items[s.defId].level === 9), 'arco da faixa');
+    const bow = t.shop.find((s) => items[s.defId].family === 'bow' && items[s.defId].level === 9);
+    const p = server.playerOf(c.char.id);
+    const g0 = p.char.gold;
+    let r = await c.request('buy', { npc: 'armorer_amaro', item: bow.defId, qty: 1 });
+    assert.equal(r.ok, true, r.reason);
+    assert.equal(p.char.gold, g0 - bow.price);
+    assert.equal((await c.request('buy', { npc: 'armorer_amaro', item: bow.defId, qty: 2 })).code, 'bad_request', 'equipamento um por vez');
+    assert.equal((await c.request('buy', { npc: 'armorer_amaro', item: 'axe_1h_t9' })).code, 'not_sold', 'peça de outra classe não está à venda');
+    const inst = [...p.char.items.values()].find((x) => x.defId === bow.defId && x.loc === 'bag');
+    r = await c.request('sell', { npc: 'armorer_amaro', instance: inst.id });
+    assert.equal(r.ok, true, r.reason);
+    assert.equal(r.gold, Math.floor(items[bow.defId].value / 2));
+    c.ws.close();
+  });
+});

@@ -217,3 +217,19 @@ test('Rajada Cortante: 3 azagaias em leque, cada uma no primeiro monstro do cami
   for (const m of ms.slice(0, 3)) assert.ok(hits.includes(m.eid), 'cada uma num sapo do leque');
   assert.ok(!hits.includes(ms[3].eid), 'o de trás fica protegido pelo da frente');
 });
+
+test('outra habilidade no meio da conjuração cancela a anterior e sai na hora', () => {
+  const { zone, mk, sent } = setup();
+  const w = mk('warden', 'Ttroca', 40, 40);
+  w.char.level = 20; w.char.skills.spinal_shot = 1; w.char.skills.passage_arrow = 1; zone.recalc(w); w.char.mp = w.stats.maxMp;
+  const t = toad(zone).find((m) => m.state !== 'dead');
+  t.x = w.char.x + 6; t.z = w.char.z; t.hp = t.def.hp * 20;
+  let r = zone.cmdCast(w, 'spinal_shot', t.eid);
+  assert.equal(r.ok, true, r.reason);
+  assert.equal(r.gcdMs, Math.max(data.formulas.skills.globalCooldownMs, data.skills.spinal_shot.castMs));
+  zone.tick(100);
+  r = zone.cmdCast(w, 'passage_arrow', t.eid);
+  assert.equal(r.ok, true, `a segunda sai sem esperar: ${r.reason}`);
+  assert.ok(sent.some((m) => m.t === 'cast_end' && m.ok === false && m.skill === 'spinal_shot'), 'a primeira foi cancelada');
+  assert.equal(w.casting, null);
+});

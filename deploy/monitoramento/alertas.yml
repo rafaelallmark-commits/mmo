@@ -1,0 +1,28 @@
+# Alertas sugeridos (docs/08-operacao.md §8.3). Para receber avisos (e-mail, chat), ligue um Alertmanager ao
+# Prometheus; sem ele, os alertas aparecem na página "Alerts" do Prometheus e no painel do Grafana.
+groups:
+  - name: cinzas
+    rules:
+      - alert: ServidorForaDoAr
+        expr: up{job="cinzas-zona"} == 0
+        for: 1m
+        labels: { gravidade: critica }
+        annotations:
+          resumo: "O servidor de zona não responde às métricas há 1 minuto."
+      - alert: TickLento
+        expr: cinzas_tick_ms_p99 > 30
+        for: 5m
+        labels: { gravidade: aviso }
+        annotations:
+          resumo: "p99 do tick acima de 30 ms por 5 minutos ({{ $value }} ms)."
+      - alert: TicksAcimaDe50ms
+        expr: increase(cinzas_slow_ticks_total[10m]) > 5
+        labels: { gravidade: aviso }
+        annotations:
+          resumo: "Mais de 5 ticks acima de 50 ms nos últimos 10 minutos."
+      - alert: MemoriaCrescendo
+        expr: deriv(cinzas_rss_mb[1h]) > 0.05 and cinzas_rss_mb > 600
+        for: 30m
+        labels: { gravidade: aviso }
+        annotations:
+          resumo: "Memória acima de 600 MB e crescendo sem parar há 30 minutos (possível vazamento)."

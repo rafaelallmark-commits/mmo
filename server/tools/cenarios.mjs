@@ -23,6 +23,10 @@ const SUITES = [
   ['Snapshots por diferença = estado completo; saída do raio; troca de zona', 'test/snapshots.test.js'],
   ['Migração de banco antigo (uma única vez)', 'test/store.test.js'],
   ['Regras, morte, equipamento, habilidades, navegação, dados', 'test/rules.test.js test/death.test.js test/equipment.test.js test/skills.test.js test/nav.test.js test/data.test.js'],
+  ['Capítulo 4 completo: canalização, escolta da carroça, escolha de diálogo', 'test/ch4.test.js'],
+  ['Pós-versão 1: refino +4..+6 com selo, troca atômica, clãs, duelos (e casos de borda)', 'test/social.test.js'],
+  ['Teste público: contas e token, limites, papéis, desligamento gracioso, TLS, SMTP, moderação e denúncias', 'test/publico.test.js test/moderacao.test.js'],
+  ['Ajustes do M4: recargas entre zonas, tônicos por nível, venda, descarte, armeiro', 'test/ajustes.test.js'],
 ];
 
 function run(cmd, args, opts = {}) {
