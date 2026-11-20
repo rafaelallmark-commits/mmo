@@ -90,6 +90,11 @@ export function prometheusText(m) {
   g('cpu_pct', 'Uso de CPU do processo na janela (%).', m.cpuPct);
   g('rss_mb', 'Memória residente (MB).', m.rssMb);
   g('uptime_s', 'Tempo no ar (s).', m.uptimeS);
+  if (m.db) { // PostgreSQL: cada chamada pela ponte síncrona para o laço de eventos
+    g('db_calls_per_s', 'Chamadas ao banco por segundo.', m.db.callsPerS);
+    g('db_wait_ms_per_s', 'Milissegundos por segundo com o laço de eventos parado esperando o banco.', m.db.waitMsPerS);
+    for (const k of ['p50', 'p99', 'max']) g(`db_call_ms_${k}`, `Duração de uma chamada ao banco (${k}) em ms.`, m.db[`${k}Ms`]);
+  }
   return lines.join('\n') + '\n';
 }
 

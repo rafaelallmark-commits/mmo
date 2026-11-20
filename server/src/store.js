@@ -1,5 +1,8 @@
 // Persistência simples em SQLite (node:sqlite, síncrono). Um arquivo por servidor de zona.
 // Cada operação que muda inventário, XP ou saque roda numa transação única.
+// SQLite é o banco de desenvolvimento; em produção o mesmo contrato roda no PostgreSQL (store-pg.js,
+// escolhido por createStore em db.js). Toda migração nova precisa existir nos dois (MIGRATIONS aqui e
+// PG_MIGRATIONS em store-pg.js, com a mesma versão e o mesmo nome).
 import { DatabaseSync } from 'node:sqlite';
 import { randomUUID, scryptSync, randomBytes, timingSafeEqual, createHash, randomInt } from 'node:crypto';
 
@@ -177,12 +180,42 @@ export function migrate(db) {
   return applied;
 }
 
-function hashPassword(password, salt) {
+// ---------- partes puras, compartilhadas com o PostgreSQL (store-pg.js) ----------
+export function hashPassword(password, salt) {
   return scryptSync(password, salt, 32).toString('hex');
+}
+
+// hash do código de 6 dígitos (só ele fica no banco)
+export function codeHash(accountId, code) {
+  return createHash('sha256').update(`${accountId}:${String(code)}`).digest('hex');
+}
+
+// linha de characters + linhas de item_instances (já ordenadas) -> personagem em memória
+export function charFromRow(row, itemRows) {
+  const items = new Map();
+  for (const it of itemRows) {
+    if (it.loc === 'storage') continue; // fica no depósito da conta
+    items.set(it.id, { id: it.id, defId: it.def_id, qty: it.qty, enh: it.enh, loc: it.loc, slot: it.slot });
+  }
+  return {
+    id: row.id, accountId: row.account_id, name: row.name, classId: row.class_id, level: row.level, xp: row.xp,
+    alloc: JSON.parse(row.alloc_json), unspent: row.unspent, skillPoints: row.skill_points, skills: JSON.parse(row.skills_json),
+    hp: row.hp, mp: row.mp, gold: row.gold, mapId: row.map_id, x: row.x, z: row.z, dead: !!row.dead, items, playedS: row.played_s ?? 0,
+    ...(() => { const f = JSON.parse(row.flags_json || '{}'); return { trialDone: !!f.trialDone, title: f.title ?? null, choices: f.choices ?? {} }; })(),
+  };
+}
+
+// valores do UPDATE de saveCharacter, na ordem das colunas (o id vai por último)
+export function charSaveValues(c, now = Date.now()) {
+  return [
+    c.level, c.xp, JSON.stringify(c.alloc), c.unspent, c.skillPoints, JSON.stringify(c.skills), Math.round(c.hp), Math.round(c.mp),
+    c.gold, c.saveMapId ?? c.mapId, c.saveX ?? c.x, c.saveZ ?? c.z, c.dead ? 1 : 0, JSON.stringify({ trialDone: !!c.trialDone, title: c.title ?? null, choices: c.choices ?? {} }), c.playedS ?? 0, now, c.id,
+  ];
 }
 
 export class Store {
   constructor(path = ':memory:') {
+    this.path = path;
     this.db = new DatabaseSync(path);
     // vários processos no mesmo banco (várias zonas): a espera pela trava vale desde o começo, e a troca
     // para WAL (que exige acesso exclusivo e não espera sozinha) é tentada de novo por até ~1 s
@@ -197,6 +230,9 @@ export class Store {
     this.migrated = migrate(this.db);
     this.st = {};
   }
+
+  get kind() { return 'sqlite'; }
+  describe() { return `SQLite ${this.path}`; }
 
   close() { this.db.close(); }
 
@@ -233,6 +269,12 @@ export class Store {
     return this.prep('SELECT * FROM accounts WHERE id = ? AND deleted_at IS NULL').get(id);
   }
 
+  // várias contas de uma vez (conferência periódica da moderação), em ordem de id; no PostgreSQL é uma
+  // consulta só, para não parar o tick com uma ida e volta por jogador
+  findAccountsByIds(ids) {
+    return [...new Set(ids)].sort((a, b) => a - b).map((id) => this.findAccountById(id)).filter(Boolean);
+  }
+
   findAccountByEmail(email) {
     return this.prep('SELECT * FROM accounts WHERE email = ? COLLATE NOCASE AND deleted_at IS NULL').get(email);
   }
@@ -264,7 +306,7 @@ export class Store {
     const code = String(randomInt(0, 1000000)).padStart(6, '0');
     this.prep('UPDATE account_codes SET used_at = ? WHERE account_id = ? AND kind = ? AND used_at IS NULL').run(Date.now(), accountId, kind);
     this.prep('INSERT INTO account_codes (account_id, kind, code_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)')
-      .run(accountId, kind, createHash('sha256').update(`${accountId}:${code}`).digest('hex'), Date.now() + ttlMs, Date.now());
+      .run(accountId, kind, codeHash(accountId, code), Date.now() + ttlMs, Date.now());
     return code;
   }
 
@@ -272,7 +314,7 @@ export class Store {
   consumeCode(accountId, kind, code) {
     const row = this.prep('SELECT rowid AS rid, * FROM account_codes WHERE account_id = ? AND kind = ? AND used_at IS NULL AND expires_at > ? ORDER BY created_at DESC LIMIT 1').get(accountId, kind, Date.now());
     if (!row) return false;
-    const ok = row.code_hash === createHash('sha256').update(`${accountId}:${String(code)}`).digest('hex');
+    const ok = row.code_hash === codeHash(accountId, code);
     if (ok) this.prep('UPDATE account_codes SET used_at = ? WHERE rowid = ?').run(Date.now(), row.rid);
     else this.prep('UPDATE account_codes SET attempts = attempts + 1, used_at = CASE WHEN attempts + 1 >= 5 THEN ? ELSE NULL END WHERE rowid = ?').run(Date.now(), row.rid);
     return ok;
@@ -396,24 +438,19 @@ export class Store {
   loadCharacter(charId) {
     const row = this.prep('SELECT * FROM characters WHERE id = ?').get(charId);
     if (!row) return null;
-    const items = new Map();
-    for (const it of this.prep('SELECT * FROM item_instances WHERE char_id = ? ORDER BY created_at, id').all(charId)) {
-      if (it.loc === 'storage') continue; // fica no depósito da conta
-      items.set(it.id, { id: it.id, defId: it.def_id, qty: it.qty, enh: it.enh, loc: it.loc, slot: it.slot });
-    }
-    return {
-      id: row.id, accountId: row.account_id, name: row.name, classId: row.class_id, level: row.level, xp: row.xp,
-      alloc: JSON.parse(row.alloc_json), unspent: row.unspent, skillPoints: row.skill_points, skills: JSON.parse(row.skills_json),
-      hp: row.hp, mp: row.mp, gold: row.gold, mapId: row.map_id, x: row.x, z: row.z, dead: !!row.dead, items, playedS: row.played_s ?? 0,
-      ...(() => { const f = JSON.parse(row.flags_json || '{}'); return { trialDone: !!f.trialDone, title: f.title ?? null, choices: f.choices ?? {} }; })(),
-    };
+    return charFromRow(row, this.prep('SELECT * FROM item_instances WHERE char_id = ? ORDER BY created_at, id').all(charId));
   }
 
   saveCharacter(c) {
     this.prep(`UPDATE characters SET level=?, xp=?, alloc_json=?, unspent=?, skill_points=?, skills_json=?, hp=?, mp=?, gold=?,
-      map_id=?, x=?, z=?, dead=?, flags_json=?, played_s=?, updated_at=? WHERE id=?`).run(
-      c.level, c.xp, JSON.stringify(c.alloc), c.unspent, c.skillPoints, JSON.stringify(c.skills), Math.round(c.hp), Math.round(c.mp),
-      c.gold, c.saveMapId ?? c.mapId, c.saveX ?? c.x, c.saveZ ?? c.z, c.dead ? 1 : 0, JSON.stringify({ trialDone: !!c.trialDone, title: c.title ?? null, choices: c.choices ?? {} }), c.playedS ?? 0, Date.now(), c.id);
+      map_id=?, x=?, z=?, dead=?, flags_json=?, played_s=?, updated_at=? WHERE id=?`).run(...charSaveValues(c));
+  }
+
+  // Salvamento periódico de todos os personagens conectados (GameServer.saveAll): uma transação só.
+  saveCharacters(list) {
+    if (!list.length) return;
+    if (this.db.isTransaction) { for (const c of list) this.saveCharacter(c); return; }
+    this.tx(() => { for (const c of list) this.saveCharacter(c); });
   }
 
   insertItem({ id, charId, defId, qty, enh, loc, slot, source }) {

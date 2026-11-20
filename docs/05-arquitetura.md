@@ -10,7 +10,7 @@
 │   previsão           │                                     │ - navegação (A*, nav.js)       │
 │ - interface          │                                     │ - regras puras (rules.js)      │
 │ - nunca decide       │                                     │ - validação de equipamento     │
-└──────────────────────┘                                     │ - persistência SQLite          │
+└──────────────────────┘                                     │ - persistência SQLite/Postgres │
                                                              └──────────────┬────────────────┘
                                                                             │ lê
                                                              ┌──────────────▼────────────────┐
@@ -23,6 +23,7 @@
 - **Godot 4** no cliente: aberto, leve, roda em macOS/Windows/Linux, exporta executável, tem WebSocket nativo e um modo headless que usamos para testar o cliente automaticamente.
 - **Servidor autoritativo de zona em Node.js** (JavaScript, módulos ES): roda e testa sem instalação pesada (`node:test`, `node:sqlite` embutidos; uma dependência, `ws`), ciclo rápido de iteração, JSON nativo — o mesmo formato dos arquivos de dados e do protocolo. Um processo = uma zona.
 - **SQLite** (arquivo único, transações ACID) em vez de JSON solto: saque idempotente e trocas de equipamento precisam de atomicidade.
+- **PostgreSQL central em produção**, pelo mesmo `Store` síncrono: `createStore` (`db.js`) escolhe pelo `--db` (`postgres://` → `store-pg.js`; arquivo → SQLite, só desenvolvimento). O `PgStore` fala com o cliente `pg` num worker thread com conexão dedicada, por uma ponte síncrona (`Atomics.wait`), e as migrações existem nos dois bancos com as mesmas versões (D119, D120; operação em [08-operacao.md §8.11](08-operacao.md#811-postgresql)).
 
 ## O que o servidor controla
 
@@ -76,6 +77,10 @@ mmo/
 │   │   ├── rules.js               regras puras: atributos, estatísticas, dano, acerto, crítico, XP
 │   │   ├── equipment.js           validação de nível/classe/atributos/espaço/empunhadura
 │   │   ├── store.js               SQLite: contas, personagens, instâncias de item, saques, missões
+│   │   ├── store-pg.js            o mesmo Store no PostgreSQL (SQL traduzido, migrações espelhadas)
+│   │   ├── pg-bridge.js           ponte síncrona: Atomics.wait + MessagePort até o worker
+│   │   ├── pg-worker.js           worker thread com a conexão dedicada do cliente 'pg'
+│   │   ├── db.js                  createStore: postgres:// → PgStore, arquivo → SQLite
 │   │   ├── data.js                carrega /data
 │   │   └── rng.js                 RNG determinístico (testes reproduzíveis)
 │   ├── test/
@@ -214,7 +219,7 @@ O teste de aceitação envia o mesmo pedido de coleta 4 vezes (2 simultâneos, 2
 ## Operações simultâneas no inventário
 
 - Cada personagem pertence a exatamente **um** servidor de zona, que processa as mensagens em um único laço: duas operações do mesmo personagem nunca rodam intercaladas.
-- Cada operação que mexe em inventário roda numa transação SQLite (`BEGIN IMMEDIATE`) e só altera a memória depois de validar; trocas (equipar uma arma de duas mãos que desloca a mão secundária) gravam todas as instâncias alteradas juntas.
+- Cada operação que mexe em inventário roda numa transação (SQLite: `BEGIN IMMEDIATE`; PostgreSQL: `BEGIN` na conexão dedicada, com `FOR UPDATE` no saque e no depósito) e só altera a memória depois de validar; trocas (equipar uma arma de duas mãos que desloca a mão secundária) gravam todas as instâncias alteradas juntas.
 - Pedidos repetidos são neutralizados pelo cache de `rid` e pela idempotência do saque.
 - Futuro (comércio, depósito compartilhado entre personagens da mesma conta): operações que envolvem dois donos usarão uma transação única no banco central com verificação de versão por instância (`version` incrementada a cada movimento), para que dois servidores não movam a mesma peça.
 
@@ -289,7 +294,7 @@ Feito até aqui: métricas do servidor e HTTP de métricas, snapshots por difere
 |---|---|---|
 | Transporte | `ws://` sem criptografia | `wss://` (TLS) atrás de proxy reverso; limite de tamanho e de taxa por conexão |
 | Autenticação | conta + senha no servidor de zona | serviço de contas separado (e-mail verificado, recuperação de senha), token de sessão de curta duração apresentado ao servidor de zona |
-| Persistência | SQLite local por processo | PostgreSQL central com backups e migrações versionadas; SQLite só em desenvolvimento |
+| Persistência | SQLite local por processo | PostgreSQL central com backups e migrações versionadas; SQLite só em desenvolvimento — **feito**: `CINZAS_DB=postgres://...`, `pg_dump`, migrações nos dois bancos, `npm run test:pg` ([08-operacao.md §8.11](08-operacao.md#811-postgresql)) |
 | Anti-trapaça | servidor já autoritativo | + limite de comandos por segundo, detecção de velocidade/posição anômalas nos registros, auditoria de saque e ouro |
 | Comandos de mestre | `--dev` liga para todos | papéis de conta; registro de cada comando |
 | Operação | um processo no terminal | serviço gerenciado (reinício automático, logs estruturados, métricas, alertas), desligamento gracioso com aviso aos jogadores |
@@ -300,8 +305,9 @@ Feito até aqui: métricas do servidor e HTTP de métricas, snapshots por difere
 Já preparado ([08-operacao.md §8.8](08-operacao.md)): `wss://` atrás de um proxy Caddy com certificado automático,
 serviço gerenciado (Docker com verificação de saúde e reinício, ou systemd endurecido) com desligamento gracioso,
 backup de hora em hora, CI com o validador de dados e os testes, e executáveis exportados para Linux, Windows e macOS,
-assinados e notarizados quando houver certificados. Continua pendente: serviço de contas e PostgreSQL (com lugar
-reservado no compose), limites de taxa por conexão, papéis de mestre e privacidade.
+assinados e notarizados quando houver certificados. Também prontos: serviço de contas, limites por conexão, papéis de
+mestre e privacidade ([§8.9](08-operacao.md#89-contas-segurança-e-privacidade-teste-público)) e o PostgreSQL central
+no compose (perfil `postgres`, [§8.11](08-operacao.md#811-postgresql)).
 
 ## Múltiplas zonas
 

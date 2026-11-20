@@ -90,9 +90,12 @@ export class Moderation {
       const keep = log.filter((l) => now - l.at <= HOUR);
       if (keep.length) this.chatLog.set(charId, keep); else this.chatLog.delete(charId);
     }
-    for (const s of [...this.s.sessions]) {
-      if (s.accountId == null) continue;
-      const acc = this.st.findAccountById(s.accountId);
+    const sessions = [...this.s.sessions].filter((s) => s.accountId != null);
+    if (!sessions.length) return;
+    // uma consulta para todas as sessões (no PostgreSQL, uma ida e volta em vez de uma por jogador)
+    const accounts = new Map(this.st.findAccountsByIds(sessions.map((s) => s.accountId)).map((a) => [a.id, a]));
+    for (const s of sessions) {
+      const acc = accounts.get(s.accountId);
       // conta excluída fora deste servidor (serviço de contas, ferramenta): a sessão cai
       if (!acc) { this.kickSession(s, 'Esta conta foi excluída.'); continue; }
       s.mutedUntil = acc.muted_until ?? 0;
@@ -165,7 +168,7 @@ export class Moderation {
         if (!permanent && !(hours > 0 && hours <= MAX_BAN_H)) return { ok: false, code: 'bad_request', reason: `Use: /gm suspender Nome horas motivo (1 a ${MAX_BAN_H} h) ou "perm".` };
         if ((permanent || hours > MAX_GM_BAN_H) && role !== 'admin') return { ok: false, code: 'forbidden', reason: `Mestres suspendem até ${MAX_GM_BAN_H} h; acima disso, só administradores.` };
         if (!reason) return { ok: false, code: 'bad_request', reason: 'Informe o motivo da suspensão.' };
-        const until = permanent ? PERMANENT : Date.now() + hours * 3600_000;
+        const until = permanent ? PERMANENT : Date.now() + Math.round(hours * 3600_000);
         this.st.setBan(t.accountId, until, reason);
         this.st.audit('mod_ban', { ...by, targetAccount: t.accountId, target: t.charId, until, reason });
         // derruba todas as sessões da conta (nesta zona e, com várias zonas, nas outras)

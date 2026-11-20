@@ -10,14 +10,15 @@
 //   node tools/conta.mjs --db cinzas.db --bugs [--n 50]        (relatos de problema do /bug)
 // (--personagem Nome no lugar de --conta acha a conta pelo personagem)
 // Suspensões e silêncios valem no servidor em até 1 minuto (ele confere o banco a cada minuto).
-import { Store } from '../src/store.js';
+// --db (ou CINZAS_DB) aceita arquivo SQLite ou postgres://usuario:senha@host/banco.
+import { createStore } from '../src/db.js';
 import { PERMANENT } from '../src/moderation.js';
 
 // texto de jogador impresso no terminal sem caracteres de controle (não dá para forjar linhas)
 const safe = (t) => String(t ?? '').replace(/[\u0000-\u001f\u007f-\u009f]/g, '·');
 
 const arg = (n, d) => { const i = process.argv.indexOf(`--${n}`); if (i === -1) return d; const v = process.argv[i + 1]; return v === undefined || v.startsWith('--') ? true : v; };
-const st = new Store(arg('db', process.env.CINZAS_DB ?? 'cinzas.db'));
+const st = createStore(arg('db', process.env.CINZAS_DB ?? 'cinzas.db'));
 try {
   if (arg('bugs', false)) {
     for (const a of st.auditTail(Number(arg('n', 50)), 'bug_report').reverse()) {
@@ -47,7 +48,7 @@ try {
       const horas = Number(arg('horas', 0));
       if (!perm && !(horas > 0 && horas <= 24 * 365 * 5)) { console.error('use --horas N (até 5 anos) ou --permanente'); process.exit(1); }
       if (typeof motivo !== 'string') { console.error('informe --motivo'); process.exit(1); }
-      const until = perm ? PERMANENT : Date.now() + horas * 3600_000;
+      const until = perm ? PERMANENT : Date.now() + Math.round(horas * 3600_000);
       st.setBan(acc.id, until, motivo);
       st.audit('mod_ban', { targetAccount: acc.id, until, reason: motivo, by: 'ferramenta' });
       console.log(`conta ${name} suspensa ${perm ? 'sem data para acabar' : `até ${new Date(until).toISOString()}`}`);
@@ -56,7 +57,7 @@ try {
     if (arg('silenciar', false)) {
       const min = Number(arg('minutos', 0));
       if (!(min > 0 && min <= 60 * 24 * 30)) { console.error('use --minutos N (até 30 dias)'); process.exit(1); }
-      const until = Date.now() + min * 60_000;
+      const until = Date.now() + Math.round(min * 60_000);
       st.setMute(acc.id, until);
       st.audit('mod_mute', { targetAccount: acc.id, until, reason: typeof motivo === 'string' ? motivo : '', by: 'ferramenta' });
       console.log(`conta ${name} silenciada até ${new Date(until).toISOString()}`);

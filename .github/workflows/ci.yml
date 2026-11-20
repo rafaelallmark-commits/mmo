@@ -1,5 +1,6 @@
 # Integração contínua de CINZAS DO MERIDIANO (docs/08-operacao.md §8.8):
-#   servidor  - valida os dados do jogo e roda todas as suítes de teste (Node 22)
+#   servidor           - valida os dados do jogo e roda todas as suítes de teste (Node 22, SQLite)
+#   servidor-postgres  - as mesmas suítes no PostgreSQL 17 (contêiner de serviço do job)
 #   cliente   - importa o projeto Godot 4.3 em modo headless e falha com qualquer erro de script
 #   docker    - constrói a imagem do servidor (sem publicar) e faz um teste rápido do contêiner
 name: CI
@@ -54,6 +55,49 @@ jobs:
         run: npm run validate-data
 
       - name: Testes (todas as suítes, ~3 min)
+        run: npm test
+
+  servidor-postgres:
+    name: Servidor no PostgreSQL (testes)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+        working-directory: server
+    services:
+      # banco descartável deste job, só em localhost (a senha não é segredo de nada)
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: cinzas
+          POSTGRES_PASSWORD: cinzas-ci
+          POSTGRES_DB: cinzas
+          POSTGRES_INITDB_ARGS: --encoding=UTF8 --locale=C.UTF-8
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U cinzas -d cinzas"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci --no-audit --no-fund
+
+      # CINZAS_TEST_PG: cada banco que os testes pedem vira um esquema isolado nesse servidor (src/db.js),
+      # como no "npm run test:pg" local, que sobe um PostgreSQL temporário em vez deste contêiner
+      - name: Testes no PostgreSQL (todas as suítes)
+        env:
+          CINZAS_TEST_PG: postgresql://cinzas:cinzas-ci@localhost:5432/cinzas
         run: npm test
 
   cliente:

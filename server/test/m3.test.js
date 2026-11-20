@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { GameServer } from '../src/server.js';
 import { loadGameData } from '../src/data.js';
-import { Store } from '../src/store.js';
+import { createStore } from '../src/db.js';
 import { Zone } from '../src/zone.js';
 import { makeRng } from '../src/rng.js';
 import { rollEnhance, enhanceQuote } from '../src/smith.js';
@@ -134,7 +134,7 @@ test('ferreiro: sucesso sobe o grau; falha mantém o grau e consome ouro e mater
 
 // ---------------------------------------------------------------- elite diária e única do chefe
 test('elite diária dá XP em dobro só no primeiro abate do dia; a única do chefe sai uma vez', () => {
-  const store = new Store(':memory:');
+  const store = createStore(':memory:');
   const acc = store.createAccount('d', 'senha');
   const zone = new Zone({ mapId: 'galerias_eco', data, store, rng: makeRng(5), send: () => {}, broadcast: () => {} });
   const cls = data.classes.warden;

@@ -16,7 +16,7 @@ import http from 'node:http';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Store } from './store.js';
+import { createStore } from './db.js';
 import { signToken } from './token.js';
 import { banMessage } from './moderation.js';
 
@@ -31,7 +31,7 @@ export class AccountsService {
     this.opts = { port: 7780, host: '127.0.0.1', dbPath: 'cinzas.db', tokenSecret: null, tokenTtlS: 300, minPassword: 8, perIpPerMin: 20, trustProxy: false, log: true,
       docsDir: join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'docs'), ...opts };
     if (!this.opts.tokenSecret) throw new Error('serviço de contas precisa de --token-secret (ou CINZAS_TOKEN_SECRET)');
-    this.store = opts.store ?? new Store(this.opts.dbPath);
+    this.store = opts.store ?? createStore(this.opts.dbPath); // arquivo SQLite ou postgres://...
     this.mailer = opts.mailer ?? createMailer(opts.mail ?? { kind: 'console' });
     this.hits = new Map(); // ip -> [instantes]
   }

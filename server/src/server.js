@@ -14,7 +14,7 @@ import { Moderation, banMessage } from './moderation.js';
 import { enhanceable, enhanceQuote, enhancePreview, rollEnhance, enhanceOutcome } from './smith.js';
 import { randomUUID } from 'node:crypto';
 import { loadGameData, ATTRS } from './data.js';
-import { Store } from './store.js';
+import { createStore } from './db.js';
 import { Zone, lootView } from './zone.js';
 import { makeRng } from './rng.js';
 import { QuestEngine } from './quests.js';
@@ -52,7 +52,8 @@ export class GameServer {
       ...Object.fromEntries(Object.entries(opts).filter(([, v]) => v !== undefined)),
     };
     this.data = opts.data ?? loadGameData(opts.dataDir);
-    this.store = new Store(this.opts.dbPath);
+    // arquivo SQLite (desenvolvimento) ou postgres://... (produção); veja db.js
+    this.store = createStore(this.opts.dbPath);
     this.rng = makeRng(this.opts.seed);
     this.quests = new QuestEngine({ data: this.data, store: this.store });
     this.sessions = new Set();
@@ -145,7 +146,7 @@ export class GameServer {
     return new Promise((resolve) => {
       const onListening = (addr) => {
         this.port = addr.port;
-        this.log(`CINZAS DO MERIDIANO ${SERVER_VERSION} — servidor ouvindo em ${this.tls ? 'wss' : 'ws'}://${this.opts.host}:${this.port} (${this.zones.size} zonas, tick ${this.opts.tickHz} Hz, escala ${this.opts.timeScale}x, XP ${this.opts.xpRate}x, protocolo ${PROTOCOL_VERSION}, dados ${this.dataVersion}${this.opts.dev ? ', modo dev' : ''}, login: ${this.opts.auth})`);
+        this.log(`CINZAS DO MERIDIANO ${SERVER_VERSION} — servidor ouvindo em ${this.tls ? 'wss' : 'ws'}://${this.opts.host}:${this.port} (${this.zones.size} zonas, tick ${this.opts.tickHz} Hz, escala ${this.opts.timeScale}x, XP ${this.opts.xpRate}x, protocolo ${PROTOCOL_VERSION}, dados ${this.dataVersion}${this.opts.dev ? ', modo dev' : ''}, login: ${this.opts.auth}, banco: ${this.store.describe()})`);
         resolve(this.port);
       };
       if (this.opts.tlsCert && this.opts.tlsKey) {
@@ -173,7 +174,7 @@ export class GameServer {
       if (this.opts.metricsPort != null && this.opts.metricsPort !== false) {
         this.metricsSrv = await startMetricsServer({
           port: Number(this.opts.metricsPort), host: this.opts.metricsHost,
-          collect: () => this.collectMetrics(), onReset: () => this.metrics.reset(),
+          collect: () => this.collectMetrics(), onReset: () => { this.metrics.reset(); this.store.resetDbStats?.(); },
         });
         this.metricsPort = this.metricsSrv.address().port;
         this.log(`métricas em http://${this.opts.metricsHost}:${this.metricsPort}/metrics`);
@@ -198,7 +199,8 @@ export class GameServer {
   collectMetrics() {
     let players = 0;
     for (const z of this.zones.values()) players += z.players.size;
-    return this.metrics.snapshot({ players, sessions: this.sessions.size, zones: this.zones.size, tickHz: this.opts.tickHz });
+    const db = this.store.dbStats?.(); // só no PostgreSQL: tempo parado na ponte síncrona
+    return this.metrics.snapshot({ players, sessions: this.sessions.size, zones: this.zones.size, tickHz: this.opts.tickHz, ...(db ? { db } : {}) });
   }
 
   step(dt) {
@@ -283,9 +285,13 @@ export class GameServer {
     }
   }
 
+  // A cada 10 s e no desligamento. Um lote só (uma transação no SQLite; um UPDATE numa ida e volta no
+  // PostgreSQL): com a ponte síncrona, salvar um a um pararia o laço de eventos por N idas e voltas.
   saveAll() {
     if (this.world && !this.world.canSave()) return; // sem o mundo há tempo demais: as posses podem já ter sido liberadas
-    for (const z of this.zones.values()) for (const p of z.players.values()) this.store.saveCharacter(p.char);
+    const chars = [];
+    for (const z of this.zones.values()) for (const p of z.players.values()) chars.push(p.char);
+    if (chars.length) this.store.saveCharacters(chars);
   }
 
   // Desligamento gracioso: avisa todos, recusa novos logins, espera o prazo, salva e fecha.
