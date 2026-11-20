@@ -42,8 +42,16 @@ var _rotating := false
 var _t := 0.0
 var log_motion := false   # usado pelo tour de capturas para medir a fluidez
 var motion_log := []
+var listener: AudioListener3D
+var _step_surface := "footstep_stone"
+var _boss_phase := 0
+var _gate_prog := {}
 
 const ROLE_NAMES := {"quest": "missões", "master": "mestre de classe", "smith": "ferreiro", "shop": "tônicos", "storage": "depósito"}
+## Som: passos só de quem está a até STEP_HEAR m do jogador; chão de terra nestes mapas, pedra nos demais
+## (ruas calçadas, trilhos, túneis e câmaras).
+const STEP_HEAR := 16.0
+const DIRT_MAPS := ["estrada_velha", "brejo_bombas"]
 
 func _ready() -> void:
 	var map: Dictionary = main.map_def()
@@ -73,6 +81,12 @@ func _ready() -> void:
 	camera.far = 900.0
 	cam_pivot.add_child(camera)
 	camera.current = true
+	# ouvinte dos sons 3D 4 m acima do personagem (a câmera fica alta e longe), virado para onde a câmera
+	# olha: os sons do próprio personagem soam a 0 dB (unit_size 4) e os de longe caem devagar
+	listener = AudioListener3D.new()
+	add_child(listener)
+	listener.make_current()
+	_step_surface = "footstep_dirt" if main.map_id in DIRT_MAPS else "footstep_stone"
 	select_ring = Art.part(self, _torus(0.9, 1.05), Art.toon(Color("#ffcf4a"), false, Color(0.8, 0.6, 0.1)), Vector3.ZERO)
 	select_ring.visible = false
 	dest_marker = Art.part(self, _torus(0.3, 0.42), Art.toon(Color("#9fd3d1"), false, Color(0.3, 0.6, 0.6)), Vector3.ZERO)
@@ -81,6 +95,9 @@ func _ready() -> void:
 	pred.max_speed = float(ms.get("moveSpeed", 5.0))
 	pred.accel = float(ms.get("accel", 18.0))
 	pred.decel = float(ms.get("decel", 24.0))
+
+func _exit_tree() -> void:
+	Sfx.clear_listener()
 
 func _torus(inner: float, outer: float) -> TorusMesh:
 	var t := TorusMesh.new()
@@ -267,6 +284,8 @@ func apply_snapshot(snap: Dictionary) -> void:
 			e["label"].modulate = Color("#ffcf9a").lerp(Color("#ff4a3a"), 1.0 - frac)
 		if _is_me(eid):
 			_reconcile(pos, d)
+			if d.get("tgt") != null and not d.get("dead", false):
+				Sfx.combat_ping()   # com alvo: música de combate
 	for eid in entities.keys():
 		if not seen.has(eid):
 			entities[eid]["node"].queue_free()
@@ -330,7 +349,46 @@ func _spawn_entity(d: Dictionary) -> Dictionary:
 	if _is_me(d["id"]):
 		_lp_render = Vector2(x, z)
 		_lp_offset = Vector2.ZERO
-	return {"node": root, "label": label, "data": d, "w": d.get("w"), "track": track, "yaw": yaw, "speed": 0.0, "vel": Vector2.ZERO, "accel": 0.0, "turn": 0.0, "knock": Vector2.ZERO}
+	return {"node": root, "label": label, "data": d, "w": d.get("w"), "track": track, "yaw": yaw, "speed": 0.0, "vel": Vector2.ZERO, "accel": 0.0, "turn": 0.0, "knock": Vector2.ZERO, "snd": _sound_profile(d)}
+
+## Como a entidade soa: passos (arquivo, tom, volume) e voz ao apanhar/cair (tom pelo tamanho e família).
+## Espíritos flutuam (sem passos); máquinas pisam pesado e rangem metal; bichos pequenos têm patas leves.
+func _sound_profile(d: Dictionary) -> Dictionary:
+	if d["k"] == "p":
+		return {"fam": "player", "step": _step_surface, "step_pitch": 1.0, "step_db": 0.0, "voice": 1.0}
+	if d["k"] != "m":
+		# outras entidades do servidor (objetos que andam ou apanham): sem passos nem voz
+		return {"fam": "object", "step": "", "step_pitch": 1.0, "step_db": 0.0, "voice": 1.0}
+	var md: Dictionary = main.defs.get("monsters", {}).get(d.get("def", ""), {})
+	var fam: String = md.get("family", "beast")
+	var rank: String = md.get("rank", "normal")
+	var size := 0.85 + float(md.get("level", 1)) * 0.03 + (0.55 if rank == "elite" else 0.0) + (1.2 if rank == "boss" else 0.0)
+	var k := 1.0 / sqrt(size)
+	match fam:
+		"spirit":
+			return {"fam": fam, "step": "", "step_pitch": 1.0, "step_db": 0.0, "voice": 1.45 * k}
+		"machine":
+			return {"fam": fam, "step": "footstep_stone", "step_pitch": 0.72 * k, "step_db": 1.0 + 3.0 * (size - 1.0), "voice": 0.75 * k}
+	return {"fam": fam, "step": "footstep_dirt", "step_pitch": 1.3 * k, "step_db": -3.0, "voice": 1.15 * k}
+
+## Passo no instante em que o pé toca o chão: a fase da passada da animação (vrm_character.gd e rig.gd
+## avançam _phase pela distância percorrida) cruza um múltiplo de PI. Só para quem está perto.
+func _footstep(e: Dictionary, n: Node3D, is_me: bool, ear: Vector3) -> void:
+	var ph = n.get("_phase")
+	if ph == null:
+		return
+	var k := int(floor(float(ph) / PI))
+	var last := int(e.get("step_k", k))
+	e["step_k"] = k
+	if k == last or float(e["speed"]) < 0.5 or e["data"].get("dead", false):
+		return
+	var snd: Dictionary = e["snd"]
+	if snd["step"] == "":
+		return
+	if not is_me and Vector2(n.position.x - ear.x, n.position.z - ear.z).length() > STEP_HEAR:
+		return
+	var run := clampf((float(e["speed"]) - 2.5) / 3.0, 0.0, 1.0)
+	Sfx.play(snd["step"], n.position, float(snd["step_db"]) + (2.0 if is_me else 0.0) + 2.0 * run, float(snd["step_pitch"]))
 
 func me() -> Dictionary:
 	return entities.get(main.ch.get("eid", ""), {})
@@ -367,6 +425,7 @@ func _process(delta: float) -> void:
 	_t += delta
 	var game_dt := clock.advance(delta)
 	var my_eid: String = main.ch.get("eid", "")
+	var ear := my_pos()
 	for eid in entities.keys():
 		var e: Dictionary = entities[eid]
 		var n: Node3D = e["node"]
@@ -449,9 +508,12 @@ func _process(delta: float) -> void:
 				n.set_look_target(entities[lt]["node"].position + Vector3(0, 0.8, 0), 1.0)
 			else:
 				n.set_look_target(Vector3.ZERO, 0.0)
+		_footstep(e, n, eid == my_eid, ear)
 	var focus := my_pos()
 	_update_npcs(delta, focus)
 	_update_camera(delta, focus)
+	listener.global_transform = Transform3D(Basis(Vector3.UP, _cam_yaw), focus + Vector3(0, 4.0, 0))
+	Sfx.set_listener(focus)
 	RenderingServer.global_shader_parameter_set("focus_pos", focus)
 	scenery.follow(focus)
 	if selected != "" and entities.has(selected):
@@ -577,6 +639,7 @@ func _on_pickup(lid: String, r: Dictionary) -> void:
 			loots.erase(lid)
 		var what: String = "%d de ouro" % int(r["gold"]) if r.get("defId", null) == null else main.defs["items"][r["defId"]]["name"]
 		main.hud.system("Coletado: %s" % what)
+		Sfx.ui("loot_coins" if r.get("defId", null) == null else "loot_item")
 	else:
 		main.hud.error(r["reason"])
 
@@ -748,6 +811,7 @@ func on_hit(m: Dictionary) -> void:
 	if not src.is_empty() and src["data"]["k"] == "p":
 		fam = _weapon_family(src["data"].get("w"))
 	vfx.on_hit(m, fam)
+	_hit_voice(m, dst)
 	if not src.is_empty() and m.get("skill", null) != "dot" and src["node"].has_method("play_attack"):
 		src["node"].play_attack()
 	if not m.get("miss", false):
@@ -759,6 +823,32 @@ func on_hit(m: Dictionary) -> void:
 			var d2 := Vector2(dv.x, dv.z)
 			if d2.length() > 0.01:
 				dst["knock"] = (dst["knock"] as Vector2) + d2.normalized() * (0.28 if m.get("crit", false) else 0.16)
+
+## Quem apanha reage (o golpe em si soa em vfx.gd): gemido do jogador, grunhido ou rangido do monstro.
+## Golpes que envolvem o jogador local mantêm a música de combate.
+func _hit_voice(m: Dictionary, dst: Dictionary) -> void:
+	var my_eid: String = main.ch.get("eid", "")
+	if m.get("src", "") == my_eid or m["dst"] == my_eid:
+		Sfx.combat_ping()
+	if m.get("miss", false) or m.get("skill", null) == "dot":
+		return
+	var crit: bool = m.get("crit", false)
+	var at: Vector3 = dst["node"].position
+	if m["dst"] == my_eid:
+		Sfx.play("player_hurt", null, 2.0 if crit else 0.0)
+	elif dst["data"]["k"] == "p":
+		Sfx.play("player_hurt", at, -4.0)
+	elif dst["snd"]["fam"] != "object" and (crit or randf() < 0.55):
+		var snd: Dictionary = dst["snd"]
+		if snd["fam"] == "machine":
+			Sfx.play("hit_blunt", at, -3.0, float(snd["voice"]) * 0.8)
+		else:
+			Sfx.play("monster_hurt", at, 0.0, float(snd["voice"]))
+
+## Efeito na posição de uma entidade visível (nível de outro jogador, queda etc.).
+func sound_at(eid: String, snd: String, volume_db := 0.0) -> void:
+	if entities.has(eid):
+		Sfx.play(snd, entities[eid]["node"].position, volume_db)
 
 func on_heal(m: Dictionary) -> void:
 	var dst: Dictionary = entities.get(m["dst"], {})
@@ -776,6 +866,11 @@ func on_death(eid: String) -> void:
 			n.set_motion(0.0, 0.0, 0.0)
 		var label: Node = e["label"]
 		label.visible = false
+		if e["data"]["k"] == "m":
+			var snd: Dictionary = e["snd"]
+			Sfx.play("monster_die", n.position, 0.0, float(snd["voice"]))
+			if snd["fam"] == "machine":
+				Sfx.play("hit_blunt", n.position, -1.0, 0.7)
 		# cai de lado, fica um instante no chão e afunda
 		var side := -1.0 if randf() < 0.5 else 1.0
 		var tw := create_tween()
@@ -815,6 +910,13 @@ func add_loot(l: Dictionary) -> void:
 	tw.tween_property(gem, "scale", Vector3.ONE, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	loots[l["id"]] = {"node": root, "data": l}
 
+## Saque que acabou de cair (mensagem "loot"): tilinta no chão onde caiu.
+func on_loot_drop(l: Dictionary) -> void:
+	var fresh := not loots.has(l["id"])
+	add_loot(l)
+	if fresh:
+		Sfx.play("loot_coins" if l.get("defId", null) == null else "loot_item", _gpos(float(l["x"]), float(l["z"])), -4.0, 1.1)
+
 func ground_effect(m: Dictionary) -> void:
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = Color(1.0, 0.4, 0.1, 0.35)
@@ -827,3 +929,32 @@ func ground_effect(m: Dictionary) -> void:
 func on_boss(m: Dictionary) -> void:
 	if scenery:
 		scenery.on_boss(m)
+	_boss_audio(m)
+
+## Música e avisos do Custódio. O servidor manda o estado desde que a câmara abre; a luta "começa"
+## (música do chefe) quando ele perde vida ou passa da fase 1. Fase 3: comportas rangendo e apito.
+func _boss_audio(m: Dictionary) -> void:
+	var st: String = m.get("state", "")
+	if st != "fight":
+		Sfx.set_boss(false)
+		if st == "victory":
+			Sfx.ui("quest_done")
+		elif st == "reset":
+			Sfx.warn("gate")
+		_boss_phase = 0
+		_gate_prog.clear()
+		return
+	var phase := int(m.get("phase", 1))
+	Sfx.set_boss(phase > 1 or float(m.get("hp", 0)) < float(m.get("mhp", 1)), phase)
+	if phase == 3 and _boss_phase != 3:
+		Sfx.warn("gate")
+		Sfx.warn("alarm")
+	_boss_phase = phase
+	if phase == 3 and m.get("gates", null) != null:
+		for g in m["gates"]:
+			var p := float(g["progress"])
+			var before := float(_gate_prog.get(g["id"], 0.0))
+			# desceu mais um quarto, ou subiu de volta (trava destruída): a comporta range
+			if int(p * 4.0) > int(before * 4.0) or p < before - 0.2:
+				Sfx.warn("gate")
+			_gate_prog[g["id"]] = p

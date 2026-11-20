@@ -27,9 +27,9 @@ Personagens: modelos VRM de anime — **Seed-san model by VirtualCast, Inc.** e 
 | [docs/04-progressao-e-formulas.md](docs/04-progressao-e-formulas.md) | Tabela de XP 1–20, XP por monstro, exemplos solo e em grupo, equipamento por faixa (todas as famílias de arma em todas as faixas), verificação de requisitos, dois exemplos de evolução passo a passo, fórmulas com exemplos calculados *(gerado dos dados)* |
 | [docs/05-arquitetura.md](docs/05-arquitetura.md) | Estrutura técnica, arquivos, protocolo, saque idempotente, reconexão, concorrência, critérios de aceitação dos 4 marcos, o que muda para teste público e múltiplas zonas |
 | [docs/06-mundo-e-mapas.md](docs/06-mundo-e-mapas.md) | Cidades, cinco áreas, regras de monstros, morte e resgate, combate legível, telas da interface |
-| [docs/07-navegacao.md](docs/07-navegacao.md) | Telas, camadas dentro do jogo, mapa do mundo, controles e direção gráfica |
+| [docs/07-navegacao.md](docs/07-navegacao.md) | Telas, camadas dentro do jogo, mapa do mundo, controles, direção gráfica e som |
 | [docs/DECISOES.md](docs/DECISOES.md) | Todas as decisões tomadas por conta própria e o motivo |
-| [docs/CREDITOS.md](docs/CREDITOS.md) | Créditos e licenças dos modelos de personagem |
+| [docs/CREDITOS.md](docs/CREDITOS.md) | Créditos e licenças dos modelos de personagem; som e música originais (síntese por `tools/audio/gerar_sons.py`) |
 
 ## Requisitos
 

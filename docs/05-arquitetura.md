@@ -77,12 +77,15 @@ mmo/
 │       ├── partner.mjs            parceiro simulado para ver o calabouço no cliente
 │       └── create-character.js    cria contas/personagens de teste no banco
 ├── tools/poses/                   modelo do braço e gerador da tabela WPOSES (poses guiadas pela arma)
+├── tools/audio/gerar_sons.py      síntese de todos os sons e blocos de música (Python + numpy, determinístico)
 ├── client/                        projeto Godot 4.3
-│   ├── project.godot              autoload Net; cena principal
+│   ├── project.godot              autoloads Net e Sfx; cena principal
 │   ├── scenes/main.tscn
+│   ├── audio/                     sfx/ (efeitos) e music/ (sinos, flauta, bordões, percussão), gerados
 │   ├── shaders/                   cel shading, contorno, terreno, grama, folhagem, água, céu, "vazado"
 │   └── scripts/
 │       ├── net.gd                 WebSocketPeer, pedidos com rid e callbacks
+│       ├── audio.gd               autoload Sfx: pools de efeitos 2D/3D, volumes, música generativa por zona
 │       ├── main.gd                fluxo login → personagens → mundo; estado recebido
 │       ├── world.gd               mundo 3D, câmera suave, entidades interpoladas/previstas, clique
 │       ├── motion.gd              relógio da zona, interpolação de Hermite, previsão do próprio personagem
