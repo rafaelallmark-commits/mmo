@@ -33,7 +33,11 @@ var death_overlay: Control
 var disc_overlay: Control
 var disc_label: Label
 var pending_alloc := {}
-var cd_until := {}
+var cd_until := {}   # habilidade -> fim da recarga (Time.get_ticks_msec)
+var gcd_until := 0   # fim da recarga global
+var npc_open: Dictionary = {}  # último NPC com quem falou (venda na loja)
+var _npc_open_at := -1000000
+const HOT_SLOTS := 7  # 1–5 habilidades, 6–7 tônicos
 var npc_panel: PanelContainer
 var npc_box: VBoxContainer
 var journal_panel: PanelContainer
@@ -112,7 +116,7 @@ func _build_status(root: Control) -> void:
 	mp_bar = _bar(v, Theme_.MP)
 	mp_text = _overlay_label(mp_bar)
 	var hint := Label.new()
-	hint.text = "I inventário · C ficha · J missões · 1-5 atalhos · Q/E gira · roda zoom"
+	hint.text = "I inventário · C ficha · J missões · 1-5 habilidades · 6-7 tônicos · Q/E gira · roda zoom"
 	hint.add_theme_font_size_override("font_size", 10)
 	hint.add_theme_color_override("font_color", Theme_.MUTED)
 	v.add_child(hint)
@@ -145,13 +149,13 @@ func _build_hotbar(root: Control) -> void:
 	var p := PanelContainer.new()
 	p.add_theme_stylebox_override("panel", Theme_.panel_style(0.85))
 	p.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	p.position = Vector2(-290, -84)
+	p.position = Vector2(-364, -84)
 	root.add_child(p)
 	hotbar = HBoxContainer.new()
 	p.add_child(hotbar)
-	for i in 5:
+	for i in HOT_SLOTS:
 		var b := Button.new()
-		b.custom_minimum_size = Vector2(110, 46)
+		b.custom_minimum_size = Vector2(100, 46)
 		b.focus_mode = Control.FOCUS_NONE
 		b.autowrap_mode = TextServer.AUTOWRAP_WORD
 		b.add_theme_font_size_override("font_size", 11)
@@ -288,6 +292,10 @@ func refresh_char() -> void:
 		return
 	var c: Dictionary = main.ch
 	var cls: Dictionary = main.defs["classes"].get(c["classId"], {})
+	# recargas informadas pelo servidor (ao entrar no mundo, trocar de zona ou depois de uma ação)
+	var now := Time.get_ticks_msec()
+	for k in c.get("cooldowns", {}).keys():
+		cd_until[k] = now + int(c["cooldowns"][k])
 	var ttl := str(c.get("title", "")) if c.get("title") != null else ""
 	name_label.text = "%s — %s, nível %d   ·   %d ouro%s" % [c["name"], cls.get("name", ""), int(c["level"]), int(c["gold"]), ("\n«%s»" % ttl) if ttl != "" else ""]
 	hp_bar.max_value = float(c["stats"]["maxHp"])
@@ -396,6 +404,12 @@ func _tick_ping(delta: float) -> void:
 func _process(delta: float) -> void:
 	if social:
 		social.tick(delta)
+	# recargas na barra de atalhos (a cada 0,1 s)
+	_cd_acc += delta
+	if _cd_acc >= 0.1:
+		_cd_acc = 0.0
+		if not cd_until.is_empty() or gcd_until > Time.get_ticks_msec() - 200:
+			_refresh_hotbar()
 	_tick_ping(delta)
 	_tick_channel(delta)
 	# mantém o inventário inteiro dentro da tela, qualquer que seja a largura do conteúdo
@@ -405,17 +419,27 @@ func _process(delta: float) -> void:
 
 func _hot_actions() -> Array:
 	var skills: Array = main.class_skills()
-	return [
-		{"kind": "skill", "id": skills[0] if skills.size() > 0 else ""},
-		{"kind": "skill", "id": skills[1] if skills.size() > 1 else ""},
-		{"kind": "skill", "id": skills[2] if skills.size() > 2 else ""},
-		{"kind": "potion", "id": "potion_hp_s"},
-		{"kind": "potion", "id": "potion_mp_s"},
-	]
+	var acts := []
+	for i in 5:
+		acts.append({"kind": "skill", "id": skills[i] if skills.size() > i else ""})
+	acts.append({"kind": "potion", "id": _best_potion(["potion_hp_m", "potion_hp_s"])})
+	acts.append({"kind": "potion", "id": _best_potion(["potion_mp_m", "potion_mp_s"])})
+	return acts
+
+## O tônico mais forte que o personagem pode usar e tem na bolsa (ou o pequeno, para mostrar x0).
+func _best_potion(ids: Array) -> String:
+	var lvl := int(main.ch.get("level", 1))
+	for id in ids:
+		if int(main.defs["items"].get(id, {}).get("level", 1)) > lvl:
+			continue
+		for it in main.ch.get("items", []):
+			if it["defId"] == id and it["loc"] == "bag":
+				return id
+	return ids[ids.size() - 1]
 
 func _refresh_hotbar() -> void:
 	var acts := _hot_actions()
-	for i in 5:
+	for i in HOT_SLOTS:
 		var a: Dictionary = acts[i]
 		var b: Button = hot_buttons[i]
 		if a["kind"] == "skill":
@@ -424,8 +448,13 @@ func _refresh_hotbar() -> void:
 			var locked_text := "nível %d" % int(s.get("unlockLevel", 1))
 			if int(s.get("unlockLevel", 1)) == 10 and int(main.ch.get("level", 1)) >= 10:
 				locked_text = "prova de classe"
-			b.text = "%d · %s\n%s" % [i + 1, s.get("name", "—"), ("grau %d · %d mana" % [rank, int(s.get("mp", 0))]) if rank > 0 else locked_text]
+			var left := _cd_left(a["id"])
+			var info: String = ("grau %d · %d mana" % [rank, int(s.get("mp", 0))]) if rank > 0 else locked_text
+			if rank > 0 and left > 0.05:
+				info = "recarga %.1f s" % left
+			b.text = "%d · %s\n%s" % [i + 1, s.get("name", "—"), info]
 			b.disabled = rank == 0
+			b.modulate = Color(1, 1, 1, 0.55) if rank > 0 and left > 0.05 else Color.WHITE
 		else:
 			var count := 0
 			for it in main.ch.get("items", []):
@@ -433,6 +462,45 @@ func _refresh_hotbar() -> void:
 					count += int(it["qty"])
 			b.text = "%d · %s\nx%d" % [i + 1, main.defs["items"].get(a["id"], {}).get("name", a["id"]), count]
 			b.disabled = count == 0
+
+var _cd_acc := 0.0
+
+## Segundos que faltam para a habilidade poder sair (recarga própria ou recarga global).
+func _cd_left(skill_id: String) -> float:
+	var now := Time.get_ticks_msec()
+	var end := maxi(int(cd_until.get(skill_id, 0)), gcd_until)
+	if int(cd_until.get(skill_id, 0)) <= now:
+		cd_until.erase(skill_id)
+	return maxf(0.0, (end - now) / 1000.0)
+
+## Resposta do servidor a "cast": recarga, recarga global e barra de conjuração.
+func on_cast_result(m: Dictionary) -> void:
+	var now := Time.get_ticks_msec()
+	if m.get("ok", false):
+		if m.has("gcdMs"):
+			gcd_until = now + int(m["gcdMs"])
+		if m.has("casting"):
+			show_channel("Conjurando %s" % str(m["casting"].get("name", "")), float(m["casting"]["ms"]))
+			_casting = true
+		elif m.has("cooldownMs") and m.has("skill"):
+			cd_until[str(m["skill"])] = now + int(m["cooldownMs"])
+	_refresh_hotbar()
+
+## Fim de uma conjuração (sucesso ou interrupção).
+func on_cast_end(m: Dictionary) -> void:
+	if _casting:
+		channel_box.visible = false
+		_channel_left = 0.0
+		_casting = false
+	if m.get("ok", false):
+		if m.has("cooldownMs"):
+			cd_until[str(m["skill"])] = Time.get_ticks_msec() + int(m["cooldownMs"])
+	else:
+		error(str(m.get("reason", "Conjuração interrompida.")))
+		gcd_until = mini(gcd_until, Time.get_ticks_msec() + 300)
+	_refresh_hotbar()
+
+var _casting := false
 
 func _hotkey(i: int) -> void:
 	var a: Dictionary = _hot_actions()[i]
@@ -476,6 +544,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	match k:
 		KEY_I:
 			inv_panel.visible = not inv_panel.visible
+			if inv_panel.visible and npc_panel.visible:
+				npc_panel.visible = false  # a bolsa é larga: o painel do NPC sai da frente (a venda continua valendo)
 			if inv_panel.visible:
 				_refresh_inventory()
 		KEY_C:
@@ -485,7 +555,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				_refresh_sheet()
 		KEY_ENTER, KEY_KP_ENTER:
 			chat_input.grab_focus()
-		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5:
+		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7:
 			_hotkey(k - KEY_1)
 		KEY_J:
 			journal_panel.visible = not journal_panel.visible
@@ -499,6 +569,9 @@ func _unhandled_input(event: InputEvent) -> void:
 
 ## Esc: fecha o painel aberto mais alto. Retorna false se não havia nenhum (o main abre o menu).
 func close_top_panel() -> bool:
+	if _bag_menu_node and is_instance_valid(_bag_menu_node):
+		_close_bag_menu()
+		return true
 	if social and social.close_top():
 		return true
 	for p in [invite_panel, npc_panel, journal_panel, inv_panel, sheet_panel]:
@@ -604,6 +677,10 @@ func _refresh_inventory() -> void:
 			var b := _item_button(it)
 			var inst: Dictionary = it
 			b.pressed.connect(func(): _bag_click(inst))
+			# botão direito: usar/equipar, vender (com a loja aberta) ou descartar
+			b.gui_input.connect(func(ev: InputEvent):
+				if ev is InputEventMouseButton and ev.pressed and (ev as InputEventMouseButton).button_index == MOUSE_BUTTON_RIGHT:
+					_bag_menu(inst))
 			inv_bag.add_child(b)
 	for it in main.ch.get("items", []):
 		if it["loc"] == "recovery":
@@ -611,7 +688,108 @@ func _refresh_inventory() -> void:
 			var iid: String = it["id"]
 			b.pressed.connect(func(): Net.request("claim_recovery", {"instance": iid}))
 			inv_bag.add_child(b)
-	inv_title.text = "Bolsa %d/%d (clique: equipar ou usar)" % [used, int(main.ch.get("bagCapacity", 30))]
+	inv_title.text = "Bolsa %d/%d (clique: equipar ou usar · botão direito: vender ou descartar)" % [used, int(main.ch.get("bagCapacity", 30))]
+
+## Último comerciante (loja ou ferreiro) com quem você falou nos últimos 5 min: dá para vender a ele
+## (o servidor confere se você ainda está perto).
+func _merchant_open() -> bool:
+	return str(npc_open.get("role", "")) in ["shop", "smith"] and Time.get_ticks_msec() - _npc_open_at < 300000
+
+func _sell_price(inst: Dictionary) -> int:
+	var d: Dictionary = main.defs["items"].get(inst["defId"], {})
+	return maxi(1, int(d.get("value", 1)) / 2) * int(inst.get("qty", 1))
+
+func _bag_menu(inst: Dictionary) -> void:
+	# menu de contexto feito com painéis do próprio HUD: um fundo transparente em tela cheia fecha ao clicar fora
+	_close_bag_menu()
+	var d: Dictionary = main.defs["items"].get(inst["defId"], {})
+	var root: Control = inv_panel.get_parent()
+	var backdrop := Control.new()
+	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
+	backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
+	backdrop.gui_input.connect(func(ev: InputEvent):
+		if ev is InputEventMouseButton and ev.pressed:
+			_close_bag_menu())
+	root.add_child(backdrop)
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", Theme_.panel_style(0.97))
+	backdrop.add_child(panel)
+	var v := VBoxContainer.new()
+	panel.add_child(v)
+	var title := Label.new()
+	title.text = ItemText.item_name(main.defs, inst)
+	title.add_theme_color_override("font_color", Theme_.AMBER)
+	v.add_child(title)
+	var usable: bool = d.get("kind", "") == "consumable" or d.get("slot", null) != null
+	if usable:
+		_menu_button(v, "Usar" if d.get("kind", "") == "consumable" else "Equipar", func(): _on_bag_menu(0, inst))
+	if _merchant_open():
+		var label := "Vender%s a %s por %d de ouro" % [" (x%d)" % int(inst["qty"]) if int(inst.get("qty", 1)) > 1 else "", str(npc_open.get("name", "comerciante")).get_slice(",", 0), _sell_price(inst)]
+		_menu_button(v, label, func(): _on_bag_menu(1, inst))
+	else:
+		var off := _menu_button(v, "Vender (fale com uma loja ou ferreiro)", func(): pass)
+		off.disabled = true
+	_menu_button(v, "Descartar…", func(): _on_bag_menu(2, inst))
+	_menu_button(v, "Cancelar", func(): pass)
+	# na posição do mouse, sem sair da tela
+	var vp := get_viewport().get_visible_rect().size
+	var mp := get_viewport().get_mouse_position()
+	panel.reset_size()
+	var sz := panel.get_combined_minimum_size()
+	panel.position = Vector2(clampf(mp.x, 8.0, vp.x - sz.x - 8.0), clampf(mp.y, 8.0, vp.y - sz.y - 8.0))
+	_bag_menu_node = backdrop
+
+var _bag_menu_node: Control = null
+
+func _menu_button(box: Container, text: String, cb: Callable) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	b.pressed.connect(func():
+		_close_bag_menu()
+		cb.call())
+	box.add_child(b)
+	return b
+
+func _close_bag_menu() -> void:
+	if _bag_menu_node and is_instance_valid(_bag_menu_node):
+		_bag_menu_node.queue_free()
+	_bag_menu_node = null
+
+func _on_bag_menu(id: int, inst: Dictionary) -> void:
+	if id == 0:
+		_bag_click(inst)
+	elif id == 1:
+		_sell_item(str(inst["id"]))
+	elif id == 2:
+		_confirm_discard(inst)
+
+func _sell_item(iid: String) -> void:
+	Net.request("sell", {"npc": npc_open.get("id", ""), "instance": iid}, func(r):
+		if r.get("ok", false):
+			Sfx.ui("loot_coins")
+			system(str(r.get("message", "Vendido.")))
+		else:
+			error(str(r.get("reason", "Não foi possível vender."))))
+
+func _confirm_discard(inst: Dictionary) -> void:
+	var dlg := ConfirmationDialog.new()
+	dlg.title = "Descartar"
+	dlg.dialog_text = "Descartar %s? Não dá para desfazer." % ItemText.item_name(main.defs, inst)
+	dlg.ok_button_text = "Descartar"
+	dlg.cancel_button_text = "Cancelar"
+	add_child(dlg)
+	var iid: String = inst["id"]
+	dlg.confirmed.connect(func():
+		Net.request("discard", {"instance": iid}, func(r):
+			if r.get("ok", false):
+				system(str(r.get("message", "Descartado.")))
+			else:
+				error(str(r.get("reason", "Não foi possível descartar.")))))
+	dlg.visibility_changed.connect(func():
+		if not dlg.visible:
+			dlg.queue_free())
+	dlg.popup_centered()
 
 func _bag_click(inst: Dictionary) -> void:
 	var d: Dictionary = main.defs["items"].get(inst["defId"], {})
@@ -835,6 +1013,8 @@ func _objectives_text(q: Dictionary) -> String:
 func show_npc(r: Dictionary) -> void:
 	_clear(npc_box)
 	var npc: Dictionary = r["npc"]
+	npc_open = npc
+	_npc_open_at = Time.get_ticks_msec()
 	_title(npc_box, npc["name"], 18)
 	var quests: Dictionary = r.get("quests", {})
 	for q in quests.get("active", []):
@@ -907,6 +1087,7 @@ func show_npc(r: Dictionary) -> void:
 		npc_box.add_child(tb)
 	if r.get("shop", null) != null:
 		_title(npc_box, "Loja", 14)
+		_text(npc_box, "Para vender: abra a bolsa (I) e clique com o botão direito no item.", Theme_.MUTED)
 		for item in r["shop"]:
 			var row := HBoxContainer.new()
 			npc_box.add_child(row)

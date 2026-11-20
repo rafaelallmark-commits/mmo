@@ -446,7 +446,7 @@ export class GameServer {
       case 'move': return this.nc(zone.cmdMove(p, msg.x, msg.z));
       case 'attack': return this.nc(zone.cmdAttack(p, msg.target));
       case 'stop': return this.nc(zone.cmdStop(p));
-      case 'cast': return this.withChar(p, zone.cmdCast(p, msg.skill, msg.target, msg.x, msg.z, msg.ally));
+      case 'cast': { const r = zone.cmdCast(p, msg.skill, msg.target, msg.x, msg.z, msg.ally); r.skill = msg.skill; return this.withChar(p, r); }
       case 'use_item': return this.withChar(p, zone.cmdUseItem(p, msg.instance));
       case 'respawn': return this.withChar(p, zone.cmdRespawn(p));
       case 'learn_skill': return this.withChar(p, zone.cmdLearnSkill(p, msg.skill));
@@ -462,6 +462,8 @@ export class GameServer {
       case 'talk': return this.hTalk(p, msg);
       case 'interact': return this.hInteract(p, msg);
       case 'buy': return this.hBuy(p, msg);
+      case 'sell': return this.hSell(p, msg);
+      case 'discard': return this.hDiscard(p, msg);
       case 'quests': return { ok: true, journal: this.quests.journal(p.char), cache: false };
       case 'quest_accept': return this.hQuestAccept(p, msg);
       case 'quest_turnin': return this.hQuestTurnIn(p, msg);
@@ -667,7 +669,10 @@ export class GameServer {
     this.broadcastZone(fromKey, { t: 'left', eid: p.eid });
     p.char.x = x; p.char.z = z;
     const np = dest.addPlayer(p.char);
-    np.cooldowns = p.cooldowns;
+    // recargas e tônico seguem como TEMPO RESTANTE: cada zona tem o próprio relógio (uma instância nova
+    // começa em 0), então copiar os instantes absolutos travava habilidades por minutos ou dias
+    np.cooldowns = Object.fromEntries(Object.entries(p.cooldowns).map(([k, t]) => [k, dest.now + Math.max(0, t - from.now)]).filter(([, t]) => t > dest.now));
+    np.potionReadyAt = dest.now + Math.max(0, (p.potionReadyAt || 0) - from.now);
     this.charZone.set(charId, destKey);
     const sess = this.byChar.get(charId);
     if (sess) { sess.known = new Map(); sess.knownFull = true; }
@@ -822,6 +827,44 @@ export class GameServer {
   }
 
   priceOf(defId) { return Math.max(1, (this.data.items[defId].value || 1) * 2); }
+  // o comerciante paga um quarto do preço de venda (metade do valor) por unidade
+  sellPriceOf(defId) { return Math.max(1, Math.floor((this.data.items[defId].value || 1) / 2)); }
+
+  // Vender ao comerciante (qualquer loja ou ferreiro por perto): só da bolsa; item de missão não.
+  hSell(p, { npc, instance, qty }) {
+    const n = p.zone.npcNear(p, npc);
+    if (!n || !['shop', 'smith'].includes(n.role)) return { ok: false, code: 'too_far', reason: 'Chegue mais perto de um comerciante.' };
+    const c = p.char;
+    const it = c.items.get(instance);
+    if (!it || it.loc !== 'bag') return { ok: false, code: 'not_in_bag', reason: 'Só dá para vender itens da bolsa (desequipe antes).' };
+    const def = this.data.items[it.defId];
+    if (def.questItem) return { ok: false, code: 'bound', reason: 'Itens de missão não podem ser vendidos.' };
+    const n2 = qty == null ? it.qty : qty;
+    if (!Number.isInteger(n2) || n2 < 1 || n2 > it.qty) return { ok: false, code: 'bad_request', reason: 'Quantidade inválida.' };
+    const gain = this.sellPriceOf(it.defId) * n2;
+    this.trades.dropItem?.(c.id, it.id);
+    this.store.tx(() => {
+      it.qty -= n2;
+      if (it.qty <= 0) { c.items.delete(it.id); this.store.deleteItem(c.id, it.id); } else this.store.saveItems(c.id, [it]);
+      c.gold += gain;
+      this.store.saveCharacter(c);
+    });
+    this.audit('sell', { charId: c.id, item: it.defId, qty: n2, enh: it.enh || 0, gold: gain, goldAfter: c.gold, npc: n.id });
+    return { ok: true, gold: gain, message: `Vendido: ${def.name}${n2 > 1 ? ` x${n2}` : ''} por ${gain} de ouro.`, char: p.zone.charView(p), cache: false };
+  }
+
+  // Descartar um item da bolsa (some de vez).
+  hDiscard(p, { instance }) {
+    const c = p.char;
+    const it = c.items.get(instance);
+    if (!it || it.loc !== 'bag') return { ok: false, code: 'not_in_bag', reason: 'Só dá para descartar itens da bolsa.' };
+    const def = this.data.items[it.defId];
+    if (def.questItem) return { ok: false, code: 'bound', reason: 'Itens de missão não podem ser descartados.' };
+    this.trades.dropItem?.(c.id, it.id);
+    this.store.tx(() => { c.items.delete(it.id); this.store.deleteItem(c.id, it.id); });
+    this.audit('discard', { charId: c.id, item: it.defId, qty: it.qty, enh: it.enh || 0 });
+    return { ok: true, message: `Descartado: ${def.name}${it.qty > 1 ? ` x${it.qty}` : ''}.`, char: p.zone.charView(p), cache: false };
+  }
 
   hBuy(p, { npc, item, qty = 1 }) {
     const n = p.zone.npcNear(p, npc);
@@ -830,6 +873,7 @@ export class GameServer {
     if (!Number.isInteger(qty) || qty < 1 || qty > 50) return { ok: false, code: 'bad_request', reason: 'Quantidade inválida.' };
     const c = p.char;
     const def = this.data.items[item];
+    if (def.kind === 'consumable' && (def.level || 1) > c.level) return { ok: false, code: 'level', reason: `Nível ${def.level} exigido para ${def.name}. Seu nível atual é ${c.level}.` };
     const cost = this.priceOf(item) * qty;
     if (c.gold < cost) return { ok: false, code: 'no_gold', reason: `Ouro insuficiente: ${cost} necessário, você tem ${c.gold}.` };
     const stack = [...c.items.values()].find((it) => it.loc === 'bag' && it.defId === item && it.qty + qty <= (def.stack || 1));

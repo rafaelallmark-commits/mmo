@@ -97,7 +97,7 @@ Para já abrir com a conta preenchida:
 
 Em cada janela: **Jogar** → servidor `ws://127.0.0.1:7777`, **Criar conta** (ou **Entrar**) → **Criar novo personagem** (escolha a classe; a prévia 3D muda) → **Jogar**. **Esc** fecha painéis ou abre o menu (Opções, Trocar de personagem, Sair para o título).
 
-Controles: clique no chão anda; clique no monstro ataca; clique no NPC conversa (missões, loja, prova de classe); clique no anel de um portal muda de mapa; clique no saque coleta; **1–3** habilidades, **4/5** tônicos; **J** missões; chat com `/g` (grupo), `/s Nome` (sussurro), `/convidar Nome`, `/sair`; **I** inventário (clique no item equipa/usa; passe o mouse para ver a descrição e a comparação); **C** ficha (pontos e habilidades); **Q/E** ou botão direito arrastando giram a câmera; roda do mouse aproxima; **Enter** conversa; **Esc** fecha painéis.
+Controles: clique no chão anda; clique no monstro ataca; clique no NPC conversa (missões, loja, prova de classe); clique no anel de um portal muda de mapa; clique no saque coleta; **1–5** habilidades (com recarga e recarga global na barra), **6/7** tônicos (o melhor que você pode usar); **J** missões; chat com `/g` (grupo), `/s Nome` (sussurro), `/convidar Nome`, `/sair`; **I** inventário (clique no item equipa/usa; botão direito vende — com loja ou ferreiro aberto — ou descarta; passe o mouse para ver a descrição e a comparação); **C** ficha (pontos e habilidades); **Q/E** ou botão direito arrastando giram a câmera; roda do mouse aproxima; **Enter** conversa; **Esc** fecha painéis.
 
 Para jogar em rede local, rode o servidor em uma máquina e use `ws://IP-DA-MÁQUINA:7777` no campo Servidor.
 
@@ -145,7 +145,7 @@ npm run validate-data
 npm run gen-docs
 ```
 
-Medir a progressão (Marco 4): um bot por classe caça do nível 1 ao teto (25) num servidor em processo, acelerado (`server.step(100)` em laço, sem rede), e o tempo de cada nível é comparado com as metas de `data/xp_table.json`. A rodada padrão (8 classes × 8 sementes, mais o mesmo lote sem a prova de classe) leva ~5 min e regrava [docs/relatorio-progressao.md](docs/relatorio-progressao.md); o JSON completo vai para `server/relatorio-progressao.json` (fora do git). O relatório versionado ainda é a rodada 1→20, anterior ao teto 25 (`--ate-nivel 20 --md ../docs/relatorio-progressao.md` repete aquela medição; a faixa 20–25 está resumida em D101 de `docs/DECISOES.md`):
+Medir a progressão (Marco 4): um bot por classe caça do nível 1 ao teto (25) num servidor em processo, acelerado (`server.step(100)` em laço, sem rede), e o tempo de cada nível é comparado com as metas de `data/xp_table.json`. A rodada padrão (8 classes × 8 sementes, mais o mesmo lote sem a prova de classe) leva ~5 min e regrava [docs/relatorio-progressao.md](docs/relatorio-progressao.md); o JSON completo vai para `server/relatorio-progressao.json` (fora do git). O relatório versionado ainda é a rodada 1→20, anterior ao teto 25 (`--ate-nivel 20 --md ../docs/relatorio-progressao.md` repete aquela medição; a faixa 20–25 está resumida em D107 de `docs/DECISOES.md`):
 
 ```bash
 npm run simular-progressao

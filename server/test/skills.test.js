@@ -13,7 +13,7 @@ function setup(partyOf = () => null) {
   const store = new Store(':memory:');
   const acc = store.createAccount('t', 'senha');
   const sent = [];
-  const zone = new Zone({ mapId: 'brejo_bombas', data, store, rng: makeRng(3), send: () => {}, broadcast: (m) => sent.push(m), hooks: { partyIdOf: partyOf } });
+  const zone = new Zone({ mapId: 'brejo_bombas', data, store, rng: makeRng(3), send: (charId, m) => sent.push({ ...m, _to: charId }), broadcast: (m) => sent.push(m), hooks: { partyIdOf: partyOf } });
   const mk = (classId, name, x, z) => {
     const cls = data.classes[classId];
     const id = store.createCharacter({ accountId: acc, name, classId, hp: 999, mp: 999, mapId: 'brejo_bombas', x, z, kit: cls.startingKit, slotFor: (d) => data.items[d].slot });
@@ -43,7 +43,7 @@ test('as 24 habilidades dos níveis 1, 5 e 10 executam com o efeito esperado', (
       const t = ms[0];
       p.cooldowns = {}; p.char.mp = p.stats.maxMp;
       ally.char.hp = Math.round(ally.stats.maxHp / 2);
-      const res = zone.cmdCast(p, sid, t.eid, t.x, t.z, ally.eid);
+      const res = zone.castNow(p, sid, t.eid, t.x, t.z, ally.eid);
       assert.equal(res.ok, true, `${cls.name} / ${s.name}: ${res.reason}`);
       const k = s.effect.kind;
       if (['strike', 'spell', 'cone_strike', 'line_strike', 'charge', 'pull', 'aoe_spell', 'debuff'].includes(k)) assert.ok(res.hits.length >= 1, `${s.name} atingiu alguém`);
@@ -120,7 +120,7 @@ test('as 16 habilidades dos níveis 15 e 20 executam com o efeito esperado', () 
       if (k === 'resurrect') { ally.char.dead = true; ally.char.hp = 0; }
       if (s.effect.guaranteedCritIfMarked) zone.addMonsterFx(t, { kind: 'mark', until: zone.now + 5000, physDamageTakenPct: 0, by: p.char.id });
       const hpBefore = t.hp;
-      const res = zone.cmdCast(p, sid, t.eid, t.x, t.z, ally.eid);
+      const res = zone.castNow(p, sid, t.eid, t.x, t.z, ally.eid);
       assert.equal(res.ok, true, `${cls.name} / ${s.name}: ${res.reason}`);
       if (['strike', 'spell', 'cone_strike', 'line_strike', 'aoe_strike'].includes(k)) assert.ok(res.hits.length >= 1, `${s.name} atingiu alguém`);
       if (s.effect.hits) assert.ok(res.hits.filter((e) => e === t.eid).length >= 2, `${s.name} golpeia ${s.effect.hits} vezes`);
@@ -144,7 +144,7 @@ test('as 16 habilidades dos níveis 15 e 20 executam com o efeito esperado', () 
           p.cooldowns = {}; p.char.mp = p.stats.maxMp; t.hp = t.def.hp * 20;
           zone.addMonsterFx(t, { kind: 'mark', until: zone.now + 5000, physDamageTakenPct: 0, by: p.char.id });
           sent.length = 0;
-          zone.cmdCast(p, sid, t.eid);
+          zone.castNow(p, sid, t.eid);
           const h = sent.find((m) => m.t === 'hit' && m.dst === t.eid && m.skill === sid);
           if (h && !h.miss) { landed++; if (h.crit) crits++; }
         }
@@ -152,4 +152,68 @@ test('as 16 habilidades dos níveis 15 e 20 executam com o efeito esperado', () 
       }
     }
   }
+});
+
+test('recarga global entre habilidades e tempo de conjuração (parado; mover interrompe; alvo conferido no fim)', () => {
+  const party = new Map();
+  const { zone, mk, sent } = setup((id) => party.get(id) ?? null);
+  const gcd = data.formulas.skills?.globalCooldownMs ?? 1000;
+  // recarga global: duas habilidades diferentes em seguida
+  const b = mk('breaker', 'Tgcd', 40, 36);
+  b.char.skills.momentum = 1;
+  const ms = toad(zone).filter((m) => m.state !== 'dead');
+  ms.forEach((m, i) => { m.x = b.char.x + 1.5 + i * 0.3; m.z = b.char.z; m.hp = m.def.hp * 20; });
+  let r = zone.cmdCast(b, 'deep_cut', ms[0].eid);
+  assert.equal(r.ok, true, r.reason);
+  assert.equal(r.gcdMs, gcd);
+  r = zone.cmdCast(b, 'momentum', ms[0].eid);
+  assert.equal(r.code, 'gcd', 'segunda habilidade espera a recarga global');
+  for (let i = 0; i < gcd / 100 + 1; i++) zone.tick(100);
+  r = zone.cmdCast(b, 'momentum', ms[0].eid);
+  assert.equal(r.ok, true, r.reason);
+
+  // tempo de conjuração: Tiro do Espinhal (1 s) só sai no fim, e mover-se interrompe
+  const w = mk('warden', 'Tcast', 40, 40);
+  w.char.level = 20; w.char.skills.spinal_shot = 1; zone.recalc(w); w.char.mp = w.stats.maxMp;
+  const s = data.skills.spinal_shot;
+  const t = ms[1];
+  t.x = w.char.x + 6; t.z = w.char.z; t.hp = t.def.hp * 20;
+  const hp0 = t.hp;
+  r = zone.cmdCast(w, 'spinal_shot', t.eid);
+  assert.equal(r.ok, true, r.reason);
+  assert.equal(r.casting.ms, s.castMs);
+  assert.equal(t.hp, hp0, 'nada sai antes do fim da conjuração');
+  for (let i = 0; i < s.castMs / 100 + 1; i++) zone.tick(100);
+  const end = sent.filter((m) => m.t === 'cast_end').pop();
+  assert.equal(end?.ok, true, end?.reason);
+  assert.ok(sent.some((m) => m.t === 'hit' && m.src === w.eid && m.skill === 'spinal_shot'), 'o tiro saiu no fim');
+  // de novo, mas andando no meio: interrompe, sem gastar mana nem recarga
+  w.cooldowns = {}; w.gcdUntil = 0; w.char.mp = w.stats.maxMp;
+  const mp0 = w.char.mp;
+  r = zone.cmdCast(w, 'spinal_shot', t.eid);
+  assert.equal(r.ok, true, r.reason);
+  zone.tick(100);
+  zone.cmdMove(w, w.char.x - 3, w.char.z);
+  const cut = sent.filter((m) => m.t === 'cast_end').pop();
+  assert.equal(cut.ok, false);
+  assert.match(cut.reason, /moveu/);
+  assert.equal(w.char.mp, mp0, 'interrompida não gasta mana');
+  assert.ok(!(w.cooldowns.spinal_shot > zone.now), 'interrompida não entra em recarga');
+});
+
+test('Rajada Cortante: 3 azagaias em leque, cada uma no primeiro monstro do caminho', () => {
+  const { zone, mk, sent } = setup();
+  const p = mk('windwalker', 'Tleque', 40, 36);
+  p.char.level = 15; p.char.skills.cutting_gust = 1; zone.recalc(p); p.char.mp = p.stats.maxMp;
+  const ms = toad(zone).filter((m) => m.state !== 'dead').slice(0, 4);
+  // três sapos em leque a 6 m (−30°, 0°, +30°) e um quarto atrás do do meio
+  const ang = [-Math.PI / 6, 0, Math.PI / 6];
+  ms.forEach((m, i) => { const a = ang[i] ?? 0; const r = i < 3 ? 6 : 9; m.x = p.char.x + Math.cos(a) * r; m.z = p.char.z + Math.sin(a) * r; m.hp = m.def.hp * 20; m.state = 'idle'; });
+  sent.length = 0;
+  const res = zone.castNow(p, 'cutting_gust', ms[1].eid);
+  assert.equal(res.ok, true, res.reason);
+  const hits = sent.filter((m) => m.t === 'hit' && m.skill === 'cutting_gust').map((m) => m.dst);
+  assert.equal(hits.length, 3, `3 azagaias (${hits.length})`);
+  for (const m of ms.slice(0, 3)) assert.ok(hits.includes(m.eid), 'cada uma num sapo do leque');
+  assert.ok(!hits.includes(ms[3].eid), 'o de trás fica protegido pelo da frente');
 });

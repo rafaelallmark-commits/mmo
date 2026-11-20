@@ -968,12 +968,17 @@ func _on_message(m: Dictionary) -> void:
 					hud.refresh_quests()
 			if not m.get("ok", true) and in_world and hud and m.get("req", "") != "pickup":
 				hud.error(m.get("reason", "Recusado."))
+			if m.get("req", "") == "cast" and in_world and hud:
+				hud.on_cast_result(m)
 		"snap":
 			if world and in_world:
 				world.apply_snapshot(_merge_snap(m) if m.has("d") else m)
 		"channel_end":
 			if hud:
 				hud.end_channel(m)
+		"cast_end":
+			if hud:
+				hud.on_cast_end(m)
 		"escort":
 			if hud:
 				hud.on_escort(m)
