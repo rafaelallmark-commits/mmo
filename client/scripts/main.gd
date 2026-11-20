@@ -34,6 +34,11 @@ var party = null
 var chars_cache := []
 var classes_cache := []
 var settings := {"camera_sensitivity": 1.0, "show_names": true, "ui_scale": 1.0}
+var snap_cache := {}   # entidades conhecidas (snapshots por diferença do servidor)
+const PROTOCOL := 3    # versão do protocolo que este cliente fala (o servidor manda no "hello")
+var server_hello := {}
+var _hello_waiters: Array = []
+var accounts_url := ""  # serviço de contas (teste público); vazio = deduzido do endereço do servidor
 var state := "title"
 
 var ui: CanvasLayer
@@ -53,6 +58,7 @@ func _ready() -> void:
 		var kv := s.split("=", true, 1)
 		args[kv[0]] = kv[1] if kv.size() > 1 else "true"
 	server_url = args.get("server", server_url)
+	accounts_url = args.get("accounts", accounts_url)
 	account = args.get("account", "")
 	password = args.get("password", "")
 	_load_settings()
@@ -85,7 +91,7 @@ func _ready() -> void:
 	if args.has("poseprobe"):
 		var pp = preload("res://scripts/pose_probe.gd").new()
 		add_child(pp)
-		pp.start(args["poseprobe"], args.get("only", ""))
+		pp.start(args["poseprobe"], args.get("only", ""), int(args.get("focus", "-1")), int(args.get("group", "0")))
 		return
 	if args.has("sceneshots"):
 		autotest = preload("res://scripts/autotest.gd").new()
@@ -215,12 +221,15 @@ func set_status(text: String, bad := false) -> void:
 	if status_label:
 		status_label.text = text
 		status_label.add_theme_color_override("font_color", Theme_.RED if bad else Theme_.MUTED)
+	if bad:
+		Sfx.ui("ui_error")
 
 # ---------------- TÍTULO ----------------
 func show_title() -> void:
 	state = "title"
 	_ensure_menu_scene()
 	menu_scene.set_view("title")
+	Sfx.set_mood("title")   # abertura: o primeiro e o segundo toque dos sinos
 	_clear_screen()
 	var root := Control.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -263,7 +272,7 @@ func show_title() -> void:
 	cred.add_theme_color_override("font_color", Color(1, 1, 1, 0.65))
 	root.add_child(cred)
 	var ver := Label.new()
-	ver.text = "Marco 2 · protótipo"
+	ver.text = "Teste público · protocolo %d" % PROTOCOL
 	ver.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	ver.position = Vector2(-170, -34)
 	ver.add_theme_color_override("font_color", Color(1, 1, 1, 0.6))
@@ -291,6 +300,9 @@ func show_login() -> void:
 		server_url = e_url.text.strip_edges(); account = e_acc.text.strip_edges(); password = e_pass.text
 		connect_and_login(true))
 	b2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_button(box, "Esqueci a senha", func():
+		server_url = e_url.text.strip_edges()
+		show_forgot_accounts())
 	_button(box, "Voltar", func():
 		Net.close()
 		show_title())
@@ -299,6 +311,7 @@ func show_login() -> void:
 
 func connect_and_login(register: bool) -> void:
 	_pending_register = register
+	server_hello = {}
 	set_status("Conectando a %s..." % server_url)
 	if Net.is_open():
 		_after_connect()
@@ -313,26 +326,151 @@ func _on_connected() -> void:
 func _after_connect() -> void:
 	if _pending_register:
 		_pending_register = false
-		Net.request("register", {"account": account, "password": password}, func(r):
-			if not r["ok"] and r.get("code", "") != "account_exists":
-				set_status(r["reason"], true)
+		_when_hello(func():
+			if str(server_hello.get("auth", "both")) == "token":
+				show_register_accounts()
 				return
-			_login())
+			Net.request("register", {"account": account, "password": password}, func(r):
+				if not r["ok"] and r.get("code", "") != "account_exists":
+					set_status(r["reason"], true)
+					return
+				_login()))
 	else:
 		_login()
 
+# ---------------- CONTA (serviço de contas do teste público) ----------------
+func show_register_accounts() -> void:
+	state = "login"
+	var box := _menu_panel("Criar conta")
+	var e_acc := _field(box, "Conta", account)
+	var e_mail := _field(box, "E-mail", "")
+	var e_pass := _field(box, "Senha (8 ou mais caracteres)", password, true)
+	_button(box, "Criar e receber o código", func():
+		account = e_acc.text.strip_edges(); password = e_pass.text
+		_accounts_post("/contas", {"conta": account, "email": e_mail.text.strip_edges(), "senha": password}, func(ok: bool, b: Dictionary):
+			if ok:
+				show_verify_accounts(str(b.get("mensagem", "")))
+			else:
+				set_status(str(b.get("erro", "Não foi possível criar a conta.")), true)), true)
+	_button(box, "Voltar", show_login)
+	_status(box)
+
+func show_verify_accounts(msg := "") -> void:
+	var box := _menu_panel("Confirmar e-mail")
+	var info := Label.new()
+	info.text = msg if msg != "" else "Digite o código de 6 dígitos que enviamos para o seu e-mail."
+	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(info)
+	var e_code := _field(box, "Código", "")
+	_button(box, "Confirmar", func():
+		_accounts_post("/contas/verificar", {"conta": account, "codigo": e_code.text.strip_edges()}, func(ok: bool, b: Dictionary):
+			if ok:
+				show_login()
+				set_status(str(b.get("mensagem", "Conta confirmada.")))
+			else:
+				set_status(str(b.get("erro", "Código incorreto.")), true)), true)
+	_button(box, "Reenviar código", func():
+		_accounts_post("/contas/reenviar", {"conta": account}, func(_ok: bool, b: Dictionary):
+			set_status(str(b.get("mensagem", "Pedido enviado.")))))
+	_button(box, "Voltar", show_login)
+	_status(box)
+
+func show_forgot_accounts() -> void:
+	var box := _menu_panel("Esqueci a senha")
+	var e_mail := _field(box, "E-mail", "")
+	_button(box, "Enviar código", func():
+		_accounts_post("/senha/esqueci", {"email": e_mail.text.strip_edges()}, func(_ok: bool, b: Dictionary):
+			set_status(str(b.get("mensagem", "Se o e-mail tiver conta, enviamos um código.")))), true)
+	var e_code := _field(box, "Código", "")
+	var e_new := _field(box, "Nova senha", "", true)
+	_button(box, "Trocar a senha", func():
+		_accounts_post("/senha/redefinir", {"email": e_mail.text.strip_edges(), "codigo": e_code.text.strip_edges(), "senha": e_new.text}, func(ok: bool, b: Dictionary):
+			if ok:
+				show_login()
+				set_status("Senha trocada. Entre com a nova senha.")
+			else:
+				set_status(str(b.get("erro", "Não foi possível trocar a senha.")), true)))
+	_button(box, "Voltar", show_login)
+	_status(box)
+
+## Exclusão da própria conta (privacidade), confirmada com a senha.
+func show_delete_account() -> void:
+	var box := _menu_panel("Excluir conta")
+	var warn := Label.new()
+	warn.text = "Isto apaga a conta %s, os personagens, os itens e o e-mail. Não dá para desfazer." % account
+	warn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	warn.add_theme_color_override("font_color", Color("#ff8a7a"))
+	box.add_child(warn)
+	var e_pass := _field(box, "Senha", "", true)
+	_button(box, "Excluir para sempre", func():
+		Net.request("delete_account", {"password": e_pass.text}, func(r):
+			if r["ok"]:
+				account = ""; password = ""
+				show_title()
+			else:
+				set_status(r["reason"], true)))
+	_button(box, "Cancelar", func(): show_chars())
+	_status(box)
+
+## Espera o "hello" do servidor (versão e modo de login) antes de seguir.
+func _when_hello(cb: Callable) -> void:
+	if not server_hello.is_empty():
+		cb.call()
+	else:
+		_hello_waiters.append(cb)
+
 func _login() -> void:
-	Net.request("login", {"account": account, "password": password}, func(r):
-		if not r["ok"]:
-			set_status(r["reason"], true)
-			return
-		chars_cache = r["chars"]
-		classes_cache = r["classes"]
-		if reconnecting and char_id >= 0 and state == "world":
-			enter_world(char_id)
+	_when_hello(func():
+		if str(server_hello.get("auth", "both")) == "token":
+			_login_with_accounts()
 		else:
-			reconnecting = false
-			show_chars())
+			Net.request("login", {"account": account, "password": password, "delta": true}, _on_login))
+
+## Teste público: conta e senha vão ao serviço de contas, que devolve um token de uso único para a zona.
+func _login_with_accounts() -> void:
+	set_status("Entrando pelo serviço de contas...")
+	_accounts_post("/sessoes", {"conta": account, "senha": password}, func(ok: bool, body: Dictionary):
+		if not ok:
+			set_status(str(body.get("erro", "Não foi possível entrar.")), true)
+			return
+		Net.request("login_token", {"token": body["token"], "delta": true}, _on_login))
+
+func _accounts_base() -> String:
+	if accounts_url != "":
+		return accounts_url.trim_suffix("/")
+	var u := server_url
+	var host := u.get_slice("://", 1).get_slice("/", 0).get_slice(":", 0)
+	if u.begins_with("wss://"):
+		return "https://%s/contas" % host
+	return "http://%s:7780" % host
+
+func _accounts_post(path: String, body: Dictionary, cb: Callable) -> void:
+	var http := HTTPRequest.new()
+	add_child(http)
+	http.timeout = 15.0
+	http.request_completed.connect(func(result: int, code: int, _h: PackedStringArray, raw: PackedByteArray):
+		http.queue_free()
+		var data = JSON.parse_string(raw.get_string_from_utf8()) if raw.size() > 0 else null
+		var d: Dictionary = data if data is Dictionary else {}
+		if result != HTTPRequest.RESULT_SUCCESS:
+			d = {"erro": "Serviço de contas indisponível (%s)." % _accounts_base()}
+		cb.call(result == HTTPRequest.RESULT_SUCCESS and code >= 200 and code < 300 and d.get("ok", false), d))
+	var err := http.request(_accounts_base() + path, ["Content-Type: application/json"], HTTPClient.METHOD_POST, JSON.stringify(body))
+	if err != OK:
+		http.queue_free()
+		cb.call(false, {"erro": "Não foi possível falar com o serviço de contas."})
+
+func _on_login(r: Dictionary) -> void:
+	if not r["ok"]:
+		set_status(r["reason"], true)
+		return
+	chars_cache = r["chars"]
+	classes_cache = r["classes"]
+	if reconnecting and char_id >= 0 and state == "world":
+		enter_world(char_id)
+	else:
+		reconnecting = false
+		show_chars()
 
 # ---------------- PERSONAGENS ----------------
 var _selected_char := -1
@@ -364,6 +502,7 @@ func show_chars(select_id := -1) -> void:
 		_button(box, "Jogar", func(): enter_world(_selected_char), true)
 	if chars_cache.size() < 4:
 		_button(box, "Criar novo personagem", show_create)
+	_button(box, "Excluir conta", show_delete_account)
 	_button(box, "Voltar", func():
 		Net.close()
 		show_login())
@@ -505,12 +644,14 @@ func enter_world(cid: int) -> void:
 			menu_scene = null
 		map_id = r["char"].get("mapId", "estrada_velha")
 		_rebuild_world()
+		Sfx.set_zone(map_id)
 		if hud == null:
 			hud = HudScript.new()
 			hud.main = self
 			add_child(hud)
 		hud.visible = true
 		set_char(r["char"])
+		snap_cache = {}
 		world.apply_snapshot(r["snapshot"])
 		for l in r["loot"]:
 			world.add_loot(l)
@@ -522,6 +663,40 @@ func enter_world(cid: int) -> void:
 		hud.system("Local: %s." % map_def().get("name", "?"))
 		in_world = true
 		hide_loading(0.5))
+
+## Snapshot por diferença → estado completo: "full" recomeça o conjunto, cada entrada traz os grupos
+## de campos que mudaram, "gone" lista quem saiu do raio de interesse. "_u" marca quem foi
+## atualizado neste snapshot (os demais não recebem amostra nova de movimento).
+func _merge_snap(m: Dictionary) -> Dictionary:
+	if int(m.get("full", 0)) == 1:
+		snap_cache = {}
+	var now := float(m.get("now", 0))
+	var updated := {}
+	for d in m.get("ents", []):
+		var eid: String = d["id"]
+		var e: Dictionary = snap_cache.get(eid, {})
+		for k in d.keys():
+			e[k] = d[k]
+		if d.has("x"):
+			# base da previsão por velocidade (o servidor faz a mesma conta para decidir quando corrigir)
+			e["_px"] = float(d["x"])
+			e["_pz"] = float(d["z"])
+			e["_pt"] = now
+		snap_cache[eid] = e
+		updated[eid] = true
+	for eid in m.get("gone", []):
+		snap_cache.erase(eid)
+	var ents := []
+	for eid in snap_cache.keys():
+		var e: Dictionary = snap_cache[eid]
+		var moving: bool = float(e.get("vx", 0.0)) != 0.0 or float(e.get("vz", 0.0)) != 0.0
+		if not updated.has(eid) and moving and e.has("_pt"):
+			var dts: float = (now - float(e["_pt"])) / 1000.0
+			e["x"] = float(e["_px"]) + float(e["vx"]) * dts
+			e["z"] = float(e["_pz"]) + float(e["vz"]) * dts
+		e["_u"] = updated.has(eid) or moving
+		ents.append(e)
+	return {"t": "snap", "now": m.get("now", 0), "map": m.get("map", ""), "ents": ents}
 
 func map_def() -> Dictionary:
 	return defs.get("maps", {}).get(map_id, defs.get("map", {}))
@@ -536,8 +711,11 @@ func _rebuild_world() -> void:
 ## Troca de zona (portal, prova de classe): tela Carregando + mundo novo.
 func _on_zone(m: Dictionary) -> void:
 	map_id = m["mapId"]
+	snap_cache = {}
 	show_loading(map_def().get("name", map_id))
+	Sfx.ui("portal")
 	_rebuild_world()
+	Sfx.set_zone(map_id)
 	set_char(m["char"])
 	world.apply_snapshot(m["snapshot"])
 	for l in m.get("loot", []):
@@ -559,6 +737,8 @@ func leave_world(to_title: bool) -> void:
 	party = null
 	journal = {}
 	Net.close()
+	Sfx.set_zone("")
+	Sfx.set_mood("title")
 	_ensure_menu_scene()
 	if to_title:
 		show_title()
@@ -584,6 +764,7 @@ func toggle_pause_menu() -> void:
 	if pause_menu:
 		close_pause_menu()
 		return
+	Sfx.ui("ui_open")
 	pause_menu = ColorRect.new()
 	pause_menu.color = Color(0.04, 0.02, 0.05, 0.55)
 	pause_menu.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -620,6 +801,7 @@ func close_pause_menu() -> void:
 	if pause_menu:
 		pause_menu.queue_free()
 		pause_menu = null
+		Sfx.ui("ui_close")
 
 func show_options() -> void:
 	if options_panel:
@@ -668,16 +850,59 @@ func show_options() -> void:
 	names.button_pressed = bool(settings["show_names"])
 	names.toggled.connect(func(on): settings["show_names"] = on)
 	v.add_child(names)
+	_sound_sliders(v)
 	_button(v, "Salvar e fechar", func():
 		_save_settings()
+		close_options(), true)
+	Sfx.ui("ui_open")
+
+## Som: volume geral, da música e dos efeitos (valem na hora; salvos em user://settings.cfg).
+func _sound_sliders(v: VBoxContainer) -> void:
+	var t := Label.new()
+	t.text = "Som"
+	t.add_theme_color_override("font_color", Theme_.AMBER)
+	v.add_child(t)
+	for row in [["master", "Geral"], ["music", "Música"], ["sfx", "Efeitos"]]:
+		var kind: String = row[0]
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 8)
+		v.add_child(h)
+		var l := Label.new()
+		l.text = row[1]
+		l.custom_minimum_size = Vector2(70, 0)
+		h.add_child(l)
+		var s := HSlider.new()
+		s.min_value = 0.0
+		s.max_value = 1.0
+		s.step = 0.05
+		s.value = Sfx.get_volume(kind)
+		s.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		s.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		h.add_child(s)
+		var pct := Label.new()
+		pct.text = "%d%%" % roundi(s.value * 100.0)
+		pct.custom_minimum_size = Vector2(44, 0)
+		pct.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		pct.add_theme_color_override("font_color", Theme_.MUTED)
+		h.add_child(pct)
+		s.value_changed.connect(func(x: float):
+			Sfx.set_volume(kind, x)
+			pct.text = "%d%%" % roundi(x * 100.0))
+		if kind != "music":
+			# amostra do volume novo ao soltar o controle
+			s.drag_ended.connect(func(_changed: bool): Sfx.ui("loot_coins"))
+
+func close_options() -> void:
+	if options_panel:
 		options_panel.queue_free()
-		options_panel = null, true)
+		options_panel = null
+		Sfx.save_settings()
+		Sfx.ui("ui_close")
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and (event as InputEventKey).keycode == KEY_ESCAPE:
 		if options_panel:
-			options_panel.queue_free()
-			options_panel = null
+			close_options()
 		elif state == "world" and in_world:
 			if hud and hud.close_top_panel():
 				pass
@@ -693,6 +918,24 @@ func _unhandled_input(event: InputEvent) -> void:
 func _on_message(m: Dictionary) -> void:
 	var t: String = m.get("t", "")
 	match t:
+		"hello":
+			server_hello = m
+			if int(m.get("protocol", 0)) != PROTOCOL:
+				set_status("Versão incompatível: este cliente fala o protocolo %d e o servidor, o %d. Atualize o jogo." % [PROTOCOL, int(m.get("protocol", 0))], true)
+				Net.close()
+				_hello_waiters.clear()
+				return
+			var waiting := _hello_waiters
+			_hello_waiters = []
+			for cb in waiting:
+				(cb as Callable).call()
+		"notice":
+			# aviso do servidor (ex.: reinício programado)
+			if hud and in_world:
+				hud.system(str(m.get("text", "")))
+				hud._flash(str(m.get("text", "")), Color("#ffcf7a"))
+			else:
+				set_status(str(m.get("text", "")))
 		"defs":
 			defs = m
 		"res":
@@ -706,7 +949,13 @@ func _on_message(m: Dictionary) -> void:
 				hud.error(m.get("reason", "Recusado."))
 		"snap":
 			if world and in_world:
-				world.apply_snapshot(m)
+				world.apply_snapshot(_merge_snap(m) if m.has("d") else m)
+		"channel_end":
+			if hud:
+				hud.end_channel(m)
+		"escort":
+			if hud:
+				hud.on_escort(m)
 		"hit":
 			if world:
 				world.on_hit(m)
@@ -718,20 +967,26 @@ func _on_message(m: Dictionary) -> void:
 				world.on_death(m["eid"])
 		"loot":
 			if world:
-				world.add_loot(m["loot"])
+				world.on_loot_drop(m["loot"])
 		"xp":
 			if hud:
 				hud.system("+%d XP" % int(m["gained"]))
 		"char":
 			set_char(m["char"])
 		"level_up":
-			if hud and m["eid"] == ch.get("eid", ""):
-				hud.system("Nível %d! Você ganhou pontos de atributo e de habilidade (C)." % int(m["level"]))
+			if m["eid"] == ch.get("eid", ""):
+				Sfx.ui("level_up")   # fanfarra de sinos
+				if hud:
+					hud.system("Nível %d! Você ganhou pontos de atributo e de habilidade (C)." % int(m["level"]))
+			elif world:
+				world.sound_at(m["eid"], "level_up", -8.0)
 		"chat":
 			if hud:
 				var ch_name: String = m.get("channel", "zone")
 				if ch_name == "party":
 					hud.chat_line("[color=#9fd3d1][Grupo] [b]%s:[/b] %s[/color]" % [m["from"], m["text"]])
+				elif ch_name == "clan":
+					hud.chat_line("[color=#e3a548][%s] [b]%s:[/b] %s[/color]" % [m.get("tag", "Clã"), m["from"], m["text"]])
 				elif ch_name == "whisper":
 					hud.chat_line("[color=#d7a8ff][%s → %s] %s[/color]" % [m["from"], m.get("to", ""), m["text"]])
 				else:
@@ -747,6 +1002,8 @@ func _on_message(m: Dictionary) -> void:
 				if hud:
 					hud.refresh_quests())
 			for q in m["quests"]:
+				if q.get("ready", false):
+					Sfx.ui("quest_done", -6.0)   # objetivos completos: hora de entregar
 				if hud:
 					var done := 0
 					for o in q["objectives"]:
@@ -760,7 +1017,19 @@ func _on_message(m: Dictionary) -> void:
 		"party_invite":
 			if hud:
 				hud.show_invite(m["from"], int(m["fromId"]))
+		"trade_invite", "trade", "trade_done", "trade_closed", "clan_invite", "clan_event", "duel_invite", "duel", "duel_start", "duel_end":
+			if hud and hud.social:
+				hud.social.on_message(m)
 		"trial":
+			match m["state"]:
+				"started":
+					Sfx.warn("line")
+				"wave":
+					Sfx.warn("valve")
+				"success":
+					Sfx.ui("quest_done")
+				"failed":
+					Sfx.ui("refine_fail")
 			if hud:
 				match m["state"]:
 					"started":
@@ -775,12 +1044,17 @@ func _on_message(m: Dictionary) -> void:
 			if hud:
 				hud.system(m["text"])
 		"player_dead":
-			if hud and m["eid"] == ch.get("eid", ""):
-				ch["dead"] = true
-				hud.show_death()
+			if m["eid"] == ch.get("eid", ""):
+				Sfx.ui("player_die")
+				if hud:
+					ch["dead"] = true
+					hud.show_death()
+			elif world:
+				world.sound_at(m["eid"], "player_die", -8.0)
 		"respawn":
 			if hud and m["eid"] == ch.get("eid", ""):
 				hud.hide_death()
+				Sfx.ui("heal_chime" if m.get("revived", false) else "portal")
 		"ground":
 			if world:
 				world.ground_effect(m)
@@ -805,11 +1079,13 @@ func _on_message(m: Dictionary) -> void:
 			if hud:
 				hud.show_disconnect(m.get("reason", "Desconectado."))
 			in_world = false
+			Sfx.ui("ui_error")
 
 func _on_disconnected(reason: String) -> void:
 	if state == "world" and hud:
 		hud.show_disconnect(reason)
 		in_world = false
+		Sfx.ui("ui_error")
 	elif status_label:
 		set_status("Sem conexão: %s" % reason, true)
 

@@ -1,7 +1,7 @@
 // Persistência simples em SQLite (node:sqlite, síncrono). Um arquivo por servidor de zona.
 // Cada operação que muda inventário, XP ou saque roda numa transação única.
 import { DatabaseSync } from 'node:sqlite';
-import { randomUUID, scryptSync, randomBytes, timingSafeEqual } from 'node:crypto';
+import { randomUUID, scryptSync, randomBytes, timingSafeEqual, createHash, randomInt } from 'node:crypto';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS accounts (
@@ -78,6 +78,102 @@ CREATE TABLE IF NOT EXISTS quest_progress (
 );
 `;
 
+// Migrações versionadas: cada passo roda uma única vez, em ordem, numa transação, e a versão fica em
+// schema_version. Bancos anteriores ao controle de versão (M1–M3) são reconhecidos como versão 1.
+export const MIGRATIONS = [
+  { v: 1, name: 'base (M1–M3)', up: (db) => {
+    db.exec(SCHEMA);
+    const cols = db.prepare('PRAGMA table_info(characters)').all().map((c) => c.name);
+    if (!cols.includes('flags_json')) db.exec("ALTER TABLE characters ADD COLUMN flags_json TEXT NOT NULL DEFAULT '{}'");
+  } },
+  { v: 2, name: 'telemetria de progressão (M4)', up: (db) => {
+    db.exec('ALTER TABLE characters ADD COLUMN played_s REAL NOT NULL DEFAULT 0');
+    db.exec(`CREATE TABLE IF NOT EXISTS level_log (
+      char_id INTEGER NOT NULL REFERENCES characters(id),
+      level INTEGER NOT NULL,
+      class_id TEXT NOT NULL,
+      played_s REAL NOT NULL,
+      at INTEGER NOT NULL,
+      PRIMARY KEY (char_id, level)
+    )`);
+  } },
+  { v: 3, name: 'contas para o teste público: e-mail, papel, exclusão, códigos e auditoria', up: (db) => {
+    db.exec("ALTER TABLE accounts ADD COLUMN email TEXT");
+    db.exec('ALTER TABLE accounts ADD COLUMN verified INTEGER NOT NULL DEFAULT 1');
+    db.exec("ALTER TABLE accounts ADD COLUMN role TEXT NOT NULL DEFAULT 'player'");
+    db.exec('ALTER TABLE accounts ADD COLUMN deleted_at INTEGER');
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_email ON accounts(email COLLATE NOCASE) WHERE email IS NOT NULL');
+    db.exec(`CREATE TABLE IF NOT EXISTS account_codes (
+      account_id INTEGER NOT NULL REFERENCES accounts(id),
+      kind TEXT NOT NULL CHECK (kind IN ('verify','reset')),
+      code_hash TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      used_at INTEGER,
+      created_at INTEGER NOT NULL
+    )`);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_codes_account ON account_codes(account_id, kind)');
+    db.exec(`CREATE TABLE IF NOT EXISTS audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      at INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      account_id INTEGER,
+      char_id INTEGER,
+      ip TEXT,
+      data_json TEXT NOT NULL DEFAULT '{}'
+    )`);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_audit_at ON audit_log(at)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_audit_char ON audit_log(char_id, at)');
+  } },
+  { v: 4, name: 'clãs (pós-versão 1)', up: (db) => {
+    db.exec(`CREATE TABLE IF NOT EXISTS clans (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      tag TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      leader_char_id INTEGER NOT NULL REFERENCES characters(id),
+      motd TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL
+    )`);
+    db.exec(`CREATE TABLE IF NOT EXISTS clan_members (
+      clan_id INTEGER NOT NULL REFERENCES clans(id),
+      char_id INTEGER NOT NULL PRIMARY KEY REFERENCES characters(id),
+      rank TEXT NOT NULL CHECK (rank IN ('leader','officer','member')),
+      joined_at INTEGER NOT NULL
+    )`);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_clan_members_clan ON clan_members(clan_id)');
+  } },
+  { v: 5, name: 'moderação: suspensão e silêncio por conta', up: (db) => {
+    db.exec('ALTER TABLE accounts ADD COLUMN banned_until INTEGER');
+    db.exec('ALTER TABLE accounts ADD COLUMN ban_reason TEXT');
+    db.exec('ALTER TABLE accounts ADD COLUMN muted_until INTEGER');
+  } },
+];
+
+export function migrate(db) {
+  db.exec('CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)');
+  let row = db.prepare('SELECT version FROM schema_version').get();
+  if (!row) {
+    // banco novo ou anterior ao controle de versão: a migração 1 é idempotente (CREATE IF NOT EXISTS)
+    db.prepare('INSERT INTO schema_version (version) VALUES (0)').run();
+    row = { version: 0 };
+  }
+  const applied = [];
+  for (const m of MIGRATIONS) {
+    if (m.v <= row.version) continue;
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      m.up(db);
+      db.prepare('UPDATE schema_version SET version = ?').run(m.v);
+      db.exec('COMMIT');
+      applied.push(m.v);
+    } catch (e) {
+      db.exec('ROLLBACK');
+      throw new Error(`migração ${m.v} (${m.name}) falhou: ${e.message}`);
+    }
+  }
+  return applied;
+}
+
 function hashPassword(password, salt) {
   return scryptSync(password, salt, 32).toString('hex');
 }
@@ -85,11 +181,8 @@ function hashPassword(password, salt) {
 export class Store {
   constructor(path = ':memory:') {
     this.db = new DatabaseSync(path);
-    this.db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
-    this.db.exec(SCHEMA);
-    // migrações simples (bancos criados no M1)
-    const cols = this.db.prepare('PRAGMA table_info(characters)').all().map((c) => c.name);
-    if (!cols.includes('flags_json')) this.db.exec("ALTER TABLE characters ADD COLUMN flags_json TEXT NOT NULL DEFAULT '{}'");
+    this.db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 3000;');
+    this.migrated = migrate(this.db);
     this.st = {};
   }
 
@@ -112,32 +205,167 @@ export class Store {
   }
 
   // ---------- contas ----------
-  createAccount(name, password) {
+  // email/verified: contas criadas pelo serviço de contas (teste público) começam sem verificação.
+  createAccount(name, password, { email = null, verified = true } = {}) {
     const salt = randomBytes(16).toString('hex');
-    const r = this.prep('INSERT INTO accounts (name, pass_hash, salt, created_at) VALUES (?, ?, ?, ?)')
-      .run(name, hashPassword(password, salt), salt, Date.now());
+    const r = this.prep('INSERT INTO accounts (name, pass_hash, salt, created_at, email, verified) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(name, hashPassword(password, salt), salt, Date.now(), email, verified ? 1 : 0);
     return Number(r.lastInsertRowid);
   }
 
   findAccount(name) {
-    return this.prep('SELECT * FROM accounts WHERE name = ?').get(name);
+    return this.prep('SELECT * FROM accounts WHERE name = ? AND deleted_at IS NULL').get(name);
+  }
+
+  findAccountById(id) {
+    return this.prep('SELECT * FROM accounts WHERE id = ? AND deleted_at IS NULL').get(id);
+  }
+
+  findAccountByEmail(email) {
+    return this.prep('SELECT * FROM accounts WHERE email = ? COLLATE NOCASE AND deleted_at IS NULL').get(email);
   }
 
   verifyAccount(name, password) {
     const acc = this.findAccount(name);
     if (!acc) return null;
+    return this.checkPassword(acc, password) ? acc : null;
+  }
+
+  checkPassword(acc, password) {
     const a = Buffer.from(hashPassword(password, acc.salt), 'hex');
     const b = Buffer.from(acc.pass_hash, 'hex');
-    return a.length === b.length && timingSafeEqual(a, b) ? acc : null;
+    return a.length === b.length && timingSafeEqual(a, b);
+  }
+
+  setPassword(accountId, password) {
+    const salt = randomBytes(16).toString('hex');
+    this.prep('UPDATE accounts SET pass_hash = ?, salt = ? WHERE id = ?').run(hashPassword(password, salt), salt, accountId);
+  }
+
+  setVerified(accountId) { this.prep('UPDATE accounts SET verified = 1 WHERE id = ?').run(accountId); }
+  setRole(accountId, role) { this.prep('UPDATE accounts SET role = ? WHERE id = ?').run(role, accountId); }
+  setBan(accountId, until, reason) { this.prep('UPDATE accounts SET banned_until = ?, ban_reason = ? WHERE id = ?').run(until, reason, accountId); }
+  setMute(accountId, until) { this.prep('UPDATE accounts SET muted_until = ? WHERE id = ?').run(until, accountId); }
+
+  // Código de 6 dígitos (verificação de e-mail ou troca de senha). Guarda só o hash; vale 30 min.
+  issueCode(accountId, kind, ttlMs = 30 * 60 * 1000) {
+    const code = String(randomInt(0, 1000000)).padStart(6, '0');
+    this.prep('UPDATE account_codes SET used_at = ? WHERE account_id = ? AND kind = ? AND used_at IS NULL').run(Date.now(), accountId, kind);
+    this.prep('INSERT INTO account_codes (account_id, kind, code_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)')
+      .run(accountId, kind, createHash('sha256').update(`${accountId}:${code}`).digest('hex'), Date.now() + ttlMs, Date.now());
+    return code;
+  }
+
+  // true se o código confere (usa uma vez; 5 tentativas erradas invalidam)
+  consumeCode(accountId, kind, code) {
+    const row = this.prep('SELECT rowid AS rid, * FROM account_codes WHERE account_id = ? AND kind = ? AND used_at IS NULL AND expires_at > ? ORDER BY created_at DESC LIMIT 1').get(accountId, kind, Date.now());
+    if (!row) return false;
+    const ok = row.code_hash === createHash('sha256').update(`${accountId}:${String(code)}`).digest('hex');
+    if (ok) this.prep('UPDATE account_codes SET used_at = ? WHERE rowid = ?').run(Date.now(), row.rid);
+    else this.prep('UPDATE account_codes SET attempts = attempts + 1, used_at = CASE WHEN attempts + 1 >= 5 THEN ? ELSE NULL END WHERE rowid = ?').run(Date.now(), row.rid);
+    return ok;
+  }
+
+  // Exclusão de conta (privacidade): apaga dados pessoais e itens, mantém linhas anônimas para a
+  // integridade das referências (saque, auditoria).
+  deleteAccount(accountId) {
+    return this.tx(() => {
+      const chars = this.prep('SELECT id FROM characters WHERE account_id = ?').all(accountId);
+      for (const c of chars) {
+        this.prep('DELETE FROM clan_members WHERE char_id = ?').run(c.id);
+        // clã liderado por quem saiu: passa para o oficial (ou membro) mais antigo; vazio, acaba
+        for (const cl of this.prep('SELECT id FROM clans WHERE leader_char_id = ?').all(c.id)) {
+          const next = this.prep("SELECT char_id FROM clan_members WHERE clan_id = ? ORDER BY CASE rank WHEN 'officer' THEN 0 ELSE 1 END, joined_at LIMIT 1").get(cl.id);
+          if (next) { this.prep('UPDATE clans SET leader_char_id = ? WHERE id = ?').run(next.char_id, cl.id); this.prep("UPDATE clan_members SET rank = 'leader' WHERE char_id = ?").run(next.char_id); }
+          else this.prep('DELETE FROM clans WHERE id = ?').run(cl.id);
+        }
+        this.prep('DELETE FROM item_instances WHERE char_id = ?').run(c.id);
+        this.prep('DELETE FROM quest_progress WHERE char_id = ?').run(c.id);
+        this.prep('DELETE FROM loot_drops WHERE char_id = ? AND claimed_at IS NULL').run(c.id);
+        this.prep("UPDATE characters SET name = ?, account_id = account_id, gold = 0, flags_json = '{}' WHERE id = ?").run(`excluido_${c.id}`, c.id);
+      }
+      this.prep('DELETE FROM account_codes WHERE account_id = ?').run(accountId);
+      this.prep("UPDATE accounts SET name = ?, email = NULL, pass_hash = '', salt = '', deleted_at = ? WHERE id = ?").run(`excluida_${accountId}`, Date.now(), accountId);
+      return chars.length;
+    });
+  }
+
+  // Portabilidade (LGPD): tudo o que guardamos da conta, em JSON.
+  exportAccount(accountId) {
+    const acc = this.prep('SELECT id, name, email, verified, role, created_at FROM accounts WHERE id = ?').get(accountId);
+    const chars = this.prep('SELECT id, name, class_id, level, xp, gold, map_id, played_s, created_at, updated_at FROM characters WHERE account_id = ?').all(accountId);
+    const ids = chars.map((c) => c.id);
+    const inChars = (sql) => ids.flatMap((id) => this.prep(sql).all(id));
+    return {
+      conta: acc,
+      personagens: chars,
+      itens: inChars('SELECT char_id, def_id, qty, enh, loc, slot, source, created_at FROM item_instances WHERE char_id = ?'),
+      missoes: inChars('SELECT char_id, quest_id, state, updated_at FROM quest_progress WHERE char_id = ?'),
+      auditoria: this.prep('SELECT at, kind, char_id, ip, data_json FROM audit_log WHERE account_id = ? ORDER BY at').all(accountId),
+    };
+  }
+
+  // ---------- comércio ----------
+  // Passa um item da bolsa de um personagem para a de outro (dentro de tx); false se não estava lá.
+  transferItem(itemId, fromChar, toChar) {
+    return this.prep("UPDATE item_instances SET char_id = ?, loc = 'bag', slot = NULL WHERE id = ? AND char_id = ? AND loc = 'bag'").run(toChar, itemId, fromChar).changes === 1;
+  }
+
+  // ---------- clãs ----------
+  createClan(name, tag, leaderCharId) {
+    const r = this.prep('INSERT INTO clans (name, tag, leader_char_id, created_at) VALUES (?, ?, ?, ?)').run(name, tag, leaderCharId, Date.now());
+    const id = Number(r.lastInsertRowid);
+    this.prep("INSERT INTO clan_members (clan_id, char_id, rank, joined_at) VALUES (?, ?, 'leader', ?)").run(id, leaderCharId, Date.now());
+    return id;
+  }
+  clanById(id) { return this.prep('SELECT * FROM clans WHERE id = ?').get(id); }
+  clanByNameOrTag(name, tag) { return this.prep('SELECT * FROM clans WHERE name = ? OR tag = ?').get(name, tag); }
+  clanOfChar(charId) {
+    return this.prep('SELECT c.id, c.name, c.tag, c.motd, c.leader_char_id, m.rank FROM clan_members m JOIN clans c ON c.id = m.clan_id WHERE m.char_id = ?').get(charId);
+  }
+  clanMembers(clanId) {
+    return this.prep('SELECT m.char_id, m.rank, ch.name, ch.level, ch.class_id FROM clan_members m JOIN characters ch ON ch.id = m.char_id WHERE m.clan_id = ? ORDER BY m.rank, ch.name').all(clanId);
+  }
+  addClanMember(clanId, charId, rank = 'member') { this.prep('INSERT INTO clan_members (clan_id, char_id, rank, joined_at) VALUES (?, ?, ?, ?)').run(clanId, charId, rank, Date.now()); }
+  removeClanMember(charId) { this.prep('DELETE FROM clan_members WHERE char_id = ?').run(charId); }
+  setClanRank(charId, rank) { this.prep('UPDATE clan_members SET rank = ? WHERE char_id = ?').run(rank, charId); }
+  setClanLeader(clanId, charId) { this.prep('UPDATE clans SET leader_char_id = ? WHERE id = ?').run(charId, clanId); }
+  setClanMotd(clanId, motd) { this.prep('UPDATE clans SET motd = ? WHERE id = ?').run(motd, clanId); }
+  deleteClan(clanId) {
+    this.prep('DELETE FROM clan_members WHERE clan_id = ?').run(clanId);
+    this.prep('DELETE FROM clans WHERE id = ?').run(clanId);
+  }
+
+  // ---------- auditoria ----------
+  audit(kind, { accountId = null, charId = null, ip = null, ...data } = {}) {
+    this.prep('INSERT INTO audit_log (at, kind, account_id, char_id, ip, data_json) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(Date.now(), kind, accountId, charId, ip, JSON.stringify(data));
+  }
+
+  auditTail(limit = 50, kind = null) {
+    return kind ? this.prep('SELECT * FROM audit_log WHERE kind = ? ORDER BY id DESC LIMIT ?').all(kind, limit)
+      : this.prep('SELECT * FROM audit_log ORDER BY id DESC LIMIT ?').all(limit);
+  }
+
+  // retenção: apaga auditoria mais velha que N dias e códigos vencidos
+  purgeOld(auditDays) {
+    const cut = Date.now() - auditDays * 86400000;
+    const a = this.prep('DELETE FROM audit_log WHERE at < ?').run(cut).changes;
+    const c = this.prep('DELETE FROM account_codes WHERE expires_at < ?').run(Date.now() - 86400000).changes;
+    return { audit: Number(a), codes: Number(c) };
   }
 
   // ---------- personagens ----------
   listCharacters(accountId) {
-    return this.prep('SELECT id, name, class_id, level, map_id FROM characters WHERE account_id = ? ORDER BY id').all(accountId);
+    return this.prep("SELECT id, name, class_id, level, map_id FROM characters WHERE account_id = ? AND name NOT LIKE 'excluido\\_%' ESCAPE '\\' ORDER BY id").all(accountId);
   }
 
   characterNameTaken(name) {
     return !!this.prep('SELECT 1 FROM characters WHERE name = ?').get(name);
+  }
+
+  characterByName(name) {
+    return this.prep('SELECT id, name, account_id FROM characters WHERE name = ? COLLATE NOCASE').get(name);
   }
 
   // kit: { equip: [defId], bag: [[defId, qty]] }; slotFor: defId -> slot
@@ -164,16 +392,16 @@ export class Store {
     return {
       id: row.id, accountId: row.account_id, name: row.name, classId: row.class_id, level: row.level, xp: row.xp,
       alloc: JSON.parse(row.alloc_json), unspent: row.unspent, skillPoints: row.skill_points, skills: JSON.parse(row.skills_json),
-      hp: row.hp, mp: row.mp, gold: row.gold, mapId: row.map_id, x: row.x, z: row.z, dead: !!row.dead, items,
-      trialDone: !!JSON.parse(row.flags_json || '{}').trialDone,
+      hp: row.hp, mp: row.mp, gold: row.gold, mapId: row.map_id, x: row.x, z: row.z, dead: !!row.dead, items, playedS: row.played_s ?? 0,
+      ...(() => { const f = JSON.parse(row.flags_json || '{}'); return { trialDone: !!f.trialDone, title: f.title ?? null, choices: f.choices ?? {} }; })(),
     };
   }
 
   saveCharacter(c) {
     this.prep(`UPDATE characters SET level=?, xp=?, alloc_json=?, unspent=?, skill_points=?, skills_json=?, hp=?, mp=?, gold=?,
-      map_id=?, x=?, z=?, dead=?, flags_json=?, updated_at=? WHERE id=?`).run(
+      map_id=?, x=?, z=?, dead=?, flags_json=?, played_s=?, updated_at=? WHERE id=?`).run(
       c.level, c.xp, JSON.stringify(c.alloc), c.unspent, c.skillPoints, JSON.stringify(c.skills), Math.round(c.hp), Math.round(c.mp),
-      c.gold, c.saveMapId ?? c.mapId, c.saveX ?? c.x, c.saveZ ?? c.z, c.dead ? 1 : 0, JSON.stringify({ trialDone: !!c.trialDone }), Date.now(), c.id);
+      c.gold, c.saveMapId ?? c.mapId, c.saveX ?? c.x, c.saveZ ?? c.z, c.dead ? 1 : 0, JSON.stringify({ trialDone: !!c.trialDone, title: c.title ?? null, choices: c.choices ?? {} }), c.playedS ?? 0, Date.now(), c.id);
   }
 
   insertItem({ id, charId, defId, qty, enh, loc, slot, source }) {
@@ -196,6 +424,15 @@ export class Store {
 
   countItems(charId) {
     return this.prep('SELECT COUNT(*) AS n FROM item_instances WHERE char_id=?').get(charId).n;
+  }
+
+  // ---------- telemetria ----------
+  logLevel(charId, level, classId, playedS) {
+    this.prep('INSERT OR IGNORE INTO level_log (char_id, level, class_id, played_s, at) VALUES (?, ?, ?, ?, ?)').run(charId, level, classId, playedS, Date.now());
+  }
+
+  levelLog() {
+    return this.prep('SELECT char_id, level, class_id, played_s FROM level_log ORDER BY char_id, level').all();
   }
 
   // ---------- missões ----------

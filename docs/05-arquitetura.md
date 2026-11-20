@@ -77,12 +77,15 @@ mmo/
 │       ├── partner.mjs            parceiro simulado para ver o calabouço no cliente
 │       └── create-character.js    cria contas/personagens de teste no banco
 ├── tools/poses/                   modelo do braço e gerador da tabela WPOSES (poses guiadas pela arma)
+├── tools/audio/gerar_sons.py      síntese de todos os sons e blocos de música (Python + numpy, determinístico)
 ├── client/                        projeto Godot 4.3
-│   ├── project.godot              autoload Net; cena principal
+│   ├── project.godot              autoloads Net e Sfx; cena principal
 │   ├── scenes/main.tscn
+│   ├── audio/                     sfx/ (efeitos) e music/ (sinos, flauta, bordões, percussão), gerados
 │   ├── shaders/                   cel shading, contorno, terreno, grama, folhagem, água, céu, "vazado"
 │   └── scripts/
 │       ├── net.gd                 WebSocketPeer, pedidos com rid e callbacks
+│       ├── audio.gd               autoload Sfx: pools de efeitos 2D/3D, volumes, música generativa por zona
 │       ├── main.gd                fluxo login → personagens → mundo; estado recebido
 │       ├── world.gd               mundo 3D, câmera suave, entidades interpoladas/previstas, clique
 │       ├── motion.gd              relógio da zona, interpolação de Hermite, previsão do próprio personagem
@@ -229,7 +232,10 @@ Critérios (todos cobertos por `server/test/acceptance.test.js`, exceto onde ind
 - Depósito por conta.
 - **Aceitação**: teste com 3 composições diferentes de grupo simulado (com tanque e curadora; sem tanque; 2 jogadores) vencendo o Custódio com bots que reagem aos avisos; recompensa única de nível 20 entregue uma vez por participante; refino com chance controlada por RNG semeado confere taxas em 10.000 tentativas; na falha, grau mantido e materiais consumidos.
 
-### Marco 4 — Testes de carga, ajuste e documentação
+### Marco 4 — Testes de carga, ajuste e documentação (em andamento)
+
+Feito até aqui: métricas do servidor e HTTP de métricas, snapshots por diferença e interesse, teste de carga com 100 clientes ([relatorio-carga.md](relatorio-carga.md): nenhum tick acima de 50 ms; ~9 KB/s por cliente), atraso artificial e indicador de ping, telemetria de nível, migrações versionadas, backup a quente, cenários críticos reproduzíveis ([relatorio-cenarios.md](relatorio-cenarios.md)) e o guia de operação ([08-operacao.md](08-operacao.md)).
+
 
 - Testes com múltiplos clientes (meta: 100 clientes simulados numa zona, 10 Hz) medindo tempo de tick, latência de ida e volta (ping) e uso de banda por cliente.
 - Medição de latência no cliente (indicador na interface) e tolerância a 150 ms.

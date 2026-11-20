@@ -27,10 +27,10 @@ Personagens: modelos VRM de anime — **Seed-san model by VirtualCast, Inc.** e 
 | [docs/04-progressao-e-formulas.md](docs/04-progressao-e-formulas.md) | Tabela de XP 1–20, XP por monstro, exemplos solo e em grupo, equipamento por faixa (todas as famílias de arma em todas as faixas), verificação de requisitos, dois exemplos de evolução passo a passo, fórmulas com exemplos calculados *(gerado dos dados)* |
 | [docs/05-arquitetura.md](docs/05-arquitetura.md) | Estrutura técnica, arquivos, protocolo, saque idempotente, reconexão, concorrência, critérios de aceitação dos 4 marcos, o que muda para teste público e múltiplas zonas |
 | [docs/06-mundo-e-mapas.md](docs/06-mundo-e-mapas.md) | Cidades, cinco áreas, regras de monstros, morte e resgate, combate legível, telas da interface |
-| [docs/07-navegacao.md](docs/07-navegacao.md) | Telas, camadas dentro do jogo, mapa do mundo, controles e direção gráfica |
+| [docs/07-navegacao.md](docs/07-navegacao.md) | Telas, camadas dentro do jogo, mapa do mundo, controles, direção gráfica e som |
 | [docs/relatorio-progressao.md](docs/relatorio-progressao.md) | Marco 4: tempo medido por nível (1→20) de cada classe caçando solo, contra as metas da tabela de XP; economia de tônicos, equipamento, mortes e problemas encontrados *(gerado pela simulação)* |
 | [docs/DECISOES.md](docs/DECISOES.md) | Todas as decisões tomadas por conta própria e o motivo |
-| [docs/CREDITOS.md](docs/CREDITOS.md) | Créditos e licenças dos modelos de personagem |
+| [docs/CREDITOS.md](docs/CREDITOS.md) | Créditos e licenças dos modelos de personagem; som e música originais (síntese por `tools/audio/gerar_sons.py`) |
 
 ## Requisitos
 
@@ -189,6 +189,18 @@ E, em outro terminal, da raiz do repositório:
 ```
 
 Com `--trial` no lugar de `--dungeon=...`, o mesmo modo faz a prova de classe na arena.
+
+Troca, clã, duelo e ferreiro com risco no cliente (servidor com `npm run dev`): um parceiro simulado aceita a troca (oferecendo 25 de ouro), entra no clã e aceita o duelo. Num terminal, dentro de `server/`:
+
+```bash
+node tools/parceiro-social.mjs --url ws://127.0.0.1:7777 --nome Parceira
+```
+
+E, em outro terminal, da raiz do repositório:
+
+```bash
+/Applications/Godot.app/Contents/MacOS/Godot --path client -- --sceneshots=/tmp/social --social=Parceira --server=ws://127.0.0.1:7777 --account=mercador --password=mercador123 --name=Mercador
+```
 
 ## 5. Reproduzir os cenários críticos à mão
 

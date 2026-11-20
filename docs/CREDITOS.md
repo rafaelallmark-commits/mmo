@@ -15,6 +15,12 @@ Modificações feitas pelo jogo, em tempo de execução: troca de materiais por 
 
 O crédito do Seed-san aparece na tela de título do jogo.
 
+## Som e música
+
+Todos os efeitos sonoros e toda a música do jogo são **originais**: nada foi gravado, baixado ou tirado de bancos de sons. Cada arquivo de `client/audio/` — efeitos em `sfx/`; notas de sino e de flauta, bordões e percussão do sequenciador em `music/` — é sintetizado do zero por `tools/audio/gerar_sons.py` (Python 3 + numpy, semente fixa por som: duas execuções geram arquivos idênticos byte a byte). As técnicas são todas de síntese: parciais inarmônicas com decaimento exponencial para sinos e metais, ruído filtrado para passos e golpes no ar, corda de Karplus-Strong para o arco, pulso glotal com formantes para grunhidos e uma reverberação curta por convolução com resposta sintética. A música é montada durante o jogo por `client/scripts/audio.gd`, que só sequencia essas notas pré-gravadas.
+
+Para regerar os sons: `python3 tools/audio/gerar_sons.py` (depois abra o projeto no Godot ou rode `godot --headless --path client --import`).
+
 ## Ferramentas
 
 - Godot Engine 4.3 (MIT).

@@ -9659,31 +9659,17 @@
      "id": "gauge_1",
      "name": "Medidor de pressão",
      "x": 92,
-     "z": 74
+     "z": 74,
+     "channelMs": 4000,
+     "channelText": "Recalibrando o medidor de pressão"
     },
     {
      "id": "gauge_2",
      "name": "Medidor de pressão",
      "x": 128,
-     "z": 86
-    },
-    {
-     "id": "cart_mark_1",
-     "name": "Marco da rota alternativa",
-     "x": 50,
-     "z": 104
-    },
-    {
-     "id": "cart_mark_2",
-     "name": "Marco da rota alternativa",
-     "x": 84,
-     "z": 140
-    },
-    {
-     "id": "cart_mark_3",
-     "name": "Marco da rota alternativa",
-     "x": 118,
-     "z": 118
+     "z": 86,
+     "channelMs": 4000,
+     "channelText": "Recalibrando o medidor de pressão"
     },
     {
      "id": "thermo_1",
@@ -9702,9 +9688,86 @@
      "name": "Ponto de medição térmica",
      "x": 56,
      "z": 138
+    },
+    {
+     "id": "ilda_cart",
+     "name": "Carroça de abastecimento",
+     "x": 30,
+     "z": 96,
+     "kind": "escort",
+     "escort": "ilda_cart"
     }
    ],
-   "returnToMapReason": "Seda condutora para refino, Mãe do Eco (elite diária), família Liga Rubra."
+   "returnToMapReason": "Seda condutora para refino, Mãe do Eco (elite diária), família Liga Rubra.",
+   "escorts": {
+    "ilda_cart": {
+     "name": "Carroça de abastecimento",
+     "model": "cart",
+     "hp": 900,
+     "defense": 18,
+     "evasion": 0,
+     "level": 13,
+     "speed": 1.5,
+     "followRadius": 12,
+     "start": {
+      "x": 34,
+      "z": 96
+     },
+     "route": [
+      {
+       "x": 50,
+       "z": 104,
+       "mark": 1
+      },
+      {
+       "x": 66,
+       "z": 120
+      },
+      {
+       "x": 84,
+       "z": 140,
+       "mark": 2
+      },
+      {
+       "x": 102,
+       "z": 130
+      },
+      {
+       "x": 118,
+       "z": 118,
+       "mark": 3
+      },
+      {
+       "x": 136,
+       "z": 110
+      }
+     ],
+     "ambush": {
+      "1": [
+       [
+        "thermal_larva",
+        2
+       ]
+      ],
+      "2": [
+       [
+        "thermal_larva",
+        3
+       ]
+      ],
+      "3": [
+       [
+        "thermal_larva",
+        2
+       ],
+       [
+        "echoer",
+        1
+       ]
+      ]
+     }
+    }
+   }
   },
   "canais_eclusa": {
    "name": "Canais da Eclusa",
@@ -12176,7 +12239,11 @@
      "name": "Gusmão, ferreiro",
      "x": 12,
      "z": 44,
-     "role": "smith"
+     "role": "smith",
+     "shop": [
+      "protect_seal",
+      "mat_refine"
+     ]
     },
     {
      "id": "potions_resina",
@@ -12721,7 +12788,11 @@
      "name": "Tiela Martelo-Fino",
      "x": 48,
      "z": 44,
-     "role": "smith"
+     "role": "smith",
+     "shop": [
+      "protect_seal",
+      "mat_refine"
+     ]
     },
     {
      "id": "potions_lume",

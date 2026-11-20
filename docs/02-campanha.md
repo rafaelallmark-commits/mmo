@@ -214,7 +214,7 @@ Cada missão principal lista **NPC**, **objetivo**, **diálogo curto**, **recomp
 - **Diálogo**: ILDA: "Eu li as mesmas ordens que vocês. Sei por que desligaram. Mas Vau de Nácar não passa outro inverno sem calor, e a Companhia sumiu com quem sabia operar isso direito. Se eu não religar, ninguém religa."
 - **Recompensa**: 3.000 XP.
 - **Pré-requisitos**: 4.1.
-- **Conclusão**: 2 medidores calibrados (interação com tempo de canalização; ser atingido interrompe).
+- **Conclusão**: 2 medidores calibrados (interação com tempo de canalização; ser atingido interrompe). Implementado: 4 s de canalização; mover, agir ou ser atingido interrompe.
 
 ### 4.3 Rota Alternativa
 - **NPC**: Ilda Varen.
@@ -222,7 +222,7 @@ Cada missão principal lista **NPC**, **objetivo**, **diálogo curto**, **recomp
 - **Diálogo**: ILDA: "Se a carroça chegar inteira, a rota aguenta carga. Se não chegar, pelo menos a gente sabe antes do inverno."
 - **Recompensa**: 6.000 XP, Tônicos Médios ×5.
 - **Pré-requisitos**: 4.2. Recomendado: grupo de 2–3.
-- **Conclusão**: carroça chega ao fim com vida > 0 (estado da escolta no servidor; se todos caírem, recomeça do último marco).
+- **Conclusão**: carroça chega ao fim com vida > 0 (estado da escolta no servidor; se todos caírem, recomeça do último marco). Implementado: 900 de vida, emboscadas nos três marcos, quebra também volta ao último marco.
 
 ### 4.4 Duas Razões
 - **NPC**: Mara e Ilda.
@@ -232,7 +232,7 @@ Cada missão principal lista **NPC**, **objetivo**, **diálogo curto**, **recomp
 - **Diálogo**: MARA: "Ela vai esquentar o chão de quem não pediu." · ILDA: "E você vai deixar esfriar o chão de quem não tem escolha." · (o jogador escolhe a resposta; a escolha muda falas futuras e um título, não a progressão).
 - **Recompensa**: 4.000 XP.
 - **Pré-requisitos**: 4.3.
-- **Conclusão**: 3 medições + carta entregue + diálogo concluído.
+- **Conclusão**: 3 medições + carta entregue + diálogo concluído. Respostas: «As medições não mentem…» (título *Voz de Vargem Funda*) ou «A carta é do hospital…» (título *Guarda do Inverno*); a escolha muda a fala de conclusão e a oferta de 4.5.
 
 ### 4.5 A Ordem de Abertura
 - **NPC**: Ilda Varen.

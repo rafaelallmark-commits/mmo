@@ -2,7 +2,16 @@
 // (mapas abertos e instâncias), grupos, chat e missões, e responde cada requisição
 // { rid } com { t:'res', rid, ok, ... }.
 import { WebSocketServer } from 'ws';
-import { enhanceable, enhanceQuote, enhancePreview, rollEnhance } from './smith.js';
+import https from 'node:https';
+import { readFileSync, readdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { join as pathJoin, dirname as pathDirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { verifyToken, ReplayGuard } from './token.js';
+import { TradeManager } from './trade.js';
+import { ClanManager } from './clans.js';
+import { Moderation, banMessage } from './moderation.js';
+import { enhanceable, enhanceQuote, enhancePreview, rollEnhance, enhanceOutcome } from './smith.js';
 import { randomUUID } from 'node:crypto';
 import { loadGameData, ATTRS } from './data.js';
 import { Store } from './store.js';
@@ -13,16 +22,25 @@ import { Dungeon } from './dungeon.js';
 import { checkEquip, applyEquip, checkUnequip, revalidateEquipment, bagCount, BAG_CAPACITY, EQUIP_SLOTS } from './equipment.js';
 import { totalAttributePoints, derivedStats } from './rules.js';
 
-export const PROTOCOL_VERSION = 2;
+import { Metrics, startMetricsServer } from './metrics.js';
+
+export const PROTOCOL_VERSION = 3; // 3: snapshots por diferença, login por token, escolta, canalização
+const SERVER_VERSION = JSON.parse(readFileSync(pathJoin(pathDirname(fileURLToPath(import.meta.url)), '../package.json'), 'utf8')).version;
 const NAME_RE = /^[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9 _-]{2,15}$/;
 const RID_CACHE = 128;
 const PARTY_MAX = 5;
 const DEFAULT_MAP = 'estrada_velha';
+const INTEREST_R = 70; // raio de interesse dos snapshots por diferença (m)
+const PRED_EPS2 = 0.1 * 0.1; // erro de posição tolerado na previsão por velocidade (m²)
 
 export class GameServer {
   constructor(opts = {}) {
     this.opts = {
       port: 7777, host: '0.0.0.0', dbPath: 'cinzas.db', tickHz: 10, timeScale: 1, xpRate: 1, seed: Date.now() & 0xffffffff, dev: false, log: true,
+      metricsPort: null, metricsHost: '127.0.0.1', lagMs: 0, jitterMs: 0,
+      // teste público: limites, autenticação, TLS, logs, desligamento e retenção
+      rateLimit: 20, rateBurst: 40, chatPer5s: 6, maxConnPerIp: 0, trustProxy: false,
+      auth: 'both', tokenSecret: null, tlsCert: null, tlsKey: null, logFormat: 'text', shutdownGraceS: 30, auditDays: 90,
       ...Object.fromEntries(Object.entries(opts).filter(([, v]) => v !== undefined)),
     };
     this.data = opts.data ?? loadGameData(opts.dataDir);
@@ -30,6 +48,14 @@ export class GameServer {
     this.rng = makeRng(this.opts.seed);
     this.quests = new QuestEngine({ data: this.data, store: this.store });
     this.sessions = new Set();
+    this.metrics = new Metrics();
+    this.ipConns = new Map(); // ip -> conexões abertas
+    this.replay = new ReplayGuard();
+    this.trades = new TradeManager(this);
+    this.clans = new ClanManager(this);
+    this.mod = new Moderation(this);
+    this.closing = false;
+    this.dataVersion = dataVersionOf(this.data);
     this.byChar = new Map(); // charId -> session
     this.byAccount = new Map(); // accountId -> session
     this.byName = new Map(); // nome minúsculo -> charId (online)
@@ -62,6 +88,9 @@ export class GameServer {
       hooks: {
         partyIdOf: (charId) => this.charParty.get(charId) ?? null,
         onKillCredit: (p, monsterId) => this.onKillCredit(zone, p, monsterId),
+        onLevelUp: (p, level) => this.store.logLevel(p.char.id, level, p.char.classId, p.char.playedS ?? 0),
+        onEscortArrived: (escort, credited) => { for (const p of credited) this.notifyQuests(p, this.quests.onEscort(p.char, escort.defId)); },
+        onChannelDone: (p, objectId) => this.notifyQuests(p, this.quests.onInteract(p.char, objectId)),
       },
     });
     this.zones.set(key, zone);
@@ -71,17 +100,31 @@ export class GameServer {
   zoneOfChar(charId) { return this.zones.get(this.charZone.get(charId)); }
   playerOf(charId) { return this.zoneOfChar(charId)?.players.get(charId) ?? null; }
 
-  log(...a) { if (this.opts.log) console.log(new Date().toISOString().slice(11, 19), ...a); }
+  log(...a) {
+    if (!this.opts.log) return;
+    if (this.opts.logFormat === 'json') console.log(JSON.stringify({ ts: new Date().toISOString(), msg: a.map((x) => (typeof x === 'string' ? x : String(x))).join(' ') }));
+    else console.log(new Date().toISOString().slice(11, 19), ...a);
+  }
+
+  audit(kind, fields) { try { this.store.audit(kind, fields); } catch (e) { this.log('auditoria falhou', kind, e.message); } }
 
   start() {
     return new Promise((resolve) => {
-      this.wss = new WebSocketServer({ port: this.opts.port, host: this.opts.host, maxPayload: 64 * 1024 });
-      this.wss.on('connection', (ws, req) => this.onConnection(ws, req));
-      this.wss.on('listening', () => {
-        this.port = this.wss.address().port;
-        this.log(`CINZAS DO MERIDIANO — servidor ouvindo em ws://${this.opts.host}:${this.port} (${this.zones.size} zonas, tick ${this.opts.tickHz} Hz, escala ${this.opts.timeScale}x, XP ${this.opts.xpRate}x${this.opts.dev ? ', modo dev' : ''})`);
+      const onListening = (addr) => {
+        this.port = addr.port;
+        this.log(`CINZAS DO MERIDIANO ${SERVER_VERSION} — servidor ouvindo em ${this.tls ? 'wss' : 'ws'}://${this.opts.host}:${this.port} (${this.zones.size} zonas, tick ${this.opts.tickHz} Hz, escala ${this.opts.timeScale}x, XP ${this.opts.xpRate}x, protocolo ${PROTOCOL_VERSION}, dados ${this.dataVersion}${this.opts.dev ? ', modo dev' : ''}, login: ${this.opts.auth})`);
         resolve(this.port);
-      });
+      };
+      if (this.opts.tlsCert && this.opts.tlsKey) {
+        // TLS direto (wss://). Em produção também dá para terminar o TLS num proxy (deploy/Caddyfile).
+        this.tls = https.createServer({ cert: readFileSync(this.opts.tlsCert), key: readFileSync(this.opts.tlsKey) });
+        this.wss = new WebSocketServer({ server: this.tls, maxPayload: 64 * 1024 });
+        this.tls.listen(this.opts.port, this.opts.host, () => onListening(this.tls.address()));
+      } else {
+        this.wss = new WebSocketServer({ port: this.opts.port, host: this.opts.host, maxPayload: 64 * 1024 });
+        this.wss.on('listening', () => onListening(this.wss.address()));
+      }
+      this.wss.on('connection', (ws, req) => this.onConnection(ws, req));
       const tickMs = 1000 / this.opts.tickHz;
       let last = performance.now();
       this.timer = setInterval(() => {
@@ -91,45 +134,166 @@ export class GameServer {
         this.step(dt);
       }, tickMs);
       this.saveTimer = setInterval(() => this.saveAll(), 10_000);
+      // retenção (privacidade): auditoria mais velha que auditDays e códigos vencidos, de hora em hora
+      this.purgeTimer = setInterval(() => { try { this.store.purgeOld(this.opts.auditDays); } catch { /* banco ocupado: tenta depois */ } }, 3600_000);
+    }).then(async (port) => {
+      if (this.opts.metricsPort != null && this.opts.metricsPort !== false) {
+        this.metricsSrv = await startMetricsServer({
+          port: Number(this.opts.metricsPort), host: this.opts.metricsHost,
+          collect: () => this.collectMetrics(), onReset: () => this.metrics.reset(),
+        });
+        this.metricsPort = this.metricsSrv.address().port;
+        this.log(`métricas em http://${this.opts.metricsHost}:${this.metricsPort}/metrics`);
+      }
+      return port;
     });
   }
 
+  collectMetrics() {
+    let players = 0;
+    for (const z of this.zones.values()) players += z.players.size;
+    return this.metrics.snapshot({ players, sessions: this.sessions.size, zones: this.zones.size, tickHz: this.opts.tickHz });
+  }
+
   step(dt) {
+    const t0 = performance.now();
     for (const [key, z] of this.zones) {
+      // tempo jogado (tempo de jogo, para a telemetria de progressão)
+      for (const p of z.players.values()) p.char.playedS = (p.char.playedS ?? 0) + dt / 1000;
       z.tick(dt);
-      if (z.players.size) this.broadcastZone(key, z.snapshot());
+      if (z.players.size) this.sendSnapshots(key, z);
     }
     this.tickTrials();
     this.tickDungeons();
     this.tickCount++;
-    if (this.tickCount % this.opts.tickHz === 0) for (const pid of this.parties.keys()) this.sendPartyUpdate(pid);
+    if (this.tickCount % this.opts.tickHz === 0) { for (const pid of this.parties.keys()) this.sendPartyUpdate(pid); this.trades.check(); this.mod.sweep(); }
+    this.metrics.recordTick(performance.now() - t0);
+  }
+
+  // Snapshot de cada jogador. Clientes que pediram "delta" no login recebem só as entidades a até
+  // INTEREST_R (mais o próprio alvo) e, de cada uma, só os grupos de campos que mudaram desde o
+  // último envio; quem saiu do raio vai em "gone". Posição e velocidade vão juntas e só quando a
+  // previsão do cliente (última posição + velocidade × tempo) erraria mais que 10 cm. Os demais
+  // clientes recebem o snapshot completo da zona.
+  sendSnapshots(key, z) {
+    let full = null;
+    let recs = null;
+    const R2 = INTEREST_R * INTEREST_R;
+    for (const [charId, p] of z.players) {
+      const s = this.byChar.get(charId);
+      if (!s || s.ws.readyState !== 1) continue;
+      if (!s.delta) {
+        if (full == null) full = JSON.stringify(z.snapshot());
+        this.rawSend(s, full, true);
+        continue;
+      }
+      if (!recs) recs = z.snapRecords();
+      if (!s.known) { s.known = new Map(); s.knownFull = true; }
+      const known = s.known;
+      const vx = p.char.x, vz = p.char.z;
+      const now = Math.round(z.now);
+      const parts = [];
+      let visible = 0;
+      const seen = new Set();
+      for (const r of recs) {
+        const dx = r.x - vx, dz = r.z - vz;
+        if (dx * dx + dz * dz > R2 && r.id !== p.targetId && r.id !== p.eid) continue;
+        seen.add(r.id);
+        visible++;
+        const k = known.get(r.id);
+        if (!k) {
+          parts.push(`{"id":"${r.id}",${r.A},${r.P},${r.V},${r.C}}`);
+          known.set(r.id, { A: r.A, C: r.C, px: r.px, pz: r.pz, vx: r.vx, vz: r.vz, t: now });
+          continue;
+        }
+        let ch = '';
+        if (k.A !== r.A) { ch += ',' + r.A; k.A = r.A; }
+        // previsão por velocidade (a mesma que o cliente faz): posição só quando o erro passa de
+        // PRED_EPS, quando a velocidade muda ou a cada 2 s
+        const dts = (now - k.t) / 1000;
+        const ex = r.px - (k.px + k.vx * dts), ez = r.pz - (k.pz + k.vz * dts);
+        if (r.vx !== k.vx || r.vz !== k.vz || ex * ex + ez * ez > PRED_EPS2 || now - k.t > 2000) {
+          ch += ',' + r.P + ',' + r.V;
+          k.px = r.px; k.pz = r.pz; k.vx = r.vx; k.vz = r.vz; k.t = now;
+        }
+        if (k.C !== r.C) { ch += ',' + r.C; k.C = r.C; }
+        if (ch) parts.push(`{"id":"${r.id}"${ch}}`);
+      }
+      let gone = '';
+      if (known.size > visible) {
+        const g = [];
+        for (const id of known.keys()) if (!seen.has(id)) { g.push(`"${id}"`); known.delete(id); }
+        gone = g.join(',');
+      }
+      const raw = `{"t":"snap","now":${now},"map":"${z.mapId}","d":1${s.knownFull ? ',"full":1' : ''},"ents":[${parts.join(',')}],"gone":[${gone}]}`;
+      s.knownFull = false;
+      this.rawSend(s, raw, true);
+    }
   }
 
   saveAll() {
     for (const z of this.zones.values()) for (const p of z.players.values()) this.store.saveCharacter(p.char);
   }
 
+  // Desligamento gracioso: avisa todos, recusa novos logins, espera o prazo, salva e fecha.
+  async shutdown(graceS = this.opts.shutdownGraceS) {
+    if (this.closing) return;
+    this.closing = true;
+    const note = (text) => { for (const s of this.sessions) this.sendTo(s, { t: 'notice', kind: 'shutdown', text, inS: graceS }); };
+    if (graceS > 0) {
+      note(`O servidor vai reiniciar em ${graceS} s. Seu progresso está salvo.`);
+      this.log(`desligando em ${graceS} s`);
+      const step = Math.max(0, graceS - 5);
+      await new Promise((r) => setTimeout(r, step * 1000));
+      if (graceS > 5) note('O servidor reinicia em 5 s.');
+      await new Promise((r) => setTimeout(r, Math.min(5, graceS) * 1000));
+    }
+    this.saveAll();
+    await this.stop();
+  }
+
   async stop() {
-    clearInterval(this.timer); clearInterval(this.saveTimer);
+    clearInterval(this.timer); clearInterval(this.saveTimer); clearInterval(this.purgeTimer);
     for (const s of [...this.sessions]) this.dropSession(s);
     for (const ws of this.wss.clients) ws.terminate();
     await new Promise((r) => this.wss.close(() => r()));
+    if (this.tls) await new Promise((r) => this.tls.close(() => r()));
+    if (this.metricsSrv) await new Promise((r) => this.metricsSrv.close(() => r()));
     this.store.close();
   }
 
   // ---------- conexões ----------
-  onConnection(ws) {
-    const s = { id: randomUUID(), ws, accountId: null, charId: null };
+  onConnection(ws, req) {
+    let ip = req?.socket?.remoteAddress ?? '?';
+    if (this.opts.trustProxy) {
+      const fwd = req?.headers?.['x-forwarded-for'];
+      if (typeof fwd === 'string' && fwd.trim()) ip = fwd.split(',')[0].trim();
+    }
+    const n = this.ipConns.get(ip) ?? 0;
+    if (this.opts.maxConnPerIp > 0 && n >= this.opts.maxConnPerIp) {
+      ws.send(JSON.stringify({ t: 'kicked', reason: 'Conexões demais deste endereço.' }));
+      ws.close(1008, 'conexoes demais');
+      this.audit('conn_limit', { ip });
+      return;
+    }
+    this.ipConns.set(ip, n + 1);
+    const s = { id: randomUUID(), ws, ip, accountId: null, charId: null, role: 'player', bucket: { tokens: this.opts.rateBurst, at: performance.now(), over: 0, overAt: 0 }, chat: [] };
     this.sessions.add(s);
-    ws.on('message', (buf) => this.onMessage(s, buf));
+    ws.on('message', (buf) => {
+      const lag = this.lagDelay();
+      if (lag > 0) this.lagQueue(s, 'in', lag, () => this.onMessage(s, buf));
+      else this.onMessage(s, buf);
+    });
     ws.on('close', () => this.dropSession(s));
     ws.on('error', () => {});
-    this.sendTo(s, { t: 'hello', protocol: PROTOCOL_VERSION, server: 'cinzas-zone', dev: !!this.opts.dev });
+    this.sendTo(s, { t: 'hello', protocol: PROTOCOL_VERSION, server: 'cinzas-zone', version: SERVER_VERSION, dataVersion: this.dataVersion, auth: this.opts.auth, dev: !!this.opts.dev });
   }
 
   dropSession(s) {
     if (!this.sessions.has(s)) return;
     this.sessions.delete(s);
+    const n = (this.ipConns.get(s.ip) ?? 1) - 1;
+    if (n <= 0) this.ipConns.delete(s.ip); else this.ipConns.set(s.ip, n);
     if (s.charId != null) this.leaveWorld(s);
     if (s.accountId != null && this.byAccount.get(s.accountId) === s) this.byAccount.delete(s.accountId);
     try { s.ws.close(); } catch { /* já fechado */ }
@@ -137,6 +301,7 @@ export class GameServer {
 
   leaveWorld(s) {
     const charId = s.charId;
+    this.trades.cancel(charId, 'O outro jogador saiu.');
     const key = this.charZone.get(charId);
     if (this.trials.has(key)) this.endTrial(key, false, 'Conexão perdida durante a prova.', true);
     const dg = this.dungeons.get(key);
@@ -161,24 +326,76 @@ export class GameServer {
     s.charId = null;
   }
 
+  // Atraso artificial (metade do RTT pedido em cada sentido, com variação) para testar tolerância.
+  lagDelay() {
+    const { lagMs, jitterMs } = this.opts;
+    if (!(lagMs > 0) && !(jitterMs > 0)) return 0;
+    return Math.max(0, (lagMs || 0) / 2 + (Math.random() * 2 - 1) * (jitterMs || 0) / 2);
+  }
+
+  // Fila com atraso por conexão e sentido: entrega na ordem de chegada (como o TCP), cada item
+  // no mínimo `lag` ms depois de entrar e nunca antes do anterior.
+  lagQueue(s, dir, lag, fn) {
+    const key = dir === 'in' ? 'lagIn' : 'lagOut';
+    const q = s[key] ?? (s[key] = { items: [], timer: null, last: 0 });
+    const at = Math.max(performance.now() + lag, q.last);
+    q.last = at;
+    q.items.push({ at, fn });
+    const pump = () => {
+      q.timer = null;
+      const now = performance.now();
+      while (q.items.length && q.items[0].at <= now + 0.5) q.items.shift().fn();
+      if (q.items.length) q.timer = setTimeout(pump, Math.max(0, q.items[0].at - performance.now()));
+    };
+    if (!q.timer) q.timer = setTimeout(pump, Math.max(0, q.items[0].at - performance.now()));
+  }
+
+  rawSend(s, raw, snap = false) {
+    if (!s || s.ws.readyState !== 1) return;
+    this.metrics.out(raw.length, snap);
+    const lag = this.lagDelay();
+    if (lag > 0) this.lagQueue(s, 'out', lag, () => { if (s.ws.readyState === 1) s.ws.send(raw); });
+    else s.ws.send(raw);
+  }
+
   sendTo(s, msg) {
-    if (s && s.ws.readyState === 1) s.ws.send(JSON.stringify(msg));
+    if (s && s.ws.readyState === 1) this.rawSend(s, JSON.stringify(msg));
   }
 
   broadcastZone(key, msg) {
     const z = this.zones.get(key);
     if (!z) return;
     const raw = JSON.stringify(msg);
-    for (const charId of z.players.keys()) {
-      const s = this.byChar.get(charId);
-      if (s && s.ws.readyState === 1) s.ws.send(raw);
+    const snap = msg.t === 'snap';
+    for (const charId of z.players.keys()) this.rawSend(this.byChar.get(charId), raw, snap);
+  }
+
+  // Limite de comandos por conexão (balde de fichas): rateLimit por segundo, rajada de rateBurst.
+  // Quem passa muito do limite por 10 s seguidos é desconectado (auditado).
+  allowMessage(s) {
+    const b = s.bucket;
+    const now = performance.now();
+    b.tokens = Math.min(this.opts.rateBurst, b.tokens + ((now - b.at) / 1000) * this.opts.rateLimit);
+    b.at = now;
+    if (b.tokens >= 1) { b.tokens -= 1; return true; }
+    if (now - b.overAt > 10_000) { b.over = 0; b.overAt = now; }
+    b.over++;
+    if (b.over > this.opts.rateLimit * 10) {
+      this.audit('kick_flood', { accountId: s.accountId, charId: s.charId, ip: s.ip });
+      this.sendTo(s, { t: 'kicked', reason: 'Comandos demais em pouco tempo.' });
+      this.dropSession(s);
     }
+    return false;
   }
 
   onMessage(s, buf) {
+    this.metrics.in(buf.length);
+    if (!this.sessions.has(s)) return;
     let msg;
     try { msg = JSON.parse(buf.toString()); } catch { return this.sendTo(s, { t: 'res', rid: null, ok: false, code: 'bad_json', reason: 'Mensagem inválida.' }); }
     const rid = typeof msg.rid === 'string' || typeof msg.rid === 'number' ? msg.rid : null;
+    // acima do limite: responde ao próprio pedido (o cliente não fica esperando) sem executar
+    if (!this.allowMessage(s)) return this.sendTo(s, { t: 'res', rid, req: msg.t, ok: false, code: 'rate_limited', reason: 'Muitos comandos; espere um pouco.' });
     // Pedido repetido (mesmo rid e mesmo tipo, mesmo personagem): mesma resposta, sem reexecutar.
     if (rid != null && s.charId != null) {
       const cached = this.ridCache.get(s.charId)?.get(rid);
@@ -209,14 +426,16 @@ export class GameServer {
   handle(s, msg) {
     switch (msg.t) {
       case 'ping': return { ok: true, now: Date.now(), cache: false };
-      case 'register': return this.hRegister(s, msg);
-      case 'login': return this.hLogin(s, msg);
+      case 'register': return this.opts.auth === 'token' ? { ok: false, code: 'use_accounts', reason: 'Crie sua conta pelo site/serviço de contas.' } : this.hRegister(s, msg);
+      case 'login': return this.opts.auth === 'token' ? { ok: false, code: 'use_accounts', reason: 'Entre pelo serviço de contas (token).' } : this.hLogin(s, msg);
+      case 'login_token': return this.hLoginToken(s, msg);
     }
     if (s.accountId == null) return { ok: false, code: 'not_logged', reason: 'Faça login primeiro.' };
     switch (msg.t) {
       case 'list_chars': return { ok: true, chars: this.store.listCharacters(s.accountId).map(charRow), classes: this.creatableClasses() };
       case 'create_char': return this.hCreateChar(s, msg);
       case 'enter': return this.hEnter(s, msg);
+      case 'delete_account': return this.hDeleteAccount(s, msg);
     }
     if (s.charId == null) return { ok: false, code: 'not_in_world', reason: 'Entre no mundo com um personagem primeiro.' };
     const zone = this.zoneOfChar(s.charId);
@@ -245,6 +464,7 @@ export class GameServer {
       case 'quests': return { ok: true, journal: this.quests.journal(p.char), cache: false };
       case 'quest_accept': return this.hQuestAccept(p, msg);
       case 'quest_turnin': return this.hQuestTurnIn(p, msg);
+      case 'quest_choice': return this.hQuestChoice(p, msg);
       case 'trial_start': return this.hTrialStart(s, p, msg);
       case 'party_invite': return this.hPartyInvite(p, msg);
       case 'party_accept': return this.hPartyAccept(p, msg);
@@ -258,6 +478,35 @@ export class GameServer {
       case 'storage_take': return this.hStorageTake(p, msg);
       case 'dungeon_enter': return this.hDungeonEnter(s, p, msg);
       case 'gm': return this.hGm(p, msg);
+      case 'report': return this.mod.report(p, msg);
+      // comércio
+      case 'trade_request': return this.trades.request(p, msg.name);
+      case 'trade_accept': return this.trades.accept(p, msg.from);
+      case 'trade_decline': return this.trades.decline(p);
+      case 'trade_offer': return this.nc(this.trades.offer(p, msg));
+      case 'trade_lock': return this.nc(this.trades.lock(p));
+      case 'trade_confirm': return this.nc(this.trades.confirm(p));
+      case 'trade_cancel': return this.nc(this.trades.cancel(p.char.id, `${p.char.name} cancelou a troca.`));
+      // clãs
+      case 'clan_create': return this.clans.create(p, msg);
+      case 'clan_invite': return this.clans.invite(p, msg);
+      case 'clan_accept': return this.clans.accept(p, msg);
+      case 'clan_decline': return this.clans.decline(p);
+      case 'clan_leave': return this.clans.leave(p);
+      case 'clan_kick': return this.clans.kick(p, msg);
+      case 'clan_rank': return this.clans.setRank(p, msg);
+      case 'clan_transfer': return this.clans.transfer(p, msg);
+      case 'clan_disband': return this.clans.disband(p);
+      case 'clan_motd': return this.clans.motd(p, msg);
+      case 'clan_info': return { ok: true, clan: this.clans.info(p), cache: false };
+      // duelo
+      case 'duel_request': {
+        const tid = typeof msg.name === 'string' ? this.byName.get(msg.name.trim().toLowerCase()) : null;
+        const t = tid != null ? zone.players.get(tid) : null;
+        return zone.duels.request(p, t);
+      }
+      case 'duel_accept': return zone.duels.accept(p, msg.from);
+      case 'duel_decline': return zone.duels.decline(p);
       default: return { ok: false, code: 'unknown', reason: `Comando desconhecido: ${msg.t}` };
     }
   }
@@ -286,6 +535,17 @@ export class GameServer {
   }
 
   // ---------- autenticação e personagens ----------
+  // Exclusão da própria conta (privacidade), confirmada com a senha; fora do mundo.
+  hDeleteAccount(s, { password }) {
+    if (s.charId != null) return { ok: false, code: 'in_world', reason: 'Saia do mundo antes de excluir a conta.' };
+    const acc = this.store.findAccountById(s.accountId);
+    if (!acc || typeof password !== 'string' || !this.store.checkPassword(acc, password)) return { ok: false, code: 'bad_password', reason: 'Senha incorreta.' };
+    const n = this.store.deleteAccount(acc.id);
+    this.audit('account_deleted', { accountId: acc.id, ip: s.ip, characters: n });
+    this.log(`conta excluída: ${acc.id} (${n} personagens)`);
+    return { ok: true, after: () => this.dropSession(s) };
+  }
+
   hRegister(s, { account, password }) {
     if (typeof account !== 'string' || !/^[a-zA-Z0-9_]{3,20}$/.test(account)) return { ok: false, code: 'bad_account', reason: 'Conta: 3 a 20 letras, números ou _.' };
     if (typeof password !== 'string' || password.length < 4) return { ok: false, code: 'bad_password', reason: 'Senha precisa de pelo menos 4 caracteres.' };
@@ -294,10 +554,31 @@ export class GameServer {
     return { ok: true };
   }
 
-  hLogin(s, { account, password }) {
+  hLogin(s, msg) {
+    const { account, password } = msg;
     if (s.accountId != null) return { ok: false, code: 'already', reason: 'Sessão já autenticada.' };
+    if (this.closing) return { ok: false, code: 'closing', reason: 'O servidor está reiniciando. Tente em instantes.' };
     const acc = typeof account === 'string' && typeof password === 'string' ? this.store.verifyAccount(account, password) : null;
-    if (!acc) return { ok: false, code: 'bad_login', reason: 'Conta ou senha incorretas.' };
+    if (!acc) { this.audit('login_fail', { ip: s.ip, account: typeof account === 'string' ? account.slice(0, 24) : null }); return { ok: false, code: 'bad_login', reason: 'Conta ou senha incorretas.' }; }
+    if (!acc.verified) return { ok: false, code: 'unverified', reason: 'Confirme seu e-mail antes de entrar.' };
+    return this.completeLogin(s, msg, acc, 'senha');
+  }
+
+  // Login com token do serviço de contas (teste público): assinatura, validade e uso único.
+  hLoginToken(s, msg) {
+    if (s.accountId != null) return { ok: false, code: 'already', reason: 'Sessão já autenticada.' };
+    if (this.closing) return { ok: false, code: 'closing', reason: 'O servidor está reiniciando. Tente em instantes.' };
+    if (this.opts.auth === 'password') return { ok: false, code: 'no_tokens', reason: 'Este servidor não aceita login por token.' };
+    const p = verifyToken(msg.token, this.opts.tokenSecret);
+    if (!p || !this.replay.use(p)) { this.audit('login_fail', { ip: s.ip, via: 'token' }); return { ok: false, code: 'bad_token', reason: 'Sessão inválida ou vencida. Entre de novo.' }; }
+    const acc = this.store.findAccountById(p.sub);
+    if (!acc || !acc.verified) return { ok: false, code: 'bad_token', reason: 'Conta indisponível.' };
+    return this.completeLogin(s, msg, acc, 'token');
+  }
+
+  completeLogin(s, msg, acc, via) {
+    const ban = banMessage(acc);
+    if (ban) { this.audit('login_banned', { accountId: acc.id, ip: s.ip, via }); return { ok: false, code: 'banned', reason: ban }; }
     const old = this.byAccount.get(acc.id);
     if (old) {
       // Reconexão: a sessão antiga (talvez "pendurada") é encerrada e salva antes de continuar.
@@ -305,6 +586,10 @@ export class GameServer {
       this.dropSession(old);
     }
     s.accountId = acc.id;
+    s.role = acc.role ?? 'player';
+    this.mod.onLogin(s, acc);
+    s.delta = msg.delta === true; // cliente entende snapshots por diferença
+    this.audit('login', { accountId: acc.id, ip: s.ip, via });
     this.byAccount.set(acc.id, s);
     this.sendTo(s, this.defsPayload());
     return { ok: true, account: acc.name, chars: this.store.listCharacters(acc.id).map(charRow), classes: this.creatableClasses() };
@@ -336,6 +621,7 @@ export class GameServer {
     if (prev) this.dropSession(prev);
     const char = this.store.loadCharacter(charId);
     this.quests.load(char);
+    this.clans.attach(char);
     const wasDead = char.dead;
     let zone = this.zones.get(char.mapId) ?? this.zones.get(DEFAULT_MAP);
     // voltou dentro do prazo: reentra no calabouço do grupo como estava (morto continua morto)
@@ -354,6 +640,7 @@ export class GameServer {
     }
     this.store.saveCharacter(char);
     s.charId = charId;
+    s.known = new Map(); s.knownFull = true;
     this.byChar.set(charId, s);
     this.byName.set(char.name.toLowerCase(), charId);
     this.charZone.set(charId, zone.key);
@@ -374,12 +661,15 @@ export class GameServer {
     const fromKey = this.charZone.get(charId);
     const from = this.zones.get(fromKey);
     const dest = this.zones.get(destKey);
+    this.trades.cancel(charId, 'Troca cancelada: troca de mapa.');
     from.removePlayer(charId, false);
     this.broadcastZone(fromKey, { t: 'left', eid: p.eid });
     p.char.x = x; p.char.z = z;
     const np = dest.addPlayer(p.char);
     np.cooldowns = p.cooldowns;
     this.charZone.set(charId, destKey);
+    const sess = this.byChar.get(charId);
+    if (sess) { sess.known = new Map(); sess.knownFull = true; }
     if (!dest.instanceId) { delete p.char.saveMapId; delete p.char.saveX; delete p.char.saveZ; }
     this.store.saveCharacter(p.char);
     this.broadcastZone(destKey, { t: 'joined', eid: np.eid, name: p.char.name });
@@ -401,15 +691,37 @@ export class GameServer {
     if (!n) return { ok: false, code: 'too_far', reason: 'Chegue mais perto para conversar.' };
     const changed = this.quests.onTalk(p.char, n.id);
     this.notifyQuests(p, changed);
-    const shop = n.role === 'shop' ? n.shop.map((defId) => ({ defId, price: this.priceOf(defId) })) : undefined;
+    const shop = (n.role === 'shop' || n.role === 'smith') && n.shop ? n.shop.map((defId) => ({ defId, price: this.priceOf(defId) })) : undefined;
     const trialAvailable = n.role === 'master' && n.classId === p.char.classId && p.char.quests.get('c3_trial')?.state === 'active' && !p.char.trialDone && p.char.level >= 10;
-    return { ok: true, npc: { id: n.id, name: n.name, role: n.role, classId: n.classId ?? null }, quests: this.quests.npcQuests(p.char, n.id), shop, trialAvailable, cache: false };
+    const choice = this.quests.pendingChoice(p.char, n.id) ?? undefined;
+    return { ok: true, npc: { id: n.id, name: n.name, role: n.role, classId: n.classId ?? null }, quests: this.quests.npcQuests(p.char, n.id), shop, trialAvailable, choice, cache: false };
+  }
+
+  // Resposta escolhida num diálogo de missão (ex.: "Duas Razões"): muda falas futuras e dá um título.
+  hQuestChoice(p, { quest, option, npc }) {
+    const n = p.zone.npcNear(p, npc);
+    if (!n) return { ok: false, code: 'too_far', reason: 'Chegue mais perto para conversar.' };
+    const r = this.quests.choose(p.char, quest, option, n.id);
+    if (!r.ok) return r;
+    this.notifyQuests(p, [quest]);
+    return { ok: true, reply: r.option.reply, title: p.char.title ?? null, journal: this.quests.journal(p.char), char: p.zone.charView(p), cache: false };
   }
 
   hInteract(p, { object }) {
     const o = p.zone.objectNear(p, object);
     if (!o) return { ok: false, code: 'too_far', reason: 'Chegue mais perto.' };
     if (o.kind === 'dungeon') return this.hDungeonEnter(null, p, { object: o.id });
+    if (o.kind === 'escort') {
+      if (!this.quests.hasPending(p.char, 'escort', (x) => x.escort === o.escort)) return { ok: false, code: 'nothing', reason: 'A carroça está parada. Fale com quem cuida dela.' };
+      const r = p.zone.startEscort(o.escort, p);
+      if (!r.ok) return r;
+      return { ok: true, object: o.id, escort: r.escort.eid, already: !!r.already, cache: false };
+    }
+    if (o.channelMs) {
+      // interação com tempo: só começa se alguma missão avançar com ela
+      if (!this.quests.wouldProgressInteract(p.char, o.id)) return { ok: false, code: 'nothing', reason: 'Nada a fazer aqui agora.' };
+      return { ...p.zone.startChannel(p, o.id, o.channelMs, o.channelText ?? 'Trabalhando...'), cache: false };
+    }
     const changed = this.quests.onInteract(p.char, o.id);
     if (!changed.length) return { ok: false, code: 'nothing', reason: 'Nada a fazer aqui agora.' };
     this.notifyQuests(p, changed);
@@ -417,7 +729,7 @@ export class GameServer {
   }
 
   // ---------- ferreiro ----------
-  hEnhance(p, { npc, instance }, apply) {
+  hEnhance(p, { npc, instance, protect = false }, apply) {
     const n = p.zone.npcNear(p, npc);
     if (!n || n.role !== 'smith') return { ok: false, code: 'too_far', reason: 'Chegue mais perto do ferreiro.' };
     const c = p.char;
@@ -426,31 +738,46 @@ export class GameServer {
     const def = this.data.items[it.defId];
     if (!enhanceable(def)) return { ok: false, code: 'not_enhanceable', reason: `${def.name} não pode ser refinado.` };
     const q = enhanceQuote(def, it.enh || 0, this.data);
-    if (!q) return { ok: false, code: 'max', reason: `${def.name} já está em +${it.enh}, o máximo deste ferreiro.` };
+    if (!q) return { ok: false, code: 'max', reason: `${def.name} já está em +${it.enh}, o máximo.` };
     const preview = enhancePreview(def, it.enh || 0, this.data);
-    const have = [...c.items.values()].filter((x) => x.loc === 'bag' && x.defId === q.material).reduce((s, x) => s + x.qty, 0);
-    const quote = { ...q, preview, materialHave: have, goldHave: c.gold, cache: false };
+    const countOf = (defId) => [...c.items.values()].filter((x) => x.loc === 'bag' && x.defId === defId).reduce((s, x) => s + x.qty, 0);
+    const have = countOf(q.material);
+    const protectHave = q.protectItem ? countOf(q.protectItem) : 0;
+    const quote = { ...q, preview, materialHave: have, goldHave: c.gold, protectHave, materialName: this.data.items[q.material].name, cache: false };
     if (!apply) return { ok: true, ...quote };
     if (c.gold < q.gold) return { ok: false, code: 'no_gold', reason: `Ouro insuficiente: ${q.gold} necessário, você tem ${c.gold}.`, ...quote };
     const matName = this.data.items[q.material].name;
     if (have < q.materialQty) return { ok: false, code: 'no_material', reason: `${matName} insuficiente: ${q.materialQty} necessário, você tem ${have}.`, ...quote };
+    const useProtect = !!protect && q.downgradeOnFail;
+    if (useProtect && protectHave < 1) return { ok: false, code: 'no_protect', reason: `Você não tem ${this.data.items[q.protectItem].name}.`, ...quote };
     const r = rollEnhance(p.zone.rng, q.chancePct);
-    this.store.tx(() => {
-      c.gold -= q.gold;
-      let left = q.materialQty;
+    const before = it.enh || 0;
+    const out = enhanceOutcome(before, r.success, q, useProtect);
+    const consume = (defId, qty) => {
+      let left = qty;
       for (const x of [...c.items.values()]) {
-        if (left <= 0 || x.loc !== 'bag' || x.defId !== q.material) continue;
+        if (left <= 0 || x.loc !== 'bag' || x.defId !== defId) continue;
         const take = Math.min(left, x.qty);
         x.qty -= take; left -= take;
         if (x.qty <= 0) { c.items.delete(x.id); this.store.deleteItem(c.id, x.id); } else this.store.saveItems(c.id, [x]);
       }
-      if (r.success) { it.enh = (it.enh || 0) + 1; this.store.saveItems(c.id, [it]); }
+    };
+    this.store.tx(() => {
+      c.gold -= q.gold;
+      consume(q.material, q.materialQty);
+      if (out.protectUsed) consume(q.protectItem, 1);
+      if (out.enh !== before) { it.enh = out.enh; this.store.saveItems(c.id, [it]); }
       this.store.saveCharacter(c);
     });
     if (it.loc === 'equip') p.zone.recalc(p);
-    return { ok: true, success: r.success, roll: r.roll, chancePct: q.chancePct, enh: it.enh || 0, instanceId: it.id,
-      message: r.success ? `${def.name} agora é +${it.enh}.` : `O refino falhou (rolagem ${r.roll} ≥ ${q.chancePct}%). ${def.name} continua em +${it.enh || 0}; ouro e materiais foram gastos.`,
-      char: p.zone.charView(p), cache: false };
+    this.audit('enhance', { charId: c.id, instance: it.id, item: it.defId, success: r.success, from: before, enh: it.enh || 0, protectUsed: out.protectUsed, gold: q.gold, goldAfter: c.gold });
+    let message;
+    if (r.success) message = `${def.name} agora é +${it.enh}.`;
+    else if (out.downgraded) message = `O refino falhou (rolagem ${r.roll} ≥ ${q.chancePct}%). ${def.name} caiu para +${it.enh || 0}; ouro e materiais foram gastos.`;
+    else if (out.protectUsed) message = `O refino falhou (rolagem ${r.roll} ≥ ${q.chancePct}%). O Selo de Proteção segurou ${def.name} em +${it.enh || 0}.`;
+    else message = `O refino falhou (rolagem ${r.roll} ≥ ${q.chancePct}%). ${def.name} continua em +${it.enh || 0}; ouro e materiais foram gastos.`;
+    return { ok: true, success: r.success, roll: r.roll, chancePct: q.chancePct, enh: it.enh || 0, instanceId: it.id, downgraded: out.downgraded, protectUsed: out.protectUsed,
+      message, char: p.zone.charView(p), cache: false };
   }
 
   // ---------- depósito da conta ----------
@@ -497,7 +824,7 @@ export class GameServer {
 
   hBuy(p, { npc, item, qty = 1 }) {
     const n = p.zone.npcNear(p, npc);
-    if (!n || n.role !== 'shop') return { ok: false, code: 'too_far', reason: 'Chegue mais perto do comerciante.' };
+    if (!n || !n.shop || !['shop', 'smith'].includes(n.role)) return { ok: false, code: 'too_far', reason: 'Chegue mais perto do comerciante.' };
     if (!n.shop.includes(item)) return { ok: false, code: 'not_sold', reason: 'Este comerciante não vende isso.' };
     if (!Number.isInteger(qty) || qty < 1 || qty > 50) return { ok: false, code: 'bad_request', reason: 'Quantidade inválida.' };
     const c = p.char;
@@ -516,6 +843,7 @@ export class GameServer {
       }
       this.store.saveCharacter(c);
     });
+    this.audit('buy', { charId: p.char.id, item, qty, cost, goldAfter: p.char.gold });
     return { ok: true, cost, char: p.zone.charView(p) };
   }
 
@@ -533,6 +861,7 @@ export class GameServer {
     const lvl = p.char.level;
     const r = this.quests.turnIn(p.char, quest, n.id, (xp) => p.zone.grantXp(p, xp));
     if (r.ok && !r.alreadyDone) {
+      this.audit('quest_reward', { charId: p.char.id, quest, gold: r.rewards?.gold ?? 0, xp: r.rewards?.xp ?? 0, items: r.rewards?.items ?? [] });
       if (p.char.level > lvl) p.zone.broadcast({ t: 'level_up', eid: p.eid, level: p.char.level });
       r.char = p.zone.charView(p);
       r.journal = this.quests.journal(p.char);
@@ -828,6 +1157,7 @@ export class GameServer {
       if (row.gold) { c.gold += row.gold; this.store.saveCharacter(c); }
       this.store.markLootClaimed(row.id, instanceId);
       result = { ok: true, alreadyClaimed: false, loot: lootId, instanceId, gold: row.gold, defId: row.def_id };
+      this.audit('loot', { charId: c.id, loot: lootId, gold: row.gold || 0, item: row.def_id ?? null, qty: row.qty, instance: instanceId ?? null });
     });
     if (result.ok) result.char = p.zone.charView(p); // objetivos "collect" são contados ao vivo na bolsa
     return result;
@@ -895,6 +1225,20 @@ export class GameServer {
 
   // ---------- chat: zona, grupo, sussurro ----------
   hChat(p, { text, channel = 'zone', to }) {
+    const sess = this.byChar.get(p.char.id);
+    if (sess) {
+      const now = Date.now();
+      sess.chat = sess.chat.filter((t) => now - t < 5000);
+      if (sess.chat.length >= this.opts.chatPer5s) return { ok: false, code: 'chat_flood', reason: 'Calma: mensagens demais em pouco tempo.' };
+      sess.chat.push(now);
+    }
+    const blocked = this.mod.chatBlocked(p, channel, text);
+    if (blocked) return blocked;
+    if (channel === 'clan') {
+      const t = typeof text === 'string' ? text.replace(/[\u0000-\u001f]/g, '').trim().slice(0, 200) : '';
+      if (!t) return { ok: false, code: 'empty', reason: 'Mensagem vazia.' };
+      return this.nc(this.clans.chat(p, t));
+    }
     if (typeof text !== 'string') return { ok: false, code: 'bad_request', reason: 'Mensagem inválida.' };
     const clean = text.replace(/[\u0000-\u001f]/g, '').trim().slice(0, 200);
     if (!clean) return { ok: false, code: 'empty', reason: 'Mensagem vazia.' };
@@ -915,7 +1259,11 @@ export class GameServer {
 
   // Comandos de mestre: só com --dev. Usados para reproduzir cenários (README) e nos testes.
   hGm(p, msg) {
-    if (!this.opts.dev) return { ok: false, code: 'forbidden', reason: 'Comandos de mestre desativados.' };
+    const s = this.byChar.get(p.char.id);
+    if (!this.opts.dev && !['gm', 'admin'].includes(s?.role)) return { ok: false, code: 'forbidden', reason: 'Comandos de mestre desativados.' };
+    this.audit('gm', { accountId: s?.accountId ?? null, charId: p.char.id, ip: s?.ip ?? null, cmd: msg.cmd, args: Object.fromEntries(Object.entries(msg).filter(([k]) => !['t', 'rid', 'cmd'].includes(k))) });
+    const modRes = this.mod.gm(p, msg, s);
+    if (modRes) return modRes;
     const c = p.char;
     if (msg.cmd === 'give') {
       const def = this.data.items[msg.defId];
@@ -943,10 +1291,28 @@ export class GameServer {
       this.store.saveCharacter(c);
       return { ok: true, char: p.zone.charView(p) };
     }
+    if (msg.cmd === 'set_enh') {
+      // cenários: define o grau de refino de uma peça
+      const it = c.items.get(msg.instance);
+      if (!it) return { ok: false, code: 'not_found', reason: 'Item não encontrado.' };
+      it.enh = Math.max(0, Math.min(this.data.formulas.enhance.maxLevel, Math.floor(msg.enh || 0)));
+      this.store.saveItems(c.id, [it]);
+      if (it.loc === 'equip') p.zone.recalc(p);
+      return { ok: true, char: p.zone.charView(p) };
+    }
     if (msg.cmd === 'gold') {
       c.gold += Math.max(0, Math.floor(msg.amount || 0));
       this.store.saveCharacter(c);
       return { ok: true, char: p.zone.charView(p) };
+    }
+    if (msg.cmd === 'quest_progress') {
+      // testes: define o progresso de um objetivo de missão ativa
+      const st = c.quests.get(msg.quest);
+      if (!st || st.state !== 'active') return { ok: false, code: 'not_active', reason: 'Missão não está ativa.' };
+      st.progress[msg.index] = msg.value;
+      this.quests.save(c, msg.quest);
+      this.notifyQuests(p, [msg.quest]);
+      return { ok: true, cache: false };
     }
     if (msg.cmd === 'quest_done') {
       // marca missões como concluídas (atalho de cenário)
@@ -955,6 +1321,16 @@ export class GameServer {
     }
     return { ok: false, code: 'unknown', reason: 'Comando de mestre desconhecido.' };
   }
+}
+
+// Versão dos dados do jogo: hash dos JSON de data/ (vai no hello e no log de início).
+function dataVersionOf(data) {
+  const h = createHash('sha256');
+  for (const k of Object.keys(data).sort()) {
+    const v = data[k];
+    if (v && typeof v === 'object') h.update(k).update(JSON.stringify(v));
+  }
+  return h.digest('hex').slice(0, 12);
 }
 
 function charRow(r) {

@@ -1,5 +1,5 @@
 {
- "_doc": "Missões. npc/turnIn '@master' = mestre da classe do personagem. Objetivos: talk (falar com NPC), kill (abates com participação), collect (itens reais na bolsa, consumidos na entrega), questDrop (contador que sobe ao derrotar o monstro, com chance; não ocupa a bolsa), interact (objetos do mapa), level, allocated (sem pontos livres), equipLevel (arma equipada de nível mínimo). O servidor conta e valida tudo. XP somado por capítulo ≈ 30% do XP da faixa (ver docs/04).",
+ "_doc": "Missões. npc/turnIn '@master' = mestre da classe do personagem. Objetivos: talk (falar com NPC), kill (abates com participação), collect (itens reais na bolsa, consumidos na entrega), questDrop (contador que sobe ao derrotar o monstro, com chance; não ocupa a bolsa), interact (objetos do mapa), level, allocated (sem pontos livres), equipLevel (arma equipada de nível mínimo), enterMap (entrar num mapa), trial (prova de classe), escort (a escolta do mapa chega ao fim com o jogador por perto) e choice (resposta escolhida num diálogo; grava a escolha e pode dar título; dialogueByChoice troca falas de missões seguintes). O servidor conta e valida tudo. XP somado por capítulo ≈ 30% do XP da faixa (ver docs/04).",
  "quests": {
   "tutorial": {
    "chapter": 0,
@@ -567,13 +567,9 @@
    ],
    "objectives": [
     {
-     "type": "interact",
-     "objects": [
-      "cart_mark_1",
-      "cart_mark_2",
-      "cart_mark_3"
-     ],
-     "text": "Abra a rota alternativa pelos Ninhos Térmicos (3 marcos)"
+     "type": "escort",
+     "escort": "ilda_cart",
+     "text": "Escolte a carroça de abastecimento pelos Ninhos Térmicos"
     }
    ],
    "rewards": {
@@ -588,7 +584,7 @@
    },
    "dialogue": {
     "offer": "Se a carroça passar pelos ninhos, a rota aguenta carga. Marque o caminho para mim. Melhor ir em dois ou três.",
-    "progress": "Três marcos, do acampamento até o fim dos ninhos.",
+    "progress": "A carroça está parada no acampamento. Fiquem perto dela: se ninguém estiver por perto, ela para.",
     "complete": "A carroça chegou inteira. A rota aguenta. As larvas, não sei."
    }
   },
@@ -613,9 +609,25 @@
      "text": "Meça a temperatura em 3 pontos dos Ninhos Térmicos"
     },
     {
-     "type": "talk",
+     "type": "choice",
      "npc": "ilda",
-     "text": "Entregue a carta da sua cidade a Ilda"
+     "key": "duas_razoes",
+     "text": "Entregue a carta a Ilda e diga o que pensa",
+     "prompt": "ILDA: \"E você vai deixar esfriar o chão de quem não tem escolha?\"",
+     "options": [
+      {
+       "id": "cautela",
+       "text": "«As medições não mentem: mais calor, mais ninhos sob Vargem Funda. Religue só quando for seguro.»",
+       "title": "Voz de Vargem Funda",
+       "reply": "Seguro. Até lá, alguém escolhe quem passa frio. ... Eu entendi. Não concordo, mas entendi."
+      },
+      {
+       "id": "inverno",
+       "text": "«A carta é do hospital. Religue, e a gente cuida dos ninhos no caminho.»",
+       "title": "Guarda do Inverno",
+       "reply": "Então somos dois para carregar isso. Vamos fazer direito, pelo menos."
+      }
+     ]
     }
    ],
    "rewards": {
@@ -625,8 +637,18 @@
    },
    "dialogue": {
     "offer": "Ela vai esquentar o chão de quem não pediu. Meça você mesmo e me diga que estou errada.",
-    "progress": "Três pontos de medição nos ninhos. E a carta que chegou da cidade.",
+    "progress": "Três pontos de medição nos ninhos. E a carta que chegou da cidade: entregue a Ilda e diga o que pensa.",
     "complete": "E você vai deixar esfriar o chão de quem não tem escolha? ... Eu sei. As duas coisas são verdade."
+   },
+   "dialogueByChoice": {
+    "duas_razoes": {
+     "cautela": {
+      "complete": "Você acha que eu não vi as larvas? Vi. ... Vou abrir devagar. Uma comporta por vez. Se a pressão subir, eu fecho."
+     },
+     "inverno": {
+      "complete": "Obrigada. De verdade. Vou abrir a primeira comporta antes que o frio chegue às alas."
+     }
+    }
    }
   },
   "c4_order": {
@@ -660,6 +682,16 @@
     "offer": "Com isso a Eclusa reconhece vocês como equipe de manutenção. Pelo menos no papel. O Custódio fechou as saídas quando eu abri a primeira válvula. Não sei se ele vai ler papel.",
     "progress": "As Portas da Galeria ficam depois da Ponte dos Fios.",
     "complete": "Ele leu. Ou fingiu. Estamos dentro."
+   },
+   "dialogueByChoice": {
+    "duas_razoes": {
+     "cautela": {
+      "offer": "Você pediu cuidado. Esta ordem é o cuidado possível: com ela, a Eclusa nos trata como manutenção e não como invasores. O Custódio fechou as saídas quando eu abri a primeira válvula — devagar, como você disse."
+     },
+     "inverno": {
+      "offer": "Com isso a Eclusa reconhece vocês como equipe de manutenção. O hospital ganhou uma semana de calor. O Custódio fechou as saídas quando eu abri a primeira válvula. Não sei se ele vai ler papel."
+     }
+    }
    }
   },
   "c5_pressure": {

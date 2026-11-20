@@ -61,8 +61,20 @@ export class QuestEngine {
       case 'equipLevel': { const w = equippedIn(char, 'weapon'); const ok = !!w && this.data.items[w.defId].level >= o.minLevel; return { done: ok, cur: ok ? 1 : 0, need: 1 }; }
       case 'enterMap': return { done: !!pr, cur: pr ? 1 : 0, need: 1 };
       case 'trial': return { done: !!pr || !!char.trialDone, cur: pr || char.trialDone ? 1 : 0, need: 1 };
+      case 'escort': return { done: !!pr, cur: pr ? 1 : 0, need: 1 };
+      case 'choice': return { done: !!pr, cur: pr ? 1 : 0, need: 1 };
       default: return { done: false, cur: 0, need: 1 };
     }
+  }
+
+  // Falas que mudam conforme escolhas anteriores (dialogueByChoice: { chave: { opção: { offer?, progress?, complete? } } }).
+  dialogueFor(char, q) {
+    let d = q.dialogue;
+    for (const [key, variants] of Object.entries(q.dialogueByChoice ?? {})) {
+      const picked = char.choices?.[key];
+      if (picked && variants[picked]) d = { ...d, ...variants[picked] };
+    }
+    return d;
   }
 
   view(char, id) {
@@ -72,8 +84,58 @@ export class QuestEngine {
     return {
       id, title: q.title, chapter: q.chapter, state: st.state, level: q.level,
       npc: this.npcLabel(char, q.npc), turnIn: this.npcLabel(char, q.turnIn), objectives,
-      ready: st.state === 'active' && objectives.every((o) => o.done), rewards: q.rewards, dialogue: q.dialogue,
+      ready: st.state === 'active' && objectives.every((o) => o.done), rewards: q.rewards, dialogue: this.dialogueFor(char, q),
     };
+  }
+
+  // Alguma missão ativa avançaria com esta interação?
+  wouldProgressInteract(char, objectId) {
+    for (const [id, st] of char.quests) {
+      if (st.state !== 'active') continue;
+      const q = this.quests[id];
+      if (q.objectives.some((o, i) => o.type === 'interact' && o.objects.includes(objectId) && !(st.progress[i] || []).includes(objectId))) return true;
+    }
+    return false;
+  }
+
+  hasPending(char, type, pred = () => true) {
+    for (const [id, st] of char.quests) {
+      if (st.state !== 'active') continue;
+      const q = this.quests[id];
+      if (q.objectives.some((o, i) => o.type === type && pred(o) && !st.progress[i])) return id;
+    }
+    return null;
+  }
+
+  // Escolha de diálogo pendente com este NPC: só depois dos objetivos anteriores da missão.
+  pendingChoice(char, npcId) {
+    for (const [id, st] of char.quests) {
+      if (st.state !== 'active') continue;
+      const q = this.quests[id];
+      for (let i = 0; i < q.objectives.length; i++) {
+        const o = q.objectives[i];
+        if (o.type !== 'choice' || st.progress[i] || !this.npcMatches(char, o.npc, npcId)) continue;
+        const before = q.objectives.slice(0, i).every((_, j) => this.objectiveStatus(char, q, st, j).done);
+        if (!before) continue;
+        return { quest: id, index: i, prompt: o.prompt, options: o.options.map((op) => ({ id: op.id, text: op.text })) };
+      }
+    }
+    return null;
+  }
+
+  choose(char, questId, optionId, npcId) {
+    const pc = this.pendingChoice(char, npcId);
+    if (!pc || pc.quest !== questId) return { ok: false, code: 'no_choice', reason: 'Não há o que responder agora.' };
+    const o = this.quests[questId].objectives[pc.index];
+    const op = o.options.find((x) => x.id === optionId);
+    if (!op) return { ok: false, code: 'bad_option', reason: 'Resposta inválida.' };
+    const st = char.quests.get(questId);
+    st.progress[pc.index] = op.id;
+    char.choices = { ...(char.choices ?? {}), [o.key]: op.id };
+    if (op.title) char.title = op.title;
+    this.save(char, questId);
+    this.store.saveCharacter(char);
+    return { ok: true, option: op, quest: questId };
   }
 
   journal(char) {
@@ -122,6 +184,10 @@ export class QuestEngine {
 
   onInteract(char, objectId) {
     return this.bump(char, (o) => o.type === 'interact' && o.objects.includes(objectId), (o, pr) => ((pr || []).includes(objectId) ? null : [...(pr || []), objectId]));
+  }
+
+  onEscort(char, escortId) {
+    return this.bump(char, (o) => o.type === 'escort' && o.escort === escortId, (o, pr) => (pr ? null : true));
   }
 
   onTrial(char) {
@@ -197,6 +263,6 @@ export class QuestEngine {
       this.save(char, id);
       this.store.saveCharacter(char);
     });
-    return { ok: true, alreadyDone: false, quest: { id, title: q.title }, rewards: q.rewards, leveled, dialogue: q.dialogue.complete };
+    return { ok: true, alreadyDone: false, quest: { id, title: q.title }, rewards: q.rewards, leveled, dialogue: this.dialogueFor(char, q).complete };
   }
 }
