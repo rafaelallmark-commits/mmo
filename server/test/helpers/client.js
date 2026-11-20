@@ -2,8 +2,11 @@
 import WebSocket from 'ws';
 
 export class SimClient {
-  constructor(label) {
+  // opts.delta: pede snapshots por diferença no login e reconstrói o estado completo (como o Godot)
+  constructor(label, opts = {}) {
     this.label = label;
+    this.delta = !!opts.delta;
+    this.known = new Map();
     this.rid = 0;
     this.pending = new Map();
     this.events = [];
@@ -33,14 +36,34 @@ export class SimClient {
       this.push(m);
       return;
     }
-    if (m.t === 'snap') this.snap = m;
+    if (m.t === 'snap') this.snap = m.d ? this.mergeSnap(m) : m;
     else if (m.t === 'defs') this.defs = m;
     else if (m.t === 'char') this.char = m.char;
     else if (m.t === 'loot') this.loot.set(m.loot.id, m.loot);
-    else if (m.t === 'zone') { this.snap = m.snapshot; this.char = m.char; this.loot = new Map(m.loot.map((l) => [l.id, l])); }
+    else if (m.t === 'zone') { this.known = new Map(); this.snap = m.snapshot; this.char = m.char; this.loot = new Map(m.loot.map((l) => [l.id, l])); }
     else if (m.t === 'party') this.party = m.party;
     else if (m.t === 'trial' && m.char) this.char = m.char;
     this.push(m);
+  }
+
+  mergeSnap(m) {
+    if (m.full) this.known = new Map();
+    const updated = new Set();
+    for (const d of m.ents) {
+      const e = { ...(this.known.get(d.id) ?? {}), ...d };
+      if ('x' in d) { e._px = d.x; e._pz = d.z; e._pt = m.now; }
+      this.known.set(d.id, e);
+      updated.add(d.id);
+    }
+    for (const id of m.gone) this.known.delete(id);
+    // previsão por velocidade para quem não veio neste snapshot (igual ao cliente Godot)
+    for (const e of this.known.values()) {
+      if (!updated.has(e.id) && (e.vx || e.vz) && e._pt != null) {
+        const dts = (m.now - e._pt) / 1000;
+        e.x = e._px + e.vx * dts; e.z = e._pz + e.vz * dts;
+      }
+    }
+    return { t: 'snap', now: m.now, map: m.map, ents: [...this.known.values()], delta: m };
   }
 
   push(m) {
@@ -54,6 +77,7 @@ export class SimClient {
   send(msg) { this.ws.send(JSON.stringify(msg)); }
 
   request(t, payload = {}, rid = `${this.label}-${++this.rid}`) {
+    if (t === 'login' && this.delta) payload = { ...payload, delta: true };
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => { this.pending.delete(rid); reject(new Error(`${this.label}: sem resposta para ${t}`)); }, 10000);
       this.pending.set(rid, (m) => { clearTimeout(timer); resolve(m); });

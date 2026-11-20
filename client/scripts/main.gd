@@ -34,6 +34,7 @@ var party = null
 var chars_cache := []
 var classes_cache := []
 var settings := {"camera_sensitivity": 1.0, "show_names": true, "ui_scale": 1.0}
+var snap_cache := {}   # entidades conhecidas (snapshots por diferença do servidor)
 var state := "title"
 
 var ui: CanvasLayer
@@ -322,7 +323,7 @@ func _after_connect() -> void:
 		_login()
 
 func _login() -> void:
-	Net.request("login", {"account": account, "password": password}, func(r):
+	Net.request("login", {"account": account, "password": password, "delta": true}, func(r):
 		if not r["ok"]:
 			set_status(r["reason"], true)
 			return
@@ -511,6 +512,7 @@ func enter_world(cid: int) -> void:
 			add_child(hud)
 		hud.visible = true
 		set_char(r["char"])
+		snap_cache = {}
 		world.apply_snapshot(r["snapshot"])
 		for l in r["loot"]:
 			world.add_loot(l)
@@ -522,6 +524,40 @@ func enter_world(cid: int) -> void:
 		hud.system("Local: %s." % map_def().get("name", "?"))
 		in_world = true
 		hide_loading(0.5))
+
+## Snapshot por diferença → estado completo: "full" recomeça o conjunto, cada entrada traz os grupos
+## de campos que mudaram, "gone" lista quem saiu do raio de interesse. "_u" marca quem foi
+## atualizado neste snapshot (os demais não recebem amostra nova de movimento).
+func _merge_snap(m: Dictionary) -> Dictionary:
+	if int(m.get("full", 0)) == 1:
+		snap_cache = {}
+	var now := float(m.get("now", 0))
+	var updated := {}
+	for d in m.get("ents", []):
+		var eid: String = d["id"]
+		var e: Dictionary = snap_cache.get(eid, {})
+		for k in d.keys():
+			e[k] = d[k]
+		if d.has("x"):
+			# base da previsão por velocidade (o servidor faz a mesma conta para decidir quando corrigir)
+			e["_px"] = float(d["x"])
+			e["_pz"] = float(d["z"])
+			e["_pt"] = now
+		snap_cache[eid] = e
+		updated[eid] = true
+	for eid in m.get("gone", []):
+		snap_cache.erase(eid)
+	var ents := []
+	for eid in snap_cache.keys():
+		var e: Dictionary = snap_cache[eid]
+		var moving: bool = float(e.get("vx", 0.0)) != 0.0 or float(e.get("vz", 0.0)) != 0.0
+		if not updated.has(eid) and moving and e.has("_pt"):
+			var dts: float = (now - float(e["_pt"])) / 1000.0
+			e["x"] = float(e["_px"]) + float(e["vx"]) * dts
+			e["z"] = float(e["_pz"]) + float(e["vz"]) * dts
+		e["_u"] = updated.has(eid) or moving
+		ents.append(e)
+	return {"t": "snap", "now": m.get("now", 0), "map": m.get("map", ""), "ents": ents}
 
 func map_def() -> Dictionary:
 	return defs.get("maps", {}).get(map_id, defs.get("map", {}))
@@ -536,6 +572,7 @@ func _rebuild_world() -> void:
 ## Troca de zona (portal, prova de classe): tela Carregando + mundo novo.
 func _on_zone(m: Dictionary) -> void:
 	map_id = m["mapId"]
+	snap_cache = {}
 	show_loading(map_def().get("name", map_id))
 	_rebuild_world()
 	set_char(m["char"])
@@ -706,7 +743,7 @@ func _on_message(m: Dictionary) -> void:
 				hud.error(m.get("reason", "Recusado."))
 		"snap":
 			if world and in_world:
-				world.apply_snapshot(m)
+				world.apply_snapshot(_merge_snap(m) if m.has("d") else m)
 		"hit":
 			if world:
 				world.on_hit(m)

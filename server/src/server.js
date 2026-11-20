@@ -13,16 +13,21 @@ import { Dungeon } from './dungeon.js';
 import { checkEquip, applyEquip, checkUnequip, revalidateEquipment, bagCount, BAG_CAPACITY, EQUIP_SLOTS } from './equipment.js';
 import { totalAttributePoints, derivedStats } from './rules.js';
 
+import { Metrics, startMetricsServer } from './metrics.js';
+
 export const PROTOCOL_VERSION = 2;
 const NAME_RE = /^[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9 _-]{2,15}$/;
 const RID_CACHE = 128;
 const PARTY_MAX = 5;
 const DEFAULT_MAP = 'estrada_velha';
+const INTEREST_R = 70; // raio de interesse dos snapshots por diferença (m)
+const PRED_EPS2 = 0.1 * 0.1; // erro de posição tolerado na previsão por velocidade (m²)
 
 export class GameServer {
   constructor(opts = {}) {
     this.opts = {
       port: 7777, host: '0.0.0.0', dbPath: 'cinzas.db', tickHz: 10, timeScale: 1, xpRate: 1, seed: Date.now() & 0xffffffff, dev: false, log: true,
+      metricsPort: null, metricsHost: '127.0.0.1', lagMs: 0, jitterMs: 0,
       ...Object.fromEntries(Object.entries(opts).filter(([, v]) => v !== undefined)),
     };
     this.data = opts.data ?? loadGameData(opts.dataDir);
@@ -30,6 +35,7 @@ export class GameServer {
     this.rng = makeRng(this.opts.seed);
     this.quests = new QuestEngine({ data: this.data, store: this.store });
     this.sessions = new Set();
+    this.metrics = new Metrics();
     this.byChar = new Map(); // charId -> session
     this.byAccount = new Map(); // accountId -> session
     this.byName = new Map(); // nome minúsculo -> charId (online)
@@ -62,6 +68,7 @@ export class GameServer {
       hooks: {
         partyIdOf: (charId) => this.charParty.get(charId) ?? null,
         onKillCredit: (p, monsterId) => this.onKillCredit(zone, p, monsterId),
+        onLevelUp: (p, level) => this.store.logLevel(p.char.id, level, p.char.classId, p.char.playedS ?? 0),
       },
     });
     this.zones.set(key, zone);
@@ -91,18 +98,99 @@ export class GameServer {
         this.step(dt);
       }, tickMs);
       this.saveTimer = setInterval(() => this.saveAll(), 10_000);
+    }).then(async (port) => {
+      if (this.opts.metricsPort != null && this.opts.metricsPort !== false) {
+        this.metricsSrv = await startMetricsServer({
+          port: Number(this.opts.metricsPort), host: this.opts.metricsHost,
+          collect: () => this.collectMetrics(), onReset: () => this.metrics.reset(),
+        });
+        this.metricsPort = this.metricsSrv.address().port;
+        this.log(`métricas em http://${this.opts.metricsHost}:${this.metricsPort}/metrics`);
+      }
+      return port;
     });
   }
 
+  collectMetrics() {
+    let players = 0;
+    for (const z of this.zones.values()) players += z.players.size;
+    return this.metrics.snapshot({ players, sessions: this.sessions.size, zones: this.zones.size, tickHz: this.opts.tickHz });
+  }
+
   step(dt) {
+    const t0 = performance.now();
     for (const [key, z] of this.zones) {
+      // tempo jogado (tempo de jogo, para a telemetria de progressão)
+      for (const p of z.players.values()) p.char.playedS = (p.char.playedS ?? 0) + dt / 1000;
       z.tick(dt);
-      if (z.players.size) this.broadcastZone(key, z.snapshot());
+      if (z.players.size) this.sendSnapshots(key, z);
     }
     this.tickTrials();
     this.tickDungeons();
     this.tickCount++;
     if (this.tickCount % this.opts.tickHz === 0) for (const pid of this.parties.keys()) this.sendPartyUpdate(pid);
+    this.metrics.recordTick(performance.now() - t0);
+  }
+
+  // Snapshot de cada jogador. Clientes que pediram "delta" no login recebem só as entidades a até
+  // INTEREST_R (mais o próprio alvo) e, de cada uma, só os grupos de campos que mudaram desde o
+  // último envio; quem saiu do raio vai em "gone". Posição e velocidade vão juntas e só quando a
+  // previsão do cliente (última posição + velocidade × tempo) erraria mais que 10 cm. Os demais
+  // clientes recebem o snapshot completo da zona.
+  sendSnapshots(key, z) {
+    let full = null;
+    let recs = null;
+    const R2 = INTEREST_R * INTEREST_R;
+    for (const [charId, p] of z.players) {
+      const s = this.byChar.get(charId);
+      if (!s || s.ws.readyState !== 1) continue;
+      if (!s.delta) {
+        if (full == null) full = JSON.stringify(z.snapshot());
+        this.rawSend(s, full, true);
+        continue;
+      }
+      if (!recs) recs = z.snapRecords();
+      if (!s.known) { s.known = new Map(); s.knownFull = true; }
+      const known = s.known;
+      const vx = p.char.x, vz = p.char.z;
+      const now = Math.round(z.now);
+      const parts = [];
+      let visible = 0;
+      const seen = new Set();
+      for (const r of recs) {
+        const dx = r.x - vx, dz = r.z - vz;
+        if (dx * dx + dz * dz > R2 && r.id !== p.targetId && r.id !== p.eid) continue;
+        seen.add(r.id);
+        visible++;
+        const k = known.get(r.id);
+        if (!k) {
+          parts.push(`{"id":"${r.id}",${r.A},${r.P},${r.V},${r.C}}`);
+          known.set(r.id, { A: r.A, C: r.C, px: r.px, pz: r.pz, vx: r.vx, vz: r.vz, t: now });
+          continue;
+        }
+        let ch = '';
+        if (k.A !== r.A) { ch += ',' + r.A; k.A = r.A; }
+        // previsão por velocidade (a mesma que o cliente faz): posição só quando o erro passa de
+        // PRED_EPS, quando a velocidade muda ou a cada 2 s
+        const dts = (now - k.t) / 1000;
+        const ex = r.px - (k.px + k.vx * dts), ez = r.pz - (k.pz + k.vz * dts);
+        if (r.vx !== k.vx || r.vz !== k.vz || ex * ex + ez * ez > PRED_EPS2 || now - k.t > 2000) {
+          ch += ',' + r.P + ',' + r.V;
+          k.px = r.px; k.pz = r.pz; k.vx = r.vx; k.vz = r.vz; k.t = now;
+        }
+        if (k.C !== r.C) { ch += ',' + r.C; k.C = r.C; }
+        if (ch) parts.push(`{"id":"${r.id}"${ch}}`);
+      }
+      let gone = '';
+      if (known.size > visible) {
+        const g = [];
+        for (const id of known.keys()) if (!seen.has(id)) { g.push(`"${id}"`); known.delete(id); }
+        gone = g.join(',');
+      }
+      const raw = `{"t":"snap","now":${now},"map":"${z.mapId}","d":1${s.knownFull ? ',"full":1' : ''},"ents":[${parts.join(',')}],"gone":[${gone}]}`;
+      s.knownFull = false;
+      this.rawSend(s, raw, true);
+    }
   }
 
   saveAll() {
@@ -114,6 +202,7 @@ export class GameServer {
     for (const s of [...this.sessions]) this.dropSession(s);
     for (const ws of this.wss.clients) ws.terminate();
     await new Promise((r) => this.wss.close(() => r()));
+    if (this.metricsSrv) await new Promise((r) => this.metricsSrv.close(() => r()));
     this.store.close();
   }
 
@@ -121,7 +210,11 @@ export class GameServer {
   onConnection(ws) {
     const s = { id: randomUUID(), ws, accountId: null, charId: null };
     this.sessions.add(s);
-    ws.on('message', (buf) => this.onMessage(s, buf));
+    ws.on('message', (buf) => {
+      const lag = this.lagDelay();
+      if (lag > 0) this.lagQueue(s, 'in', lag, () => this.onMessage(s, buf));
+      else this.onMessage(s, buf);
+    });
     ws.on('close', () => this.dropSession(s));
     ws.on('error', () => {});
     this.sendTo(s, { t: 'hello', protocol: PROTOCOL_VERSION, server: 'cinzas-zone', dev: !!this.opts.dev });
@@ -161,21 +254,52 @@ export class GameServer {
     s.charId = null;
   }
 
+  // Atraso artificial (metade do RTT pedido em cada sentido, com variação) para testar tolerância.
+  lagDelay() {
+    const { lagMs, jitterMs } = this.opts;
+    if (!(lagMs > 0) && !(jitterMs > 0)) return 0;
+    return Math.max(0, (lagMs || 0) / 2 + (Math.random() * 2 - 1) * (jitterMs || 0) / 2);
+  }
+
+  // Fila com atraso por conexão e sentido: entrega na ordem de chegada (como o TCP), cada item
+  // no mínimo `lag` ms depois de entrar e nunca antes do anterior.
+  lagQueue(s, dir, lag, fn) {
+    const key = dir === 'in' ? 'lagIn' : 'lagOut';
+    const q = s[key] ?? (s[key] = { items: [], timer: null, last: 0 });
+    const at = Math.max(performance.now() + lag, q.last);
+    q.last = at;
+    q.items.push({ at, fn });
+    const pump = () => {
+      q.timer = null;
+      const now = performance.now();
+      while (q.items.length && q.items[0].at <= now + 0.5) q.items.shift().fn();
+      if (q.items.length) q.timer = setTimeout(pump, Math.max(0, q.items[0].at - performance.now()));
+    };
+    if (!q.timer) q.timer = setTimeout(pump, Math.max(0, q.items[0].at - performance.now()));
+  }
+
+  rawSend(s, raw, snap = false) {
+    if (!s || s.ws.readyState !== 1) return;
+    this.metrics.out(raw.length, snap);
+    const lag = this.lagDelay();
+    if (lag > 0) this.lagQueue(s, 'out', lag, () => { if (s.ws.readyState === 1) s.ws.send(raw); });
+    else s.ws.send(raw);
+  }
+
   sendTo(s, msg) {
-    if (s && s.ws.readyState === 1) s.ws.send(JSON.stringify(msg));
+    if (s && s.ws.readyState === 1) this.rawSend(s, JSON.stringify(msg));
   }
 
   broadcastZone(key, msg) {
     const z = this.zones.get(key);
     if (!z) return;
     const raw = JSON.stringify(msg);
-    for (const charId of z.players.keys()) {
-      const s = this.byChar.get(charId);
-      if (s && s.ws.readyState === 1) s.ws.send(raw);
-    }
+    const snap = msg.t === 'snap';
+    for (const charId of z.players.keys()) this.rawSend(this.byChar.get(charId), raw, snap);
   }
 
   onMessage(s, buf) {
+    this.metrics.in(buf.length);
     let msg;
     try { msg = JSON.parse(buf.toString()); } catch { return this.sendTo(s, { t: 'res', rid: null, ok: false, code: 'bad_json', reason: 'Mensagem inválida.' }); }
     const rid = typeof msg.rid === 'string' || typeof msg.rid === 'number' ? msg.rid : null;
@@ -294,7 +418,8 @@ export class GameServer {
     return { ok: true };
   }
 
-  hLogin(s, { account, password }) {
+  hLogin(s, msg) {
+    const { account, password } = msg;
     if (s.accountId != null) return { ok: false, code: 'already', reason: 'Sessão já autenticada.' };
     const acc = typeof account === 'string' && typeof password === 'string' ? this.store.verifyAccount(account, password) : null;
     if (!acc) return { ok: false, code: 'bad_login', reason: 'Conta ou senha incorretas.' };
@@ -305,6 +430,7 @@ export class GameServer {
       this.dropSession(old);
     }
     s.accountId = acc.id;
+    s.delta = msg.delta === true; // cliente entende snapshots por diferença
     this.byAccount.set(acc.id, s);
     this.sendTo(s, this.defsPayload());
     return { ok: true, account: acc.name, chars: this.store.listCharacters(acc.id).map(charRow), classes: this.creatableClasses() };
@@ -354,6 +480,7 @@ export class GameServer {
     }
     this.store.saveCharacter(char);
     s.charId = charId;
+    s.known = new Map(); s.knownFull = true;
     this.byChar.set(charId, s);
     this.byName.set(char.name.toLowerCase(), charId);
     this.charZone.set(charId, zone.key);
@@ -380,6 +507,8 @@ export class GameServer {
     const np = dest.addPlayer(p.char);
     np.cooldowns = p.cooldowns;
     this.charZone.set(charId, destKey);
+    const sess = this.byChar.get(charId);
+    if (sess) { sess.known = new Map(); sess.knownFull = true; }
     if (!dest.instanceId) { delete p.char.saveMapId; delete p.char.saveX; delete p.char.saveZ; }
     this.store.saveCharacter(p.char);
     this.broadcastZone(destKey, { t: 'joined', eid: np.eid, name: p.char.name });

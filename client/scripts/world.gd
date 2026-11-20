@@ -247,7 +247,8 @@ func apply_snapshot(snap: Dictionary) -> void:
 		e["data"] = d
 		var pos := Vector2(float(d["x"]), float(d["z"]))
 		var vel := Vector2(float(d.get("vx", 0.0)), float(d.get("vz", 0.0)))
-		(e["track"] as Motion.Track).push(now_srv, pos, vel)
+		if d.get("_u", true):
+			(e["track"] as Motion.Track).push(now_srv, pos, vel)
 		var name: String
 		if d["k"] == "p":
 			name = "%s  nv %d" % [d["n"], int(d["lvl"])]

@@ -1,4 +1,5 @@
 // Ponto de entrada: node src/main.js [--port 7777] [--db cinzas.db] [--dev] [--xp-rate 1] [--time-scale 1] [--seed N]
+//   [--metrics-port 9100] [--metrics-host 127.0.0.1] [--lag-ms 0] [--jitter-ms 0]
 import { GameServer } from './server.js';
 
 function arg(name, def) {
@@ -16,6 +17,10 @@ const server = new GameServer({
   xpRate: Number(arg('xp-rate', 1)),
   timeScale: Number(arg('time-scale', 1)),
   seed: arg('seed', undefined) !== undefined ? Number(arg('seed')) : undefined,
+  metricsPort: arg('metrics-port', process.env.CINZAS_METRICS_PORT ?? null),
+  metricsHost: arg('metrics-host', '127.0.0.1'),
+  lagMs: Number(arg('lag-ms', 0)),
+  jitterMs: Number(arg('jitter-ms', 0)),
 });
 await server.start();
 const shutdown = async () => { console.log('salvando e encerrando...'); await server.stop(); process.exit(0); };

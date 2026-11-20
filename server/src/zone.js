@@ -112,7 +112,9 @@ export class Zone {
   recalc(p) {
     const buffs = {};
     for (const b of p.buffs) for (const [k, v] of Object.entries(b.mods)) buffs[k] = (buffs[k] || 0) + v;
-    p.stats = derivedStats(p.char, equippedList(p.char, this.data).map((e) => ({ def: e.def, enh: e.enh })), this.data, buffs);
+    const eq = equippedList(p.char, this.data);
+    p.stats = derivedStats(p.char, eq.map((e) => ({ def: e.def, enh: e.enh })), this.data, buffs);
+    p.weaponDefId = eq.find((e) => e.def.slot === 'weapon')?.def.id ?? null;
     p.char.hp = Math.min(p.char.hp, p.stats.maxHp);
     p.char.mp = Math.min(p.char.mp, p.stats.maxMp);
   }
@@ -136,7 +138,9 @@ export class Zone {
     const lvl = levelForXp(c.xp, this.data);
     if (lvl <= c.level) return false;
     const gained = lvl - c.level;
+    const from = c.level;
     c.level = lvl;
+    for (let L = from + 1; L <= lvl; L++) this.hooks.onLevelUp?.(p, L);
     c.unspent += gained * this.data.pointsPerLevel;
     c.skillPoints += gained * this.data.skillPointsPerLevel;
     this.grantUnlockedSkills(c);
@@ -827,8 +831,7 @@ export class Zone {
     const ents = [];
     for (const p of this.players.values()) {
       const c = p.char;
-      const w = equippedList(c, this.data).find((e) => e.def.slot === 'weapon');
-      ents.push({ id: p.eid, k: 'p', n: c.name, cls: c.classId, lvl: c.level, x: r2(c.x), z: r2(c.z), vx: r2(c.vx || 0), vz: r2(c.vz || 0), hp: Math.ceil(c.hp), mhp: p.stats.maxHp, dead: c.dead, tgt: p.targetId, w: w?.def.id ?? null, party: this.hooks.partyIdOf?.(c.id) ?? null, sh: p.shield ? Math.round(p.shield.amount) : 0 });
+      ents.push({ id: p.eid, k: 'p', n: c.name, cls: c.classId, lvl: c.level, x: r2(c.x), z: r2(c.z), vx: r2(c.vx || 0), vz: r2(c.vz || 0), hp: Math.ceil(c.hp), mhp: p.stats.maxHp, dead: c.dead, tgt: p.targetId, w: p.weaponDefId ?? null, party: this.hooks.partyIdOf?.(c.id) ?? null, sh: p.shield ? Math.round(p.shield.amount) : 0 });
     }
     for (const m of this.monsters.values()) {
       if (m.state === 'dead') continue;
@@ -836,6 +839,37 @@ export class Zone {
       ents.push({ id: m.eid, k: 'm', def: m.defId, lvl: m.def.level, x: r2(m.x), z: r2(m.z), vx: r2(m.vx || 0), vz: r2(m.vz || 0), hp: Math.ceil(m.hp), mhp: m.def.hp, st: m.state, tgt: m.targetId, fx: fx.length ? fx : undefined });
     }
     return { t: 'snap', now: Math.round(this.now), map: this.mapId, ents };
+  }
+
+  // Registros para snapshots por diferença (server.js sendSnapshots): os mesmos campos do
+  // snapshot completo, em quatro grupos já serializados — A (identidade), P (posição),
+  // V (velocidade) e C (combate) — mais posição e velocidade arredondadas para a previsão.
+  snapRecords() {
+    const recs = [];
+    for (const p of this.players.values()) {
+      const c = p.char;
+      const px = r2(c.x), pz = r2(c.z), vx = r2(c.vx || 0), vz = r2(c.vz || 0);
+      recs.push({
+        id: p.eid, x: c.x, z: c.z, px, pz, vx, vz,
+        A: `"k":"p","n":${JSON.stringify(c.name)},"cls":"${c.classId}","lvl":${c.level},"mhp":${p.stats.maxHp},"w":${p.weaponDefId ? `"${p.weaponDefId}"` : 'null'},"party":${JSON.stringify(this.hooks.partyIdOf?.(c.id) ?? null)}`,
+        P: `"x":${px},"z":${pz}`,
+        V: `"vx":${vx},"vz":${vz}`,
+        C: `"hp":${Math.ceil(c.hp)},"dead":${!!c.dead},"tgt":${p.targetId ? `"${p.targetId}"` : 'null'},"sh":${p.shield ? Math.round(p.shield.amount) : 0}`,
+      });
+    }
+    for (const m of this.monsters.values()) {
+      if (m.state === 'dead') continue;
+      const fx = m.fx.filter((f) => f.until > this.now).map((f) => f.kind);
+      const px = r2(m.x), pz = r2(m.z), vx = r2(m.vx || 0), vz = r2(m.vz || 0);
+      recs.push({
+        id: m.eid, x: m.x, z: m.z, px, pz, vx, vz,
+        A: `"k":"m","def":"${m.defId}","lvl":${m.def.level},"mhp":${m.def.hp}`,
+        P: `"x":${px},"z":${pz}`,
+        V: `"vx":${vx},"vz":${vz}`,
+        C: `"hp":${Math.ceil(m.hp)},"st":"${m.state}","tgt":${m.targetId ? `"${m.targetId}"` : 'null'},"fx":${JSON.stringify(fx)}`,
+      });
+    }
+    return recs;
   }
 
   charView(p) {

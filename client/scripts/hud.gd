@@ -43,6 +43,9 @@ var party_box: VBoxContainer
 var invite_panel: PanelContainer
 var invite_label: Label
 var invite_from := -1
+var ping_label: Label
+var ping_ms := -1.0          # ida e volta medida (média móvel), em ms
+var _ping_in := 0.5
 
 func _ready() -> void:
 	layer = 5
@@ -59,6 +62,7 @@ func _ready() -> void:
 	_build_sheet(root)
 	_build_m2(root)
 	_build_overlays(root)
+	_build_ping(root)
 	refresh_char()
 
 func _bar(parent: Control, color: Color, w := 260.0) -> ProgressBar:
@@ -292,7 +296,36 @@ func refresh_char() -> void:
 	if sheet_panel.visible:
 		_refresh_sheet()
 
-func _process(_delta: float) -> void:
+## Indicador de latência no canto inferior direito: ida e volta de um "ping" a cada 2 s.
+func _build_ping(root: Control) -> void:
+	ping_label = Label.new()
+	ping_label.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	ping_label.offset_left = -170.0
+	ping_label.offset_right = -10.0
+	ping_label.offset_top = -32.0
+	ping_label.offset_bottom = -12.0
+	ping_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	ping_label.add_theme_font_size_override("font_size", 12)
+	ping_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ping_label.tooltip_text = "Tempo de ida e volta até o servidor"
+	root.add_child(ping_label)
+
+func _tick_ping(delta: float) -> void:
+	_ping_in -= delta
+	if _ping_in > 0.0 or main == null or not main.in_world:
+		return
+	_ping_in = 2.0
+	var t0 := Time.get_ticks_usec()
+	Net.request("ping", {}, func(_r):
+		var ms := float(Time.get_ticks_usec() - t0) / 1000.0
+		ping_ms = ms if ping_ms < 0.0 else lerpf(ping_ms, ms, 0.5)
+		if ping_label:
+			ping_label.text = "ping %d ms" % int(round(ping_ms))
+			var c := Color("#7fd47f") if ping_ms < 80.0 else (Theme_.AMBER if ping_ms < 150.0 else Color("#ff6a5a"))
+			ping_label.add_theme_color_override("font_color", c))
+
+func _process(delta: float) -> void:
+	_tick_ping(delta)
 	# mantém o inventário inteiro dentro da tela, qualquer que seja a largura do conteúdo
 	if inv_panel and inv_panel.visible:
 		var vw := get_viewport().get_visible_rect().size.x
