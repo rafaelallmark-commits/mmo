@@ -1102,6 +1102,15 @@ export class GameServer {
       this.store.saveCharacter(c);
       return { ok: true, char: p.zone.charView(p) };
     }
+    if (msg.cmd === 'quest_progress') {
+      // testes: define o progresso de um objetivo de missão ativa
+      const st = c.quests.get(msg.quest);
+      if (!st || st.state !== 'active') return { ok: false, code: 'not_active', reason: 'Missão não está ativa.' };
+      st.progress[msg.index] = msg.value;
+      this.quests.save(c, msg.quest);
+      this.notifyQuests(p, [msg.quest]);
+      return { ok: true, cache: false };
+    }
     if (msg.cmd === 'quest_done') {
       // marca missões como concluídas (atalho de cenário)
       for (const id of msg.quests || []) { c.quests.set(id, { state: 'done', progress: {} }); this.quests.save(c, id); }

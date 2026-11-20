@@ -80,7 +80,7 @@ Decisões tomadas por conta própria durante a sessão que criou o Marco 1. Cada
 | # | Decisão | Motivo |
 |---|---|---|
 | D54 | **Elites diárias** só nos pontos de caça do M3 (Mãe do Eco e Fragmento do Custódio, campo `daily` em `monsters.json`): o primeiro abate do dia (UTC) de cada personagem dá XP em dobro e uma rolagem extra de saque, gravado em `daily_claims`. | A especificação fala de "pontos de caça em grupo com elites diárias" no M3; aplicar a todo elite mudava o XP do capítulo 1 (o teste do M1 deixou de bater o nível 2). |
-| D55 | Capítulo 4 simplificado: a recalibração dos medidores é interação simples (sem canalização interrompível), a escolta da carroça virou abrir três marcos da rota e a escolha de resposta em "Duas Razões" ficou para depois (só mudaria falas e um título). Novo objetivo `enterMap` para "chegar aos Canais". | Mantém a história e a progressão com os tipos de objetivo testados; escolta e canalização pedem sistemas próprios. |
+| D55 | *(Substituída pela D72.)* Capítulo 4 simplificado: a recalibração dos medidores é interação simples (sem canalização interrompível), a escolta da carroça virou abrir três marcos da rota e a escolha de resposta em "Duas Razões" ficou para depois (só mudaria falas e um título). Novo objetivo `enterMap` para "chegar aos Canais". | Mantém a história e a progressão com os tipos de objetivo testados; escolta e canalização pedem sistemas próprios. |
 | D56 | **Refino**: chances 90/70/45% para +1/+2/+3; ouro = 12 × (grau+1) × nível do item; Pó de Refino 1/2/3. Cada grau dá +8% no dano da arma e +10% na defesa/poder mágico da peça. Rolagem com o RNG semeado da zona. | Valores editáveis em `formulas.json`; o teste confere as taxas em 10.000 tentativas. |
 | D57 | **Depósito da conta**: os itens ficam em `item_instances` com `loc='storage'` e o dono original; pegar troca o dono numa transação condicionada (a mesma peça não sai duas vezes). Capacidade 60. | Sem tabela nova e sem duplicação de itens entre personagens. |
 | D58 | **Entrada na Última Eclusa**: grupo de 2 a 5, nível 16, alguém do grupo com "O Fragmento" concluído (a Chave de Comporta); quem pede entra junto com os membros a até 20 m da porta; os demais podem entrar depois pela mesma porta. | Simples de explicar e não obriga todos a clicar ao mesmo tempo. |
@@ -107,4 +107,11 @@ Decisões tomadas por conta própria durante a sessão que criou o Marco 1. Cada
 | D69 | **Atraso artificial com fila por conexão** (`--lag-ms`, `--jitter-ms`) que preserva a ordem das mensagens. | A primeira versão (um temporizador por mensagem) entregava fora de ordem e quebrou o login do cliente no teste de 150 ms — o TCP nunca faria isso. |
 | D70 | **Migrações versionadas** do banco (`schema_version`, passos em ordem, um por transação) e **telemetria de progressão**: tempo jogado por personagem e registro de cada subida de nível (`level_log`), com relatório contra as metas (±25%). | Mudanças de esquema seguras para bancos já em uso; medir o tempo por nível com jogadores reais, não só na simulação. |
 | D71 | **Backup a quente com `VACUUM INTO`** e verificação de integridade, mantendo as N cópias mais recentes. | Foto consistente do banco sem parar o servidor. |
+
+## Capítulo 4 completo
+
+| # | Decisão | Motivo |
+|---|---|---|
+| D72 | **Capítulo 4 como desenhado**: recalibração com canalização de 4 s (mover, agir ou ser atingido interrompe); escolta da carroça com emboscadas nos três marcos, quebra ou queda geral volta ao último marco com a mesma emboscada, chegada conta para o grupo por perto; resposta escolhida em "Duas Razões" grava a escolha, dá um título (Voz de Vargem Funda / Guarda do Inverno) e troca falas de missões seguintes (`dialogueByChoice`). | Fecha as simplificações da D55 com os sistemas que faltavam (canalização, entidade de escolta mirada pelos monstros, escolhas persistentes). A escolha muda falas e título, não a progressão (docs/02). |
+| D73 | Emboscados **miram a carroça até alguém do grupo gerar ameaça**; a carroça para enquanto há monstro encostado nela. | Dá o que fazer a quem protege (puxar os monstros) e impede a carroça de "fugir" da luta. |
 

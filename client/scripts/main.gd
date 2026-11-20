@@ -744,6 +744,12 @@ func _on_message(m: Dictionary) -> void:
 		"snap":
 			if world and in_world:
 				world.apply_snapshot(_merge_snap(m) if m.has("d") else m)
+		"channel_end":
+			if hud:
+				hud.end_channel(m)
+		"escort":
+			if hud:
+				hud.on_escort(m)
 		"hit":
 			if world:
 				world.on_hit(m)

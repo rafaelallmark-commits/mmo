@@ -43,6 +43,11 @@ var party_box: VBoxContainer
 var invite_panel: PanelContainer
 var invite_label: Label
 var invite_from := -1
+var channel_box: PanelContainer
+var channel_label: Label
+var channel_bar: ProgressBar
+var _channel_total := 0.0
+var _channel_left := 0.0
 var ping_label: Label
 var ping_ms := -1.0          # ida e volta medida (média móvel), em ms
 var _ping_in := 0.5
@@ -63,6 +68,7 @@ func _ready() -> void:
 	_build_m2(root)
 	_build_overlays(root)
 	_build_ping(root)
+	_build_channel(root)
 	refresh_char()
 
 func _bar(parent: Control, color: Color, w := 260.0) -> ProgressBar:
@@ -273,7 +279,8 @@ func refresh_char() -> void:
 		return
 	var c: Dictionary = main.ch
 	var cls: Dictionary = main.defs["classes"].get(c["classId"], {})
-	name_label.text = "%s — %s, nível %d   ·   %d ouro" % [c["name"], cls.get("name", ""), int(c["level"]), int(c["gold"])]
+	var ttl := str(c.get("title", "")) if c.get("title") != null else ""
+	name_label.text = "%s — %s, nível %d   ·   %d ouro%s" % [c["name"], cls.get("name", ""), int(c["level"]), int(c["gold"]), ("\n«%s»" % ttl) if ttl != "" else ""]
 	hp_bar.max_value = float(c["stats"]["maxHp"])
 	hp_bar.value = float(c["hp"])
 	hp_text.text = "Vida %d / %d" % [int(c["hp"]), int(c["stats"]["maxHp"])]
@@ -310,6 +317,59 @@ func _build_ping(root: Control) -> void:
 	ping_label.tooltip_text = "Tempo de ida e volta até o servidor"
 	root.add_child(ping_label)
 
+## Barra de canalização (interações com tempo, como recalibrar um medidor): acima da barra de atalhos.
+func _build_channel(root: Control) -> void:
+	channel_box = PanelContainer.new()
+	channel_box.add_theme_stylebox_override("panel", Theme_.panel_style(0.85))
+	channel_box.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	channel_box.offset_left = -170.0
+	channel_box.offset_right = 170.0
+	channel_box.offset_top = -150.0
+	channel_box.offset_bottom = -104.0
+	channel_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	channel_box.visible = false
+	root.add_child(channel_box)
+	var v := VBoxContainer.new()
+	channel_box.add_child(v)
+	channel_label = Label.new()
+	channel_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	channel_label.add_theme_color_override("font_color", Theme_.AMBER)
+	v.add_child(channel_label)
+	channel_bar = _bar(v, Color("#ffb347"), 320.0)
+	channel_bar.max_value = 1.0
+
+func show_channel(text: String, ms: float) -> void:
+	_channel_total = maxf(ms / 1000.0, 0.1)
+	_channel_left = _channel_total
+	channel_label.text = "%s... (não se mova)" % text
+	channel_bar.value = 0.0
+	channel_box.visible = true
+
+func end_channel(m: Dictionary) -> void:
+	channel_box.visible = false
+	_channel_left = 0.0
+	if m.get("ok", false):
+		_flash("Concluído!", Theme_.AMBER)
+	else:
+		error(str(m.get("reason", "Interrompido.")))
+
+func _tick_channel(delta: float) -> void:
+	if not channel_box or not channel_box.visible:
+		return
+	_channel_left = maxf(0.0, _channel_left - delta)
+	channel_bar.value = 1.0 - _channel_left / _channel_total
+
+## Mensagens da escolta: viram linha no chat e, as importantes, aviso no centro.
+func on_escort(m: Dictionary) -> void:
+	var text := str(m.get("text", ""))
+	system(text)
+	if m.has("ambush"):
+		_flash("Emboscada!", Color("#ff6a5a"))
+	elif m.get("broken", false):
+		_flash("A carroça quebrou!", Color("#ff6a5a"))
+	elif m.get("arrived", false):
+		_flash("A carroça chegou!", Theme_.AMBER)
+
 func _tick_ping(delta: float) -> void:
 	_ping_in -= delta
 	if _ping_in > 0.0 or main == null or not main.in_world:
@@ -326,6 +386,7 @@ func _tick_ping(delta: float) -> void:
 
 func _process(delta: float) -> void:
 	_tick_ping(delta)
+	_tick_channel(delta)
 	# mantém o inventário inteiro dentro da tela, qualquer que seja a largura do conteúdo
 	if inv_panel and inv_panel.visible:
 		var vw := get_viewport().get_visible_rect().size.x
@@ -764,6 +825,30 @@ func show_npc(r: Dictionary) -> void:
 					else:
 						error(res["reason"])))
 			npc_box.add_child(b)
+	if r.get("choice", null) != null:
+		# escolha de resposta (ex.: "Duas Razões"): muda falas futuras e dá um título
+		var ch: Dictionary = r["choice"]
+		_text(npc_box, str(ch.get("prompt", "")), Theme_.AMBER)
+		for op in ch.get("options", []):
+			var cb := Button.new()
+			cb.text = str(op["text"])
+			cb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			cb.custom_minimum_size = Vector2(380, 0)
+			var opt_id: String = op["id"]
+			var quest_id: String = ch["quest"]
+			cb.pressed.connect(func():
+				Net.request("quest_choice", {"quest": quest_id, "option": opt_id, "npc": npc["id"]}, func(res):
+					if res["ok"]:
+						chat_line("[color=#ffe39a]%s: \"%s\"[/color]" % [npc["name"], str(res.get("reply", ""))])
+						if res.get("title") != null:
+							system("Título recebido: «%s»" % str(res["title"]))
+						if res.has("journal"):
+							main.journal = res["journal"]
+							refresh_quests()
+						npc_panel.visible = false
+					else:
+						error(res["reason"])))
+			npc_box.add_child(cb)
 	for q in quests.get("offer", []):
 		_title(npc_box, "Nova missão: %s" % q["title"], 14)
 		_text(npc_box, "\"%s\"" % q["dialogue"]["offer"])
@@ -815,7 +900,7 @@ func show_npc(r: Dictionary) -> void:
 		_smith_ui(npc)
 	elif role == "storage":
 		_storage_ui(npc)
-	if quests.get("active", []).is_empty() and quests.get("offer", []).is_empty() and r.get("shop", null) == null and not r.get("trialAvailable", false) and not role in ["smith", "storage"]:
+	if quests.get("active", []).is_empty() and quests.get("offer", []).is_empty() and r.get("shop", null) == null and not r.get("trialAvailable", false) and r.get("choice", null) == null and not role in ["smith", "storage"]:
 		_text(npc_box, "Nada para você agora.", Theme_.MUTED)
 	var close := Button.new()
 	close.text = "Fechar"

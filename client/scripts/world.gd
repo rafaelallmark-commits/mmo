@@ -252,6 +252,10 @@ func apply_snapshot(snap: Dictionary) -> void:
 		var name: String
 		if d["k"] == "p":
 			name = "%s  nv %d" % [d["n"], int(d["lvl"])]
+			if d.get("ttl") != null and str(d.get("ttl")) != "":
+				name = "«%s»\n%s" % [str(d["ttl"]), name]
+		elif d["k"] == "e":
+			name = str(d.get("n", "Carroça"))
 		else:
 			name = "%s  nv %d" % [main.defs["monsters"].get(d["def"], {}).get("name", d["def"]), int(d["lvl"])]
 		var frac := clampf(float(d["hp"]) / maxf(1.0, float(d["mhp"])), 0.0, 1.0)
@@ -303,14 +307,16 @@ func _spawn_entity(d: Dictionary) -> Dictionary:
 	var root: Node3D
 	if d["k"] == "p":
 		root = Art.character(d.get("cls", ""), _weapon_family(d.get("w")))
+	elif d["k"] == "e":
+		root = Art.cart()
 	else:
 		var md: Dictionary = main.defs["monsters"].get(d["def"], {}).duplicate()
 		md["id"] = d["def"]
 		root = Art.monster(md)
-	root.scale = Vector3.ONE * (1.3 if d["k"] == "p" else 1.15)
+	root.scale = Vector3.ONE * (1.3 if d["k"] == "p" else (1.0 if d["k"] == "e" else 1.15))
 	add_child(root)
-	var label := _label("", 34, Color("#f2ead8") if d["k"] == "p" else Color("#ffcf9a"))
-	label.position.y = 2.1 if d["k"] == "p" else 1.8
+	var label := _label("", 34, Color("#f2ead8") if d["k"] == "p" else (Color("#9fe3ff") if d["k"] == "e" else Color("#ffcf9a")))
+	label.position.y = 2.1 if d["k"] == "p" else (2.5 if d["k"] == "e" else 1.8)
 	root.add_child(label)
 	var x := float(d["x"])
 	var z := float(d["z"])
@@ -486,7 +492,10 @@ func _process(delta: float) -> void:
 				"object":
 					Net.request("interact", {"object": pa["id"]}, func(r):
 						if r["ok"]:
-							main.hud.system("Feito: %s" % object_nodes.get(pa["id"], {}).get("data", {}).get("name", "")))
+							if r.has("channel"):
+								main.hud.show_channel(str(r["channel"]["text"]), float(r["channel"]["ms"]))
+							elif not r.has("escort"):
+								main.hud.system("Feito: %s" % object_nodes.get(pa["id"], {}).get("data", {}).get("name", "")))
 				"portal":
 					Net.request("portal", {"portal": pa["id"]})
 	if not pending_cast.is_empty() and entities.has(pending_cast.get("target", "")):
@@ -733,8 +742,8 @@ func on_hit(m: Dictionary) -> void:
 	if not m.get("miss", false):
 		if dst["node"].has_method("play_hurt"):
 			dst["node"].play_hurt()
-		# empurrãozinho para longe de quem bateu (mais forte no crítico)
-		if not src.is_empty():
+		# empurrãozinho para longe de quem bateu (mais forte no crítico); a carroça não sai do lugar
+		if not src.is_empty() and dst["data"].get("k", "") != "e":
 			var dv: Vector3 = dst["node"].position - src["node"].position
 			var d2 := Vector2(dv.x, dv.z)
 			if d2.length() > 0.01:

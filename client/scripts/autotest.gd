@@ -60,6 +60,8 @@ func _enter(cid: int) -> void:
 func _msg(m: Dictionary) -> void:
 	if m.get("t", "") == "death" and m.get("eid", "") == target and target != "":
 		killed = true
+	if m.get("t", "") == "escort" and m.has("ambush"):
+		cap4_ambush = true
 	if m.get("t", "") == "party_invite":
 		say("convite de grupo recebido de %s; aceitando" % m["from"])
 		Net.request("party_accept", {"from": int(m["fromId"])})
@@ -390,6 +392,9 @@ func _scene_tick() -> void:
 	if main.args.has("dungeon") and scene_i == 0 and not dungeon_done:
 		_dungeon_tick()
 		return
+	if main.args.has("cap4") and scene_i == 0 and not cap4_done:
+		_cap4_tick()
+		return
 	if scene_i >= SCENE_SPOTS.size() or (scene_i >= 1 and main.args.has("scenequick")):
 		say("OK")
 		get_tree().quit(0)
@@ -578,6 +583,130 @@ var dungeon_step := 0
 var dungeon_done := false
 var dungeon_until := 0
 var dungeon_shots := 0
+
+# ---------- capítulo 4 no cliente (--cap4): canalização, escolta e escolha de diálogo ----------
+var cap4_step := 0
+var cap4_done := false
+var cap4_until := 0
+var cap4_ambush := false
+var cap4_ambush_shot := false
+
+func _cap4_cart() -> Dictionary:
+	for eid in main.world.entities.keys():
+		var e: Dictionary = main.world.entities[eid]
+		if e["data"].get("k", "") == "e":
+			return e
+	return {}
+
+func _cap4_tick() -> void:
+	if Time.get_ticks_msec() < cap4_until:
+		return
+	var wait := 1500
+	match cap4_step:
+		0:
+			Net.request("gm", {"cmd": "xp", "level": 15}, func(r):
+				if r["ok"]:
+					main.set_char(r["char"]))
+			var pre := ["c4_bells"]
+			for qid in main.defs["quests"].keys():
+				if int(main.defs["quests"][qid].get("chapter", 9)) < 4:
+					pre.append(qid)
+			Net.request("gm", {"cmd": "quest_done", "quests": pre})
+			wait = 2500
+		1:
+			Net.request("gm", {"cmd": "teleport", "mapId": "galerias_eco", "x": 25.5, "z": 87.0})
+			wait = 4500
+		2:
+			if main.map_def().get("id", "") != "galerias_eco" or main.world == null or main.world.me().is_empty():
+				return
+			Net.request("quest_accept", {"quest": "c4_ilda", "npc": "ilda"}, func(r):
+				say("aceitou Ilda Varen: %s" % ("ok" if r["ok"] else r["reason"])))
+		3:
+			Net.request("gm", {"cmd": "teleport", "x": 92.0, "z": 72.5})
+			main.world.cam_dist = 11.0
+			main.world.cam_pitch = 0.7
+		4:
+			Net.request("interact", {"object": "gauge_1"}, func(r):
+				if r["ok"] and r.has("channel"):
+					main.hud.show_channel(str(r["channel"]["text"]), float(r["channel"]["ms"]))
+				say("medidor: %s" % ("canalizando" if r["ok"] else r["reason"])))
+			wait = 1800
+		5:
+			_scene_shot("90_canalizacao")
+			wait = 3500
+		6:
+			Net.request("gm", {"cmd": "quest_done", "quests": ["c4_ilda"]})
+			Net.request("gm", {"cmd": "teleport", "x": 25.5, "z": 87.0})
+			wait = 2000
+		7:
+			Net.request("quest_accept", {"quest": "c4_route", "npc": "ilda"}, func(r):
+				say("aceitou Rota Alternativa: %s" % ("ok" if r["ok"] else r["reason"])))
+			Net.request("gm", {"cmd": "teleport", "x": 31.0, "z": 93.0})
+			main.world.cam_dist = 16.0
+		8:
+			Net.request("interact", {"object": "ilda_cart"}, func(r):
+				say("carroça: %s" % ("partiu" if r["ok"] else r["reason"])))
+		9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24:
+			var cart := _cap4_cart()
+			if not cart.is_empty():
+				var cp: Vector3 = cart["node"].position
+				main.world.request_move(cp.x + 1.8, cp.z - 1.2)
+			if cap4_step == 12:
+				_scene_shot("91_escolta")
+			if cap4_ambush and not cap4_ambush_shot:
+				cap4_ambush_shot = true
+				var best := ""
+				var bd := 30.0
+				for eid in main.world.entities.keys():
+					var e: Dictionary = main.world.entities[eid]
+					if e["data"].get("k", "") == "m":
+						var d: float = e["node"].position.distance_to(main.world.my_pos())
+						if d < bd:
+							bd = d
+							best = eid
+				if best != "":
+					main.world.selected = best
+					Net.request("attack", {"target": best})
+				wait = 1200
+			elif cap4_ambush_shot and cap4_step < 24:
+				_scene_shot("92_emboscada")
+				cap4_step = 24
+			wait = maxi(wait, 1500)
+		25:
+			Net.request("gm", {"cmd": "quest_done", "quests": ["c4_route"]})
+			Net.request("gm", {"cmd": "teleport", "x": 27.5, "z": 73.0})
+			wait = 2500
+		26:
+			Net.request("quest_accept", {"quest": "c4_reasons", "npc": "mara"}, func(r):
+				say("aceitou Duas Razões: %s" % ("ok" if r["ok"] else r["reason"]))
+				Net.request("gm", {"cmd": "quest_progress", "quest": "c4_reasons", "index": 0, "value": ["thermo_1", "thermo_2", "thermo_3"]}))
+			wait = 1500
+		27:
+			Net.request("gm", {"cmd": "teleport", "x": 25.5, "z": 87.0})
+			main.world.cam_dist = 10.0
+			wait = 2000
+		28:
+			Net.request("talk", {"npc": "ilda"}, func(r):
+				if r["ok"]:
+					main.hud.show_npc(r)
+					say("Ilda pergunta: %s" % ("sim" if r.get("choice", null) != null else "não")))
+		29:
+			_scene_shot("93_escolha")
+			Net.request("quest_choice", {"quest": "c4_reasons", "option": "inverno", "npc": "ilda"}, func(r):
+				say("escolha: %s" % (("título " + str(r.get("title", ""))) if r["ok"] else r["reason"]))
+				main.hud.npc_panel.visible = false)
+			wait = 2500
+		30:
+			main.world.cam_dist = 8.0
+			wait = 2000
+		31:
+			_scene_shot("94_titulo")
+			say("capítulo 4 visto no cliente")
+			cap4_done = true
+			scene_i = SCENE_SPOTS.size()
+			return
+	cap4_step += 1
+	cap4_until = Time.get_ticks_msec() + wait
 
 func _dungeon_tick() -> void:
 	if Time.get_ticks_msec() < dungeon_until:

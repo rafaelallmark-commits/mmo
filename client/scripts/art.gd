@@ -476,6 +476,27 @@ const MONSTER_COLORS := {
 
 ## Monstro por espécie (rato, besouro, cão, lagarto, javali) ou por família, com olhos
 ## pintados e patas animadas.
+## Carroça de abastecimento da escolta (capítulo 4): caixa de madeira sobre quatro rodas, um tanque de
+## cobre com chaminé e lanternas âmbar. +Z = frente.
+static func cart() -> Node3D:
+	var root := Node3D.new()
+	var wood := toon(Color("#7a5232"))
+	var dark := toon(Color("#4a3020"))
+	var copper := toon(Color("#b8743a"))
+	part(root, box(Vector3(1.4, 0.5, 2.4)), wood, Vector3(0, 0.75, 0))
+	part(root, box(Vector3(1.5, 0.12, 2.5)), dark, Vector3(0, 0.5, 0))
+	for sx in [-1.0, 1.0]:
+		for sz in [-0.85, 0.85]:
+			part(root, cyl(0.38, 0.38, 0.12, 14), dark, Vector3(sx * 0.78, 0.38, sz), Vector3.ONE, Vector3(0, 0, 90))
+			part(root, cyl(0.1, 0.1, 0.16, 8), copper, Vector3(sx * 0.8, 0.38, sz), Vector3.ONE, Vector3(0, 0, 90))
+	part(root, cyl(0.42, 0.42, 1.3, 14), copper, Vector3(0, 1.32, -0.2), Vector3.ONE, Vector3(90, 0, 0))
+	part(root, cyl(0.1, 0.12, 0.7, 8), dark, Vector3(0, 1.9, -0.6))
+	part(root, box(Vector3(0.1, 0.08, 1.4)), dark, Vector3(0.35, 0.9, 1.75))
+	part(root, box(Vector3(0.1, 0.08, 1.4)), dark, Vector3(-0.35, 0.9, 1.75))
+	for sx in [-0.7, 0.7]:
+		part(root, sphere(0.09), toon(Color("#ffb347"), false, Color(1.0, 0.55, 0.15)), Vector3(sx, 1.15, 1.2))
+	return root
+
 static func monster(def: Dictionary) -> Node3D:
 	var root: Node3D = Rig.new()
 	root.step_speed = 12.0
