@@ -12,6 +12,7 @@ export class ClanManager {
   constructor(server) {
     this.s = server;
     this.invites = new Map(); // charId convidado -> { clanId, from, at }
+    this.motdAt = new Map();  // clanId -> última mudança da mensagem do dia
   }
 
   get st() { return this.s.store; }
@@ -165,7 +166,13 @@ export class ClanManager {
   motd(p, { text }) {
     const cl = this.st.clanOfChar(p.char.id);
     if (!cl || RANK_ORDER[cl.rank] < 2) return { ok: false, code: 'forbidden', reason: 'Só líder e oficiais mudam a mensagem do dia.' };
-    const t = typeof text === 'string' ? text.trim().slice(0, 140) : '';
+    // o clã inteiro recebe o texto: vale o silêncio da conta e um limite de frequência
+    const muted = this.s.mod?.mutedReason(p);
+    if (muted) return muted;
+    const now = Date.now();
+    if (now - (this.motdAt.get(cl.id) ?? 0) < 30_000) return { ok: false, code: 'too_fast', reason: 'Espere um pouco antes de mudar a mensagem do dia de novo.' };
+    this.motdAt.set(cl.id, now);
+    const t = typeof text === 'string' ? text.replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').trim().slice(0, 140) : '';
     this.st.setClanMotd(cl.id, t);
     this.notifyClan(cl.id, { t: 'clan_event', text: `Mensagem do dia: ${t}` });
     return { ok: true, clan: this.info(p) };
