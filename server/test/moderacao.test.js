@@ -87,6 +87,11 @@ test('moderação: silêncio, denúncia, suspensão, ferramenta, onde está e an
     assert.equal((await A.request('gm', { cmd: 'announce', text: 'Reinício às 20h' })).ok, true);
     assert.match((await ann).text, /Reinício às 20h/);
 
+    // hierarquia e limites: mestre não modera admin; prazos absurdos recusados (antes corrompiam a conta)
+    assert.equal((await G.request('gm', { cmd: 'mute', name: 'Admina', minutes: 10, reason: 'x' })).code, 'forbidden');
+    assert.equal((await A.request('gm', { cmd: 'ban', name: 'Quezilento', hours: 1e15, reason: 'x' })).code, 'bad_request');
+    assert.equal((await G.request('gm', { cmd: 'mute', name: 'Quezilento', minutes: 1e12, reason: 'x' })).code, 'bad_request');
+
     // mestre suspende até 72 h; permanente só admin; motivo obrigatório
     assert.equal((await G.request('gm', { cmd: 'ban', name: 'Quezilento', hours: 100, reason: 'ameaças' })).code, 'forbidden');
     assert.equal((await G.request('gm', { cmd: 'ban', name: 'Quezilento', hours: 2 })).code, 'bad_request');
@@ -123,11 +128,17 @@ test('moderação: silêncio, denúncia, suspensão, ferramenta, onde está e an
     server.mod.lastSweep = 0;
     server.mod.sweep();
     assert.match((await pk).reason, /teste da ferramenta/);
+    // conta excluída fora do servidor (serviço de contas, ferramenta): a sessão cai na varredura
+    const gk = G.waitFor((m) => m.t === 'kicked', 3000, 'expulsão de conta excluída');
+    server.store.deleteAccount(server.store.findAccount('m_mestre').id);
+    server.mod.lastSweep = 0;
+    server.mod.sweep();
+    assert.match((await gk).reason, /excluída/);
     // auditoria registrou tudo
     const kinds = new Set(server.store.auditTail(200).map((a) => a.kind));
     for (const k of ['mod_mute', 'mod_unmute', 'mod_ban', 'mod_unban', 'report', 'login_banned']) assert.ok(kinds.has(k), `auditoria: ${k}`);
     log('ferramenta e auditoria conferidas');
-    for (const c of [A, G]) c.ws.close();
+    A.ws.close();
     await sleep(100);
   } finally {
     await accSvc.stop().catch(() => {});
