@@ -454,3 +454,56 @@ test('troca: item oferecido que muda depois de travar (tônico bebido, compra qu
     A.ws.close(); B.ws.close();
   });
 });
+
+test('duelo: queda por monstro encerra sem vencedor; de fora ninguém cura; só golpes e magias valem; escudo absorve', async () => {
+  await withServer(async (server, url) => {
+    const A = await hero(url, 'Golpe', 'breaker', 15);
+    const B = await hero(url, 'Guarda', 'breaker', 15);
+    const C = await hero(url, 'Curandeira', 'veilsinger', 5);
+    const W = await hero(url, 'Marcadora', 'warden', 5);
+    const pa = player(server, A), pb = player(server, B);
+    const sx = pa.char.x, sz = pa.char.z;
+    for (const [c, dx] of [[A, 0], [B, 3], [C, -3], [W, 1.5]]) await tp(c, sx + dx, sz);
+    const zone = pa.zone;
+    const start = async (ch, op, name) => {
+      const { push: inv } = await expectPush(op, (m) => m.t === 'duel_invite', () => ch.request('duel_request', { name }), 'desafio');
+      await op.request('duel_accept', { from: inv.fromId });
+      await ch.waitFor((m) => m.t === 'duel' && m.state === 'active', 6000, 'início');
+    };
+    await start(A, B, 'Guarda');
+    // de fora não cura o duelista
+    pb.char.hp = 40;
+    const heal = await C.request('cast', { skill: 'sustain_chant', ally: pb.eid });
+    assert.equal(heal.code, 'in_duel');
+    // escudo do próprio duelista absorve o golpe do duelo
+    pb.shield = { amount: 500, until: zone.now + 10_000, by: pb.char.id };
+    const hp0 = pb.char.hp;
+    zone.duels.damage(pa, pb, 30);
+    assert.equal(pb.char.hp, hp0, 'escudo absorveu');
+    assert.equal(pb.shield.amount, 470);
+    pb.shield = null;
+    // monstro derruba um duelista: o duelo acaba sem vencedor (golpe no corpo não vale)
+    const ended = A.waitFor((m) => m.t === 'duel' && m.state === 'ended', 4000, 'fim por queda');
+    zone.applyRawDamage(pb, 99999);
+    assert.equal(pb.char.dead, true);
+    const cast = await A.request('cast', { skill: 'deep_cut', target: pb.eid });
+    assert.equal(cast.ok, false, 'corpo não é alvo');
+    const e = await ended;
+    assert.equal(e.draw, true);
+    assert.equal(pb.char.hp, 0, 'continua caído, sem vida inventada');
+    // ninguém desafia caído; e quem cai depois do desafio não aceita
+    assert.equal((await A.request('duel_request', { name: 'Guarda' })).code, 'dead');
+    await B.request('respawn');
+    await tp(B, sx + 3, sz); await tp(W, sx + 1.5, sz);
+    const { push: inv2 } = await expectPush(B, (m) => m.t === 'duel_invite', () => A.request('duel_request', { name: 'Guarda' }), 'desafio');
+    zone.applyRawDamage(pb, 99999);
+    assert.equal((await B.request('duel_accept', { from: inv2.fromId })).code, 'dead');
+    await B.request('respawn');
+    await tp(B, sx + 3, sz);
+    // marca da trilha (sem dano) não vale em duelo
+    await start(W, B, 'Guarda');
+    const mark = await W.request('cast', { skill: 'trail_mark', target: pb.eid });
+    assert.equal(mark.code, 'not_in_duel');
+    for (const c of [A, B, C, W]) c.ws.close();
+  });
+});

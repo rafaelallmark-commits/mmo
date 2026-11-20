@@ -341,7 +341,8 @@ export class Zone {
     if (needsEnemy && typeof targetId === 'string' && targetId.startsWith('p')) {
       // duelo: habilidade de alvo único no oponente (só o dano; efeitos de controle não valem em duelo)
       const op = this.entityById(targetId);
-      if (!op || !this.duels.active(p, op)) return { ok: false, code: 'bad_target', reason: 'Só dá para atacar jogadores num duelo.' };
+      if (!op || !this.duels.active(p, op) || op.char.dead) return { ok: false, code: 'bad_target', reason: 'Só dá para atacar jogadores num duelo.' };
+      if (!['strike', 'spell'].includes(s.effect.kind)) return { ok: false, code: 'not_in_duel', reason: `${s.name} não vale em duelo (só golpes e magias de alvo único).` };
       const d = dist(c, op.char);
       if (d > range + tol) return { ok: false, code: 'out_of_range', reason: `Alvo fora de alcance (${d.toFixed(1)} m; alcance ${range} m).` };
       if (dry) return { ok: true, dry: true };
@@ -370,6 +371,7 @@ export class Zone {
     } else if (s.target === 'ally') {
       ally = allyId ? this.entityById(allyId) : p;
       if (!ally || !ally.char || ally.char.dead) return { ok: false, code: 'bad_target', reason: 'Aliado inválido.' };
+      if (ally !== p && ally.char && this.duels.duelOf(ally.char.id)) return { ok: false, code: 'in_duel', reason: `${ally.char.name} está num duelo: ninguém de fora ajuda.` };
       if (ally !== p && dist(c, ally.char) > range + tol) return { ok: false, code: 'out_of_range', reason: `Aliado fora de alcance (alcance ${range} m).` };
     }
     if (dry) return { ok: true, dry: true };
@@ -451,7 +453,8 @@ export class Zone {
     const pid = this.hooks.partyIdOf?.(p.char.id);
     if (pid == null) return out;
     for (const o of this.players.values()) {
-      if (o !== p && !o.char.dead && this.hooks.partyIdOf(o.char.id) === pid && dist(o.char, p.char) <= r) out.push(o);
+      // quem está num duelo não recebe cura nem reforço do grupo (só o próprio duelista se ajuda)
+      if (o !== p && !o.char.dead && this.hooks.partyIdOf(o.char.id) === pid && dist(o.char, p.char) <= r && !this.duels.duelOf(o.char.id)) out.push(o);
     }
     return out;
   }

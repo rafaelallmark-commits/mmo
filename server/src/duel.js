@@ -40,6 +40,7 @@ export class DuelManager {
     this.invites.delete(p.char.id);
     const a = z.players.get(fromId);
     if (!a || dist(a.char, p.char) > START_RANGE * 1.5) return { ok: false, code: 'too_far', reason: 'Vocês se afastaram.' };
+    if (a.char.dead || p.char.dead) return { ok: false, code: 'dead', reason: 'Ninguém duela caído.' };
     if (this.byChar.has(a.char.id) || this.byChar.has(p.char.id)) return { ok: false, code: 'busy', reason: 'Um de vocês já está num duelo.' };
     const d = { id: ++this.seq, a: a.char.id, b: p.char.id, state: 'countdown', startAt: z.now + COUNTDOWN_MS, endAt: z.now + COUNTDOWN_MS + LIMIT_MS, center: { x: (a.char.x + p.char.x) / 2, z: (a.char.z + p.char.z) / 2 } };
     this.duels.set(d.id, d);
@@ -70,6 +71,7 @@ export class DuelManager {
     for (const d of [...this.duels.values()]) {
       const a = z.players.get(d.a), b = z.players.get(d.b);
       if (!a || !b) { this.end(d, a ? d.a : b ? d.b : null, 'O outro duelista saiu.'); continue; }
+      if (a.char.dead || b.char.dead) { this.end(d, null, 'Duelo interrompido: um dos duelistas caiu.'); continue; }
       if (d.state === 'countdown' && z.now >= d.startAt) {
         d.state = 'active';
         for (const p of [a, b]) z.send(p.char.id, { t: 'duel', state: 'active' });
@@ -84,7 +86,16 @@ export class DuelManager {
   // dano de duelo: nunca derruba; quem chegaria a 0 perde com 1 de vida
   damage(att, def, amount) {
     const d = this.duelOf(att.char.id);
-    if (!d || d.state !== 'active') return;
+    if (!d || d.state !== 'active' || def.char.dead || att.char.dead) return;
+    const z = this.zone;
+    const down = z.buffMod(def, 'damageTakenDownPct');
+    if (down) amount = Math.max(1, Math.round(amount * (1 - Math.min(down, 80) / 100)));
+    if (def.shield && amount > 0) {
+      const absorbed = Math.min(def.shield.amount, amount);
+      def.shield.amount -= absorbed; amount -= absorbed;
+      if (def.shield.amount <= 0) def.shield = null;
+    }
+    if (amount <= 0) { def.lastHitAt = z.now; return; }
     def.lastHitAt = this.zone.now;
     def.lastCombatAt = this.zone.now;
     att.lastCombatAt = this.zone.now;
