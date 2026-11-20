@@ -18,14 +18,15 @@ const MD = arg('md', join(root, '../docs/relatorio-cenarios.md'));
 
 const SUITES = [
   ['Núcleo do M1: dois clientes, saque individual, anti-duplicação (coleta simultânea, mesmo rid, reconexão), requisitos de equipamento, reinício do servidor', 'test/acceptance.test.js'],
-  ['Grupo de 5, papéis (ameaça, cura reduz tônicos ≥ 40%, XP sem dano), prova de classe com queda de conexão', 'test/m2.test.js'],
+  ['Grupo de 5, papéis (ameaça, XP sem dano), prova de classe com queda de conexão', 'test/m2.test.js'],
+  ['Critérios do M2: as 8 classes equipam a faixa 9 (recusa com valor atual e exigido); a Cantora reduz os tônicos do grupo em ≥ 40%', 'test/criterios.test.js'],
   ['Calabouço com 3 composições e bots que reagem aos avisos, recompensa única, refino com RNG semeado (10.000 tentativas), depósito', 'test/m3.test.js'],
   ['Snapshots por diferença = estado completo; saída do raio; troca de zona', 'test/snapshots.test.js'],
   ['Migração de banco antigo (uma única vez)', 'test/store.test.js'],
   ['Regras, morte, equipamento, habilidades, navegação, dados', 'test/rules.test.js test/death.test.js test/equipment.test.js test/skills.test.js test/nav.test.js test/data.test.js'],
   ['Capítulo 4 completo: canalização, escolta da carroça, escolha de diálogo', 'test/ch4.test.js'],
   ['Pós-versão 1: refino +4..+6 com selo, troca atômica, clãs, duelos (e casos de borda)', 'test/social.test.js'],
-  ['Teste público: contas e token, limites, papéis, desligamento gracioso, TLS, SMTP, moderação e denúncias', 'test/publico.test.js test/moderacao.test.js'],
+  ['Teste público: contas e token, limites, papéis, desligamento gracioso, TLS, SMTP com TLS obrigatório, segredos, moderação e denúncias', 'test/publico.test.js test/moderacao.test.js test/email.test.js'],
   ['Ajustes do M4: recargas entre zonas, tônicos por nível, venda, descarte, armeiro, pedido que falha no meio sai sem gravar', 'test/ajustes.test.js'],
   ['Níveis 21–25: teto, A Cava Primeira, elite diária, habilidades do nível 25, capítulo 6 inteiro', 'test/nivel25.test.js'],
   ['Várias zonas: mundo + 2 zonas, transferência com token, posse única, grupo e clã entre zonas, quedas e moderação', 'test/multizona.test.js'],
