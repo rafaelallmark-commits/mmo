@@ -13,6 +13,9 @@
 import { Store } from '../src/store.js';
 import { PERMANENT } from '../src/moderation.js';
 
+// texto de jogador impresso no terminal sem caracteres de controle (não dá para forjar linhas)
+const safe = (t) => String(t ?? '').replace(/[\u0000-\u001f\u007f-\u009f]/g, '·');
+
 const arg = (n, d) => { const i = process.argv.indexOf(`--${n}`); if (i === -1) return d; const v = process.argv[i + 1]; return v === undefined || v.startsWith('--') ? true : v; };
 const st = new Store(arg('db', process.env.CINZAS_DB ?? 'cinzas.db'));
 try {
@@ -20,13 +23,13 @@ try {
     for (const a of st.auditTail(Number(arg('n', 50)), 'bug_report').reverse()) {
       const d = JSON.parse(a.data_json);
       console.log(`${new Date(a.at).toISOString()}  pers=${a.char_id} (${d.classId} nv ${d.level}) ${d.map}${d.instance ? ' [instância]' : ''} (${d.x}, ${d.z}) cliente=${d.client ?? '?'} servidor=${d.server ?? '?'} dados=${d.data ?? '?'}`);
-      console.log(`    ${d.text}`);
+      console.log(`    ${safe(d.text)}`);
     }
   } else if (arg('denuncias', false)) {
     for (const a of st.auditTail(Number(arg('n', 50)), 'report').reverse()) {
       const d = JSON.parse(a.data_json);
-      console.log(`${new Date(a.at).toISOString()}  de pers=${a.char_id} contra ${d.targetName} (pers=${d.target}, conta=${d.targetAccount}) em ${d.map}: ${d.reason}`);
-      for (const l of d.chat ?? []) console.log(`    ${new Date(l.at).toISOString().slice(11, 19)} [${l.channel}] ${l.text}`);
+      console.log(`${new Date(a.at).toISOString()}  de pers=${a.char_id} contra ${safe(d.targetName)} (pers=${d.target}, conta=${d.targetAccount}) em ${d.map}: ${safe(d.reason)}`);
+      for (const l of d.chat ?? []) console.log(`    ${new Date(l.at).toISOString().slice(11, 19)} [${safe(l.channel)}] ${safe(l.text)}`);
     }
   } else if (arg('auditoria', false)) {
     for (const a of st.auditTail(Number(arg('n', 50)), arg('tipo', null) || null).reverse()) {
@@ -42,7 +45,7 @@ try {
     if (arg('suspender', false)) {
       const perm = !!arg('permanente', false);
       const horas = Number(arg('horas', 0));
-      if (!perm && !(horas > 0)) { console.error('use --horas N ou --permanente'); process.exit(1); }
+      if (!perm && !(horas > 0 && horas <= 24 * 365 * 5)) { console.error('use --horas N (até 5 anos) ou --permanente'); process.exit(1); }
       if (typeof motivo !== 'string') { console.error('informe --motivo'); process.exit(1); }
       const until = perm ? PERMANENT : Date.now() + horas * 3600_000;
       st.setBan(acc.id, until, motivo);
@@ -52,7 +55,7 @@ try {
     if (arg('retirar-suspensao', false)) { st.setBan(acc.id, null, null); st.audit('mod_unban', { targetAccount: acc.id, by: 'ferramenta' }); console.log(`suspensão de ${name} retirada`); }
     if (arg('silenciar', false)) {
       const min = Number(arg('minutos', 0));
-      if (!(min > 0)) { console.error('use --minutos N'); process.exit(1); }
+      if (!(min > 0 && min <= 60 * 24 * 30)) { console.error('use --minutos N (até 30 dias)'); process.exit(1); }
       const until = Date.now() + min * 60_000;
       st.setMute(acc.id, until);
       st.audit('mod_mute', { targetAccount: acc.id, until, reason: typeof motivo === 'string' ? motivo : '', by: 'ferramenta' });

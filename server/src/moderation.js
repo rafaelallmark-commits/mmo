@@ -7,6 +7,13 @@ const CHAT_KEEP = 20;          // últimas falas por personagem guardadas para d
 const REPORTS_PER_HOUR = 5;
 const BUGS_PER_HOUR = 10;
 const MAX_GM_BAN_H = 72;       // mestre suspende até 72 h; acima disso (ou permanente), só admin
+const MAX_BAN_H = 24 * 365 * 5;     // prazo máximo com data: 5 anos (acima disso, "perm")
+const MAX_MUTE_MIN = 60 * 24 * 30;  // silêncio: até 30 dias
+const CHANNELS = new Set(['zone', 'party', 'whisper', 'clan']);
+const HOUR = 3600_000;
+const ROLE_LEVEL = { player: 0, gm: 1, admin: 2 };
+// texto vindo do jogador, sem caracteres de controle (não mexe no terminal de quem lê a auditoria)
+export const cleanText = (t, max) => (typeof t === 'string' ? t.replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').trim().slice(0, max) : '');
 
 const fmt = (ms) => new Date(ms).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' });
 const untilText = (ms) => (ms >= PERMANENT ? 'sem data para acabar' : `até ${fmt(ms)}`);
@@ -33,14 +40,23 @@ export class Moderation {
 
   // gancho do chat: recusa se a conta está silenciada; senão guarda a fala para as denúncias
   chatBlocked(p, channel, text) {
-    const sess = this.s.byChar.get(p.char.id);
-    if (sess?.mutedUntil > Date.now()) return { ok: false, code: 'muted', reason: `Você está silenciado ${untilText(sess.mutedUntil)}.` };
-    if (typeof text === 'string') {
-      const log = this.chatLog.get(p.char.id) ?? [];
-      log.push({ at: Date.now(), channel, text: text.slice(0, 200) });
+    const muted = this.mutedReason(p);
+    if (muted) return muted;
+    const t = cleanText(text, 200);
+    if (t) {
+      const now = Date.now();
+      const log = (this.chatLog.get(p.char.id) ?? []).filter((l) => now - l.at <= HOUR);
+      log.push({ at: now, channel: CHANNELS.has(channel) ? channel : 'outro', text: t });
       if (log.length > CHAT_KEEP) log.shift();
       this.chatLog.set(p.char.id, log);
     }
+    return null;
+  }
+
+  // silenciado? (vale para chat e para textos que o clã inteiro recebe, como a mensagem do dia)
+  mutedReason(p) {
+    const sess = this.s.byChar.get(p.char.id);
+    if (sess?.mutedUntil > Date.now()) return { ok: false, code: 'muted', reason: `Você está silenciado ${untilText(sess.mutedUntil)}.` };
     return null;
   }
 
@@ -51,11 +67,15 @@ export class Moderation {
     if (now - this.lastSweep < 60_000) return;
     this.lastSweep = now;
     // falas com mais de 1 h saem do contexto de denúncia
-    for (const [charId, log] of this.chatLog) if (now - log[log.length - 1].at > 3600_000) this.chatLog.delete(charId);
+    for (const [charId, log] of this.chatLog) {
+      const keep = log.filter((l) => now - l.at <= HOUR);
+      if (keep.length) this.chatLog.set(charId, keep); else this.chatLog.delete(charId);
+    }
     for (const s of [...this.s.sessions]) {
       if (s.accountId == null) continue;
       const acc = this.st.findAccountById(s.accountId);
-      if (!acc) continue;
+      // conta excluída fora deste servidor (serviço de contas, ferramenta): a sessão cai
+      if (!acc) { this.kickSession(s, 'Esta conta foi excluída.'); continue; }
       s.mutedUntil = acc.muted_until ?? 0;
       const ban = banMessage(acc, now);
       if (ban) this.kickSession(s, ban);
@@ -96,7 +116,14 @@ export class Moderation {
     }
     const t = this.findTarget(msg.name);
     if (!t) return { ok: false, code: 'not_found', reason: `Personagem ${msg.name ?? ''} não encontrado.` };
-    const reason = typeof msg.reason === 'string' ? msg.reason.trim().slice(0, 140) : '';
+    const reason = cleanText(msg.reason, 140);
+    // ninguém modera quem tem papel igual ou maior (mestre não mexe em mestre nem em admin)
+    if (cmd !== 'where' && t.accountId != null) {
+      const tacc = this.st.findAccountById(t.accountId);
+      if (tacc && (ROLE_LEVEL[tacc.role] ?? 0) >= (ROLE_LEVEL[role] ?? 0) && !this.s.opts.dev) return { ok: false, code: 'forbidden', reason: 'Você não pode moderar uma conta da equipe com papel igual ou maior que o seu.' };
+      // suspensão longa ou sem data é coisa de admin: mestre não a retira
+      if (cmd === 'unban' && role !== 'admin' && tacc?.banned_until && tacc.banned_until - Date.now() > MAX_GM_BAN_H * HOUR) return { ok: false, code: 'forbidden', reason: 'Só administradores retiram suspensões longas ou sem data.' };
+    }
     switch (cmd) {
       case 'where':
         return t.p ? { ok: true, message: `${t.name}: ${t.p.zone.mapId}${t.p.zone.instanceId ? ' (instância)' : ''} em (${t.p.char.x.toFixed(1)}, ${t.p.char.z.toFixed(1)}), nível ${t.p.char.level}.`, cache: false }
@@ -109,7 +136,7 @@ export class Moderation {
       case 'ban': {
         const permanent = msg.hours === 'perm' || msg.permanent === true;
         const hours = Number(msg.hours);
-        if (!permanent && !(hours > 0)) return { ok: false, code: 'bad_request', reason: 'Use: /gm ban Nome horas motivo (ou "perm").' };
+        if (!permanent && !(hours > 0 && hours <= MAX_BAN_H)) return { ok: false, code: 'bad_request', reason: `Use: /gm suspender Nome horas motivo (1 a ${MAX_BAN_H} h) ou "perm".` };
         if ((permanent || hours > MAX_GM_BAN_H) && role !== 'admin') return { ok: false, code: 'forbidden', reason: `Mestres suspendem até ${MAX_GM_BAN_H} h; acima disso, só administradores.` };
         if (!reason) return { ok: false, code: 'bad_request', reason: 'Informe o motivo da suspensão.' };
         const until = permanent ? PERMANENT : Date.now() + hours * 3600_000;
@@ -126,16 +153,18 @@ export class Moderation {
         return { ok: true, message: `Suspensão da conta de ${t.name} retirada.`, cache: false };
       case 'mute': {
         const minutes = Number(msg.minutes);
-        if (!(minutes > 0)) return { ok: false, code: 'bad_request', reason: 'Use: /gm mute Nome minutos motivo.' };
-        const until = Date.now() + minutes * 60_000;
+        if (!(minutes > 0 && minutes <= MAX_MUTE_MIN)) return { ok: false, code: 'bad_request', reason: `Use: /gm silenciar Nome minutos motivo (1 a ${MAX_MUTE_MIN}).` };
+        const until = Date.now() + Math.round(minutes * 60_000);
         this.st.setMute(t.accountId, until);
-        if (t.sess) { t.sess.mutedUntil = until; this.s.sendTo(t.sess, { t: 'system', text: `Você foi silenciado ${untilText(until)}.${reason ? ` Motivo: ${reason}.` : ''}` }); }
+        // a conta pode estar on-line com outro personagem
+        const ms = t.sess ?? this.s.byAccount.get(t.accountId);
+        if (ms) { ms.mutedUntil = until; this.s.sendTo(ms, { t: 'system', text: `Você foi silenciado ${untilText(until)}.${reason ? ` Motivo: ${reason}.` : ''}` }); }
         this.st.audit('mod_mute', { ...by, targetAccount: t.accountId, target: t.charId, until, reason });
         return { ok: true, message: `${t.name} silenciado ${untilText(until)}.`, cache: false };
       }
       case 'unmute':
         this.st.setMute(t.accountId, null);
-        if (t.sess) t.sess.mutedUntil = 0;
+        { const us = t.sess ?? this.s.byAccount.get(t.accountId); if (us) us.mutedUntil = 0; }
         this.st.audit('mod_unmute', { ...by, targetAccount: t.accountId, target: t.charId });
         return { ok: true, message: `${t.name} pode falar de novo.`, cache: false };
     }
@@ -167,12 +196,13 @@ export class Moderation {
     const t = this.findTarget(name);
     if (!t) return { ok: false, code: 'not_found', reason: `Personagem ${name ?? ''} não encontrado.` };
     if (t.charId === p.char.id) return { ok: false, code: 'self', reason: 'Você não pode denunciar a si mesmo.' };
-    const why = typeof reason === 'string' ? reason.trim().slice(0, 200) : '';
+    const why = cleanText(reason, 200);
     if (!why) return { ok: false, code: 'bad_request', reason: 'Diga o motivo: /denunciar Nome motivo.' };
     recent.push(now);
     this.reports.set(p.char.id, recent);
     const sess = this.s.byChar.get(p.char.id);
-    this.st.audit('report', { accountId: sess?.accountId ?? null, charId: p.char.id, ip: sess?.ip ?? null, target: t.charId, targetName: t.name, targetAccount: t.accountId, reason: why, map: p.zone.mapId, chat: this.chatLog.get(t.charId) ?? [] });
+    const chat = (this.chatLog.get(t.charId) ?? []).filter((l) => now - l.at <= HOUR); // só a última hora (política de privacidade)
+    this.st.audit('report', { accountId: sess?.accountId ?? null, charId: p.char.id, ip: sess?.ip ?? null, target: t.charId, targetName: t.name, targetAccount: t.accountId, reason: why, map: p.zone.mapId, chat });
     return { ok: true, message: 'Denúncia registrada. A equipe vai analisar. Obrigado.', cache: false };
   }
 }
