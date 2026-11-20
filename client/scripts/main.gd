@@ -979,6 +979,12 @@ func _on_message(m: Dictionary) -> void:
 		"cast_end":
 			if hud:
 				hud.on_cast_end(m)
+		"cast_start":
+			if world and world.vfx:
+				world.vfx.on_cast_start(m)
+		"cast_cancel":
+			if world and world.vfx:
+				world.vfx.on_cast_cancel(m)
 		"escort":
 			if hud:
 				hud.on_escort(m)

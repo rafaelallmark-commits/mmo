@@ -278,6 +278,39 @@ func bubble(eid, c: Color, ms: float) -> void:
 	tw.tween_property(mi.material_override, "albedo_color:a", 0.0, 0.4)
 	tw.tween_callback(mi.queue_free)
 
+## Conjuração com tempo (castMs): anel que gira aos pés de quem conjura e se fecha no fim; some se for
+## interrompida. Cor pela habilidade (magia/sagrado/físico).
+func on_cast_start(m: Dictionary) -> void:
+	var eid = m.get("eid")
+	if eid == null or not world.entities.has(eid):
+		return
+	var node: Node3D = world.entities[eid]["node"]
+	on_cast_cancel(m)
+	var s: Dictionary = world.main.defs["skills"].get(m.get("skill", ""), {})
+	var eff: Dictionary = s.get("effect", {})
+	var c: Color = COLORS["magic"] if eff.get("damageType", "") == "magic" or eff.get("kind", "") in ["delayed_aoe", "spell"] else (COLORS["sacred"] if eff.get("kind", "") == "resurrect" else COLORS["buff"])
+	var inv := 1.0 / maxf(node.scale.x, 0.01)
+	var t := TorusMesh.new()
+	t.inner_radius = 0.55
+	t.outer_radius = 0.62
+	var mi := _mesh(t, glow(c, 0.75), Vector3(0, 0.06 * inv, 0), node)
+	mi.name = "VfxCast"
+	mi.scale = Vector3.ONE * inv * 1.4
+	var secs := maxf(0.2, float(m.get("ms", 1000)) / 1000.0)
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(mi, "rotation:y", TAU * secs, secs)
+	tw.tween_property(mi, "scale", Vector3.ONE * inv * 0.35, secs).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	tw.chain().tween_callback(mi.queue_free)
+
+func on_cast_cancel(m: Dictionary) -> void:
+	var eid = m.get("eid")
+	if eid == null or not world.entities.has(eid):
+		return
+	var old: Node = world.entities[eid]["node"].get_node_or_null("VfxCast")
+	if old:
+		old.queue_free()
+
 ## Espiral roxa (enfraquecido, lento, marcado).
 func swirl(eid, c: Color) -> void:
 	if eid == null or not world.entities.has(eid):
