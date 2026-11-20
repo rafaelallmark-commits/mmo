@@ -174,9 +174,13 @@
     "sharedCooldownMs": 3000
   },
   "death": {
+    "_doc": "Caído: volta ao posto com 50% de vida e de mana (sem perda de XP), sozinho depois de corpseTimeoutMs. Qualquer aliado fora de combate levanta um caído a até allyReviveRange m canalizando allyReviveMs (mover, agir ou ser atingido interrompe), com allyReviveHpPct da vida.",
     "respawnHpPct": 50,
     "respawnMpPct": 50,
-    "corpseTimeoutMs": 300000
+    "corpseTimeoutMs": 300000,
+    "allyReviveMs": 5000,
+    "allyReviveHpPct": 20,
+    "allyReviveRange": 3
   },
   "threat": {
     "_doc": "Ameaça: dano × multiplicador da classe; cura gera healingPerHp por ponto curado, dividido entre os monstros engajados com o aliado curado. O monstro troca de alvo quando alguém passa de switchMargin × a ameaça do alvo atual. Quem provoca a agressão por proximidade (ou é atacado pela matilha) começa com proximityAggro de ameaça.",

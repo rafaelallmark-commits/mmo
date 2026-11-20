@@ -8,6 +8,9 @@ export class QuestEngine {
     this.data = data;
     this.store = store;
     this.quests = data.quests ?? {};
+    // nome de exibição de cada NPC (o diário mostrava o id interno: "fale com master_veilsinger")
+    this.npcNames = new Map();
+    for (const m of Object.values(data.maps ?? {})) for (const n of m?.npcs ?? []) if (!this.npcNames.has(n.id)) this.npcNames.set(n.id, n.name);
   }
 
   load(char) {
@@ -84,6 +87,8 @@ export class QuestEngine {
     return {
       id, title: q.title, chapter: q.chapter, state: st.state, level: q.level,
       npc: this.npcLabel(char, q.npc), turnIn: this.npcLabel(char, q.turnIn), objectives,
+      npcName: this.npcNames.get(this.npcLabel(char, q.npc)) ?? this.npcLabel(char, q.npc),
+      turnInName: this.npcNames.get(this.npcLabel(char, q.turnIn)) ?? this.npcLabel(char, q.turnIn),
       ready: st.state === 'active' && objectives.every((o) => o.done), rewards: q.rewards, dialogue: this.dialogueFor(char, q),
     };
   }

@@ -159,6 +159,35 @@ test('elite diária dá XP em dobro só no primeiro abate do dia; a única do ch
   assert.ok(!second.includes('bow_t20') && !second.some((x) => x === 'ring_t20' || x === 'amulet_t20'), 'não repete a única');
 });
 
+test('Custódio: quem está caído na morte do chefe também leva XP, a única e o crédito da missão 5.3', () => {
+  const store = createStore(':memory:');
+  const acc = store.createAccount('caido', 'senha');
+  const credits = [];
+  const zone = new Zone({ mapId: 'ultima_eclusa', data, store, rng: makeRng(9), send: () => {}, broadcast: () => {}, hooks: { partyIdOf: () => 'g1', onKillCredit: (p, defId) => credits.push([p.char.name, defId]) } });
+  for (const m of [...zone.monsters.values()]) zone.monsters.delete(m.eid);
+  const mk = (name, classId, dx) => {
+    const id = store.createCharacter({ accountId: acc, name, classId, hp: 999, mp: 999, mapId: 'ultima_eclusa', x: 40 + dx, z: 40, kit: data.classes[classId].startingKit, slotFor: (d) => data.items[d].slot });
+    const c = store.loadCharacter(id); c.level = 18; c.quests = new Map();
+    return zone.addPlayer(c);
+  };
+  const vivo = mk('Vivo', 'warden', 0);
+  const caido = mk('Caido', 'breaker', 2);
+  const boss = zone.spawnMonster({ monster: 'lock_custodian', x: 42, z: 42, radius: 0 }, { noRespawn: true });
+  boss.state = 'chase';
+  boss.score.set(caido.char.id, boss.def.hp * 0.4); // participação registrada antes de cair
+  caido.char.dead = true; caido.char.hp = 0;
+  const xp0 = caido.char.xp;
+  boss.hp = 1;
+  zone.damageMonster(boss, vivo.char.id, 5);
+  assert.equal(boss.state, 'dead');
+  assert.ok(caido.char.xp > xp0, 'o caído recebeu a XP do chefe');
+  assert.ok(caido.char.dead, 'continua caído até a vitória o levantar (subir de nível não levanta)');
+  assert.ok(credits.some(([n, d]) => n === 'Caido' && d === 'lock_custodian'), 'crédito da missão para o caído');
+  const weapon = data.lootTables.lt_lock_custodian.entries.find((e) => e.type === 'classDrop').byClass.breaker;
+  const loot = store.unclaimedLoot(caido.char.id, Date.now()).map((r) => r.def_id);
+  assert.ok(loot.includes(weapon), `o caído recebeu ${weapon}`);
+});
+
 // ---------------------------------------------------------------- capítulos 4 e 5
 test('capítulo 4: Mara e Ilda nas Galerias, objetivo "entrar nos Canais" conclui pela passagem', async () => {
   await withServer(async (server, url) => {

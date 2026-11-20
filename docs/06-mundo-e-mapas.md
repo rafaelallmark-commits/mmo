@@ -87,7 +87,7 @@ z=100└────────────────────────
 
 ### A Cava Primeira (pós-v1, níveis 20–25)
 
-Obras mais velhas que a Companhia e que as duas cidades: escadas talhadas, salões de placas de bronze, tubos de voz nas paredes e uma cisterna que o calor do fundo deixou morna. Entrada pelo **Poço de Inspeção** (90, 176) dos Canais da Eclusa, ao lado da porta da Última Eclusa — nível 20 exigido ("Nível 20 exigido para A Cava Primeira. Seu nível atual é 19."). Mapa de 220 × 160 m (o mesmo porte das Galerias do Eco), cenário gerado com semente fixa (`npm run gen-scenery`: 300 peças, 141 com colisão, 5 estradas).
+Obras mais velhas que a Companhia e que as duas cidades: escadas talhadas, salões de placas de bronze, tubos de voz nas paredes e uma cisterna que o calor do fundo deixou morna. Entrada pelo **Poço de Inspeção** (90, 176) dos Canais da Eclusa, ao lado da porta da Última Eclusa — nível 20 exigido ("Nível 20 exigido para A Cava Primeira. Seu nível atual é 19."). Mapa de 220 × 160 m (o mesmo porte das Galerias do Eco), cenário gerado com semente fixa (`npm run gen-scenery -- --mapa cava_primeira`: 300 peças, 141 com colisão, 5 estradas).
 
 ```
  z=0 ┌──────────────────────────────────────────────────────────────────┐
@@ -125,7 +125,7 @@ z=160└────────────────────────
 
 ## Morte e resgate
 
-- Ao cair, o personagem fica no chão. Opções: **voltar ao posto de guarda** (aparece com 50% de vida e mana) ou esperar **resgate por aliado** (Coro do Recomeço da Cantora no nível 20; no M2, qualquer aliado pode levantar um caído canalizando 5 s fora de combate, com 20% de vida). Não há perda de XP; o custo é tempo e deslocamento.
+- Ao cair, o personagem fica no chão. Opções: **voltar ao posto de guarda** do mapa (aparece com 50% de vida e mana) ou esperar **resgate por aliado**: qualquer jogador a até 3 m levanta um caído canalizando 5 s fora de combate, com 20% de vida (`revive_ally`; D154), e o Coro do Recomeço da Cantora (nível 20) levanta à distância. Sem resgate, o caído volta sozinho ao posto em 5 min (`death.corpseTimeoutMs`). Não há perda de XP; o custo é tempo e deslocamento.
 - **Queda de conexão durante a morte**: o servidor grava o estado "caído" imediatamente. Ao reconectar, o personagem reaparece no posto de guarda com 50% de vida (implementado no M1 em `Zone.addPlayer` e coberto pelo teste `server/test/death.test.js`).
 
 ## Combate legível

@@ -915,6 +915,19 @@ func debug_pose(p_speed: float, phase01: float, p_combat: bool, attack_t := -1.0
 	_pose(0.0)
 
 # ---------------- quadro a quadro ----------------
+# Desempenho (opções gráficas): no modo leve, personagens a mais de anim_max_dist metros da câmera não
+# recalculam a pose; fora do campo de visão, ninguém recalcula (fica a última pose até voltar à tela).
+static var anim_max_dist := 0.0  # 0 = sem limite
+
+func _should_pose() -> bool:
+	var cam := get_viewport().get_camera_3d() if is_inside_tree() else null
+	if cam == null:
+		return true
+	var head := global_position + Vector3(0, 1.0, 0)
+	if anim_max_dist > 0.0 and cam.global_position.distance_to(head) > anim_max_dist:
+		return false
+	return cam.is_position_in_frustum(head) or cam.global_position.distance_to(head) < 4.0
+
 func _process(delta: float) -> void:
 	if skel == null:
 		return
@@ -958,6 +971,8 @@ func _process(delta: float) -> void:
 			pitch_t = clampf(atan2(local.y - 1.35, maxf(0.3, Vector2(local.x, local.z).length())), -0.5, 0.45) * _look_w
 	_look_yaw = lerpf(_look_yaw, yaw_t, clampf(delta * 5.0, 0.0, 1.0))
 	_look_pitch = lerpf(_look_pitch, pitch_t, clampf(delta * 5.0, 0.0, 1.0))
+	if not _should_pose():
+		return
 	_pose(delta)
 	_face(delta)
 

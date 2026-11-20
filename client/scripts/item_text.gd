@@ -60,13 +60,29 @@ static func describe(defs: Dictionary, inst: Dictionary, ch: Dictionary, compare
 		if d.get("kind", "") == "weapon":
 			hands = " · " + ("Duas mãos (ocupa a mão secundária)" if int(d.get("hands", 1)) == 2 else "Uma mão")
 		t += "Espaço: %s%s\n" % [defs.get("slots", {}).get(slot, slot), hands]
+	# refino: +weaponDamagePct% no dano da arma e +defensePct% na defesa e no poder mágico da peça, por grau
+	var enh := int(inst.get("enh", 0))
+	var enh_cfg: Dictionary = defs.get("enhance", {})
+	var dmg_mul := 1.0 + float(enh_cfg.get("weaponDamagePct", 0)) * enh / 100.0
+	var def_mul := 1.0 + float(enh_cfg.get("defensePct", 0)) * enh / 100.0
+	var enh_note := " [color=#9fd3d1](+%d)[/color]" % enh if enh > 0 else ""
 	if d.has("damage"):
 		var kind := "mágico" if d.get("damageType", "phys") == "magic" else "físico"
-		t += "Dano %s: %d–%d  ·  intervalo %.2f s  ·  alcance %s m\n" % [kind, int(d["damage"][0]), int(d["damage"][1]), float(d.get("attackIntervalMs", 1000)) / 1000.0, str(d.get("range", 2.5))]
+		var lo := int(floor(float(d["damage"][0]) * dmg_mul))
+		var hi := int(floor(float(d["damage"][1]) * dmg_mul))
+		t += "Dano %s: %d–%d%s  ·  intervalo %.2f s  ·  alcance %s m\n" % [kind, lo, hi, enh_note, float(d.get("attackIntervalMs", 1000)) / 1000.0, str(d.get("range", 2.5))]
+	if d.has("crit"):
+		t += "Crítico: +%s%%\n" % str(d["crit"])
 	if d.has("magicPower"):
-		t += "Poder mágico: %d\n" % int(d["magicPower"])
+		t += "Poder mágico: %d%s\n" % [int(round(float(d["magicPower"]) * def_mul)), enh_note]
+	if d.has("healBonusPct"):
+		t += "Cura: +%d%%\n" % int(d["healBonusPct"])
 	if d.has("defense"):
-		t += "Defesa: %d\n" % int(d["defense"])
+		t += "Defesa: %d%s\n" % [int(round(float(d["defense"]) * def_mul)), enh_note]
+	if d.has("bonusHp"):
+		t += "Vida máxima: +%d\n" % int(d["bonusHp"])
+	if d.has("bonusMp"):
+		t += "Mana máxima: +%d\n" % int(d["bonusMp"])
 	if d.has("blockPct"):
 		t += "Bloqueio: %d%% dos golpes de monstro\n" % int(d["blockPct"])
 	if d.has("mres"):

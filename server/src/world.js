@@ -450,7 +450,11 @@ export class WorldService {
     if (pid) {
       const party = this.parties.get(pid);
       if (party && ![...party.members].some((c) => this.online.has(c))) this.disbandParty(pid);
-      else this.pushParty(pid, true);
+      else {
+        // líder saiu do ar: a liderança passa a um membro on-line (como no servidor único)
+        if (party && party.leader === charId) party.leader = [...party.members].find((c) => this.online.has(c)) ?? party.leader;
+        this.pushParty(pid, true);
+      }
     }
   }
 
@@ -613,7 +617,7 @@ export class WorldService {
     party.members.delete(charId);
     this.clearParty(pid, [charId], false);
     if (party.members.size <= 1) return this.disbandParty(pid);
-    if (party.leader === charId) party.leader = [...party.members][0];
+    if (party.leader === charId) party.leader = [...party.members].find((c) => this.online.has(c)) ?? [...party.members][0];
     this.pushParty(pid, true);
   }
 

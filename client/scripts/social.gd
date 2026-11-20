@@ -550,23 +550,36 @@ func _build_actions(root: Control) -> void:
 	v.add_child(actions_label)
 	var row := HBoxContainer.new()
 	v.add_child(row)
-	for spec in [["Trocar", "trade"], ["Duelar", "duel"], ["Grupo", "party"], ["Clã", "clan"], ["Sussurrar", "whisper"], ["×", "close"]]:
+	for spec in [["Levantar (5 s)", "revive"], ["Trocar", "trade"], ["Duelar", "duel"], ["Grupo", "party"], ["Clã", "clan"], ["Sussurrar", "whisper"], ["×", "close"]]:
 		var b := Button.new()
 		b.text = spec[0]
 		var what: String = spec[1]
 		b.pressed.connect(func(): _act(what))
 		row.add_child(b)
+		if what == "revive":
+			revive_btn = b
 	actions_panel.visible = false
 
-func show_player_actions(player_name: String) -> void:
+var revive_btn: Button
+
+## Ações sobre outro jogador; caído, a primeira é levantá-lo (qualquer um, fora de combate).
+func show_player_actions(player_name: String, dead := false) -> void:
 	actions_name = player_name
-	actions_label.text = player_name
+	actions_label.text = player_name + (" (caído)" if dead else "")
+	if revive_btn:
+		revive_btn.visible = dead
 	actions_panel.visible = true
 
 func _act(what: String) -> void:
 	var n := actions_name
 	actions_panel.visible = false
 	match what:
+		"revive":
+			Net.request("revive_ally", {"name": n}, func(r):
+				if r["ok"] and r.has("channel"):
+					hud.show_channel(str(r["channel"]["text"]), float(r["channel"]["ms"]))
+				elif not r["ok"]:
+					hud.error(r["reason"]))
 		"trade":
 			Net.request("trade_request", {"name": n}, _msg_or_err)
 		"duel":

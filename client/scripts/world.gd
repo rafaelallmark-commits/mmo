@@ -47,7 +47,7 @@ var _step_surface := "footstep_stone"
 var _boss_phase := 0
 var _gate_prog := {}
 
-const ROLE_NAMES := {"quest": "missões", "master": "mestre de classe", "smith": "ferreiro", "shop": "tônicos", "storage": "depósito"}
+const ROLE_NAMES := {"quest": "missões", "master": "mestre de classe", "smith": "ferreiro", "shop": "tônicos", "storage": "depósito", "armorer": "armeiro"}
 ## Som: passos só de quem está a até STEP_HEAR m do jogador; chão de terra nestes mapas, pedra nos demais
 ## (ruas calçadas, trilhos, túneis e câmaras).
 const STEP_HEAR := 16.0
@@ -59,10 +59,11 @@ func _ready() -> void:
 	env.environment = Scenery.environment(map.get("id", ""))
 	add_child(env)
 	var sun := DirectionalLight3D.new()
+	sun_light = sun
 	sun.rotation_degrees = Vector3(-52, -40, 0)
 	sun.light_color = Scenery.sun_color(map.get("id", ""))
 	sun.light_energy = 1.0
-	sun.shadow_enabled = true
+	sun.shadow_enabled = bool(main.gfx.get("shadows", true)) and not bool(main.gfx.get("light_mode", false)) if main else true
 	sun.shadow_blur = 1.5
 	sun.directional_shadow_max_distance = 70.0
 	add_child(sun)
@@ -709,7 +710,7 @@ func _click(screen_pos: Vector2) -> void:
 				return
 			ally_selected = eid
 			main.hud.system("Aliado selecionado: %s" % pe["data"]["n"])
-			main.hud.social.show_player_actions(str(pe["data"]["n"]))
+			main.hud.social.show_player_actions(str(pe["data"]["n"]), bool(pe["data"].get("dead", false)))
 			return
 	var best := ""
 	var best_d := 1.8
@@ -962,3 +963,12 @@ func _boss_audio(m: Dictionary) -> void:
 			if int(p * 4.0) > int(before * 4.0) or p < before - 0.2:
 				Sfx.warn("gate")
 			_gate_prog[g["id"]] = p
+
+
+# ---------------- opções gráficas ----------------
+var sun_light: DirectionalLight3D
+
+## Sombras ligadas ou não (opções; o modo leve desliga). Vale na hora.
+func apply_graphics(gfx: Dictionary) -> void:
+	if sun_light:
+		sun_light.shadow_enabled = bool(gfx.get("shadows", true)) and not bool(gfx.get("light_mode", false))

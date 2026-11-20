@@ -160,8 +160,25 @@ export class Zone {
     c.skillPoints += gained * this.data.skillPointsPerLevel;
     this.grantUnlockedSkills(c);
     this.recalc(p);
-    c.hp = p.stats.maxHp; c.mp = p.stats.maxMp;
+    // quem sobe de nível caído (crédito do chefe) continua caído: a vida cheia não o levanta
+    if (!c.dead) { c.hp = p.stats.maxHp; c.mp = p.stats.maxMp; }
     return true;
+  }
+
+  // Atordoamento em jogador (hoje só a descarga do Custódio): imunidade (Égide Firme etc.) anula, e a
+  // resistência a controle da Vitalidade (ccResistPct, até 50%) encurta. Devolve a duração aplicada.
+  stunPlayer(p, ms) {
+    if (p.char.dead || p.ccImmuneUntil > this.now) return 0;
+    const dur = Math.round(ms * (1 - Math.min(50, p.stats.ccResistPct || 0) / 100));
+    if (dur <= 0) return 0;
+    p.stunUntil = Math.max(p.stunUntil || 0, this.now + dur);
+    return dur;
+  }
+
+  // Tira um efeito negativo do jogador (Alvorada). Hoje o único é o atordoamento.
+  cleansePlayer(p) {
+    if (p.stunUntil > this.now) { p.stunUntil = 0; this.broadcast({ t: 'cleanse', eid: p.eid }); return true; }
+    return false;
   }
 
   inBounds(x, z) {
@@ -220,8 +237,34 @@ export class Zone {
     if (this.now >= ch.endAt) {
       p.channel = null;
       this.send(p.char.id, { t: 'channel_end', ok: true, object: ch.object });
+      if (ch.object.startsWith('revive:')) return this.finishRevive(p, ch.object.slice(7));
       this.hooks.onChannelDone?.(p, ch.object);
     }
+  }
+
+  // ---------- levantar um aliado caído (qualquer jogador, fora de combate, canalizando) ----------
+  cmdReviveAlly(p, t) {
+    const f = this.f.death;
+    if (p.char.dead) return { ok: false, code: 'dead', reason: 'Você está caído.' };
+    if (!t || t === p || this.players.get(t.char.id) !== t) return { ok: false, code: 'bad_target', reason: 'Escolha um aliado caído neste mapa.' };
+    if (!t.char.dead) return { ok: false, code: 'not_dead', reason: `${t.char.name} não está caído.` };
+    if (dist(p.char, t.char) > f.allyReviveRange) return { ok: false, code: 'too_far', reason: `Chegue mais perto (${f.allyReviveRange} m) para levantar ${t.char.name}.` };
+    if (this.now - (p.lastCombatAt ?? -Infinity) <= this.f.regen.outOfCombatAfterMs) return { ok: false, code: 'in_combat', reason: 'Em combate: espere 5 s sem lutar para levantar alguém.' };
+    if (this.duels.duelOf(p.char.id)) return { ok: false, code: 'duel', reason: 'Não durante um duelo.' };
+    return this.startChannel(p, `revive:${t.eid}`, f.allyReviveMs, `Levantando ${t.char.name}…`);
+  }
+
+  finishRevive(p, eid) {
+    const t = this.entityById(eid);
+    const f = this.f.death;
+    if (!t || !t.char?.dead || dist(p.char, t.char) > f.allyReviveRange + 1) {
+      this.send(p.char.id, { t: 'system', text: 'Não deu para levantar: o aliado já voltou ou ficou longe.' });
+      return;
+    }
+    this.revivePlayer(t, f.allyReviveHpPct, p);
+    this.store.saveCharacter(t.char);
+    this.send(t.char.id, { t: 'system', text: `${p.char.name} levantou você.` });
+    this.send(p.char.id, { t: 'system', text: `Você levantou ${t.char.name}.` });
   }
 
   npcNear(p, npcId) {
@@ -642,7 +685,11 @@ export class Zone {
     const c = p.char;
     if (p.channel) this.tickChannel(p);
     if (p.casting) this.tickCast(p);
-    if (c.dead) return;
+    if (c.dead) {
+      // ninguém levantou em death.corpseTimeoutMs: volta sozinho ao posto (como o botão)
+      if (p.deadAt != null && this.now - p.deadAt >= this.f.death.corpseTimeoutMs) { p.deadAt = null; this.respawnAtPost(p); }
+      return;
+    }
     if (p.buffs.length) {
       const before = p.buffs.length;
       p.buffs = p.buffs.filter((b) => b.until > this.now);
@@ -768,7 +815,9 @@ export class Zone {
     m.respawnAt = m.def.respawnSec > 0 && !m.noRespawn ? this.now + m.def.respawnSec * 1000 : Infinity;
     this.broadcast({ t: 'death', eid: m.eid });
     const radius = this.f.xp.shareRadius;
-    const near = (p) => p && !p.char.dead && dist(p.char, m) <= radius;
+    // chefe: quem caiu na reta final também leva XP, saque e o crédito da missão (a participação já está
+    // registrada); nos demais monstros, só quem está de pé
+    const near = (p) => p && (!p.char.dead || m.def.rank === 'boss') && dist(p.char, m) <= radius;
     // participantes diretos + membros de grupo próximos (mesmo sem participação)
     const contrib = new Map();
     for (const [charId, score] of m.score) {
@@ -977,6 +1026,7 @@ export class Zone {
   killPlayer(p) {
     const c = p.char;
     c.hp = 0; c.dead = true; p.targetId = null; p.dest = null; p.buffs = []; p.guards = []; p.shield = null;
+    p.deadAt = this.now; // volta sozinho ao posto depois de death.corpseTimeoutMs
     for (const m of this.monsters.values()) { m.threat.delete(c.id); if (m.targetId === p.eid) m.targetId = null; }
     this.store.saveCharacter(c);
     this.broadcast({ t: 'player_dead', eid: p.eid });

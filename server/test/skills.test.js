@@ -311,3 +311,50 @@ test('outra habilidade no meio da conjuração cancela a anterior e sai na hora'
   assert.ok(sent.some((m) => m.t === 'cast_end' && m.ok === false && m.skill === 'spinal_shot'), 'a primeira foi cancelada');
   assert.equal(w.casting, null);
 });
+
+test('controle em jogador: Vitalidade encurta o atordoamento, imunidade anula, Alvorada tira; Fenda Sísmica só derruba normais', () => {
+  const party = new Map();
+  const { zone, mk, sent } = setup((id) => party.get(id) ?? null);
+  const fraco = mk('emberweaver', 'Fraco', 40, 36);
+  const forte = mk('bastion', 'Forte', 41, 36);
+  // Vitalidade: ccResistPct = min(50, vit × 0,5)
+  fraco.stats.ccResistPct = 0;
+  forte.stats.ccResistPct = 40;
+  assert.equal(zone.stunPlayer(fraco, 1000), 1000);
+  assert.equal(zone.stunPlayer(forte, 1000), 600, '40% de resistência: 600 ms');
+  forte.stats.ccResistPct = 90;
+  forte.stunUntil = 0;
+  assert.equal(zone.stunPlayer(forte, 1000), 500, 'a resistência para em 50%');
+  fraco.stunUntil = 0;
+  fraco.ccImmuneUntil = zone.now + 5000;
+  assert.equal(zone.stunPlayer(fraco, 1000), 0, 'imune: não atordoa');
+  // Alvorada (Escudeiro da Aurora, nível 20) tira o atordoamento dos aliados
+  const aurora = mk('dawnshield', 'Aurora', 40, 37);
+  party.set(aurora.char.id, 'g'); party.set(forte.char.id, 'g');
+  aurora.char.level = 20; aurora.char.skills.daybreak = 1;
+  forte.stunUntil = zone.now + 1000;
+  aurora.cooldowns = {}; aurora.char.mp = aurora.stats.maxMp;
+  const r = zone.castNow(aurora, 'daybreak', null, aurora.char.x, aurora.char.z, null);
+  assert.equal(r.ok, true, r.reason);
+  assert.ok(!(forte.stunUntil > zone.now), 'Alvorada tirou o atordoamento do aliado');
+  // Fenda Sísmica: derruba o normal, não a elite
+  const q = mk('breaker', 'Quebra', 30, 36);
+  q.char.level = 20; q.char.skills.seismic_rift = 1;
+  const [normal] = toad(zone).filter((m) => m.state !== 'dead');
+  const elite = zone.spawnMonster({ monster: 'echo_mother', x: 33, z: 36.6, radius: 0 }, { noRespawn: true });
+  normal.x = 32; normal.z = 36; normal.hp = normal.def.hp * 50; elite.hp = elite.def.hp;
+  normal.state = 'chase'; elite.state = 'chase';
+  // repete até a fenda acertar os dois (a precisão é rolada), conferindo a derrubada a cada acerto
+  let normalHit = false, eliteHit = false;
+  for (let i = 0; i < 40 && !(normalHit && eliteHit); i++) {
+    q.cooldowns = {}; q.char.mp = q.stats.maxMp; q.gcdUntil = 0; q.char.x = 30; q.char.z = 36;
+    normal.fx = []; elite.fx = []; sent.length = 0;
+    normal.x = 32; normal.z = 36; elite.x = 33; elite.z = 36.6;
+    const f = zone.castNow(q, 'seismic_rift', normal.eid, 34, 36, null);
+    assert.equal(f.ok, true, f.reason);
+    if (sent.some((m) => m.t === 'hit' && m.dst === normal.eid && !m.miss)) { normalHit = true; assert.ok(zone.monsterFx(normal, 'stun'), 'monstro normal derrubado'); }
+    if (sent.some((m) => m.t === 'hit' && m.dst === elite.eid && !m.miss)) { eliteHit = true; assert.ok(!zone.monsterFx(elite, 'stun'), 'elite não é derrubada'); }
+    normal.hp = normal.def.hp * 50; elite.hp = elite.def.hp;
+  }
+  assert.ok(normalHit && eliteHit, 'a fenda acertou os dois ao menos uma vez');
+});

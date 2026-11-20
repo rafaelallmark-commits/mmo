@@ -227,7 +227,10 @@ export function executeSkill(zone, p, s, rank, { target, x, z, ally }) {
     }
     case 'party_heal': {
       const amount = eff.healPctMaxHp ? null : healAmount(p, eff, rank);
-      for (const a of zone.alliesNear(p, range)) zone.healPlayer(p, a, amount ?? Math.round(a.stats.maxHp * perRank(eff, 'healPctMaxHp', rank) / 100));
+      for (const a of zone.alliesNear(p, range)) {
+        zone.healPlayer(p, a, amount ?? Math.round(a.stats.maxHp * perRank(eff, 'healPctMaxHp', rank) / 100));
+        if (eff.cleanse) zone.cleansePlayer(a);
+      }
       break;
     }
     case 'shield_ally': {
@@ -262,9 +265,11 @@ function applyOnHit(zone, p, m, eff, rank) {
     zone.creditControl(m, p, ms / 1000);
   }
   if (eff.knockbackM) zone.pushMonster(m, c, eff.knockbackM);
-  // atordoar / derrubar: o monstro não anda nem ataca
+  // atordoar / derrubar: o monstro não anda nem ataca. Atordoamento vale para normais e elites;
+  // derrubada (Fenda Sísmica) só para monstros normais, como a descrição promete; chefe, nunca.
   const stunMs = eff.stunMs ? perRank(eff, 'stunMs', rank) : (eff.knockdownMs || 0);
-  if (stunMs > 0 && m.def.rank !== 'boss') {
+  const rankOk = eff.stunMs ? m.def.rank !== 'boss' : (m.def.rank ?? 'normal') === 'normal';
+  if (stunMs > 0 && rankOk) {
     zone.addMonsterFx(m, { kind: 'stun', until: zone.now + stunMs, by: c.id });
     zone.creditControl(m, p, stunMs / 1000);
   }

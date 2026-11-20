@@ -4,11 +4,13 @@
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 
 export class Dungeon {
-  constructor({ key, zone, partyId, members, data }) {
+  constructor({ key, zone, partyId, members, data, onlineCount = null }) {
     this.key = key;
     this.zone = zone;
     this.partyId = partyId;
     this.members = new Set(members);  // charIds autorizados
+    // quantos do grupo estão on-line agora (a escala de cada tentativa não conta quem está fora do ar)
+    this.onlineCount = onlineCount;
     this.data = data;
     this.f = data.formulas.dungeon;
     this.map = zone.map;
@@ -19,9 +21,10 @@ export class Dungeon {
     this.start();
   }
 
-  // Vida do chefe pelo tamanho do grupo (60% para 2, 100% para 5).
+  // Vida do chefe pelo tamanho do grupo (60% para 2, 100% para 5), contando só quem está on-line no
+  // começo de cada tentativa: um membro desconectado não engorda o Custódio para os outros.
   scale() {
-    const n = Math.max(2, Math.min(5, this.members.size));
+    const n = Math.max(2, Math.min(5, this.onlineCount ? this.onlineCount() : this.members.size));
     return Math.min(1, this.f.hpScaleMin + (n - 2) * this.f.hpScaleStep);
   }
 
@@ -157,7 +160,7 @@ export class Dungeon {
         const dmg = Math.round(p.stats.maxHp * f.lineDamagePctMaxHp / 100);
         z.broadcast({ t: 'hit', src: this.boss.eid, dst: p.eid, dmg, crit: false, miss: false, skill: 'discharge', magic: true });
         z.damagePlayer(p, dmg, this.boss);
-        if (!(p.ccImmuneUntil > z.now)) p.stunUntil = z.now + f.lineStunMs;
+        z.stunPlayer(p, f.lineStunMs);
       }
       L.state = 'idle';
       L.at = z.now + Math.max(500, f.lineCycleMs - f.lineWarnMs);

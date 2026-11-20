@@ -410,7 +410,11 @@ export class GameServer {
     if (pid) {
       const party = this.parties.get(pid);
       if (party && ![...party.members].some((m) => this.byChar.has(m))) this.disbandParty(pid);
-      else this.sendPartyUpdate(pid);
+      else {
+        // líder saiu do ar: a liderança passa a um membro on-line (senão ninguém convida nem expulsa)
+        if (party && party.leader === charId) party.leader = [...party.members].find((m) => this.byChar.has(m)) ?? party.leader;
+        this.sendPartyUpdate(pid);
+      }
     }
     if (this.world) {
       // várias zonas: devolve a posse ao mundo (que avisa grupo e diretório)
@@ -641,6 +645,7 @@ export class GameServer {
       case 'storage_take': return this.hStorageTake(p, msg);
       case 'dungeon_enter': return this.hDungeonEnter(s, p, msg);
       case 'gm': return this.hGm(p, msg);
+      case 'revive_ally': return this.hReviveAlly(p, msg);
       case 'report': return this.mod.report(p, msg);
       case 'bug_report': return this.mod.bugReport(p, msg);
       // comércio
@@ -694,6 +699,7 @@ export class GameServer {
     return {
       t: 'defs', items: d.items, classes: d.classes, skills: d.skills, attributes: d.attributes, rarities: d.rarities, slots: d.slots,
       families: d.families, monsters, xp: d.xp.cumulative, levelCap: d.levelCap, skillRules: d.skillRules, origins: d.origins,
+      enhance: { weaponDamagePct: d.formulas.enhance.weaponDamagePct ?? 0, defensePct: d.formulas.defense.enhancePct ?? 0 },
       maps, map: maps[DEFAULT_MAP], quests,
     };
   }
@@ -1357,7 +1363,8 @@ export class GameServer {
     const c = p.char;
     const pid = this.partyIdOf(c.id);
     const members = pid ? this.partyMemberIds(pid) : [];
-    if (members.length < 2) return { ok: false, code: 'party', reason: 'A Última Eclusa exige um grupo de 2 a 5 jogadores.' };
+    // o mínimo de 2 conta só quem está on-line: com o parceiro fora do ar, ninguém entra sozinho
+    if (members.filter((id) => this.isOnline(id)).length < 2) return { ok: false, code: 'party', reason: 'A Última Eclusa exige um grupo de 2 a 5 jogadores on-line.' };
     const keyOk = members.some((id) => {
       const m = this.playerOf(id)?.char;
       return m && (this.quests.isDone(m, 'c5_fragment') || m.quests.get('c5_eclusa')?.state === 'active');
@@ -1369,7 +1376,7 @@ export class GameServer {
     if (!dg || dg.done) {
       key = `dungeon:${pid}:${randomUUID().slice(0, 8)}`;
       const zone = this.createZone('ultima_eclusa', key);
-      dg = new Dungeon({ key, zone, partyId: pid, members, data: this.data });
+      dg = new Dungeon({ key, zone, partyId: pid, members, data: this.data, onlineCount: () => this.partyMemberIds(pid).filter((id) => this.isOnline(id)).length });
       this.dungeons.set(key, dg);
       this.partyDungeon.set(pid, key);
       this.log(`calabouço aberto: ${key} (${members.length} jogadores)`);
@@ -1442,6 +1449,15 @@ export class GameServer {
     }
     if (!disconnected) this.zones.delete(key);
     else setImmediate(() => this.zones.delete(key));
+  }
+
+  // Levantar um aliado caído: pelo nome (ações ao clicar no jogador) ou pelo eid; mesmo mapa, perto.
+  hReviveAlly(p, { name, target }) {
+    let t = null;
+    if (typeof target === 'string') t = p.zone.entityById(target);
+    else if (typeof name === 'string') t = this.playerOf(this.byName.get(name.trim().toLowerCase()));
+    if (t && t.zone !== p.zone) t = null;
+    return p.zone.cmdReviveAlly(p, t?.char ? t : null);
   }
 
   // ---------- grupos ----------
@@ -1543,7 +1559,7 @@ export class GameServer {
     party.members.delete(charId);
     this.sendTo(this.byChar.get(charId), { t: 'party', party: null });
     if (party.members.size <= 1) return this.disbandParty(pid);
-    if (party.leader === charId) party.leader = [...party.members][0];
+    if (party.leader === charId) party.leader = [...party.members].find((m) => this.byChar.has(m)) ?? [...party.members][0];
     this.sendPartyUpdate(pid);
   }
 

@@ -258,7 +258,7 @@ func _build_sheet(root: Control) -> void:
 	sheet_panel.visible = false
 
 func _build_overlays(root: Control) -> void:
-	death_overlay = _overlay(root, "Você caiu.", "Voltar ao Posto da Ponte", func(): Net.request("respawn"))
+	death_overlay = _overlay(root, "Você caiu.\nUm aliado pode levantar você: 5 s perto de você, fora de combate.\nSem ajuda, você volta sozinho ao posto em 5 minutos.", "Voltar ao posto deste mapa", func(): Net.request("respawn"))
 	var d := _overlay(root, "Conexão perdida.", "Reconectar", func(): main.reconnect())
 	disc_overlay = d
 	disc_label = d.get_meta("label")
@@ -536,10 +536,11 @@ func refresh_target() -> void:
 	target_box.visible = true
 	var md: Dictionary = main.defs["monsters"].get(d.get("def", ""), {})
 	var rank := ""
+	var rank_names := {"elite": "elite", "boss": "chefe"}
 	if md.get("rank", "normal") != "normal":
-		rank = " (%s)" % md["rank"]
+		rank = " (%s)" % rank_names.get(md["rank"], md["rank"])
 	if d.get("k", "") == "p":
-		rank = " (duelo)"
+		rank = " (caído)" if d.get("dead", false) else " (duelo)"
 	target_label.text = "%s · nível %d%s" % [md.get("name", d.get("n", "?")), int(d["lvl"]), rank]
 	target_bar.max_value = float(d["mhp"])
 	target_bar.value = float(d["hp"])
@@ -789,6 +790,24 @@ func _sell_item(iid: String) -> void:
 		else:
 			error(str(r.get("reason", "Não foi possível vender."))))
 
+func _confirm_reset_attrs() -> void:
+	var dlg := ConfirmationDialog.new()
+	dlg.title = "Redistribuir tudo"
+	dlg.dialog_text = "Devolver todos os pontos de atributo para distribuir de novo?\nGrátis durante o teste. Itens que deixarem de atender aos requisitos voltam para a bolsa."
+	dlg.ok_button_text = "Redistribuir"
+	dlg.cancel_button_text = "Cancelar"
+	add_child(dlg)
+	dlg.confirmed.connect(func():
+		Net.request("reset_attrs", {}, func(r):
+			if r["ok"] and r["moved"].size() > 0:
+				system("%d item(ns) voltaram para a bolsa." % r["moved"].size())
+			elif not r["ok"]:
+				error(str(r.get("reason", "Não foi possível redistribuir.")))))
+	dlg.visibility_changed.connect(func():
+		if not dlg.visible:
+			dlg.queue_free())
+	dlg.popup_centered()
+
 func _confirm_discard(inst: Dictionary) -> void:
 	var dlg := ConfirmationDialog.new()
 	dlg.title = "Descartar"
@@ -871,10 +890,8 @@ func _refresh_sheet() -> void:
 	row2.add_child(cancel)
 	var reset := Button.new()
 	reset.text = "Redistribuir tudo"
-	reset.tooltip_text = "Grátis no Marco 1. Itens que deixarem de atender aos requisitos voltam para a bolsa."
-	reset.pressed.connect(func(): Net.request("reset_attrs", {}, func(r):
-		if r["ok"] and r["moved"].size() > 0:
-			system("%d item(ns) voltaram para a bolsa." % r["moved"].size())))
+	reset.tooltip_text = "Grátis durante o teste. Devolve todos os pontos; itens que deixarem de atender aos requisitos voltam para a bolsa."
+	reset.pressed.connect(_confirm_reset_attrs)
 	row2.add_child(reset)
 	sheet_box.add_child(HSeparator.new())
 	var s: Dictionary = c["stats"]
@@ -1039,7 +1056,7 @@ func show_npc(r: Dictionary) -> void:
 		_text(npc_box, _objectives_text(q))
 		if q["ready"] and q["turnIn"] == npc["id"]:
 			var b := Button.new()
-			b.text = "Entregar (+%d XP, +%d ouro)" % [int(q["rewards"]["xp"]), int(q["rewards"].get("gold", 0))]
+			b.text = "Entregar (%s)" % _rewards_text(q["rewards"])
 			var qid: String = q["id"]
 			b.pressed.connect(func():
 				Net.request("quest_turnin", {"quest": qid, "npc": npc["id"]}, func(res):
@@ -1080,7 +1097,7 @@ func show_npc(r: Dictionary) -> void:
 		_title(npc_box, "Nova missão: %s" % q["title"], 14)
 		_text(npc_box, "\"%s\"" % q["dialogue"]["offer"])
 		_text(npc_box, _objectives_text(q), Theme_.MUTED)
-		_text(npc_box, "Recompensa: %d XP, %d ouro" % [int(q["rewards"]["xp"]), int(q["rewards"].get("gold", 0))], Theme_.MUTED)
+		_text(npc_box, "Recompensa: %s" % _rewards_text(q["rewards"]), Theme_.MUTED)
 		var b := Button.new()
 		b.text = "Aceitar"
 		var qid: String = q["id"]
@@ -1166,7 +1183,7 @@ func refresh_quests() -> void:
 			_text(journal_box, _objectives_text(q))
 		_title(journal_box, "Disponíveis", 14)
 		for q in j.get("available", []):
-			_text(journal_box, "%s — nível %d (fale com %s)" % [q["title"], int(q["level"]), q["npc"]], Theme_.MUTED)
+			_text(journal_box, "%s — nível %d (fale com %s)" % [q["title"], int(q["level"]), q.get("npcName", q["npc"])], Theme_.MUTED)
 		_title(journal_box, "Concluídas: %d" % j.get("done", []).size(), 14)
 
 func refresh_party() -> void:
@@ -1177,20 +1194,50 @@ func refresh_party() -> void:
 		return
 	party_panel.visible = true
 	_title(party_box, "Grupo", 14)
+	var me_id := int(main.ch.get("id", -1))
+	var i_lead := int(party["leader"]) == me_id
 	for m in party["members"]:
+		var row := HBoxContainer.new()
+		party_box.add_child(row)
 		var l := Label.new()
+		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var lead := " ★" if int(m["charId"]) == int(party["leader"]) else ""
 		if m.get("online", false):
-			l.text = "%s%s nv%d · %d/%d%s" % [m["name"], lead, int(m["level"]), int(m["hp"]), int(m["mhp"]), "" if m["mapId"] == main.map_id else " (outro mapa)"]
+			var where := ""
+			if m["mapId"] != main.map_id:
+				where = " (outro mapa)"
+			elif int(m["charId"]) != me_id and m.has("x"):
+				where = " · %d m" % int(round(Vector2(float(m["x"]), float(m["z"])).distance_to(Vector2(float(main.ch.get("x", 0)), float(main.ch.get("z", 0))))))
+			var fallen := " · CAÍDO" if m.get("dead", false) else ""
+			l.text = "%s%s nv%d%s%s" % [m["name"], lead, int(m["level"]), fallen, where]
+			if m.get("dead", false):
+				l.add_theme_color_override("font_color", Theme_.RED)
 		else:
 			l.text = "%s%s (desconectado)" % [m["name"], lead]
 		l.add_theme_font_size_override("font_size", 12)
-		party_box.add_child(l)
+		row.add_child(l)
+		if i_lead and int(m["charId"]) != me_id:
+			var kick := Button.new()
+			kick.text = "Expulsar"
+			kick.add_theme_font_size_override("font_size", 10)
+			var kid := int(m["charId"])
+			var kname: String = m["name"]
+			kick.pressed.connect(func(): Net.request("party_kick", {"charId": kid}, func(r):
+				if r["ok"]:
+					system("%s saiu do grupo." % kname)
+				else:
+					error(r["reason"])))
+			row.add_child(kick)
 		if m.get("online", false):
 			var bar := _bar(party_box, Theme_.HP, 196)
 			bar.custom_minimum_size.y = 6
 			bar.max_value = float(m["mhp"])
 			bar.value = float(m["hp"])
+			if m.has("mmp") and float(m["mmp"]) > 0:
+				var mb := _bar(party_box, Theme_.MP, 196)
+				mb.custom_minimum_size.y = 4
+				mb.max_value = float(m["mmp"])
+				mb.value = float(m.get("mp", 0))
 	var leave := Button.new()
 	leave.text = "Sair do grupo"
 	leave.pressed.connect(func(): Net.request("party_leave"))
@@ -1320,6 +1367,12 @@ func _storage_refresh(npc: Dictionary, box: VBoxContainer) -> void:
 # ---------------- chefe ----------------
 var boss_label: Label
 
+## Ao trocar de mapa (saída da Eclusa, reconexão): o painel do chefe não fica preso na tela.
+func clear_boss() -> void:
+	if boss_label:
+		boss_label.text = ""
+		boss_label.visible = false
+
 ## Painel do chefe no alto da tela: fase, vida e o que fazer agora.
 func show_boss(m: Dictionary) -> void:
 	if boss_label == null:
@@ -1333,6 +1386,7 @@ func show_boss(m: Dictionary) -> void:
 		boss_label.position = Vector2(-320, 86)
 		boss_label.size = Vector2(640, 60)
 		add_child(boss_label)
+	boss_label.visible = true
 	var st: String = m.get("state", "")
 	if st == "victory":
 		boss_label.text = "O Custódio parou. A saída está aberta (anel na entrada)."
@@ -1354,3 +1408,27 @@ func show_boss(m: Dictionary) -> void:
 				parts.append("%d%%" % int(round(float(x["progress"]) * 100.0)))
 			tip = "Comportas descendo: %s — destrua as travas, bata no Braço de Comando" % " · ".join(parts)
 	boss_label.text = "O Custódio da Eclusa — fase %d — %d%%\n%s" % [int(m.get("phase", 1)), pct, tip]
+
+
+## "120 XP, 40 ouro, Anel de Nácar, 3× Tônico de Vida Pequeno, +1 grau em habilidade"
+func _rewards_text(rw: Dictionary) -> String:
+	var parts := ["%d XP" % int(rw.get("xp", 0))]
+	if int(rw.get("gold", 0)) > 0:
+		parts.append("%d ouro" % int(rw["gold"]))
+	for it in rw.get("items", []):
+		# nos dados cada item é [defId, quantidade]
+		var did := ""
+		var qty := 1
+		if it is Array and it.size() > 0:
+			did = str(it[0])
+			qty = int(it[1]) if it.size() > 1 else 1
+		elif it is Dictionary:
+			did = str(it.get("defId", ""))
+			qty = int(it.get("qty", 1))
+		else:
+			did = str(it)
+		var nm: String = main.defs["items"].get(did, {}).get("name", did)
+		parts.append(("%d× %s" % [qty, nm]) if qty > 1 else nm)
+	if int(rw.get("skillRank", 0)) > 0:
+		parts.append("+%d grau em habilidade" % int(rw["skillRank"]))
+	return ", ".join(parts)

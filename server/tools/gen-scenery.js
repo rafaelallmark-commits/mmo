@@ -2,7 +2,10 @@
 // tocos, cristais...) com raio de colisão e construções (casas nas cidades). Determinístico:
 // a mesma semente sempre gera o mesmo mapa. O servidor usa as colisões para a navegação e o
 // cliente desenha exatamente as mesmas peças.
-// Uso: npm run gen-scenery   (depois: npm run validate-data)
+// Uso: npm run gen-scenery -- --mapa estrada_velha[,pedrambar]   (depois: npm run validate-data)
+//   --mapa é obrigatório: só os mapas citados são refeitos (D156). Mudar bandos, NPCs ou objetos de um mapa
+//   muda onde as peças podem nascer, e refazer todos moveria árvores e casas de mapas que ninguém mexeu.
+//   --todos refaz todos os mapas (só quando se quer mesmo isso).
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -91,8 +94,18 @@ function houses(map, roads, rng) {
   return out;
 }
 
+const argv = process.argv.slice(2);
+const mi = argv.indexOf('--mapa');
+const only = mi !== -1 && argv[mi + 1] && !argv[mi + 1].startsWith('--') ? new Set(argv[mi + 1].split(',').map((x) => x.trim()).filter(Boolean)) : null;
+if (!only && !argv.includes('--todos')) {
+  console.error('Diga quais mapas refazer: --mapa id[,id...] (ou --todos para refazer todos).');
+  process.exit(2);
+}
+if (only) for (const id of only) if (!doc.maps[id]) { console.error(`Mapa desconhecido: ${id}`); process.exit(2); }
+
 for (const [id, map] of Object.entries(doc.maps)) {
   if (!map.size || map.instanced) continue;
+  if (only && !only.has(id)) continue;
   const roads = ROADS[id] ?? [];
   map.roads = roads;
   const cfg = MIX[id];

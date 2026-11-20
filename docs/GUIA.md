@@ -52,6 +52,9 @@ O **escudo** (Bastião e Escudeiro) tem chance de **bloqueio** contra golpes de 
 Habilidades com **tempo de conjuração** mostram a barra "Conjurando…": fique parado até o fim — andar, atacar
 ou usar um item interrompe (sem gastar mana).
 
+**Computador modesto?** Em *Opções → Gráficos*: **Modo leve** (sem sombras, resolução 3D menor e só os personagens
+próximos animados), **Sombras**, **Tela cheia** e limite de **quadros por segundo** (30, 60 ou sem limite).
+
 ## 4. Subir de nível e se equipar
 
 - Cace monstros da sua faixa (o nível aparece sobre eles) e siga as **missões** do diário (**J**): elas contam a
@@ -83,6 +86,12 @@ Pedrâmbar e Vau de Nácar (cidades) → **A Estrada Velha** (níveis 1–5) →
 - **Clã**: nível 10 e 500 de ouro para fundar (**L**). A sigla aparece antes do nome dos membros.
 - **Duelo**: clique no jogador → *Duelar* (ou `/duelo Nome`). Ninguém morre: quem chegaria a 0 fica com 1 de vida
   e perde; afastar-se demais é desistência. Fora de duelo, jogadores não se atacam.
+- **Levantar quem caiu**: clique no jogador caído → *Levantar (5 s)*. Qualquer um levanta (não precisa ser do
+  grupo): chegue a até 3 m, fique 5 s sem lutar antes e 5 s parado canalizando; quem levanta volta com 20% da vida,
+  onde caiu. Andar, agir ou ser atingido interrompe. Quem caiu e não foi levantado volta sozinho ao posto do mapa em
+  5 minutos (ou na hora, pelo botão).
+- **Painel do grupo**: vida, mana, distância e quem está caído; o líder (★) expulsa pelo botão ao lado do nome. Se o
+  líder sair do jogo, a liderança passa a quem estiver on-line.
 
 ## 7. Convivência
 

@@ -121,17 +121,76 @@ func _load_settings() -> void:
 	if cfg.load(SETTINGS_PATH) == OK:
 		for k in settings.keys():
 			settings[k] = cfg.get_value("opcoes", k, settings[k])
+		for k in gfx.keys():
+			gfx[k] = cfg.get_value("graficos", k, gfx[k])
 	_apply_settings()
 
 func _save_settings() -> void:
 	var cfg := ConfigFile.new()
+	cfg.load(SETTINGS_PATH)  # preserva o que não é desta tela
 	for k in settings.keys():
 		cfg.set_value("opcoes", k, settings[k])
+	for k in gfx.keys():
+		cfg.set_value("graficos", k, gfx[k])
 	cfg.save(SETTINGS_PATH)
 	_apply_settings()
 
 func _apply_settings() -> void:
 	get_tree().root.content_scale_factor = float(settings["ui_scale"])
+	_apply_graphics()
+
+# ---------------- opções gráficas (computadores modestos) ----------------
+# shadows: sombra do sol · fps_cap: 0 = sem limite, 30 ou 60 · fullscreen · light_mode: sem sombras,
+# resolução 3D a 80% e só personagens a até 30 m animados
+var gfx := {"shadows": true, "fps_cap": 0, "fullscreen": false, "light_mode": false}
+var _gfx_fullscreen_applied = null
+const VrmChar := preload("res://scripts/vrm_character.gd")
+
+func _apply_graphics() -> void:
+	Engine.max_fps = int(gfx["fps_cap"])
+	var light := bool(gfx["light_mode"])
+	VrmChar.anim_max_dist = 30.0 if light else 0.0
+	get_viewport().scaling_3d_scale = 0.8 if light else 1.0
+	var fs := bool(gfx["fullscreen"])
+	if _gfx_fullscreen_applied != fs and DisplayServer.get_name() != "headless":
+		if fs or _gfx_fullscreen_applied != null:
+			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN if fs else DisplayServer.WINDOW_MODE_WINDOWED)
+	_gfx_fullscreen_applied = fs
+	if world:
+		world.apply_graphics(gfx)
+
+func _graphics_options(v: VBoxContainer) -> void:
+	var t := Label.new()
+	t.text = "Gráficos"
+	t.add_theme_color_override("font_color", Theme_.AMBER)
+	v.add_child(t)
+	var light := CheckBox.new()
+	light.text = "Modo leve (computadores modestos: sem sombras, menos detalhes)"
+	light.button_pressed = bool(gfx["light_mode"])
+	light.toggled.connect(func(on): gfx["light_mode"] = on)
+	v.add_child(light)
+	var sh := CheckBox.new()
+	sh.text = "Sombras"
+	sh.button_pressed = bool(gfx["shadows"])
+	sh.toggled.connect(func(on): gfx["shadows"] = on)
+	v.add_child(sh)
+	var fs := CheckBox.new()
+	fs.text = "Tela cheia"
+	fs.button_pressed = bool(gfx["fullscreen"])
+	fs.toggled.connect(func(on): gfx["fullscreen"] = on)
+	v.add_child(fs)
+	var h := HBoxContainer.new()
+	v.add_child(h)
+	var l := Label.new()
+	l.text = "Quadros por segundo"
+	h.add_child(l)
+	var ob := OptionButton.new()
+	var caps := [0, 60, 30]
+	for c in caps:
+		ob.add_item("sem limite" if c == 0 else "até %d" % c)
+	ob.selected = max(0, caps.find(int(gfx["fps_cap"])))
+	ob.item_selected.connect(func(i): gfx["fps_cap"] = caps[i])
+	h.add_child(ob)
 
 # ---------------- utilidades de tela ----------------
 func _ensure_menu_scene() -> void:
@@ -810,6 +869,12 @@ func _rebuild_world() -> void:
 func _on_zone(m: Dictionary) -> void:
 	map_id = m["mapId"]
 	snap_cache = {}
+	# troca de mapa: avisos de outro mapa não ficam presos (morte na prova de classe volta ao mestre de
+	# pé, sem evento 'respawn'; o painel do Custódio fica para trás ao sair da Eclusa)
+	if hud:
+		hud.clear_boss()
+		if not m["char"].get("dead", false):
+			hud.hide_death()
 	show_loading(map_def().get("name", map_id))
 	Sfx.ui("portal")
 	_rebuild_world()
@@ -959,6 +1024,7 @@ func show_options() -> void:
 	names.toggled.connect(func(on): settings["show_names"] = on)
 	v.add_child(names)
 	_sound_sliders(v)
+	_graphics_options(v)
 	_button(v, "Salvar e fechar", func():
 		_save_settings()
 		close_options(), true)
