@@ -182,28 +182,31 @@ export function areasDeCaca(data) {
   return out;
 }
 
-// Área para o nível: monstros em [nível−2, nível+1], de preferência no nível (nível + ajuste);
-// empate: passivos, grupos agressivos menos densos (mais fáceis de puxar um a um), mapa atual
-// (menos viagem), grupo maior.
-// Em modo de perigo (ajuste < 0) a janela vira [nível−3, nível+ajuste] — nunca acima — e os
-// passivos pesam mais; a lista de áreas evitadas nunca empurra o bot para fora da janela.
+// Área para o nível: monstros em [nível−2, nível+1] (a janela do enunciado), de preferência no
+// próprio nível; empate: passivos, grupos agressivos menos densos (mais fáceis de puxar um a um),
+// mapa atual (menos viagem), grupo maior.
+// Modo de perigo (ajuste < 0, depois de mortes e fugas): monstros agressivos só até nível+ajuste
+// (e preferidos nesse nível); os passivos — que lutam um a um, sem chamar o grupo nem atacar por
+// proximidade — continuam na janela inteira e pesam mais. Áreas evitadas (onde o bot caiu há
+// pouco) ficam de fora enquanto houver outra: antes de voltar a uma delas, a janela desce um
+// nível por vez (até 3 abaixo); só então aceita as evitadas.
 export function escolherArea(areas, adj, { nivel, ajuste = 0, mapaAtual, evitar = new Set() }) {
-  const alvo = nivel + ajuste;
   const perigo = ajuste < 0;
-  const max = perigo ? nivel + ajuste : nivel + 1;
-  const min = nivel - (perigo ? 3 : 2);
+  const passivo = (a) => a.def.aggro === 'passive';
+  const teto = (a) => (perigo && !passivo(a) ? nivel + ajuste : nivel + 1);
+  const alvo = (a) => (perigo && !passivo(a) ? nivel + ajuste : nivel);
   const alcancavel = (a) => rota(adj, mapaAtual, a.mapId, nivel) !== null;
-  let lista = areas.filter((a) => a.def.level >= min && a.def.level <= max && alcancavel(a));
-  const semEvitadas = lista.filter((a) => !evitar.has(a.id));
-  if (semEvitadas.length) lista = semEvitadas;
-  if (!lista.length) lista = areas.filter((a) => a.def.level <= Math.max(max, 1) && alcancavel(a));
+  const janela = (min) => areas.filter((a) => a.def.level >= min && a.def.level <= teto(a) && alcancavel(a));
+  let lista = [];
+  for (let desce = 0; desce <= 3 && !lista.length; desce++) lista = janela(nivel - 2 - desce).filter((a) => !evitar.has(a.id));
+  if (!lista.length) lista = janela(nivel - 2);
+  if (!lista.length) lista = areas.filter((a) => a.def.level <= nivel + 1 && alcancavel(a));
   let melhor = null, melhorNota = Infinity;
   for (const a of lista) {
     const r = rota(adj, mapaAtual, a.mapId, nivel);
     const L = a.def.level;
-    const passivo = a.def.aggro === 'passive';
-    const densidade = passivo ? 0 : (a.count / (Math.PI * a.radius * a.radius)) * 100;
-    const nota = Math.abs(L - alvo) + (L > alvo ? 0.35 : 0) - (passivo ? (perigo ? 1.2 : 0.3) : 0) + densidade * 0.05 + r.length * 0.05 - a.count * 0.01;
+    const densidade = passivo(a) ? 0 : (a.count / (Math.PI * a.radius * a.radius)) * 100;
+    const nota = Math.abs(L - alvo(a)) + (L > alvo(a) ? 0.35 : 0) - (passivo(a) ? (perigo ? 1.2 : 0.3) : 0) + densidade * 0.05 + r.length * 0.05 - a.count * 0.01;
     if (nota < melhorNota) { melhorNota = nota; melhor = a; }
   }
   return melhor;

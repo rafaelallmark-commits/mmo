@@ -40,6 +40,7 @@ const POCOES_MANA = ['potion_mp_m', 'potion_mp_s'];
 const TEMPOS = ['combate', 'deslocamento', 'saque', 'espera', 'descanso', 'fuga', 'morto', 'viagem', 'cidade', 'prova'];
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+const SAQUE_VALIDADE_MS = 30 * 60_000; // o saque no chão vence em 30 min (LOOT_TTL_MS de zone.js)
 
 function cadeiaDe(questId, quests, out = []) {
   for (const pr of quests[questId]?.prereq ?? []) { cadeiaDe(pr, quests, out); if (!out.includes(pr)) out.push(pr); }
@@ -98,7 +99,7 @@ export class BotProgressao {
   met(L = this.level) {
     let m = this.niveis.get(L);
     if (!m) {
-      m = { nivel: L, inicioMs: this.now, fimMs: null, abates: 0, xpAbates: 0, mortes: 0, fugas: 0, pocoesVida: 0, pocoesMana: 0, ouroSaqueado: 0, ouroGasto: 0, viagens: 0, danoCausado: 0, danoRecebido: 0, cura: 0, monstros: {}, tempos: Object.fromEntries(TEMPOS.map((k) => [k, 0])) };
+      m = { nivel: L, inicioMs: this.now, fimMs: null, abates: 0, xpAbates: 0, mortes: 0, fugas: 0, pocoesVida: 0, pocoesMana: 0, pocoesFora: 0, ouroSaqueado: 0, ouroDropado: 0, ouroGasto: 0, viagens: 0, danoCausado: 0, danoRecebido: 0, cura: 0, monstros: {}, tempos: Object.fromEntries(TEMPOS.map((k) => [k, 0])) };
       this.niveis.set(L, m);
     }
     return m;
@@ -153,7 +154,10 @@ export class BotProgressao {
       }
       case 'char': this.recebeChar(m.char); break;
       case 'level_up': if (m.eid === this.eid && m.level > this.level) this.subiuNivel(m.level); break;
-      case 'loot': if (this.querSaque(m.loot)) this.saque.set(m.loot.id, m.loot); else this.ignorados++; break;
+      case 'loot':
+        if (m.loot?.gold) this.met().ouroDropado += m.loot.gold;
+        if (this.querSaque(m.loot)) this.saque.set(m.loot.id, { ...m.loot, visto: this.now }); else this.ignorados++;
+        break;
       case 'zone':
         this.mapa = m.mapId; this.instancia = m.instance ?? null;
         if (m.instance) {
@@ -163,7 +167,9 @@ export class BotProgressao {
           if (presas.length) this.anomalias.push({ tipo: 'recarga_herdada', nivel: this.level, mapa: m.mapId, minutoSimulado: Math.round(this.now / 60000), habilidades: presas.map(([s, ms]) => ({ habilidade: s, restanteMin: Math.round(ms / 60000) })) });
         }
         this.recebeChar(m.char);
-        this.saque = new Map((m.loot || []).filter((l) => this.querSaque(l)).map((l) => [l.id, l]));
+        // o servidor manda o saque ainda não recolhido (e não vencido) deste mapa: o que ficou no
+        // chão numa fuga, morte ou ida à cidade volta para a lista
+        this.saque = new Map((m.loot || []).filter((l) => this.querSaque(l)).map((l) => [l.id, { ...l, visto: this.now }]));
         this.alvoId = null; this.andando = null; this.descansando = false; this.fuga = null;
         break;
       case 'player_dead':
@@ -248,12 +254,21 @@ export class BotProgressao {
     const atac = this.atacantes(mundo);
     this.ultimosAtacantes = atac.map((m) => m.def);
     this.sobreviver(eu, atac);
+    // a caminho da cidade, uma briga encerra a coleta do saque antes da viagem
+    if (this.tarefa && (atac.length || this.fuga)) this.tarefa.recolheu = true;
     if (this.fuga) return this.fugir(eu, atac);
     if (atac.length || this.alvoVivo(mundo)) return this.lutar(eu, atac, mundo);
     // fora de combate: cidade (compras/depósito/prova) > recuperar > saque > área > caçar
-    if (this.tarefa || this.planejarCidade()) return this.executarTarefa(eu, mundo);
+    if (this.tarefa || this.planejarCidade()) {
+      // antes de sair do mapa de caça, recolhe o saque que está por perto (o ouro paga as compras)
+      if (!this.tarefa.recolheu && !this.instancia && this.mapa !== this.cidade.mapId) {
+        if (this.coletar(eu, mundo)) return;
+        this.tarefa.recolheu = true;
+      }
+      return this.executarTarefa(eu, mundo);
+    }
     if (this.recuperar(eu, mundo)) return;
-    if (!this.instancia && this.coletar(eu)) return;
+    if (!this.instancia && this.coletar(eu, mundo)) return;
     if (this.planejarArea()) return;
     this.cacar(eu, mundo);
   }
@@ -342,7 +357,7 @@ export class BotProgressao {
     this.trocasPorPerigo = (this.trocasPorPerigo ?? 0) + 1;
   }
 
-  usarPocao(tipos, falta, chave) {
+  usarPocao(tipos, falta, chave, fora = false) {
     // tônico médio só a partir do nível dele (o servidor não confere: ver relatório)
     const usaveis = tipos.filter((id) => this.data.items[id].level <= this.level);
     let escolha = null;
@@ -359,6 +374,7 @@ export class BotProgressao {
     this.recebeChar(r.char);
     this.potPronto = this.now + this.data.formulas.potions.sharedCooldownMs;
     this.met()[chave]++;
+    if (fora) this.met().pocoesFora++;
     return true;
   }
 
@@ -569,13 +585,25 @@ export class BotProgressao {
     return best;
   }
 
-  coletar(eu) {
+  // Saque conhecido fica na lista até ser recolhido ou vencer (30 min): o bot busca o que está a até
+  // 45 m dele ou dentro da área de caça atual — inclusive o que deixou para trás ao fugir, cair ou
+  // ir à cidade; mais longe que isso, fica na lista para quando passar perto. Não vai buscar o que
+  // exigiria entrar no raio de agressão de um monstro agressivo parado (o ponto de coleta fica a até
+  // 5 m do saque, do lado do bot): esse saque espera o grupo em volta ser abatido.
+  coletar(eu, mundo = this.cli.mundo()) {
     if (!this.saque.size) return false;
+    const area = this.area && this.area.mapId === this.mapa ? this.area : null;
+    const parados = this.monstros(mundo).filter((m) => m.tgt == null && m.st !== 'return' && this.data.monsters[m.def]?.aggro === 'aggressive');
     let best = null, bd = Infinity;
     for (const l of this.saque.values()) {
-      if (l.mapId && l.mapId !== this.mapa) { this.saque.delete(l.id); continue; }
+      if ((l.mapId && l.mapId !== this.mapa) || this.now - (l.visto ?? this.now) > SAQUE_VALIDADE_MS) { this.saque.delete(l.id); continue; }
       const d = dist(eu, l);
-      if (d > 45) { this.saque.delete(l.id); continue; }
+      if (d > 45 && !(area && dist(l, area) <= area.radius + 15)) continue;
+      if (d > this.pickupRange - 0.5 && parados.length) {
+        const k = Math.min(5, d) / (d || 1);
+        const ponto = { x: l.x + (eu.x - l.x) * k, z: l.z + (eu.z - l.z) * k };
+        if (parados.some((m) => dist(m, ponto) <= (this.data.monsters[m.def].aggroRadius || 8) + 1)) continue;
+      }
       if (d < bd) { bd = d; best = l; }
     }
     if (!best) return false;
@@ -631,12 +659,12 @@ export class BotProgressao {
     // fora de combate, tônico só acima da reserva (o resto fica para emergências em combate)
     if (vida < limV && this.temPocao(POCOES_VIDA) && this.bolsa(POCOES_VIDA) > this.op.reservaPocoes) {
       this.atividade = 'descanso';
-      if (this.now >= this.potPronto) this.usarPocao(POCOES_VIDA, eu.mhp - eu.hp, 'pocoesVida');
+      if (this.now >= this.potPronto) this.usarPocao(POCOES_VIDA, eu.mhp - eu.hp, 'pocoesVida', true);
       return true;
     }
     if (mp < limM && this.temPocao(POCOES_MANA) && this.bolsa(POCOES_MANA) > this.op.reservaPocoes) {
       this.atividade = 'descanso';
-      if (this.now >= this.potPronto) this.usarPocao(POCOES_MANA, this.char.stats.maxMp - this.char.mp, 'pocoesMana');
+      if (this.now >= this.potPronto) this.usarPocao(POCOES_MANA, this.char.stats.maxMp - this.char.mp, 'pocoesMana', true);
       return true;
     }
     // sem tônico: descansa longe do alcance de agressão dos monstros que passeiam
@@ -1015,7 +1043,7 @@ export class BotProgressao {
         nivel: m.nivel, concluido: fim != null, minutos: fim != null ? r2(minutos) : null, meta,
         desvioPct: minutos != null && meta ? r1((minutos / meta - 1) * 100) : null,
         abates: m.abates, abatesPorMin: min > 0 ? r2(m.abates / min) : 0, mortes: m.mortes, fugas: m.fugas,
-        pocoesVida: m.pocoesVida, pocoesMana: m.pocoesMana, ouroSaqueado: m.ouroSaqueado, ouroGasto: m.ouroGasto,
+        pocoesVida: m.pocoesVida, pocoesMana: m.pocoesMana, pocoesFora: m.pocoesFora, ouroSaqueado: m.ouroSaqueado, ouroDropado: m.ouroDropado, ouroGasto: m.ouroGasto,
         xpAbates: m.xpAbates, viagens: m.viagens, danoCausado: m.danoCausado, danoRecebido: m.danoRecebido, cura: m.cura,
         tempos: Object.fromEntries(Object.entries(m.tempos).map(([k, v]) => [k, r1(v / 1000)])),
         monstros: m.monstros,

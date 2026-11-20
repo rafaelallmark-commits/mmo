@@ -49,10 +49,10 @@ export function simularClasse({ classId, seed = 1, ateNivel = 20, opcoes = {}, a
   let dir = null;
   try {
     if (bancoArquivo) dir = mkdtempSync(join(tmpdir(), 'cinzas-prog-'));
-    // rateLimit/rateBurst: versões do servidor com limite de comandos por conexão medem o limite em
-    // tempo real; acelerado, o bot manda centenas de comandos por segundo real (opção ignorada
-    // por versões sem limite)
-    const server = new GameServer({ dbPath: dir ? join(dir, 'sim.db') : ':memory:', dev: true, log: false, seed, tickHz: 10, rateLimit: Infinity, rateBurst: Infinity });
+    // rateLimit/rateBurst: o limite de comandos por conexão é medido em tempo real (performance.now);
+    // acelerado, o bot manda centenas de comandos por segundo real. Valores grandes e finitos (com
+    // Infinity, dois pedidos no mesmo instante dariam 0 × Infinity = NaN fichas e travariam o balde).
+    const server = new GameServer({ dbPath: dir ? join(dir, 'sim.db') : ':memory:', dev: true, log: false, seed, tickHz: 10, rateLimit: 1e9, rateBurst: 1e9 });
     const congel = congelarZonasVazias(server, () => simMs);
     const bot = new BotProgressao({ server, classId, seed, ateNivel, opcoes, aoNivel });
     bot.iniciar();
