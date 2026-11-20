@@ -520,7 +520,8 @@ func _flash(text: String, color: Color) -> void:
 	msg_box.add_child(l)
 	if msg_box.get_child_count() > 4:
 		msg_box.get_child(0).queue_free()
-	var tw := create_tween()
+	# tween preso ao rótulo: se ele sair antes (excesso de mensagens), o tween morre junto
+	var tw := l.create_tween()
 	tw.tween_interval(3.0)
 	tw.tween_property(l, "modulate:a", 0.0, 0.8)
 	tw.tween_callback(l.queue_free)

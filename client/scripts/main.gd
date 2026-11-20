@@ -19,6 +19,7 @@ const TIPS := [
 	"O mestre da sua classe ensina a ler os requisitos dos itens.",
 ]
 
+var _kicked_reason := ""  # motivo da última expulsão (mostrado no lugar do aviso genérico de queda)
 var defs := {}
 var ch := {}
 var account := ""
@@ -311,6 +312,7 @@ func show_login() -> void:
 
 func connect_and_login(register: bool) -> void:
 	_pending_register = register
+	_kicked_reason = ""
 	server_hello = {}
 	set_status("Conectando a %s..." % server_url)
 	if Net.is_open():
@@ -1093,12 +1095,18 @@ func _on_message(m: Dictionary) -> void:
 			if hud:
 				hud.show_boss(m)
 		"kicked":
-			if hud:
-				hud.show_disconnect(m.get("reason", "Desconectado."))
+			# o motivo (ex.: suspensão) fica na tela; o fechamento da conexão que vem depois não o troca
+			_kicked_reason = str(m.get("reason", "Desconectado."))
+			if hud and state == "world":
+				hud.show_disconnect(_kicked_reason)
+				Sfx.ui("ui_error")
+			else:
+				set_status(_kicked_reason, true)  # já toca o som de erro
 			in_world = false
-			Sfx.ui("ui_error")
 
 func _on_disconnected(reason: String) -> void:
+	if _kicked_reason != "":
+		return
 	if state == "world" and hud:
 		hud.show_disconnect(reason)
 		in_world = false
@@ -1108,6 +1116,7 @@ func _on_disconnected(reason: String) -> void:
 
 func reconnect() -> void:
 	reconnecting = true
+	_kicked_reason = ""
 	if hud:
 		hud.set_disconnect_text("Reconectando...")
 	Net.close()
