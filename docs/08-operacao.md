@@ -83,7 +83,7 @@ Esta seção é o SQLite (desenvolvimento). Em produção o banco é o PostgreSQ
 | `npm run test:pg` | A mesma suíte no PostgreSQL: sobe um servidor temporário, um esquema por banco de teste, apaga no fim (§8.11). | ~3,5 min |
 | `npm run cenarios` | Cenários críticos + carga (100 clientes, 60 s) + carga com 150 ms; escreve `docs/relatorio-cenarios.md`. `-- --rapido` encurta a carga. | ~7 min |
 | `npm run carga -- --clientes 100 --duracao 60 --md ../docs/relatorio-carga.md` | Só o teste de carga (sobe um servidor próprio; `--url`/`--metricas` para usar um existente; `--completo` para comparar com snapshots completos). | ~1,5 min |
-| `npm run telemetria -- --db cinzas.db` | Tempo jogado por nível no banco real contra as metas (±25%). | segundos |
+| `npm run telemetria -- --db cinzas.db [--parou-dias 3] [--md arquivo.md]` | Tempo jogado por nível no banco real contra as metas (±25%) e, da auditoria (D171): mortes por mapa, faixa de nível, classe e último golpe (e quantos monstros cercavam); sessões, nível e mapa em que param os personagens que não voltam há N dias; tentativas, quedas por fase e vitórias na Última Eclusa; missões aceitas × concluídas; ouro que entra (saque, missões, vendas) e que sai (compras, refino). | segundos |
 | `npm run simular-progressao` | Simulação acelerada da caça solo do nível 1 ao teto (25) para as 8 classes; escreve `docs/relatorio-progressao.md` (a versão no git é essa rodada completa, do 1 ao 25, com 8 sementes fixas). | ~13 min |
 | `npm run validate-data` | Valida os JSON de `data/`. | segundos |
 

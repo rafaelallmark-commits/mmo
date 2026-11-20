@@ -988,6 +988,7 @@ export class Zone {
   // Dano em jogador: guardiões (redirecionamento) → escudo → vida. Proteção conta como participação.
   damagePlayer(p, amount, m) {
     p.lastHitAt = this.now;
+    if (m?.defId) p.lastHitBy = m.defId; // telemetria de mortes: o último monstro que acertou
     const prot = this.f.xp.participation.threatAbsorbed;
     const down = this.buffMod(p, 'damageTakenDownPct');
     if (down) amount = Math.max(1, Math.round(amount * (1 - Math.min(down, 80) / 100)));
@@ -1025,11 +1026,13 @@ export class Zone {
 
   killPlayer(p) {
     const c = p.char;
+    const attackers = [...this.monsters.values()].filter((m) => m.state !== 'dead' && m.targetId === p.eid).length;
     c.hp = 0; c.dead = true; p.targetId = null; p.dest = null; p.buffs = []; p.guards = []; p.shield = null;
     p.deadAt = this.now; // volta sozinho ao posto depois de death.corpseTimeoutMs
     for (const m of this.monsters.values()) { m.threat.delete(c.id); if (m.targetId === p.eid) m.targetId = null; }
     this.store.saveCharacter(c);
     this.broadcast({ t: 'player_dead', eid: p.eid });
+    this.hooks.onPlayerDeath?.(p, { by: p.lastHitBy ?? null, attackers });
   }
 
   tickGround() {

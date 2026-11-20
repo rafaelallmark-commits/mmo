@@ -4,13 +4,15 @@
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 
 export class Dungeon {
-  constructor({ key, zone, partyId, members, data, onlineCount = null }) {
+  constructor({ key, zone, partyId, members, data, onlineCount = null, onEvent = null }) {
     this.key = key;
     this.zone = zone;
     this.partyId = partyId;
     this.members = new Set(members);  // charIds autorizados
     // quantos do grupo estão on-line agora (a escala de cada tentativa não conta quem está fora do ar)
     this.onlineCount = onlineCount;
+    // telemetria: começo de tentativa, queda do grupo e vitória (onEvent(tipo, dados))
+    this.onEvent = onEvent;
     this.data = data;
     this.f = data.formulas.dungeon;
     this.map = zone.map;
@@ -41,6 +43,7 @@ export class Dungeon {
     boss.hp = hp;
     boss.damageFilter = (dmg, charId) => this.filterBossDamage(dmg, charId);
     this.boss = boss;
+    this.onEvent?.('start', { attempt: this.attempt, scale: Math.round(this.scale() * 100) / 100, players: z.players.size });
     this.phase = 1;
     this.brokenUntil = 0;
     this.valve = { i: -1, state: 'idle', at: z.now + 4000 };
@@ -196,6 +199,7 @@ export class Dungeon {
   }
 
   wipe(reason) {
+    this.onEvent?.('wipe', { attempt: this.attempt, phase: this.phase ?? null, reason, players: this.zone.players.size });
     const z = this.zone;
     z.broadcast({ t: 'system', text: `${reason} O grupo volta à entrada do calabouço.` });
     z.broadcast({ t: 'boss', state: 'reset', reason });
@@ -212,6 +216,7 @@ export class Dungeon {
   victory() {
     const z = this.zone;
     this.done = true;
+    this.onEvent?.('victory', { attempt: this.attempt, players: z.players.size, fallen: [...z.players.values()].filter((p) => p.char.dead).length });
     for (const m of [...z.monsters.values()]) if (m !== this.boss) z.monsters.delete(m.eid);
     z.portals = [...z.portals, { id: 'exit', name: 'Saída da Eclusa', x: this.map.spawnPoint.x, z: 2, radius: 3, to: 'canais_eclusa', toX: 100, toZ: 184, minLevel: 1 }];
     for (const p of z.players.values()) {

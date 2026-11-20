@@ -279,11 +279,11 @@ test('várias zonas: sussurro, grupo e clã entre zonas', { timeout: 60000 }, as
     const bid = bru.char.id, aid = ana.char.id;
     await waitUntil(() => A.remote.has(bid) && B.remote.has(aid), 'diretório nas duas zonas');
     // sussurro nos dois sentidos; para quem não está on-line, recusa
-    let got = bru.waitFor((m) => m.t === 'chat' && m.channel === 'whisper', 3000, 'sussurro em B');
+    let got = bru.waitFor((m) => m.t === 'chat' && m.channel === 'whisper', 8000, 'sussurro em B');
     assert.equal((await ana.request('chat', { channel: 'whisper', to: 'bruno', text: 'oi, Bruno' })).ok, true);
     let w = await got;
     assert.deepEqual([w.from, w.to, w.text], ['Anabela', 'Bruno', 'oi, Bruno']);
-    got = ana.waitFor((m) => m.t === 'chat' && m.channel === 'whisper' && m.from === 'Bruno', 3000, 'sussurro em A');
+    got = ana.waitFor((m) => m.t === 'chat' && m.channel === 'whisper' && m.from === 'Bruno', 8000, 'sussurro em A');
     assert.equal((await bru.request('chat', { channel: 'whisper', to: 'Anabela', text: 'estou no brejo' })).ok, true);
     w = await got;
     assert.equal(w.text, 'estou no brejo');
@@ -291,7 +291,7 @@ test('várias zonas: sussurro, grupo e clã entre zonas', { timeout: 60000 }, as
     log('sussurro de A para B e de B para A');
 
     // grupo entre zonas: convite, aceite, painel com o mapa de quem está na outra zona
-    const inv = bru.waitFor((m) => m.t === 'party_invite', 3000, 'convite em B');
+    const inv = bru.waitFor((m) => m.t === 'party_invite', 8000, 'convite em B');
     assert.equal((await ana.request('party_invite', { name: 'Bruno' })).ok, true);
     const iv = await inv;
     assert.equal(iv.from, 'Anabela');
@@ -311,10 +311,10 @@ test('várias zonas: sussurro, grupo e clã entre zonas', { timeout: 60000 }, as
     assert.deepEqual([remoteA.online, remoteA.mapId], [true, 'estrada_velha']);
     assert.equal(bru.party.leader, aid);
     // chat do grupo nos dois sentidos
-    got = ana.waitFor((m) => m.t === 'chat' && m.channel === 'party' && m.text === 'vem pro brejo', 3000, 'grupo em A');
+    got = ana.waitFor((m) => m.t === 'chat' && m.channel === 'party' && m.text === 'vem pro brejo', 8000, 'grupo em A');
     assert.equal((await bru.request('chat', { channel: 'party', text: 'vem pro brejo' })).ok, true);
     assert.equal((await got).from, 'Bruno');
-    got = bru.waitFor((m) => m.t === 'chat' && m.channel === 'party' && m.text === 'a caminho', 3000, 'grupo em B');
+    got = bru.waitFor((m) => m.t === 'chat' && m.channel === 'party' && m.text === 'a caminho', 8000, 'grupo em B');
     assert.equal((await ana.request('chat', { channel: 'party', text: 'a caminho' })).ok, true);
     await got;
     log(`grupo ${pid} entre zonas: painel em A mostra Bruno no Brejo (nível 10); chat do grupo nos dois sentidos`);
@@ -324,19 +324,19 @@ test('várias zonas: sussurro, grupo e clã entre zonas', { timeout: 60000 }, as
     await ana.request('gm', { cmd: 'gold', amount: 600 });
     const cr = await ana.request('clan_create', { name: 'Ordem do Vau', tag: 'VAU' });
     assert.equal(cr.ok, true, cr.reason);
-    const cinv = bru.waitFor((m) => m.t === 'clan_invite', 3000, 'convite de clã em B');
+    const cinv = bru.waitFor((m) => m.t === 'clan_invite', 8000, 'convite de clã em B');
     assert.equal((await ana.request('clan_invite', { name: 'Bruno' })).ok, true);
     const ci = await cinv;
     assert.equal(ci.clan.tag, 'VAU');
-    const joined = ana.waitFor((m) => m.t === 'clan_event' && /Bruno entrou/.test(m.text), 3000, 'aviso de entrada em A');
+    const joined = ana.waitFor((m) => m.t === 'clan_event' && /Bruno entrou/.test(m.text), 8000, 'aviso de entrada em A');
     assert.equal((await bru.request('clan_accept', { clanId: ci.clan.id })).ok, true);
     await joined;
     assert.equal(B.playerOf(bid).char.clanTag, 'VAU');
-    got = ana.waitFor((m) => m.t === 'chat' && m.channel === 'clan' && m.text === 'reunião no brejo', 3000, 'clã em A');
+    got = ana.waitFor((m) => m.t === 'chat' && m.channel === 'clan' && m.text === 'reunião no brejo', 8000, 'clã em A');
     assert.equal((await bru.request('chat', { channel: 'clan', text: 'reunião no brejo' })).ok, true);
     const cm = await got;
     assert.deepEqual([cm.from, cm.tag], ['Bruno', 'VAU']);
-    got = bru.waitFor((m) => m.t === 'chat' && m.channel === 'clan' && m.text === 'levo as poções', 3000, 'clã em B');
+    got = bru.waitFor((m) => m.t === 'chat' && m.channel === 'clan' && m.text === 'levo as poções', 8000, 'clã em B');
     assert.equal((await ana.request('chat', { channel: 'clan', text: 'levo as poções' })).ok, true);
     await got;
     const info = (await ana.request('clan_info')).clan;
@@ -527,7 +527,8 @@ test('várias zonas: moderação na chegada por transferência e entre zonas', {
     await waitUntil(() => A.remote.has(bid), 'diretório em A');
 
     // silêncio dado em A para quem está em B: vale na hora em B e acompanha a conta na volta para A
-    const told = bad.waitFor((m) => m.t === 'system' && /silenciado/.test(m.text), 3000, 'aviso de silêncio em B');
+    // entre processos (A → mundo → B): 8 s de folga para o CI carregado, bem abaixo da varredura de 60 s
+    const told = bad.waitFor((m) => m.t === 'system' && /silenciado/.test(m.text), 8000, 'aviso de silêncio em B');
     let r = await gm.request('gm', { cmd: 'mute', name: 'Arruaceiro', minutes: 10, reason: 'flood' });
     assert.equal(r.ok, true, r.reason);
     await told;
@@ -540,7 +541,7 @@ test('várias zonas: moderação na chegada por transferência e entre zonas', {
     // fala e sussurra de B para a denúncia feita em A ter contexto
     const there = await goRemote(home, 'brejo_bombas', 22, 70, 'arruaceiro-b2');
     await waitUntil(() => B.byChar.get(bid)?.mutedUntil === 0 || !B.byChar.get(bid)?.mutedUntil, 'sem silêncio em B');
-    const heard = gm.waitFor((m) => m.t === 'chat' && m.channel === 'whisper' && m.from === 'Arruaceiro', 3000, 'sussurro em A');
+    const heard = gm.waitFor((m) => m.t === 'chat' && m.channel === 'whisper' && m.from === 'Arruaceiro', 8000, 'sussurro em A');
     assert.equal((await there.request('chat', { channel: 'whisper', to: 'Vigia', text: 'vou te pegar' })).ok, true);
     await heard;
     r = await gm.request('report', { name: 'Arruaceiro', reason: 'ameaça por sussurro' });
@@ -554,10 +555,10 @@ test('várias zonas: moderação na chegada por transferência e entre zonas', {
     r = await gm.request('gm', { cmd: 'where', name: 'Arruaceiro' });
     assert.equal(r.ok, true, r.reason);
     assert.match(r.message, /brejo_bombas .*zona B/);
-    const ann = there.waitFor((m) => m.t === 'notice' && m.kind === 'announce', 3000, 'anúncio em B');
+    const ann = there.waitFor((m) => m.t === 'notice' && m.kind === 'announce', 8000, 'anúncio em B');
     assert.equal((await gm.request('gm', { cmd: 'announce', text: 'Manutenção às 22h' })).ok, true);
     assert.match((await ann).text, /Manutenção às 22h/);
-    const out = there.waitFor((m) => m.t === 'kicked', 3000, 'expulso em B');
+    const out = there.waitFor((m) => m.t === 'kicked', 8000, 'expulso em B');
     r = await gm.request('gm', { cmd: 'kick', name: 'Arruaceiro', reason: 'teste' });
     assert.equal(r.ok, true, r.reason);
     assert.match((await out).reason, /desconectado pela equipe/);

@@ -147,6 +147,8 @@ export class GameServer {
         onLevelUp: (p, level) => this.store.logLevel(p.char.id, level, p.char.classId, p.char.playedS ?? 0),
         onEscortArrived: (escort, credited) => { for (const p of credited) this.notifyQuests(p, this.quests.onEscort(p.char, escort.defId)); },
         onChannelDone: (p, objectId) => this.notifyQuests(p, this.quests.onInteract(p.char, objectId)),
+        // telemetria do teste (relatório: npm run telemetria): onde, de quê e cercado por quantos se morre
+        onPlayerDeath: (p, info) => this.audit('death', { charId: p.char.id, map: p.zone.mapId, level: p.char.level, classId: p.char.classId, x: Math.round(p.char.x), z: Math.round(p.char.z), by: info.by, attackers: info.attackers }),
       },
     });
     this.zones.set(key, zone);
@@ -398,6 +400,12 @@ export class GameServer {
     // grava ao sair, a menos que o processo "caiu" (teste), o mundo mandou soltar sem gravar ou o mundo
     // sumiu há tanto tempo que a posse pode já ser de outra zona
     const save = !this.crashed && !s.noSave && (!this.world || this.world.canSave());
+    const leaving = this.zones.get(this.charZone.get(charId))?.players.get(charId);
+    if (leaving) {
+      // telemetria: onde e em que nível cada sessão termina (desistência = a última sessão de quem não volta)
+      const c = leaving.char;
+      this.audit('session_end', { charId, level: c.level, classId: c.classId, map: leaving.zone.mapId, sessionS: Math.round((c.playedS ?? 0) - (s.sessionPlayed0 ?? c.playedS ?? 0)), totalS: Math.round(c.playedS ?? 0), dead: !!c.dead });
+    }
     const p = this.zones.get(this.charZone.get(charId))?.removePlayer(charId, save);
     this.charZone.delete(charId);
     if (this.byChar.get(charId) === s) this.byChar.delete(charId);
@@ -819,6 +827,7 @@ export class GameServer {
     }
     this.store.saveCharacter(char);
     s.charId = charId;
+    s.sessionPlayed0 = char.playedS ?? 0; // telemetria: duração da sessão (session_end)
     s.known = new Map(); s.knownFull = true;
     this.byChar.set(charId, s);
     this.byName.set(char.name.toLowerCase(), charId);
@@ -1279,7 +1288,10 @@ export class GameServer {
     const n = p.zone.npcNear(p, npc);
     if (!n) return { ok: false, code: 'too_far', reason: 'Chegue mais perto para conversar.' };
     const r = this.quests.accept(p.char, quest, n.id);
-    if (r.ok) r.journal = this.quests.journal(p.char);
+    if (r.ok) {
+      r.journal = this.quests.journal(p.char);
+      this.audit('quest_accept', { charId: p.char.id, quest, level: p.char.level });
+    }
     return r;
   }
 
@@ -1376,7 +1388,8 @@ export class GameServer {
     if (!dg || dg.done) {
       key = `dungeon:${pid}:${randomUUID().slice(0, 8)}`;
       const zone = this.createZone('ultima_eclusa', key);
-      dg = new Dungeon({ key, zone, partyId: pid, members, data: this.data, onlineCount: () => this.partyMemberIds(pid).filter((id) => this.isOnline(id)).length });
+      dg = new Dungeon({ key, zone, partyId: pid, members, data: this.data, onlineCount: () => this.partyMemberIds(pid).filter((id) => this.isOnline(id)).length,
+        onEvent: (result, d) => this.audit('dungeon', { result, party: pid, members: members.length, ...d }) });
       this.dungeons.set(key, dg);
       this.partyDungeon.set(pid, key);
       this.log(`calabouço aberto: ${key} (${members.length} jogadores)`);

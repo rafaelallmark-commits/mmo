@@ -1,13 +1,18 @@
-// Relatório de telemetria de progressão a partir do banco do servidor (tabela level_log).
-//   node tools/telemetria.mjs --db cinzas.db|postgres://... [--md docs/relatorio-telemetria.md]
-// Para cada nível: tempo jogado para sair do nível anterior (mediana e média entre personagens) contra a
-// meta de data/xp_table.json (targetMinutesToNext), com a faixa de aceitação de ±25%.
+// Relatório de telemetria do teste a partir do banco do servidor.
+//   node tools/telemetria.mjs --db cinzas.db|postgres://... [--md docs/relatorio-telemetria.md] [--parou-dias 3]
+// 1. Progressão (tabela level_log): tempo jogado para sair de cada nível (mediana e média entre
+//    personagens) contra a meta de data/xp_table.json (targetMinutesToNext), com a faixa de ±25%.
+// 2. Da auditoria (audit_log, D171): mortes (mapa, nível, classe, monstro, cercado por quantos), sessões e
+//    desistência (última sessão de quem não voltou há --parou-dias), calabouço (tentativas, quedas por
+//    fase, vitórias), missões (aceitas × concluídas) e economia (ouro que entra e que sai, por origem).
+//    A auditoria guarda 90 dias (--audit-days do servidor).
 // Só lê: no SQLite abre o arquivo em modo leitura; no PostgreSQL conecta sem rodar migrações.
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isPostgresUrl, parsePgUrl, PgStore } from '../src/store-pg.js';
+import { auditReport, AUDIT_KINDS } from './lib/telemetria-auditoria.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const arg = (n, d) => { const i = process.argv.indexOf(`--${n}`); return i === -1 ? d : process.argv[i + 1]; };
@@ -29,8 +34,9 @@ if (pg) {
     ? db.prepare('SELECT char_id, level, class_id, played_s FROM level_log ORDER BY char_id, level').all() : null;
 }
 if (!rows) {
-  console.log(`O banco ${dbLabel} ainda não tem telemetria (tabela level_log). Ela é criada quando o servidor sobe com esta versão.`);
-  process.exit(0);
+  // banco de antes da telemetria de progressão: segue com as seções da auditoria
+  console.error(`O banco ${dbLabel} ainda não tem a tabela level_log (criada quando o servidor sobe com esta versão).`);
+  rows = [];
 }
 const byChar = new Map();
 for (const r of rows) {
@@ -61,6 +67,22 @@ for (let L = 2; L <= xp.cumulative.length; L++) {
   medidos++; if (!ok) fora++;
   lines.push(`| ${L - 1}→${L} | ${a.length} | ${m.toFixed(1)} | ${mean.toFixed(1)} | ${target} | ${ok ? 'dentro de ±25%' : (m < target ? 'rápido demais' : 'lento demais')} |`);
 }
-const out = `# Telemetria de progressão (${new Date().toISOString().slice(0, 10)})\n\nBanco: \`${dbLabel}\` — ${byChar.size} personagens com subidas de nível registradas.\n\n${lines.join('\n')}\n\nNíveis medidos: ${medidos}; fora da faixa: ${fora}.\n`;
+const out = `# Telemetria do teste (${new Date().toISOString().slice(0, 10)})\n\nBanco: \`${dbLabel}\` — ${byChar.size} personagens com subidas de nível registradas.\n\n## Progressão\n\n${lines.join('\n')}\n\nNíveis medidos: ${medidos}; fora da faixa: ${fora}.\n\n${auditReport(readAudit(AUDIT_KINDS), { parouDias: Number(arg('parou-dias', 3)) })}`;
 console.log(out);
 if (md) writeFileSync(md, out);
+
+// ---------------------------------------------------------------- da auditoria
+function readAudit(kinds) {
+  if (pg) {
+    const st = new PgStore(dbPath, { migrate: false, appName: 'cinzas-telemetria' });
+    try {
+      if (!st.query("SELECT to_regclass('audit_log') IS NOT NULL AS ok")[0].ok) return [];
+      return st.query(`SELECT at, kind, char_id, data_json FROM audit_log WHERE kind IN (${kinds.map((_, i) => `$${i + 1}`).join(', ')}) ORDER BY at`, kinds);
+    } finally { st.close(); }
+  }
+  const db = new DatabaseSync(dbPath, { readOnly: true });
+  try {
+    if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='audit_log'").get()) return [];
+    return db.prepare(`SELECT at, kind, char_id, data_json FROM audit_log WHERE kind IN (${kinds.map(() => '?').join(', ')}) ORDER BY at`).all(...kinds);
+  } finally { db.close(); }
+}

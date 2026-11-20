@@ -127,7 +127,7 @@ npm run create-character -- --account teste1 --password teste123 --name Brakka -
 npm run create-character -- --account teste2 --password teste123 --name Ilvo --class emberweaver
 ```
 
-Opções: `--level N` (começa no nível N, com os pontos livres correspondentes), `--give ID_DO_ITEM` (repetível, coloca na bolsa), `--db arquivo.db`. Classes do M1: `breaker` (Quebraferro), `emberweaver` (Tecelão da Brasa). IDs de item estão em `data/items.json` (ex.: `axe_1h_t5` = Machado de Pedreira, `wand_t5` = Varinha de Vidro Fosco).
+Opções: `--level N` (começa no nível N, com os pontos livres correspondentes), `--give ID_DO_ITEM` (repetível, coloca na bolsa), `--db arquivo.db`. Classes (`--class`): as oito de `data/classes.json` — `breaker` (Quebraferro), `bastion` (Bastião de Bronze), `pikeman` (Lanceiro do Fosso), `warden` (Vigia do Espinhal), `dawnshield` (Escudeiro do Alvorecer), `windwalker` (Andarilha do Vento), `veilsinger` (Cantora do Véu) e `emberweaver` (Tecelão da Brasa). IDs de item estão em `data/items.json` (ex.: `axe_1h_t5` = Machado de Pedreira, `wand_t5` = Varinha de Vidro Fosco).
 
 ## 4. Testes automatizados
 
