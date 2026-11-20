@@ -99,6 +99,9 @@ func _process(_d: float) -> void:
 	if step == "nav":
 		_nav_tick()
 		return
+	if step == "contas":
+		_accounts_tick()
+		return
 	match step:
 		"entering":
 			if main.in_world and main.world and not main.world.me().is_empty():
@@ -422,6 +425,194 @@ func _nav_tick() -> void:
 			return
 	nav_step += 1
 	nav_until = Time.get_ticks_msec() + next_wait
+
+
+# ---------------- telas de conta (--contastest=pasta_dos_emails) ----------------
+# Servidor com --auth token e serviço de contas com --email arquivo --email-dir pasta_dos_emails. Percorre as
+# telas como o jogador (campos e botões de verdade): cria a conta, "fecha o jogo" sem confirmar, tenta entrar
+# (a recusa abre a tela do código com a conta preenchida), pede outro código (barrado: um e-mail por minuto),
+# confirma com o código lido do e-mail, entra pela mesma conexão, baixa os dados (arquivo em user://dados) e,
+# com --termos=conta:senha (conta que aceitou uma versão anterior dos termos), aceita os termos novos e entra.
+var ac_step := 0
+var ac_until := 0
+
+func start_accounts(m) -> void:
+	main = m
+	t0 = Time.get_ticks_msec()
+	deadline_ms = 90000
+	step = "contas"
+	ac_until = Time.get_ticks_msec() + 800
+	say("telas de conta; e-mails em %s" % main.args["contastest"])
+
+func _ui_nodes(cls: String) -> Array:
+	return main.screen.find_children("*", cls, true, false) if main.screen else []
+
+## Botão (ou caixa de seleção) da tela pelo texto; prefix = começa com o texto.
+func _ui_button(text: String, prefix := false) -> Button:
+	for b in _ui_nodes("Button"):
+		var t: String = (b as Button).text
+		if t == text or (prefix and t.begins_with(text)):
+			return b
+	return null
+
+func _ui_press(text: String) -> bool:
+	var b := _ui_button(text)
+	if b == null:
+		fail("botão «%s» não está na tela «%s»" % [text, _ui_title()])
+		return false
+	b.pressed.emit()
+	return true
+
+## Subtítulo do painel (o segundo rótulo: o primeiro é o nome do jogo).
+func _ui_title() -> String:
+	var labels := _ui_nodes("Label")
+	return (labels[1] as Label).text if labels.size() > 1 else ""
+
+## Preenche os campos de texto da tela, na ordem (null = deixa como está).
+func _ui_fill(values: Array) -> void:
+	var edits := _ui_nodes("LineEdit")
+	for i in range(mini(values.size(), edits.size())):
+		if values[i] != null:
+			(edits[i] as LineEdit).text = values[i]
+
+func _ui_status() -> String:
+	return main.status_label.text if main.status_label else ""
+
+## Código de 6 dígitos do e-mail mais recente da pasta (--email arquivo grava .eml com o corpo em base64).
+func _mail_code() -> String:
+	var dir: String = main.args["contastest"]
+	var files := Array(DirAccess.get_files_at(dir)).filter(func(f): return str(f).ends_with(".eml"))
+	files.sort()
+	if files.is_empty():
+		return ""
+	var parts := FileAccess.get_file_as_string(dir.path_join(files[-1])).split("\r\n\r\n", true, 1)
+	if parts.size() < 2:
+		return ""
+	var body := Marshalls.base64_to_utf8(parts[1].replace("\r\n", "").strip_edges())
+	var re := RegEx.new()
+	re.compile("\\b(\\d{6})\\b")
+	var found := re.search(body)
+	return found.get_string(1) if found else ""
+
+func _accounts_tick() -> void:
+	if Time.get_ticks_msec() < ac_until:
+		return
+	var acc: String = main.args.get("account", "testador")
+	var pw: String = main.args.get("password", "senha-forte-1")
+	match ac_step:
+		0:
+			main.show_login()
+			_ui_fill([null, acc, pw])
+			if not _ui_press("Criar conta"):
+				return
+		1:
+			if _ui_title() != "Criar conta":
+				return
+			_ui_fill([acc, "%s@exemplo.com" % acc, pw])
+			(_ui_button("Tenho 13 anos", true) as CheckBox).button_pressed = true
+			if not _ui_press("Criar e receber o código"):
+				return
+		2:
+			if _ui_title() != "Confirmar e-mail":
+				if _ui_title() == "Criar conta" and _ui_status() != "":  # a tela de cadastro só escreve recusas
+					fail("cadastro recusado: " + _ui_status())
+				return
+			say("cadastro ok, tela do código aberta; fechando o jogo sem confirmar")
+			Net.close()
+			main.show_title()
+		3:
+			main.show_login()
+			_ui_fill([null, acc, pw])
+			if not _ui_press("Entrar"):
+				return
+		4:
+			if _ui_title() != "Confirmar e-mail":
+				return
+			var edits := _ui_nodes("LineEdit")
+			if (edits[0] as LineEdit).text != acc:
+				fail("a conta não veio preenchida na tela do código")
+				return
+			say("login recusado abriu a tela do código com a conta preenchida")
+			if not _ui_press("Reenviar código"):
+				return
+		5:
+			if not _ui_status().contains("Espere"):
+				return
+			say("reenviar logo depois do cadastro: " + _ui_status())
+			var code := _mail_code()
+			if code == "":
+				fail("código não encontrado nos e-mails")
+				return
+			_ui_fill([null, code])
+			if not _ui_press("Confirmar"):
+				return
+		6:
+			if _ui_title() != "Entrar" or not _ui_status().contains("confirmada"):
+				return
+			say("conta confirmada; entrando pela mesma conexão")
+			if not _ui_press("Entrar"):
+				return
+		7:
+			if main.state != "chars":
+				return
+			say("lista de personagens de %s" % main.account)
+			if not _ui_press("Baixar meus dados"):
+				return
+		8:
+			if _ui_title() != "Baixar meus dados":
+				return
+			_ui_fill([pw])
+			if not _ui_press("Baixar"):
+				return
+		9:
+			if not _ui_status().begins_with("Pronto"):
+				return
+			var edits := _ui_nodes("LineEdit")
+			var path: String = (edits[-1] as LineEdit).text
+			var data = JSON.parse_string(FileAccess.get_file_as_string(path))
+			if not (data is Dictionary) or not (data.get("conta") is Dictionary) or str(data["conta"].get("name", "")) != acc or data["conta"].get("terms_at") == null:
+				fail("arquivo de dados inválido em " + path)
+				return
+			say("dados baixados em %s (termos aceitos: versão %d)" % [path, int(data["conta"]["terms_version"])])
+			if not main.args.has("termos"):
+				say("OK")
+				get_tree().quit(0)
+				return
+			if not _ui_press("Voltar"):
+				return
+		10:
+			if main.state != "chars":
+				return
+			if not _ui_press("Voltar"):
+				return
+		11:
+			if _ui_title() != "Entrar":
+				return
+			var t: PackedStringArray = str(main.args["termos"]).split(":", true, 1)
+			_ui_fill([null, t[0], t[1] if t.size() > 1 else ""])
+			if not _ui_press("Entrar"):
+				return
+		12:
+			if _ui_title() != "Termos atualizados":
+				return
+			say("tela de termos novos: " + str(main.screen.find_children("*", "Label", true, false)[2].text))
+			if not _ui_press("Aceitar e entrar"):  # sem marcar a caixa: recusa
+				return
+		13:
+			if not _ui_status().contains("marque"):
+				return
+			(_ui_button("Li e aceito", true) as CheckBox).button_pressed = true
+			if not _ui_press("Aceitar e entrar"):
+				return
+		14:
+			if main.state != "chars":
+				return
+			say("termos aceitos; lista de personagens de %s" % main.account)
+			say("OK")
+			get_tree().quit(0)
+			return
+	ac_step += 1
+	ac_until = Time.get_ticks_msec() + 300
 
 
 # ---------------- tour do cenário (--sceneshots=pasta, servidor com --dev) ----------------

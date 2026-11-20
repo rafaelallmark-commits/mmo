@@ -6,6 +6,7 @@
 //   node tools/conta.mjs --db cinzas.db --conta nome --retirar-suspensao
 //   node tools/conta.mjs --db cinzas.db --conta nome --silenciar --minutos 60 [--motivo "..."]
 //   node tools/conta.mjs --db cinzas.db --conta nome --retirar-silencio
+//   node tools/conta.mjs --db cinzas.db --conta nome --liberar-limites  (e-mails e códigos errados, antes das 24 h)
 //   node tools/conta.mjs --db cinzas.db --denuncias [--n 50]
 //   node tools/conta.mjs --db cinzas.db --bugs [--n 50]        (relatos de problema do /bug)
 // (--personagem Nome no lugar de --conta acha a conta pelo personagem)
@@ -63,6 +64,11 @@ try {
       console.log(`conta ${name} silenciada até ${new Date(until).toISOString()}`);
     }
     if (arg('retirar-silencio', false)) { st.setMute(acc.id, null); st.audit('mod_unmute', { targetAccount: acc.id, by: 'ferramenta' }); console.log(`${name} pode falar de novo`); }
+    if (arg('liberar-limites', false)) {
+      const n = st.clearAccountEvents(acc.id);
+      st.audit('limits_cleared', { accountId: acc.id, by: 'ferramenta', events: n });
+      console.log(`limites de ${name} liberados (${n} registro(s) de e-mail e de código errado apagados)`);
+    }
     if (arg('excluir', false)) { const n = st.deleteAccount(acc.id); st.audit('account_deleted', { accountId: acc.id, by: 'ferramenta', characters: n }); console.log(`conta ${name} excluída (${n} personagens)`); }
     const role = arg('papel', null);
     if (role) {

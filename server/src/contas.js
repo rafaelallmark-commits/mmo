@@ -6,12 +6,19 @@
 //                           declara 13 anos ou mais e aceita os Termos de Uso e a Política de Privacidade)
 //   POST /contas/verificar  { conta, codigo }            → conta confirmada
 //   POST /contas/reenviar   { conta }                    → novo código (se ainda não confirmada)
-//   POST /sessoes           { conta, senha }             → { token, expiraEm } (só conta confirmada)
+//   POST /sessoes           { conta, senha }             → { token, expiraEm } (só conta confirmada e com os termos
+//                           atuais aceitos; recusa com codigo: 'confirmar' | 'suspensa' | 'termos' (+ versao))
+//   POST /termos/aceitar    { conta, senha, aceite }     → grava a versão atual dos termos e a data na conta
 //   POST /senha/esqueci     { email }                    → 200 sempre (não revela se o e-mail existe)
 //   POST /senha/redefinir   { email, codigo, senha }     → senha trocada
 //   POST /contas/dados      { conta, senha }             → tudo o que guardamos da conta (portabilidade)
 //   POST /contas/excluir    { conta, senha }             → conta excluída (dados pessoais apagados)
 //   GET  /saude · GET /termos · GET /privacidade (texto dos documentos, para o cliente abrir no navegador)
+//
+// Limites (além dos 20 pedidos por minuto por IP), contados no banco (sobrevivem a reinício): no máximo um
+// e-mail por minuto e 10 em 24 h para cada conta e para cada endereço de destino (cadastro, reenvio e troca de
+// senha), e no máximo 20 palpites de código errados por conta em 24 h (confirmação e troca de senha somadas,
+// além dos 5 que invalidam cada código). Conta nunca confirmada some em 7 dias (purgeOld, no servidor de zona).
 import http from 'node:http';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -19,21 +26,68 @@ import { fileURLToPath } from 'node:url';
 import { createStore } from './db.js';
 import { signToken } from './token.js';
 import { banMessage } from './moderation.js';
-
-export const TERMS_VERSION = 1; // versão de docs/TERMOS.md aceita no cadastro (fica na auditoria)
 import { createMailer } from './mailer.js';
+
+// Versão atual de docs/TERMOS.md e docs/PRIVACIDADE.md. Fica gravada na conta no cadastro; ao subir este
+// número, cada conta que aceitou uma versão anterior vê a tela de aceite no próximo login (POST /sessoes
+// responde 403 com codigo 'termos') e só entra depois de POST /termos/aceitar.
+export const TERMS_VERSION = 1;
+
+export const MAIL_GAP_MS = 60_000; // um e-mail por minuto por conta e por endereço
+export const MAIL_PER_DAY = 10; // e no máximo 10 em 24 h
+export const CODE_FAILS_PER_DAY = 20; // palpites de código errados por conta em 24 h (confirmação + troca de senha)
+const DAY_MS = 86_400_000;
 
 const ACCOUNT_RE = /^[a-zA-Z0-9_]{3,20}$/;
 const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,24}$/;
 
+// tempo restante para a mensagem ("40 s", "12 min", "cerca de 5 h")
+function waitText(ms) {
+  if (ms < 60_000) return `${Math.max(1, Math.ceil(ms / 1000))} s`;
+  if (ms < 3_600_000) return `${Math.ceil(ms / 60_000)} min`;
+  return `cerca de ${Math.ceil(ms / 3_600_000)} h`;
+}
+
 export class AccountsService {
   constructor(opts = {}) {
     this.opts = { port: 7780, host: '127.0.0.1', dbPath: 'cinzas.db', tokenSecret: null, tokenTtlS: 300, minPassword: 8, perIpPerMin: 20, trustProxy: false, log: true,
-      docsDir: join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'docs'), ...opts };
+      termsVersion: TERMS_VERSION, docsDir: join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'docs'), ...opts };
     if (!this.opts.tokenSecret) throw new Error('serviço de contas precisa de --token-secret (ou CINZAS_TOKEN_SECRET)');
     this.store = opts.store ?? createStore(this.opts.dbPath); // arquivo SQLite ou postgres://...
     this.mailer = opts.mailer ?? createMailer(opts.mail ?? { kind: 'console' });
     this.hits = new Map(); // ip -> [instantes]
+  }
+
+  // Mensagem de recusa se a conta ou o endereço já receberam um e-mail no último minuto ou 10 em 24 h; null
+  // se pode mandar. O endereço conta mesmo de contas já excluídas ou vencidas (cadastrar e excluir de novo não
+  // vira uma enxurrada de e-mails para a mesma pessoa).
+  mailBlocked(accountId, email) {
+    const now = Date.now();
+    const s = this.store.accountEventStats('mail', accountId, email, now - DAY_MS);
+    let day = 0, gap = 0;
+    for (const x of [s.account, s.address]) {
+      if (x.n >= MAIL_PER_DAY) day = Math.max(day, x.first + DAY_MS - now);
+      if (x.last != null) gap = Math.max(gap, x.last + MAIL_GAP_MS - now);
+    }
+    if (day > 0) return `Este endereço já recebeu ${MAIL_PER_DAY} e-mails nossos nas últimas 24 horas. Tente de novo em ${waitText(day)}.`;
+    if (gap > 0) return `Acabamos de mandar um e-mail para este endereço. Espere ${waitText(gap)} para pedir outro.`;
+    return null;
+  }
+
+  // Mensagem de recusa se a conta já errou o código 20 vezes nas últimas 24 h; null se pode tentar.
+  codeBlocked(accountId) {
+    const now = Date.now();
+    const s = this.store.accountEventStats('code_fail', accountId, null, now - DAY_MS).account;
+    if (s.n < CODE_FAILS_PER_DAY) return null;
+    return `Muitas tentativas de código erradas nesta conta (${CODE_FAILS_PER_DAY} em 24 horas). Por segurança, novas tentativas só em ${waitText(s.first + DAY_MS - now)}.`;
+  }
+
+  // Manda o e-mail com um código novo e anota o envio (limites); a anotação vem antes do envio, para dois
+  // pedidos ao mesmo tempo não passarem juntos pela conferência.
+  async sendCode(acc, kind, subject, text) {
+    const code = this.store.issueCode(acc.id, kind);
+    this.store.noteAccountEvent('mail', acc.id, acc.email);
+    await this.mailer.send({ to: acc.email, subject, text: text(code) });
   }
 
   log(...a) { if (this.opts.log) console.log(new Date().toISOString().slice(11, 19), '[contas]', ...a); }
@@ -111,10 +165,14 @@ export class AccountsService {
         if (b.aceite !== true) return { ok: false, erro: 'Para criar a conta, confirme que tem 13 anos ou mais e aceita os Termos de Uso e a Política de Privacidade.' };
         if (st.findAccount(conta)) return { ok: false, status: 409, erro: 'Essa conta já existe.' };
         if (st.findAccountByEmail(email)) return { ok: false, status: 409, erro: 'Esse e-mail já tem conta.' };
-        const id = st.createAccount(conta, senha, { email, verified: false });
-        const code = st.issueCode(id, 'verify');
-        await this.mailer.send({ to: email, subject: 'Confirme sua conta — Cinzas do Meridiano', text: `Olá, ${conta}!\n\nSeu código de confirmação é ${code}. Ele vale por 30 minutos.\n\nSe não foi você quem criou esta conta, ignore esta mensagem.` });
-        st.audit('account_created', { accountId: id, ip, terms: TERMS_VERSION });
+        const blocked = this.mailBlocked(null, email);
+        if (blocked) return { ok: false, status: 429, codigo: 'limite', erro: blocked };
+        // o aceite fica na conta (versão e data) e na auditoria antes do e-mail: se o envio falhar, o registro existe
+        const termsVersion = this.opts.termsVersion;
+        const id = st.createAccount(conta, senha, { email, verified: false, termsVersion, termsAt: Date.now() });
+        st.audit('account_created', { accountId: id, ip, terms: termsVersion });
+        await this.sendCode({ id, email }, 'verify', 'Confirme sua conta — Cinzas do Meridiano',
+          (code) => `Olá, ${conta}!\n\nSeu código de confirmação é ${code}. Ele vale por 30 minutos.\n\nSe não foi você quem criou esta conta, ignore esta mensagem: sem confirmação, ela é apagada em 7 dias.`);
         this.log(`conta criada: ${conta}`);
         return { ok: true, status: 201, mensagem: 'Conta criada. Enviamos um código para o seu e-mail.' };
       }
@@ -122,6 +180,8 @@ export class AccountsService {
         const acc = typeof b.conta === 'string' ? st.findAccount(b.conta) : null;
         if (!acc) return { ok: false, erro: 'Conta ou código incorretos.' };
         if (acc.verified) return { ok: true, mensagem: 'Conta já confirmada.' };
+        const tooMany = this.codeBlocked(acc.id);
+        if (tooMany) return { ok: false, status: 429, codigo: 'tentativas', erro: tooMany };
         if (!st.consumeCode(acc.id, 'verify', String(b.codigo ?? ''))) return { ok: false, erro: 'Conta ou código incorretos.' };
         st.setVerified(acc.id);
         st.audit('account_verified', { accountId: acc.id, ip });
@@ -130,33 +190,59 @@ export class AccountsService {
       case '/contas/reenviar': {
         const acc = typeof b.conta === 'string' ? st.findAccount(b.conta) : null;
         if (acc && !acc.verified && acc.email) {
-          const code = st.issueCode(acc.id, 'verify');
-          await this.mailer.send({ to: acc.email, subject: 'Confirme sua conta — Cinzas do Meridiano', text: `Seu novo código de confirmação é ${code}. Ele vale por 30 minutos.` });
+          // o nome da conta já é público (o cadastro diz "Essa conta já existe."): aqui o limite pode ser explícito
+          const blocked = this.mailBlocked(acc.id, acc.email);
+          if (blocked) return { ok: false, status: 429, codigo: 'limite', erro: blocked };
+          await this.sendCode(acc, 'verify', 'Confirme sua conta — Cinzas do Meridiano',
+            (code) => `Seu novo código de confirmação é ${code}. Ele vale por 30 minutos.`);
         }
         return { ok: true, mensagem: 'Se a conta existir e não estiver confirmada, enviamos um novo código.' };
       }
       case '/sessoes': {
         const acc = typeof b.conta === 'string' && typeof b.senha === 'string' ? st.verifyAccount(b.conta, b.senha) : null;
         if (!acc) { st.audit('login_fail', { ip, via: 'contas' }); return { ok: false, status: 401, erro: 'Conta ou senha incorretas.' }; }
-        if (!acc.verified) return { ok: false, status: 403, erro: 'Confirme seu e-mail antes de entrar.' };
+        if (!acc.verified) return { ok: false, status: 403, codigo: 'confirmar', erro: 'Confirme seu e-mail antes de entrar: digite o código de 6 dígitos que enviamos para o e-mail do cadastro (ou peça outro).' };
         const ban = banMessage(acc);
-        if (ban) { st.audit('login_banned', { accountId: acc.id, ip, via: 'contas' }); return { ok: false, status: 403, erro: ban }; }
+        if (ban) { st.audit('login_banned', { accountId: acc.id, ip, via: 'contas' }); return { ok: false, status: 403, codigo: 'suspensa', erro: ban }; }
+        const versao = this.opts.termsVersion;
+        if ((acc.terms_version ?? 0) < versao) {
+          return { ok: false, status: 403, codigo: 'termos', versao, erro: `Os Termos de Uso e a Política de Privacidade mudaram (versão ${versao}). Leia e aceite para continuar jogando.` };
+        }
         const token = signToken({ sub: acc.id, name: acc.name, role: acc.role }, this.opts.tokenSecret, this.opts.tokenTtlS);
         return { ok: true, token, expiraEm: this.opts.tokenTtlS };
+      }
+      case '/termos/aceitar': {
+        const acc = typeof b.conta === 'string' && typeof b.senha === 'string' ? st.verifyAccount(b.conta, b.senha) : null;
+        if (!acc) { st.audit('login_fail', { ip, via: 'termos' }); return { ok: false, status: 401, erro: 'Conta ou senha incorretas.' }; }
+        if (b.aceite !== true) return { ok: false, erro: 'Para continuar, marque o aceite dos Termos de Uso e da Política de Privacidade.' };
+        const versao = this.opts.termsVersion;
+        // aceitar de novo a versão que já vale não troca a data do primeiro aceite
+        if ((acc.terms_version ?? 0) < versao || acc.terms_at == null) {
+          st.setTermsAccepted(acc.id, versao, Date.now());
+          st.audit('terms_accepted', { accountId: acc.id, ip, terms: versao });
+        }
+        return { ok: true, versao, mensagem: 'Aceite registrado. Bom jogo!' };
       }
       case '/senha/esqueci': {
         const acc = typeof b.email === 'string' ? st.findAccountByEmail(b.email) : null;
         if (acc) {
-          const code = st.issueCode(acc.id, 'reset');
-          await this.mailer.send({ to: acc.email, subject: 'Troca de senha — Cinzas do Meridiano', text: `Olá, ${acc.name}!\n\nSeu código para trocar a senha é ${code}. Ele vale por 30 minutos.\n\nSe não foi você, ignore esta mensagem: sua senha continua a mesma.` });
-          st.audit('password_reset_requested', { accountId: acc.id, ip });
+          // limite atingido: nada é enviado, mas a resposta é a mesma (não revela se o e-mail tem conta)
+          if (this.mailBlocked(acc.id, acc.email)) st.audit('password_reset_limited', { accountId: acc.id, ip });
+          else {
+            await this.sendCode(acc, 'reset', 'Troca de senha — Cinzas do Meridiano',
+              (code) => `Olá, ${acc.name}!\n\nSeu código para trocar a senha é ${code}. Ele vale por 30 minutos.\n\nSe não foi você, ignore esta mensagem: sua senha continua a mesma.`);
+            st.audit('password_reset_requested', { accountId: acc.id, ip });
+          }
         }
-        return { ok: true, mensagem: 'Se o e-mail tiver conta, enviamos um código.' };
+        return { ok: true, mensagem: `Se o e-mail tiver conta, enviamos um código (no máximo um e-mail por minuto e ${MAIL_PER_DAY} por dia).` };
       }
       case '/senha/redefinir': {
         const acc = typeof b.email === 'string' ? st.findAccountByEmail(b.email) : null;
         if (typeof b.senha !== 'string' || b.senha.length < this.opts.minPassword) return { ok: false, erro: `A senha precisa de pelo menos ${this.opts.minPassword} caracteres.` };
-        if (!acc || !st.consumeCode(acc.id, 'reset', String(b.codigo ?? ''))) return { ok: false, erro: 'E-mail ou código incorretos.' };
+        if (!acc) return { ok: false, erro: 'E-mail ou código incorretos.' };
+        const tooMany = this.codeBlocked(acc.id);
+        if (tooMany) return { ok: false, status: 429, codigo: 'tentativas', erro: tooMany };
+        if (!st.consumeCode(acc.id, 'reset', String(b.codigo ?? ''))) return { ok: false, erro: 'E-mail ou código incorretos.' };
         st.setPassword(acc.id, b.senha);
         if (!acc.verified) st.setVerified(acc.id); // receber o código prova o e-mail
         st.audit('password_reset', { accountId: acc.id, ip });

@@ -42,9 +42,10 @@ test('contas: e-mail com código, token de uso único no servidor de zona, troca
     assert.equal(r.status, 201, r.erro);
     assert.equal(mails.length, 1);
     assert.equal((await post(aport, '/contas', { conta: 'outra', email: 'AURORA@exemplo.com', senha: 'senha-forte-1', aceite: true })).status, 409, 'e-mail repetido');
-    // sem confirmar, não entra
+    // sem confirmar, não entra (o código "confirmar" leva o cliente à tela do código)
     r = await post(aport, '/sessoes', { conta: 'aurora', senha: 'senha-forte-1' });
     assert.equal(r.status, 403);
+    assert.equal(r.codigo, 'confirmar');
     assert.equal((await post(aport, '/contas/verificar', { conta: 'aurora', codigo: '000000' === codeOf(mails[0]) ? '111111' : '000000' })).ok, false);
     r = await post(aport, '/contas/verificar', { conta: 'aurora', codigo: codeOf(mails[0]) });
     assert.equal(r.ok, true, r.erro);
@@ -63,7 +64,8 @@ test('contas: e-mail com código, token de uso único no servidor de zona, troca
     assert.equal((await c2.request('login_token', { token: token.slice(0, -2) + 'xx' })).code, 'bad_token', 'assinatura adulterada');
     const vencido = signToken({ sub: 1 }, SECRET, -10);
     assert.equal((await c2.request('login_token', { token: vencido })).code, 'bad_token', 'vencido');
-    // troca de senha por código
+    // troca de senha por código (passado o minuto do e-mail do cadastro: limite de um e-mail por minuto)
+    acc.store.db.prepare('UPDATE account_events SET at = at - 61000').run();
     await post(aport, '/senha/esqueci', { email: 'aurora@exemplo.com' });
     assert.equal((await post(aport, '/senha/esqueci', { email: 'ninguem@exemplo.com' })).ok, true, 'não revela e-mail');
     const reset = mails.at(-1);

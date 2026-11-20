@@ -114,6 +114,10 @@ func _ready() -> void:
 		autotest = preload("res://scripts/autotest.gd").new()
 		add_child(autotest)
 		autotest.start_nav(self)
+	elif args.has("contastest"):
+		autotest = preload("res://scripts/autotest.gd").new()
+		add_child(autotest)
+		autotest.start_accounts(self)
 
 # ---------------- opções ----------------
 func _load_settings() -> void:
@@ -305,9 +309,18 @@ func show_login() -> void:
 		server_url = e_url.text.strip_edges(); account = e_acc.text.strip_edges(); password = e_pass.text
 		connect_and_login(true))
 	b2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_button(box, "Esqueci a senha", func():
+	# serviço de contas: confirmar o e-mail a qualquer momento (não só logo depois do cadastro)
+	var row2 := HBoxContainer.new()
+	row2.add_theme_constant_override("separation", 8)
+	box.add_child(row2)
+	var b3 := _button(row2, "Confirmar e-mail", func():
+		server_url = e_url.text.strip_edges(); account = e_acc.text.strip_edges()
+		show_verify_accounts("", account))
+	b3.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var b4 := _button(row2, "Esqueci a senha", func():
 		server_url = e_url.text.strip_edges()
 		show_forgot_accounts())
+	b4.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_button(box, "Voltar", func():
 		Net.close()
 		show_title())
@@ -317,18 +330,23 @@ func show_login() -> void:
 func connect_and_login(register: bool) -> void:
 	_pending_register = register
 	_kicked_reason = ""
-	server_hello = {}
 	set_status("Conectando a %s..." % server_url)
-	if Net.is_open():
+	if Net.is_open() and Net.url == server_url:
+		# a conexão de uma tentativa anterior (senha errada, e-mail a confirmar, termos novos) continua aberta,
+		# e o "hello" dela vale: zerá-lo deixaria o login esperando um "hello" que não vem mais
 		_after_connect()
 	else:
+		server_hello = {}
+		_hello_waiters.clear()
+		Net.close()  # aberta para outro endereço (o campo Servidor mudou): fecha antes de abrir a nova
 		Net.connect_to(server_url)
 
 func _on_connected() -> void:
 	if not _transfer.is_empty():
 		_send_transfer()  # chegada na outra zona (várias zonas)
 		return
-	if autotest != null and not reconnecting and not args.has("navshots"):
+	# o --autotest faz o próprio login; --navshots e --contastest passam pelas telas, como o jogador
+	if autotest != null and not reconnecting and not args.has("navshots") and not args.has("contastest"):
 		return
 	_after_connect()
 
@@ -360,14 +378,7 @@ func show_register_accounts() -> void:
 	agree.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	agree.custom_minimum_size = Vector2(360, 0)
 	box.add_child(agree)
-	var links := HBoxContainer.new()
-	box.add_child(links)
-	for spec in [["Ler os Termos de Uso", "/termos"], ["Ler a Política de Privacidade", "/privacidade"]]:
-		var lb := LinkButton.new()
-		lb.text = spec[0]
-		var path: String = spec[1]
-		lb.pressed.connect(func(): OS.shell_open(_accounts_base() + path))
-		links.add_child(lb)
+	_terms_links(box)
 	_button(box, "Criar e receber o código", func():
 		if not agree.button_pressed:
 			set_status("Para criar a conta, marque a confirmação de idade e de aceite dos termos.", true)
@@ -375,29 +386,93 @@ func show_register_accounts() -> void:
 		account = e_acc.text.strip_edges(); password = e_pass.text
 		_accounts_post("/contas", {"conta": account, "email": e_mail.text.strip_edges(), "senha": password, "aceite": true}, func(ok: bool, b: Dictionary):
 			if ok:
-				show_verify_accounts(str(b.get("mensagem", "")))
+				show_verify_accounts(str(b.get("mensagem", "")), account)
 			else:
 				set_status(str(b.get("erro", "Não foi possível criar a conta.")), true)), true)
 	_button(box, "Voltar", show_login)
 	_status(box)
 
-func show_verify_accounts(msg := "") -> void:
+## Links para os textos dos Termos de Uso e da Política de Privacidade (abrem no navegador).
+func _terms_links(box: VBoxContainer) -> void:
+	var links := HBoxContainer.new()
+	links.add_theme_constant_override("separation", 12)
+	box.add_child(links)
+	for spec in [["Ler os Termos de Uso", "/termos"], ["Ler a Política de Privacidade", "/privacidade"]]:
+		var lb := LinkButton.new()
+		lb.text = spec[0]
+		var path: String = spec[1]
+		lb.pressed.connect(func(): OS.shell_open(_accounts_base() + path))
+		links.add_child(lb)
+
+func _note(box: Container, text: String) -> Label:
+	var l := Label.new()
+	l.text = text
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.custom_minimum_size = Vector2(400, 0)
+	box.add_child(l)
+	return l
+
+## Tela do código de confirmação. Funciona sozinha: logo depois do cadastro, pelo botão "Confirmar e-mail"
+## da tela Entrar (depois de fechar o jogo, por exemplo) ou quando o login é recusado por e-mail não
+## confirmado (aí a conta já vem preenchida). Pede a conta e o código; dá para pedir outro código.
+func show_verify_accounts(msg := "", conta := "") -> void:
+	state = "login"
 	var box := _menu_panel("Confirmar e-mail")
-	var info := Label.new()
-	info.text = msg if msg != "" else "Digite o código de 6 dígitos que enviamos para o seu e-mail."
-	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	box.add_child(info)
+	_note(box, msg if msg != "" else "Digite o nome da conta e o código de 6 dígitos que enviamos para o e-mail do cadastro.")
+	var e_acc := _field(box, "Conta", conta if conta != "" else account)
 	var e_code := _field(box, "Código", "")
-	_button(box, "Confirmar", func():
+	var confirm := func():
+		account = e_acc.text.strip_edges()
 		_accounts_post("/contas/verificar", {"conta": account, "codigo": e_code.text.strip_edges()}, func(ok: bool, b: Dictionary):
 			if ok:
 				show_login()
-				set_status(str(b.get("mensagem", "Conta confirmada.")))
+				set_status(str(b.get("mensagem", "Conta confirmada. Já dá para entrar.")))
 			else:
-				set_status(str(b.get("erro", "Código incorreto.")), true)), true)
+				set_status(str(b.get("erro", "Conta ou código incorretos.")), true))
+	_button(box, "Confirmar", confirm, true)
 	_button(box, "Reenviar código", func():
-		_accounts_post("/contas/reenviar", {"conta": account}, func(_ok: bool, b: Dictionary):
-			set_status(str(b.get("mensagem", "Pedido enviado.")))))
+		account = e_acc.text.strip_edges()
+		if account == "":
+			set_status("Digite o nome da conta para receber outro código.", true)
+			return
+		_accounts_post("/contas/reenviar", {"conta": account}, func(ok: bool, b: Dictionary):
+			if ok:
+				set_status(str(b.get("mensagem", "Pedido enviado.")))
+			else:
+				set_status(str(b.get("erro", "Não foi possível pedir outro código.")), true)))
+	var hint := _note(box, "O código vale 30 minutos. Não chegou? Confira o lixo eletrônico e use Reenviar código (um por minuto, até 10 por dia). Trocar a senha em Esqueci a senha também confirma a conta.")
+	hint.add_theme_font_size_override("font_size", 12)
+	hint.add_theme_color_override("font_color", Theme_.MUTED)
+	_button(box, "Esqueci a senha", show_forgot_accounts)
+	_button(box, "Voltar", show_login)
+	_status(box)
+	e_code.text_submitted.connect(func(_t): confirm.call())
+
+## Termos novos: o serviço de contas recusou a sessão porque a conta aceitou uma versão anterior dos Termos de
+## Uso e da Política de Privacidade. Aceitar grava a versão e a data na conta e o login segue. Quem não quiser
+## aceitar pode baixar os dados ou excluir a conta daqui mesmo.
+func show_terms_accounts(version: int, msg := "") -> void:
+	state = "login"
+	var box := _menu_panel("Termos atualizados")
+	_note(box, msg if msg != "" else "Os Termos de Uso e a Política de Privacidade mudaram (versão %d). Leia e aceite para continuar jogando." % version)
+	_terms_links(box)
+	var agree := CheckBox.new()
+	agree.text = "Li e aceito os Termos de Uso e a Política de Privacidade (versão %d)" % version
+	agree.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	agree.custom_minimum_size = Vector2(360, 0)
+	box.add_child(agree)
+	_button(box, "Aceitar e entrar", func():
+		if not agree.button_pressed:
+			set_status("Para continuar, marque o aceite dos termos.", true)
+			return
+		_accounts_post("/termos/aceitar", {"conta": account, "senha": password, "aceite": true}, func(ok: bool, b: Dictionary):
+			if not ok:
+				set_status(str(b.get("erro", "Não foi possível registrar o aceite.")), true)
+				return
+			connect_and_login(false)), true)
+	var back := func(): show_terms_accounts(version, msg)
+	_button(box, "Não aceito: baixar meus dados", func(): show_export_data(back))
+	_button(box, "Não aceito: excluir a conta", func(): show_delete_account(true, back))
 	_button(box, "Voltar", show_login)
 	_status(box)
 
@@ -419,24 +494,114 @@ func show_forgot_accounts() -> void:
 	_button(box, "Voltar", show_login)
 	_status(box)
 
-## Exclusão da própria conta (privacidade), confirmada com a senha.
-func show_delete_account() -> void:
+## Exclusão da própria conta (privacidade), confirmada com a senha. Da tela de personagens vai pelo servidor
+## de zona (que confere se nenhum personagem está no mundo); da tela de termos novos, sem sessão na zona, vai
+## pelo serviço de contas (POST /contas/excluir).
+func show_delete_account(via_accounts := false, back := Callable()) -> void:
+	var go_back: Callable = back if back.is_valid() else func(): show_chars()
 	var box := _menu_panel("Excluir conta")
-	var warn := Label.new()
-	warn.text = "Isto apaga a conta %s, os personagens, os itens e o e-mail. Não dá para desfazer." % account
-	warn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var warn := _note(box, "Isto apaga a conta %s, os personagens, os itens e o e-mail. Não dá para desfazer." % account)
 	warn.add_theme_color_override("font_color", Color("#ff8a7a"))
-	box.add_child(warn)
 	var e_pass := _field(box, "Senha", "", true)
+	var done := func():
+		account = ""; password = ""
+		Net.close()
+		show_title()
 	_button(box, "Excluir para sempre", func():
+		if via_accounts:
+			_accounts_post("/contas/excluir", {"conta": account, "senha": e_pass.text}, func(ok: bool, b: Dictionary):
+				if ok:
+					done.call()
+				else:
+					set_status(str(b.get("erro", "Não foi possível excluir a conta.")), true))
+			return
 		Net.request("delete_account", {"password": e_pass.text}, func(r):
 			if r["ok"]:
-				account = ""; password = ""
-				show_title()
+				done.call()
 			else:
 				set_status(r["reason"], true)))
-	_button(box, "Cancelar", func(): show_chars())
+	_button(box, "Cancelar", go_back)
 	_status(box)
+
+# ---------------- BAIXAR MEUS DADOS (direito de acesso da LGPD) ----------------
+const EXPORT_DIR := "user://dados"
+var _export_text := ""  # último JSON baixado, para salvar uma cópia em outro lugar
+
+## Pede a senha, chama POST /contas/dados no serviço de contas e grava o JSON em user://dados (mostrando o
+## caminho, com um botão para abrir a pasta); dá para salvar uma cópia onde o jogador quiser (FileDialog).
+func show_export_data(back := Callable()) -> void:
+	var go_back: Callable = back if back.is_valid() else func(): show_chars(_selected_char)
+	_export_text = ""
+	var box := _menu_panel("Baixar meus dados")
+	_note(box, "Você recebe um arquivo JSON com tudo o que guardamos da conta %s: os dados da conta (e-mail, aceite dos termos, suspensões), os personagens, itens, missões, clãs e os registros de segurança." % account)
+	var e_pass := _field(box, "Senha", "", true)
+	var result := VBoxContainer.new()  # caminho do arquivo e botões, depois de baixar
+	result.add_theme_constant_override("separation", 8)
+	var fetch := func():
+		set_status("Baixando seus dados...")
+		_accounts_post("/contas/dados", {"conta": account, "senha": e_pass.text}, func(ok: bool, b: Dictionary):
+			if not ok or not (b.get("dados") is Dictionary):
+				set_status(str(b.get("erro", "Não foi possível baixar os dados.")), true)
+				return
+			_export_save(result, JSON.stringify(b["dados"], "  ", false)))
+	_button(box, "Baixar", fetch, true)
+	box.add_child(result)
+	_button(box, "Voltar", func():
+		_export_text = ""
+		go_back.call())
+	_status(box)
+	e_pass.text_submitted.connect(func(_t): fetch.call())
+
+func _export_save(result: VBoxContainer, text: String) -> void:
+	_export_text = text
+	for c in result.get_children():
+		c.queue_free()
+	var stamp := Time.get_datetime_string_from_system().replace("T", "-").replace(":", "-")
+	var file := "cinzas-dados-%s-%s.json" % [account.to_lower(), stamp]
+	DirAccess.make_dir_recursive_absolute(EXPORT_DIR)
+	var path := EXPORT_DIR.path_join(file)
+	if not _write_text(path, text):
+		set_status("Não foi possível gravar o arquivo em %s." % ProjectSettings.globalize_path(path), true)
+		return
+	var l := Label.new()
+	l.text = "Arquivo salvo em:"
+	result.add_child(l)
+	var shown := LineEdit.new()  # só leitura, mas dá para selecionar e copiar o caminho
+	shown.text = ProjectSettings.globalize_path(path)
+	shown.editable = false
+	result.add_child(shown)
+	_button(result, "Abrir a pasta", func(): OS.shell_open(ProjectSettings.globalize_path(EXPORT_DIR)))
+	_button(result, "Salvar uma cópia em outro lugar...", func(): _export_pick(file))
+	set_status("Pronto: seus dados foram baixados.")
+
+func _export_pick(file: String) -> void:
+	var dlg := FileDialog.new()
+	dlg.title = "Salvar uma cópia dos meus dados"
+	dlg.file_mode = FileDialog.FILE_MODE_SAVE_FILE
+	dlg.access = FileDialog.ACCESS_FILESYSTEM
+	dlg.use_native_dialog = true
+	dlg.filters = PackedStringArray(["*.json ; Arquivo JSON"])
+	var docs := OS.get_system_dir(OS.SYSTEM_DIR_DOCUMENTS)
+	if docs != "":
+		dlg.current_dir = docs
+	dlg.current_file = file
+	dlg.file_selected.connect(func(p: String):
+		dlg.queue_free()
+		if _write_text(p, _export_text):
+			set_status("Cópia salva em %s." % p)
+		else:
+			set_status("Não foi possível gravar em %s." % p, true))
+	dlg.canceled.connect(dlg.queue_free)
+	ui.add_child(dlg)
+	dlg.popup_centered_ratio(0.6)
+
+func _write_text(path: String, text: String) -> bool:
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	if f == null:
+		return false
+	f.store_string(text)
+	f.close()
+	return true
 
 ## Espera o "hello" do servidor (versão e modo de login) antes de seguir.
 func _when_hello(cb: Callable) -> void:
@@ -457,9 +622,25 @@ func _login_with_accounts() -> void:
 	set_status("Entrando pelo serviço de contas...")
 	_accounts_post("/sessoes", {"conta": account, "senha": password}, func(ok: bool, body: Dictionary):
 		if not ok:
-			_login_failed(str(body.get("erro", "Não foi possível entrar.")))
+			if not _accounts_login_blocked(body):
+				_login_failed(str(body.get("erro", "Não foi possível entrar.")))
 			return
 		Net.request("login_token", {"token": body["token"], "delta": true}, _on_login))
+
+## Login recusado pelo serviço de contas com um caminho a seguir: e-mail não confirmado abre a tela do código
+## (com a conta preenchida e a explicação); termos novos abrem a tela de aceite. Se a recusa vier ao
+## reconectar de dentro do mundo, sai do mundo antes. Devolve false para as outras recusas (senha, suspensão).
+func _accounts_login_blocked(body: Dictionary) -> bool:
+	var code := str(body.get("codigo", ""))
+	if code != "confirmar" and code != "termos":
+		return false
+	if state == "world" or in_world or reconnecting:
+		leave_world(true)
+	if code == "confirmar":
+		show_verify_accounts(str(body.get("erro", "Confirme seu e-mail antes de entrar: digite o código que enviamos para o e-mail do cadastro (ou peça outro).")), account)
+	else:
+		show_terms_accounts(int(body.get("versao", 0)), str(body.get("erro", "")))
+	return true
 
 func _accounts_base() -> String:
 	if accounts_url != "":
@@ -498,6 +679,10 @@ func _login_failed(reason: String) -> void:
 
 func _on_login(r: Dictionary) -> void:
 	if not r["ok"]:
+		# servidor com login por senha e conta do serviço de contas ainda sem e-mail confirmado
+		if str(r.get("code", "")) == "unverified" and not (reconnecting and state == "world"):
+			show_verify_accounts("Confirme seu e-mail antes de entrar: digite o código que enviamos para o e-mail do cadastro (ou peça outro).", account)
+			return
 		_login_failed(str(r["reason"]))
 		return
 	chars_cache = r["chars"]
@@ -541,7 +726,8 @@ func show_chars(select_id := -1) -> void:
 		_button(box, "Jogar", func(): enter_world(_selected_char), true)
 	if chars_cache.size() < 4:
 		_button(box, "Criar novo personagem", show_create)
-	_button(box, "Excluir conta", show_delete_account)
+	_button(box, "Baixar meus dados", func(): show_export_data())
+	_button(box, "Excluir conta", func(): show_delete_account())
 	_button(box, "Voltar", func():
 		Net.close()
 		show_login())

@@ -21,7 +21,7 @@
 import { randomUUID, randomBytes, timingSafeEqual, randomInt } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { PgBridge, rowsOf, rowOf } from './pg-bridge.js';
-import { hashPassword, codeHash, charFromRow, charSaveValues, exportAuditRows } from './store.js';
+import { hashPassword, codeHash, addressHash, eventStat, UNVERIFIED_TTL_MS, ACCOUNT_EVENTS_TTL_MS, charFromRow, charSaveValues, exportAuditRows } from './store.js';
 
 export const PG_MIGRATIONS = [
   { v: 1, name: 'base (M1–M3)', sql: `
@@ -163,6 +163,19 @@ CREATE INDEX IF NOT EXISTS idx_clan_members_clan ON clan_members (clan_id);` },
 ALTER TABLE accounts ADD COLUMN banned_until BIGINT;
 ALTER TABLE accounts ADD COLUMN ban_reason TEXT;
 ALTER TABLE accounts ADD COLUMN muted_until BIGINT;` },
+  { v: 6, name: 'contas: aceite dos termos na conta e limites de e-mail e de tentativas', sql: `
+ALTER TABLE accounts ADD COLUMN terms_version BIGINT NOT NULL DEFAULT 1;
+ALTER TABLE accounts ADD COLUMN terms_at BIGINT;
+UPDATE accounts SET terms_at = (SELECT MIN(a.at) FROM audit_log a
+  WHERE a.kind = 'account_created' AND a.account_id = accounts.id AND a.data_json LIKE '%"terms":%');
+CREATE TABLE IF NOT EXISTS account_events (
+  kind TEXT NOT NULL CHECK (kind IN ('mail','code_fail')),
+  account_id BIGINT,
+  addr_hash TEXT,
+  at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_account_events_account ON account_events (account_id, kind, at);
+CREATE INDEX IF NOT EXISTS idx_account_events_addr ON account_events (addr_hash, kind, at);` },
 ];
 
 const SCHEMA_RE = /^[A-Za-z_][A-Za-z0-9_]{0,62}$/;
@@ -421,10 +434,10 @@ export class PgStore {
   }
 
   // ---------- contas ----------
-  createAccount(name, password, { email = null, verified = true } = {}) {
+  createAccount(name, password, { email = null, verified = true, termsVersion = 1, termsAt = null } = {}) {
     const salt = randomBytes(16).toString('hex');
-    const r = this.get('INSERT INTO accounts (name, pass_hash, salt, created_at, email, verified) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
-      name, hashPassword(password, salt), salt, Date.now(), email, verified ? 1 : 0);
+    const r = this.get('INSERT INTO accounts (name, pass_hash, salt, created_at, email, verified, terms_version, terms_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id',
+      name, hashPassword(password, salt), salt, Date.now(), email, verified ? 1 : 0, termsVersion, msOrNull(termsAt));
     return Number(r.id);
   }
 
@@ -467,6 +480,25 @@ export class PgStore {
   setRole(accountId, role) { this.run('UPDATE accounts SET role = $1 WHERE id = $2', role, accountId); }
   setBan(accountId, until, reason) { this.run('UPDATE accounts SET banned_until = $1, ban_reason = $2 WHERE id = $3', msOrNull(until), reason ?? null, accountId); }
   setMute(accountId, until) { this.run('UPDATE accounts SET muted_until = $1 WHERE id = $2', msOrNull(until), accountId); }
+  setTermsAccepted(accountId, version, at = Date.now()) { this.run('UPDATE accounts SET terms_version = $1, terms_at = $2 WHERE id = $3', version, msOrNull(at), accountId); }
+
+  noteAccountEvent(kind, accountId, email = null) {
+    this.run('INSERT INTO account_events (kind, account_id, addr_hash, at) VALUES ($1, $2, $3, $4)', kind, accountId ?? null, email ? addressHash(email) : null, Date.now());
+  }
+
+  clearAccountEvents(accountId) {
+    return this.run('DELETE FROM account_events WHERE account_id = $1', accountId).changes;
+  }
+
+  // por conta e por endereço de destino, numa ida e volta
+  accountEventStats(kind, accountId, email, since) {
+    const q = 'SELECT COUNT(*) AS n, MIN(at) AS first, MAX(at) AS last FROM account_events WHERE kind = $1 AND at > $2 AND ';
+    const [acc, addr] = this.batch([
+      [`${q}account_id = $3`, [kind, since, accountId ?? null], 'get'],
+      [`${q}addr_hash = $3`, [kind, since, email ? addressHash(email) : null], 'get'],
+    ]);
+    return { account: eventStat(acc), address: eventStat(addr) };
+  }
 
   issueCode(accountId, kind, ttlMs = 30 * 60 * 1000) {
     const code = String(randomInt(0, 1000000)).padStart(6, '0');
@@ -485,7 +517,10 @@ export class PgStore {
       // "AND used_at IS NULL": dois pedidos ao mesmo tempo com o mesmo código, só um vence
       return this.run('UPDATE account_codes SET used_at = $1 WHERE rid = $2 AND used_at IS NULL', Date.now(), row.rid).changes > 0;
     }
-    this.run('UPDATE account_codes SET attempts = attempts + 1, used_at = CASE WHEN attempts + 1 >= 5 THEN $1::bigint ELSE NULL END WHERE rid = $2', Date.now(), row.rid);
+    this.batch([
+      ['UPDATE account_codes SET attempts = attempts + 1, used_at = CASE WHEN attempts + 1 >= 5 THEN $1::bigint ELSE NULL END WHERE rid = $2', [Date.now(), row.rid]],
+      ["INSERT INTO account_events (kind, account_id, addr_hash, at) VALUES ('code_fail', $1, NULL, $2)", [accountId, Date.now()]],
+    ]);
     return false;
   }
 
@@ -525,7 +560,7 @@ export class PgStore {
   exportAccount(accountId) {
     const mine = 'SELECT id FROM characters WHERE account_id = $1';
     const [conta, personagens, itens, missoes, clas, auditoria] = this.batch([
-      ['SELECT id, name, email, verified, role, created_at, banned_until, ban_reason, muted_until FROM accounts WHERE id = $1', [accountId], 'get'],
+      ['SELECT id, name, email, verified, role, created_at, terms_version, terms_at, banned_until, ban_reason, muted_until FROM accounts WHERE id = $1', [accountId], 'get'],
       ['SELECT id, name, class_id, level, xp, gold, map_id, played_s, created_at, updated_at FROM characters WHERE account_id = $1 ORDER BY id', [accountId], 'all'],
       [`SELECT char_id, def_id, qty, enh, loc, slot, source, created_at FROM item_instances WHERE char_id IN (${mine}) ORDER BY char_id, created_at, id COLLATE "C"`, [accountId], 'all'],
       [`SELECT char_id, quest_id, state, updated_at FROM quest_progress WHERE char_id IN (${mine}) ORDER BY char_id, quest_id COLLATE "C"`, [accountId], 'all'],
@@ -589,13 +624,22 @@ export class PgStore {
       : this.all('SELECT * FROM audit_log ORDER BY id DESC LIMIT $1', limit);
   }
 
+  // mesma retenção do SQLite; as contas nunca confirmadas saem numa transação (códigos e conta juntos)
   purgeOld(auditDays) {
-    const cut = Math.ceil(Date.now() - auditDays * 86400000);
-    const [a, c] = this.batch([
+    const now = Date.now();
+    const cut = Math.ceil(now - auditDays * 86400000);
+    const [a, c, e] = this.batch([
       ['DELETE FROM audit_log WHERE at < $1', [cut]],
-      ['DELETE FROM account_codes WHERE expires_at < $1', [Date.now() - 86400000]],
+      ['DELETE FROM account_codes WHERE expires_at < $1', [now - 86400000]],
+      ['DELETE FROM account_events WHERE at < $1', [now - ACCOUNT_EVENTS_TTL_MS]],
     ]);
-    return { audit: a.changes, codes: c.changes };
+    const stale = `SELECT id FROM accounts WHERE verified = 0 AND deleted_at IS NULL AND created_at < $1
+      AND NOT EXISTS (SELECT 1 FROM characters c WHERE c.account_id = accounts.id)`;
+    const [, u] = this.tx(() => this.batch([
+      [`DELETE FROM account_codes WHERE account_id IN (${stale})`, [now - UNVERIFIED_TTL_MS]],
+      [`DELETE FROM accounts WHERE id IN (${stale})`, [now - UNVERIFIED_TTL_MS]],
+    ]));
+    return { audit: a.changes, codes: c.changes, events: e.changes, unverified: u.changes };
   }
 
   // ---------- personagens ----------

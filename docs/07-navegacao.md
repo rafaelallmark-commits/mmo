@@ -12,13 +12,17 @@ Como o jogador se move entre telas, painéis e mapas. Este documento manda: o cl
                        │ Jogar
                 ┌──────▼───────┐
                 │   ENTRAR     │── Voltar ──► Título
-                │ servidor,    │── Criar conta (mesma tela)
-                │ conta, senha │
-                └──────┬───────┘
+                │ servidor,    │── Criar conta (mesma tela; teste público: CRIAR CONTA ──► CONFIRMAR E-MAIL)
+                │ conta, senha │── Confirmar e-mail ──► CONFIRMAR E-MAIL ──► Confirmar ──► Entrar
+                │              │── Esqueci a senha ──► ESQUECI A SENHA ──► Trocar ──► Entrar
+                └──────┬───────┘── login recusado: e-mail não confirmado ──► CONFIRMAR E-MAIL (conta preenchida)
+                       │           termos novos ──► TERMOS ATUALIZADOS ──► Aceitar e entrar ──► Personagens
                        │ login ok
                 ┌──────▼───────────┐
                 │  PERSONAGENS     │── Voltar ──► Entrar (desconecta)
-                │ lista + prévia 3D│── Criar novo ──► CRIAÇÃO ──► Criar ──┐
+                │ lista + prévia 3D│── Baixar meus dados ──► BAIXAR MEUS DADOS ──► Voltar ──► Personagens
+                │                  │── Excluir conta ──► EXCLUIR CONTA ──► Título (ou Cancelar)
+                │                  │── Criar novo ──► CRIAÇÃO ──► Criar ──┐
                 └──────┬───────────┘                    └── Voltar ──────┤
                        │ Jogar                                           │
                 ┌──────▼───────┐ ◄───────────────────────────────────────┘ (volta à lista com o novo selecionado)
@@ -31,8 +35,14 @@ Como o jogador se move entre telas, painéis e mapas. Este documento manda: o cl
 | Tela | Conteúdo | Saídas |
 |---|---|---|
 | **Título** | logotipo, cena 3D de fundo (ponte ao amanhecer), Jogar, Opções, Sair | Jogar → Entrar; Opções → painel; Sair → fecha |
-| **Entrar** | servidor, conta, senha; Entrar, Criar conta, Voltar; erros em vermelho | sucesso → Personagens; Voltar → Título |
-| **Personagens** | até 4 cartões (nome, classe, nível, mapa); personagem selecionado em 3D no centro, girando | Jogar → Carregando; Criar novo → Criação; Voltar → Entrar |
+| **Entrar** | servidor, conta, senha; Entrar, Criar conta, Confirmar e-mail, Esqueci a senha, Voltar; erros em vermelho | sucesso → Personagens; e-mail não confirmado → Confirmar e-mail (conta preenchida); termos novos → Termos atualizados; Voltar → Título |
+| **Criar conta** (teste público) | conta, e-mail, senha; caixa de idade e de aceite; links dos Termos e da Política | Criar e receber o código → Confirmar e-mail; Voltar → Entrar |
+| **Confirmar e-mail** | explicação, conta, código; Confirmar, Reenviar código, Esqueci a senha, Voltar; dica (validade, lixo eletrônico, limites) | Confirmar → Entrar com o aviso; Esqueci a senha → Esqueci a senha; Voltar → Entrar |
+| **Esqueci a senha** | e-mail, Enviar código; código, nova senha, Trocar a senha | Trocar → Entrar; Voltar → Entrar |
+| **Termos atualizados** | aviso com a versão nova, links dos Termos e da Política, caixa de aceite; Aceitar e entrar, Não aceito: baixar meus dados, Não aceito: excluir a conta, Voltar | Aceitar → Personagens; os dois "Não aceito" voltam aqui; Voltar → Entrar |
+| **Personagens** | até 4 cartões (nome, classe, nível, mapa); personagem selecionado em 3D no centro, girando; Baixar meus dados, Excluir conta | Jogar → Carregando; Criar novo → Criação; Baixar meus dados → Baixar meus dados; Excluir conta → Excluir conta; Voltar → Entrar |
+| **Baixar meus dados** | o que vem no arquivo, senha, Baixar; depois: caminho do arquivo em `user://dados`, Abrir a pasta, Salvar uma cópia em outro lugar... | Voltar → Personagens (ou Termos atualizados) |
+| **Excluir conta** | aviso, senha, Excluir para sempre, Cancelar | Excluir → Título; Cancelar → Personagens (ou Termos atualizados) |
 | **Criação** | 8 classes em dois grupos (Âmbar / Nacre), papel e armas da classe, prévia 3D muda ao escolher, nome | Criar → Personagens; Voltar → Personagens |
 | **Carregando** | nome do mapa, dica de jogo; aparece ao entrar no mundo e em cada troca de mapa | → Mundo |
 | **Opções** | sensibilidade da câmera, mostrar nomes, escala da interface (salvos em `user://opcoes.cfg`); volume geral, da música e dos efeitos (salvos em `user://settings.cfg`) | Fechar → tela anterior |

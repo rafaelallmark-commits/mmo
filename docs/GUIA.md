@@ -12,10 +12,25 @@ Bem-vindo a Várdia. Este guia cobre o que você precisa para começar; as regra
 1. Abra o jogo. O campo **Servidor** já vem com o endereço do teste.
 2. **Criar conta**: escolha um nome de conta, seu e-mail e uma senha (8 caracteres ou mais), marque a caixa de
    idade (13 anos ou mais) e de aceite dos termos e toque em *Criar e receber o código*.
-3. Digite o **código de 6 dígitos** que chega por e-mail (vale 30 minutos; dá para pedir outro).
+3. Digite o **código de 6 dígitos** que chega por e-mail (vale 30 minutos).
 4. Entre com conta e senha. Esqueceu a senha? *Esqueci a senha* manda um código para o e-mail.
 5. Crie o personagem: escolha a **origem** (Âmbar ou Nácar), a **classe** e o nome (3 a 16 letras, números,
    `_` ou `-`, **sem espaços**).
+
+**Fechou o jogo antes de confirmar?** Na tela Entrar, toque em *Confirmar e-mail* e digite a conta e o código. Se
+você tentar entrar sem ter confirmado, o jogo abre essa mesma tela, já com a conta preenchida. Conta que não é
+confirmada em **7 dias** é apagada (o nome e o e-mail ficam livres para um cadastro novo).
+
+**O e-mail não chegou?** Procure no lixo eletrônico (e em "Promoções", no Gmail) e use *Reenviar código* na tela do
+código: sai um código novo e o anterior deixa de valer. Para evitar abuso, mandamos no máximo **um e-mail por
+minuto e 10 por dia** para cada conta e cada endereço — se o jogo pedir para esperar, espere o tempo indicado.
+*Esqueci a senha* também confirma a conta: o código da troca de senha prova que o e-mail é seu. Errou o código
+muitas vezes (20 em 24 horas, somando confirmação e troca de senha)? Por segurança, novas tentativas ficam
+bloqueadas até completar 24 horas.
+
+**Termos novos.** Se os Termos de Uso ou a Política de Privacidade mudarem, no login seguinte o jogo mostra a tela
+*Termos atualizados*, com os links para ler os textos: marque a caixa e toque em *Aceitar e entrar*. Se não quiser
+aceitar, na mesma tela dá para baixar seus dados ou excluir a conta.
 
 ## 2. As oito classes
 
@@ -92,5 +107,12 @@ denunciado que você viu: as do mapa e o que ele disse a você, no grupo ou no c
 
 ## 8. Seus dados
 
-Na tela de personagens você pode **excluir a conta**; pelo serviço de contas também dá para **baixar seus dados**.
+Na tela de personagens:
+
+- **Baixar meus dados**: digite a senha e toque em *Baixar*. O jogo grava um arquivo JSON com tudo o que guardamos
+  da sua conta (e-mail, aceite dos termos, personagens, itens, missões, clãs e registros de segurança) na pasta de
+  dados do jogo e mostra o caminho; *Abrir a pasta* mostra o arquivo e *Salvar uma cópia em outro lugar...* deixa
+  escolher onde guardar outra cópia.
+- **Excluir conta**: apaga a conta, os personagens, os itens e o e-mail. Não dá para desfazer.
+
 Detalhes na [Política de privacidade](PRIVACIDADE.md).

@@ -294,7 +294,8 @@ systemctl status cinzas; journalctl -u cinzas -f; systemctl list-timers backup.t
   provedor mostra os registros; sem eles os códigos caem no lixo eletrônico ou são recusados). Mande um código para
   um endereço do Gmail e um do Outlook e confira que chega na caixa de entrada.
 - Responsável e contato preenchidos em `docs/TERMOS.md` e `docs/PRIVACIDADE.md` (e revisados por assessoria jurídica).
-- Criar conta pelo cliente publicado: o e-mail com o código chega, a confirmação funciona e o login por token entra.
+- Criar conta pelo cliente publicado: o e-mail com o código chega, a confirmação funciona (também fechando o jogo e
+  voltando por *Confirmar e-mail*), o login por token entra e *Baixar meus dados* grava o arquivo.
 - `docker compose ps` saudável; de outra máquina, `curl http://IP:9100/health` **não** pode responder (nem
   `curl http://IP:7777/`, que só o proxy alcança).
 - Backup agendado e uma restauração testada.
@@ -305,8 +306,23 @@ systemctl status cinzas; journalctl -u cinzas -f; systemctl list-timers backup.t
 **Serviço de contas** (processo separado, mesmo banco): `npm run contas -- --port 7780 --db cinzas.db
 --token-secret "$CINZAS_TOKEN_SECRET" --email smtp --smtp-host smtp.exemplo.com --smtp-user ... --smtp-pass ...
 --smtp-from "Cinzas <nao-responda@exemplo.com>"`. Rotas: criar conta (e-mail com código de 6 dígitos),
-confirmar, reenviar código, sessão (token de 5 min, uso único), esqueci/redefinir senha, exportar dados
-(portabilidade) e excluir conta. `--email arquivo --email-dir emails` grava os e-mails em vez de enviar.
+confirmar, reenviar código, sessão (token de 5 min, uso único), aceitar termos novos, esqueci/redefinir senha,
+exportar dados (portabilidade) e excluir conta. `--email arquivo --email-dir emails` grava os e-mails em vez de
+enviar. A sessão recusada traz `codigo`: `confirmar` (e-mail não confirmado: o cliente abre a tela do código com a
+conta preenchida), `suspensa` ou `termos` (com `versao`: o cliente abre a tela de aceite).
+
+**Limites do serviço de contas** (D142), além dos 20 pedidos por minuto por IP (na memória): no máximo **um
+e-mail por minuto e 10 em 24 h para cada conta e para cada endereço** (cadastro, reenvio do código e troca de
+senha) e **20 códigos errados por conta em 24 h** (confirmação e troca de senha somadas, além dos 5 que invalidam
+cada código). Os contadores ficam no banco (`account_events`, com um resumo SHA-256 do endereço, apagados em
+24 h) e valem depois de reiniciar. Cadastro ou reenvio barrados e excesso de códigos voltam `429` com o tempo que falta;
+"esqueci a senha" barrado responde igual ao normal (fica `password_reset_limited` na auditoria). Para liberar uma
+conta antes das 24 h (testador que errou o código demais, por exemplo): `npm run conta -- --db cinzas.db --conta
+nome --liberar-limites` (auditado como `limits_cleared`).
+
+**Conta nunca confirmada** some depois de 7 dias, com os códigos dela (D141): a limpeza da zona roda um minuto
+depois de subir e de hora em hora (com várias zonas, qualquer uma basta) e escreve no registro quantas apagou. O
+nome e o e-mail ficam livres para um cadastro novo.
 
 E-mail (D139): cada opção também vem do ambiente (`CINZAS_EMAIL`, `CINZAS_SMTP_HOST`, `_PORT`, `_USER`, `_PASS`,
 `_FROM`, `_TLS`, `_HELO`), que é como o Docker e o systemd configuram. A porta decide a criptografia: **465** liga o
@@ -332,10 +348,11 @@ npm start -- --auth token --token-secret "$CINZAS_TOKEN_SECRET" --tls-cert cert.
 | `--max-conn-per-ip` | Conexões simultâneas por endereço (0 = sem limite). Com `--trust-proxy` o endereço vem de `X-Forwarded-For`. |
 | `--log-format json` | Uma linha JSON por evento (para coletores de log). |
 | `--shutdown-grace 30` | No `SIGTERM`: avisa os jogadores ("o servidor vai reiniciar em 30 s"), recusa novos logins, salva e sai. `Ctrl+C` sai na hora (salvando). |
-| `--audit-days 90` | Retenção da auditoria; códigos vencidos também são apagados (de hora em hora). |
+| `--audit-days 90` | Retenção da auditoria. A mesma limpeza apaga os códigos vencidos, os contadores dos limites do serviço de contas com mais de 24 h e as contas nunca confirmadas há 7 dias (um minuto depois de subir e de hora em hora). |
 
 **Auditoria** (`audit_log`): entradas e falhas (com IP), comandos de mestre, saque, compras, refino,
-recompensas de missão, criação/confirmação/exclusão de conta, troca de senha, expulsões. Consulta:
+recompensas de missão, criação/confirmação/exclusão de conta, aceite de termos novos (`terms_accepted`), troca de
+senha (pedida, barrada pelo limite, feita), exportação de dados, expulsões. Consulta:
 `npm run conta -- --db cinzas.db --auditoria --tipo gm --n 50`.
 
 **Mestres** (D138): comandos `/gm` só para contas com papel `gm` ou `admin` (ou com `--dev`, em desenvolvimento):
@@ -372,11 +389,22 @@ recusa servidor de protocolo diferente com uma mensagem clara.
 
 **Termos de uso**: [TERMOS.md](TERMOS.md) (regras de convivência e de jogo limpo que a moderação aplica). O cadastro
 pelo serviço de contas exige `aceite: true` (13 anos ou mais e aceite dos termos e da política) e grava a versão aceita
-na auditoria; `GET /termos` e `GET /privacidade` servem os textos (o cliente abre no navegador; `--docs-dir` aponta a
-pasta, padrão `docs/` do repositório).
+e a data na conta (`terms_version`, `terms_at`) e na auditoria, antes de mandar o e-mail (D143); `GET /termos` e
+`GET /privacidade` servem os textos (o cliente abre no navegador; `--docs-dir` aponta a pasta, padrão `docs/` do
+repositório).
 
-**Privacidade**: política em [PRIVACIDADE.md](PRIVACIDADE.md). Exclusão de conta pelo jogo (tela de
-personagens) ou pelo serviço de contas apaga e-mail, senha, itens e missões na hora e anonimiza os nomes.
+**Termos novos**: para publicar uma versão nova dos Termos ou da Política, edite os textos, troque o número da versão
+no topo de `docs/TERMOS.md` e de `docs/PRIVACIDADE.md` (os dois andam com o mesmo número) e suba `TERMS_VERSION` em
+`server/src/contas.js` (textos e número vão juntos na mesma imagem de zona e contas). No login seguinte, cada conta que aceitou uma versão anterior recebe `403` com `codigo: 'termos'`
+e vê a tela *Termos atualizados*; `POST /termos/aceitar` (conta, senha, `aceite: true`) grava a versão e a data e o
+login segue. Exportar e excluir a conta não dependem do aceite (a mesma tela oferece as duas coisas). O login por
+senha direto na zona (`--auth both` ou `password`, só para desenvolvimento) não passa por essa conferência: no teste
+público a zona roda com `--auth token`.
+
+**Privacidade**: política em [PRIVACIDADE.md](PRIVACIDADE.md). Na tela de personagens, *Baixar meus dados* chama
+`POST /contas/dados` e grava o JSON em `user://dados` (com botão para abrir a pasta e opção de salvar uma cópia em
+outro lugar). Exclusão de conta pelo jogo (tela de personagens) ou pelo serviço de contas apaga e-mail, senha, itens e
+missões na hora e anonimiza os nomes.
 
 ## 8.10 Múltiplas zonas
 
