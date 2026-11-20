@@ -163,7 +163,7 @@ func on_message(m: Dictionary) -> bool:
 						hud.error(r["reason"])),
 				func(): Net.request("clan_decline"))
 		"clan_event":
-			hud.chat_line("[color=#e3a548][Clã] %s[/color]" % m["text"])
+			hud.chat_line("[color=#e3a548][lb]Clã] %s[/color]" % hud.esc(m["text"]))
 			if m.get("left", false):
 				clan = {}
 				_render_clan()
@@ -183,7 +183,7 @@ func on_message(m: Dictionary) -> bool:
 		"duel_end":
 			# quem duelou já viu o resultado pela mensagem "duel"
 			if str(m.get("text", "")) != duel_last_text:
-				hud.chat_line("[color=#ffb07a]%s[/color]" % m["text"])
+				hud.chat_line("[color=#ffb07a]%s[/color]" % hud.esc(m["text"]))
 		_:
 			return false
 	return true
@@ -533,7 +533,7 @@ func _on_duel(m: Dictionary) -> void:
 			duel_last_text = str(m.get("text", ""))
 			var col: Color = Theme_.GREEN if m.get("won", false) else (Theme_.TEXT if m.get("draw", false) else Theme_.RED)
 			hud._flash(str(m.get("text", "Duelo encerrado.")), col)
-			hud.chat_line("[color=#ffb07a]%s[/color]" % m.get("text", ""))
+			hud.chat_line("[color=#ffb07a]%s[/color]" % hud.esc(m.get("text", "")))
 			var w = main.world
 			if w and w.selected == duel_opponent:
 				w.selected = ""

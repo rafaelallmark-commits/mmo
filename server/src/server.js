@@ -32,6 +32,9 @@ const SERVER_VERSION = JSON.parse(readFileSync(pathJoin(pathDirname(fileURLToPat
 const NAME_RE = /^[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ0-9_-]{2,15}$/;
 // prefixos que a exclusão de conta usa para renomear (store.deleteAccount): reservados
 const RESERVED_NAME_RE = /^exclu[ií]d[oa]_/i;
+// comandos de mestre que criam ouro, itens, níveis, refino ou progresso: só admin ou --dev (D138)
+const GM_SCENARIO_CMDS = new Set(['give', 'xp', 'set_enh', 'gold', 'quest_progress', 'quest_done']);
+const GM_GOLD_MAX = 1_000_000;
 // Variantes de maiúsculas das letras acentuadas: o banco compara sem diferença de maiúsculas só em A-Z
 // (NOCASE), mas o jogo procura nomes em minúsculas Unicode (byName); "Ângela" e "ângela" não podem coexistir.
 function accentCaseVariants(name) {
@@ -364,8 +367,8 @@ export class GameServer {
     this.sessions.add(s);
     ws.on('message', (buf) => {
       const lag = this.lagDelay();
-      if (lag > 0) this.lagQueue(s, 'in', lag, () => this.onMessage(s, buf));
-      else this.onMessage(s, buf);
+      if (lag > 0) this.lagQueue(s, 'in', lag, () => this.safeMessage(s, buf));
+      else this.safeMessage(s, buf);
     });
     ws.on('close', () => this.dropSession(s));
     ws.on('error', () => {});
@@ -480,12 +483,26 @@ export class GameServer {
     return false;
   }
 
+  // Defesa em profundidade: um erro inesperado ao ler a mensagem de uma conexão derruba só aquela
+  // conexão, nunca o processo (que levaria todos os jogadores e os calabouços em andamento junto).
+  safeMessage(s, buf) {
+    try {
+      this.onMessage(s, buf);
+    } catch (e) {
+      this.log('erro ao ler mensagem', e);
+      this.audit('message_error', { accountId: s.accountId ?? null, charId: s.charId ?? null, ip: s.ip ?? null, error: String(e?.message ?? e).slice(0, 200) });
+      if (this.sessions.has(s)) { s.noSave = true; this.dropSession(s); }
+    }
+  }
+
   onMessage(s, buf) {
     this.metrics.in(buf.length);
     this.world?.check(); // (idem: nenhum comando de jogador roda sem a conferência da cerca)
     if (!this.sessions.has(s)) return;
     let msg;
-    try { msg = JSON.parse(buf.toString()); } catch { return this.sendTo(s, { t: 'res', rid: null, ok: false, code: 'bad_json', reason: 'Mensagem inválida.' }); }
+    try { msg = JSON.parse(buf.toString()); } catch { msg = undefined; }
+    // só objetos são pedidos: «null», números, textos e listas são recusados antes de ler qualquer campo
+    if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return this.sendTo(s, { t: 'res', rid: null, ok: false, code: 'bad_json', reason: 'Mensagem inválida.' });
     const rid = typeof msg.rid === 'string' || typeof msg.rid === 'number' ? msg.rid : null;
     // acima do limite: responde ao próprio pedido (o cliente não fica esperando) sem executar
     if (!this.allowMessage(s)) return this.sendTo(s, { t: 'res', rid, req: msg.t, ok: false, code: 'rate_limited', reason: 'Muitos comandos; espere um pouco.' });
@@ -1911,38 +1928,52 @@ export class GameServer {
     return { ok: true, cache: false };
   }
 
-  // Comandos de mestre: só com --dev. Usados para reproduzir cenários (README) e nos testes.
+  // Comandos de mestre (D138). Moderação (expulsar, suspender, silenciar, onde, anunciar) e teleporte do
+  // próprio personagem: papéis gm e admin. Comandos de cenário, que criam ouro, itens, níveis, refino ou
+  // progresso de missão: só administradores ou servidor --dev (testes e reprodução de cenários), com teto.
   hGm(p, msg) {
     const s = this.byChar.get(p.char.id);
     if (!this.opts.dev && !['gm', 'admin'].includes(s?.role)) return { ok: false, code: 'forbidden', reason: 'Comandos de mestre desativados.' };
-    this.audit('gm', { accountId: s?.accountId ?? null, charId: p.char.id, ip: s?.ip ?? null, cmd: msg.cmd, args: Object.fromEntries(Object.entries(msg).filter(([k]) => !['t', 'rid', 'cmd'].includes(k))) });
+    this.audit('gm', { accountId: s?.accountId ?? null, charId: p.char.id, ip: s?.ip ?? null, cmd: String(msg.cmd).slice(0, 32), args: Object.fromEntries(Object.entries(msg).filter(([k]) => !['t', 'rid', 'cmd'].includes(k))) });
     const modRes = this.mod.gm(p, msg, s);
     if (modRes) return modRes;
+    if (GM_SCENARIO_CMDS.has(msg.cmd) && !this.opts.dev && s?.role !== 'admin') {
+      return { ok: false, code: 'forbidden', reason: 'Comandos de cenário (itens, ouro, nível, refino, missões) são só para administradores.' };
+    }
     const c = p.char;
     if (msg.cmd === 'give') {
       const def = this.data.items[msg.defId];
       if (!def) return { ok: false, code: 'bad_item', reason: 'Item inexistente.' };
       if (bagCount(c) >= BAG_CAPACITY) return { ok: false, code: 'bag_full', reason: 'Inventário cheio.' };
-      const it = { id: randomUUID(), defId: def.id, qty: msg.qty || 1, enh: 0, loc: 'bag', slot: null };
+      const want = Number.isInteger(msg.qty) ? msg.qty : 1;
+      const qty = Math.max(1, Math.min(def.stack ?? 1, want));
+      const it = { id: randomUUID(), defId: def.id, qty, enh: 0, loc: 'bag', slot: null };
       this.store.insertItem({ ...it, charId: c.id, source: 'gm' });
       c.items.set(it.id, it);
       return { ok: true, instanceId: it.id, char: p.zone.charView(p) };
     }
     if (msg.cmd === 'teleport') {
-      if (msg.mapId && msg.mapId !== p.zone.mapId) {
+      // coordenadas conferidas contra o mapa de destino (sem elas, num outro mapa: o ponto de chegada)
+      const other = typeof msg.mapId === 'string' && msg.mapId !== '' && msg.mapId !== p.zone.mapId;
+      const md = this.data.maps[other ? (this.zones.get(msg.mapId)?.mapId ?? msg.mapId) : p.zone.mapId];
+      if (!md) return { ok: false, code: 'bad_map', reason: 'Mapa inexistente.' };
+      let { x, z } = msg;
+      if (other && x === undefined && z === undefined) ({ x, z } = md.spawnPoint);
+      if (!Number.isFinite(x) || !Number.isFinite(z) || x < 0 || z < 0 || x > md.size[0] || z > md.size[1]) {
+        return { ok: false, code: 'bad_request', reason: 'Coordenadas fora do mapa.' };
+      }
+      if (other) {
         if (!this.zones.has(msg.mapId)) {
-          if (this.world && this.openMap(msg.mapId)) {
-            const sp = this.data.maps[msg.mapId].spawnPoint;
-            return this.remoteMove(p, msg.mapId, typeof msg.x === 'number' ? msg.x : sp.x, typeof msg.z === 'number' ? msg.z : sp.z);
-          }
+          if (this.world && this.openMap(msg.mapId)) return this.remoteMove(p, msg.mapId, x, z);
           return { ok: false, code: 'bad_map', reason: 'Mapa inexistente.' };
         }
-        return { ok: true, cache: false, after: () => this.moveToZone(p, msg.mapId, msg.x, msg.z) };
+        return { ok: true, cache: false, after: () => this.moveToZone(p, msg.mapId, x, z) };
       }
-      c.x = msg.x; c.z = msg.z; p.dest = null;
+      c.x = x; c.z = z; p.dest = null;
       return { ok: true, char: p.zone.charView(p) };
     }
     if (msg.cmd === 'xp') {
+      if (!Number.isInteger(msg.level) || msg.level < 1) return { ok: false, code: 'bad_request', reason: 'Nível inválido.' };
       const cum = this.data.xp.cumulative;
       const target = Math.min(this.data.levelCap, msg.level);
       const need = cum[target - 1] - c.xp;
@@ -1961,7 +1992,9 @@ export class GameServer {
       return { ok: true, char: p.zone.charView(p) };
     }
     if (msg.cmd === 'gold') {
-      c.gold += Math.max(0, Math.floor(msg.amount || 0));
+      const amount = Math.floor(Number(msg.amount) || 0);
+      if (amount < 1 || amount > GM_GOLD_MAX) return { ok: false, code: 'bad_request', reason: `Quantia de 1 a ${GM_GOLD_MAX} por comando.` };
+      c.gold += amount;
       this.store.saveCharacter(c);
       return { ok: true, char: p.zone.charView(p) };
     }
@@ -1969,6 +2002,10 @@ export class GameServer {
       // testes: define o progresso de um objetivo de missão ativa
       const st = c.quests.get(msg.quest);
       if (!st || st.state !== 'active') return { ok: false, code: 'not_active', reason: 'Missão não está ativa.' };
+      const objectives = this.data.quests[msg.quest]?.objectives ?? [];
+      if (!Number.isInteger(msg.index) || msg.index < 0 || msg.index >= objectives.length || !Number.isInteger(msg.value) || msg.value < 0) {
+        return { ok: false, code: 'bad_request', reason: 'Objetivo ou valor inválido.' };
+      }
       st.progress[msg.index] = msg.value;
       this.quests.save(c, msg.quest);
       this.notifyQuests(p, [msg.quest]);
@@ -1976,7 +2013,9 @@ export class GameServer {
     }
     if (msg.cmd === 'quest_done') {
       // marca missões como concluídas (atalho de cenário)
-      for (const id of msg.quests || []) { c.quests.set(id, { state: 'done', progress: {} }); this.quests.save(c, id); }
+      const ids = Array.isArray(msg.quests) ? msg.quests : [];
+      if (!ids.length || !ids.every((id) => typeof id === 'string' && Object.hasOwn(this.data.quests, id))) return { ok: false, code: 'bad_request', reason: 'Missão inexistente.' };
+      for (const id of ids) { c.quests.set(id, { state: 'done', progress: {} }); this.quests.save(c, id); }
       return { ok: true, journal: this.quests.journal(c) };
     }
     return { ok: false, code: 'unknown', reason: 'Comando de mestre desconhecido.' };

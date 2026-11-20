@@ -24,6 +24,7 @@ export function verifyToken(token, secret) {
   if (sig.length !== want.length || !timingSafeEqual(sig, want)) return null;
   let p;
   try { p = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')); } catch { return null; }
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
   if (typeof p.exp !== 'number' || p.exp < Math.floor(Date.now() / 1000)) return null;
   return p;
 }

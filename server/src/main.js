@@ -6,6 +6,7 @@
 //   várias zonas: [--world ws://127.0.0.1:7790 --zone-id zona-a --maps estrada_velha,pedrambar
 //                  --public-url ws://host:7777] com o segredo do mundo em CINZAS_WORLD_SECRET (ou --world-secret)
 import { GameServer } from './server.js';
+import { checkSecrets } from './segredo.js';
 
 function arg(name, def) {
   const i = process.argv.indexOf(`--${name}`);
@@ -51,6 +52,7 @@ const opts = {
   publicUrl: textArg('public-url', process.env.CINZAS_PUBLIC_URL),
 };
 if (!opts.world && (opts.maps || opts.zoneId || opts.publicUrl)) console.error('aviso: --maps, --zone-id e --public-url só valem com --world (várias zonas); ignorados.');
+if (!checkSecrets([['CINZAS_TOKEN_SECRET (--token-secret)', opts.tokenSecret], ['CINZAS_WORLD_SECRET (--world-secret)', opts.worldSecret]], { dev: opts.dev })) process.exit(2);
 let server;
 try { server = new GameServer(opts); } catch (e) { console.error(`não foi possível iniciar: ${e.message}`); process.exit(2); }
 await server.start();

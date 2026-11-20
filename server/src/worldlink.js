@@ -72,6 +72,7 @@ export class WorldLink {
       if (ws !== this.ws) return;
       let m;
       try { m = JSON.parse(buf.toString()); } catch { return; }
+      if (!m || typeof m !== 'object' || Array.isArray(m)) return;
       this.onMessage(m);
     });
     ws.on('close', () => { if (ws === this.ws) this.onDown(); });

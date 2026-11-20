@@ -199,7 +199,9 @@ docker compose logs -f servidor
 
 - **Atualizar**: baixe a versão nova do repositório e rode `docker compose up -d --build`. Parar ou recriar o
   contêiner manda SIGTERM e dá 45 s (`stop_grace_period`) para o servidor salvar todos os personagens.
-- **Imagem publicada**: troque `build:` por `image: ghcr.io/<dono>/cinzas-servidor:<versão>` no serviço `servidor`.
+- **Imagem publicada**: ponha `CINZAS_IMAGEM=ghcr.io/<dono>/cinzas-servidor:<versão>` no `deploy/.env` e rode
+  `docker compose pull servidor contas && docker compose up -d --no-build`. A variável vale para a zona **e** para as
+  contas: as duas leem e migram o mesmo banco, então nunca rodam versões diferentes.
 - **Backup**: `docker compose exec servidor npm run backup -- --db /data/cinzas.db --para /data/backups`.
   Para agendar no cron do host, entre na pasta `deploy/` do repositório (aqui em `/opt/cinzas`) e use `-T`
   (sem terminal):
@@ -220,9 +222,12 @@ docker compose logs -f servidor
   `docker compose run --rm -T --no-deps servidor sh -c 'cat > /data/backups/restaurar.db' < cinzas-AAAA-MM-DDTHH-MM-SS.db`.
 - **Serviço de contas** (`contas`): mesma imagem, mesmo volume e mesmo banco; o Caddy repassa
   `https://DOMINIO/contas/*` para ele (o cliente usa essa base quando o servidor é `wss://`). O servidor de zona sobe com
-  `CINZAS_AUTH=token`: cadastro e senha só pelo serviço de contas. `deploy/.env` precisa de `CINZAS_TOKEN_SECRET`
-  (`openssl rand -hex 32`; o compose não sobe sem ele) e, para enviar e-mail de verdade, `CINZAS_EMAIL=smtp` e os
-  `CINZAS_SMTP_*` (modelo no cabeçalho do `docker-compose.yml`). Sem SMTP, os e-mails ficam em `/data/emails`.
+  `CINZAS_AUTH=token`: cadastro e senha só pelo serviço de contas. `deploy/.env` precisa de `DOMINIO`,
+  `CINZAS_TOKEN_SECRET` (`openssl rand -hex 32`) e `CINZAS_EMAIL`: o compose não sobe sem os três. Zona e contas
+  recusam um segredo com menos de 32 caracteres ou o valor de exemplo do repositório (D139). Para enviar e-mail de
+  verdade, `CINZAS_EMAIL=smtp` e os `CINZAS_SMTP_*` (modelo no cabeçalho do `docker-compose.yml`); as contas recusam
+  subir sem `CINZAS_SMTP_HOST` ou sem `CINZAS_SMTP_FROM`. `CINZAS_EMAIL=arquivo` (códigos em `/data/emails`, ninguém
+  recebe nada) só serve para um ensaio, e o serviço avisa isso no registro ao subir.
 - **PostgreSQL** (perfil `postgres`, opcional): o serviço `banco` (`postgres:17`, só na rede interna, dados no volume
   `banco`) e `CINZAS_DB=postgres://cinzas@banco:5432/cinzas` na zona e nas contas; a senha fica em
   `deploy/segredos/senha_banco.txt` (fora do git) e chega aos três como segredo do compose. Sem o perfil nada muda
@@ -285,6 +290,9 @@ systemctl status cinzas; journalctl -u cinzas -f; systemctl list-timers backup.t
 
 - DNS e portas 80/443 prontos; `DOMINIO`, `CINZAS_TOKEN_SECRET` e SMTP em `deploy/.env` (ou `/etc/cinzas/cinzas.env`);
   servidor **sem** `--dev`; uma conta com papel `admin` para a equipe (`npm run conta -- --conta nome --papel admin`).
+- Domínio do remetente verificado no provedor de e-mail, com **SPF**, **DKIM** e **DMARC** publicados no DNS (o
+  provedor mostra os registros; sem eles os códigos caem no lixo eletrônico ou são recusados). Mande um código para
+  um endereço do Gmail e um do Outlook e confira que chega na caixa de entrada.
 - Responsável e contato preenchidos em `docs/TERMOS.md` e `docs/PRIVACIDADE.md` (e revisados por assessoria jurídica).
 - Criar conta pelo cliente publicado: o e-mail com o código chega, a confirmação funciona e o login por token entra.
 - `docker compose ps` saudável; de outra máquina, `curl http://IP:9100/health` **não** pode responder (nem
@@ -299,6 +307,14 @@ systemctl status cinzas; journalctl -u cinzas -f; systemctl list-timers backup.t
 --smtp-from "Cinzas <nao-responda@exemplo.com>"`. Rotas: criar conta (e-mail com código de 6 dígitos),
 confirmar, reenviar código, sessão (token de 5 min, uso único), esqueci/redefinir senha, exportar dados
 (portabilidade) e excluir conta. `--email arquivo --email-dir emails` grava os e-mails em vez de enviar.
+
+E-mail (D139): cada opção também vem do ambiente (`CINZAS_EMAIL`, `CINZAS_SMTP_HOST`, `_PORT`, `_USER`, `_PASS`,
+`_FROM`, `_TLS`, `_HELO`), que é como o Docker e o systemd configuram. A porta decide a criptografia: **465** liga o
+TLS direto e **587** exige STARTTLS — se o servidor de e-mail não oferecer STARTTLS, o envio falha em vez de mandar
+usuário e senha do SMTP às claras. `CINZAS_SMTP_TLS=direto|starttls|nenhum` força o modo (`nenhum` só para um relé
+local de desenvolvimento). O remetente (`CINZAS_SMTP_FROM`) é obrigatório e o domínio dele vai no EHLO e no
+Message-ID (ou `CINZAS_SMTP_HELO`). Um erro de certificado do servidor de e-mail vira falha daquele envio (registrada),
+sem derrubar o serviço.
 
 **Servidor de zona no teste público**:
 
@@ -322,8 +338,12 @@ npm start -- --auth token --token-secret "$CINZAS_TOKEN_SECRET" --tls-cert cert.
 recompensas de missão, criação/confirmação/exclusão de conta, troca de senha, expulsões. Consulta:
 `npm run conta -- --db cinzas.db --auditoria --tipo gm --n 50`.
 
-**Mestres**: comandos `/gm` só para contas com papel `gm` ou `admin` (ou com `--dev`, em desenvolvimento):
-`npm run conta -- --db cinzas.db --conta nome --papel gm`. Todo comando de mestre fica na auditoria.
+**Mestres** (D138): comandos `/gm` só para contas com papel `gm` ou `admin` (ou com `--dev`, em desenvolvimento):
+`npm run conta -- --db cinzas.db --conta nome --papel gm`. O papel `gm` modera (tabela abaixo) e teleporta o próprio
+personagem (`teleport`). Os comandos de cenário, que criam ouro, itens, níveis, refino ou progresso de missão
+(`give`, `gold`, `xp`, `set_enh`, `quest_progress`, `quest_done`), são só do papel `admin` (ou `--dev`), com teto:
+`give` até uma pilha do item e `gold` até 1.000.000 por comando. Todo comando de mestre, inclusive o recusado, fica
+na auditoria.
 
 **Moderação** (no chat do jogo, contas da equipe):
 

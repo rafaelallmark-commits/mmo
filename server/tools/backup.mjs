@@ -66,13 +66,27 @@ if (isPostgresUrl(db)) {
     console.error(`aviso: o banco do servidor é o PostgreSQL (CINZAS_DB), mas este backup é do arquivo SQLite ${db}: os dados do jogo não estão nele (backup do PostgreSQL: docs/08-operacao.md §8.11)`);
   }
   const out = join(dir, `${basename(db, '.db')}-${stamp}.db`);
-  const conn = new DatabaseSync(db);
-  conn.exec(`VACUUM INTO '${out.replace(/'/g, "''")}'`);
-  conn.close();
-  const check = new DatabaseSync(out, { readOnly: true });
-  const ok = check.prepare('PRAGMA integrity_check').get();
-  const chars = check.prepare('SELECT COUNT(*) AS n FROM characters').get().n;
-  check.close();
-  console.log(`backup: ${out} (${(statSync(out).size / 1048576).toFixed(1)} MB, ${chars} personagens, integridade: ${Object.values(ok)[0]}, ${Date.now() - t0} ms)`);
+  // como no PostgreSQL: grava com outro nome e só dá o nome final depois da conferência de integridade.
+  // Uma cópia corrompida sai com erro (o backup.service e o cron acusam a falha) e não entra na conta das
+  // N mantidas, onde empurraria uma cópia boa para fora.
+  const partial = `${out}.parcial`;
+  const fail = (msg) => { rmSync(partial, { force: true }); console.error(msg); process.exit(1); };
+  let integrity = '?';
+  let chars = '?';
+  try {
+    const conn = new DatabaseSync(db);
+    conn.exec(`VACUUM INTO '${partial.replace(/'/g, "''")}'`);
+    conn.close();
+    const check = new DatabaseSync(partial, { readOnly: true });
+    try {
+      integrity = check.prepare('PRAGMA integrity_check').all().map((r) => Object.values(r)[0]).join('; ');
+      if (integrity === 'ok') chars = check.prepare('SELECT COUNT(*) AS n FROM characters').get().n;
+    } finally { check.close(); }
+  } catch (e) {
+    fail(`backup falhou: ${e.message}`);
+  }
+  if (integrity !== 'ok') fail(`backup falhou: a cópia não passou na conferência de integridade (${integrity.slice(0, 500)}); nenhuma cópia antiga foi apagada`);
+  renameSync(partial, out);
+  console.log(`backup: ${out} (${(statSync(out).size / 1048576).toFixed(1)} MB, ${chars} personagens, integridade: ok, ${Date.now() - t0} ms)`);
   prune(basename(db, '.db'), '.db');
 }

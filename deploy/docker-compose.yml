@@ -10,9 +10,17 @@
 #   CINZAS_SMTP_PORT=587
 #   CINZAS_SMTP_USER=...
 #   CINZAS_SMTP_PASS=...
-#   CINZAS_SMTP_FROM=Cinzas do Meridiano <nao-responda@exemplo.com.br>
+#   CINZAS_SMTP_FROM=Cinzas do Meridiano <nao-responda@exemplo.com.br>   # domínio verificado no provedor
 #   FIM
 #   docker compose up -d --build
+# O servidor e as contas recusam subir com um segredo de exemplo ou com menos de 32 caracteres, e as contas
+# recusam CINZAS_EMAIL=smtp sem servidor ou sem remetente. Porta 465 liga o TLS direto; 587 exige STARTTLS
+# (CINZAS_SMTP_TLS=direto|starttls força o modo).
+#
+# Imagem publicada pelo CI (release.yml) em vez de construir aqui: a MESMA imagem vale para a zona e as
+# contas (as duas leem e migram o mesmo banco), então defina só a variável e baixe:
+#   echo 'CINZAS_IMAGEM=ghcr.io/<dono-do-repositório>/cinzas-servidor:<versão>' >> .env
+#   docker compose pull servidor contas && docker compose up -d --no-build
 #   docker compose logs -f servidor
 #
 # Os jogadores conectam em wss://jogo.exemplo.com.br (campo "Servidor" do cliente ou --server=...); o
@@ -35,12 +43,12 @@ name: cinzas
 
 services:
   servidor:
-    # Construída a partir deste repositório. Para usar a imagem publicada pelo CI (release.yml), troque
-    # "build" por:  image: ghcr.io/<dono-do-repositório>/cinzas-servidor:<versão>
+    # Construída a partir deste repositório (etiqueta cinzas-servidor:local). Com CINZAS_IMAGEM no .env,
+    # usa a imagem publicada pelo CI: docker compose pull servidor contas && docker compose up -d --no-build
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    image: cinzas-servidor:local
+    image: ${CINZAS_IMAGEM:-cinzas-servidor:local}
     restart: unless-stopped
     init: true
     # SIGTERM -> o servidor salva todos os personagens e fecha o banco; 45 s de prazo antes do SIGKILL
@@ -87,7 +95,7 @@ services:
       - "80:80"                  # desafio HTTP do Let's Encrypt e redirecionamento para HTTPS
       - "443:443"                # wss:// do jogo
     environment:
-      DOMINIO: ${DOMINIO:-jogo.exemplo.com.br}
+      DOMINIO: ${DOMINIO:?defina DOMINIO (o domínio do teste, com DNS apontando para esta máquina) em deploy/.env}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_dados:/data        # certificados e chaves do TLS: não apague (limites de emissão)
@@ -100,8 +108,9 @@ services:
 
   contas:
     # Serviço de contas (cadastro com e-mail, confirmação, token de sessão de 5 min, troca de senha,
-    # exportação e exclusão de conta, termos). Mesma imagem, mesmo banco (volume "dados").
-    image: cinzas-servidor:local
+    # exportação e exclusão de conta, termos). Sempre a mesma imagem da zona (CINZAS_IMAGEM), mesmo banco:
+    # uma etiqueta diferente rodaria contas de outra versão contra o banco já migrado pela zona.
+    image: ${CINZAS_IMAGEM:-cinzas-servidor:local}
     restart: unless-stopped
     init: true
     depends_on:
@@ -119,12 +128,15 @@ services:
       CINZAS_DB_PASSWORD_FILE: /run/secrets/senha_banco
       CINZAS_TOKEN_SECRET: ${CINZAS_TOKEN_SECRET:?defina CINZAS_TOKEN_SECRET em deploy/.env}
       CINZAS_TRUST_PROXY: "1"
-      CINZAS_EMAIL: ${CINZAS_EMAIL:-arquivo}
+      # smtp no teste público; "arquivo" (códigos em /data/emails, ninguém recebe e-mail) só para ensaio
+      CINZAS_EMAIL: ${CINZAS_EMAIL:?defina CINZAS_EMAIL=smtp em deploy/.env (ou arquivo, só para um ensaio)}
       CINZAS_SMTP_HOST: ${CINZAS_SMTP_HOST:-}
       CINZAS_SMTP_PORT: ${CINZAS_SMTP_PORT:-587}
+      CINZAS_SMTP_TLS: ${CINZAS_SMTP_TLS:-}
       CINZAS_SMTP_USER: ${CINZAS_SMTP_USER:-}
       CINZAS_SMTP_PASS: ${CINZAS_SMTP_PASS:-}
       CINZAS_SMTP_FROM: ${CINZAS_SMTP_FROM:-}
+      CINZAS_SMTP_HELO: ${CINZAS_SMTP_HELO:-}
     expose:
       - "7780"                   # alcançável só pelo proxy (https://DOMINIO/contas/...)
     healthcheck:

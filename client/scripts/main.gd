@@ -1105,17 +1105,19 @@ func _on_message(m: Dictionary) -> void:
 		"chat":
 			if hud:
 				var ch_name: String = m.get("channel", "zone")
+				var from_t: String = hud.esc(m["from"])
+				var text_t: String = hud.esc(m["text"])
 				if ch_name == "party":
-					hud.chat_line("[color=#9fd3d1][Grupo] [b]%s:[/b] %s[/color]" % [m["from"], m["text"]])
+					hud.chat_line("[color=#9fd3d1][lb]Grupo] [b]%s:[/b] %s[/color]" % [from_t, text_t])
 				elif ch_name == "clan":
-					hud.chat_line("[color=#e3a548][%s] [b]%s:[/b] %s[/color]" % [m.get("tag", "Clã"), m["from"], m["text"]])
+					hud.chat_line("[color=#e3a548][lb]%s] [b]%s:[/b] %s[/color]" % [hud.esc(m.get("tag", "Clã")), from_t, text_t])
 				elif ch_name == "whisper":
-					hud.chat_line("[color=#d7a8ff][%s → %s] %s[/color]" % [m["from"], m.get("to", ""), m["text"]])
+					hud.chat_line("[color=#d7a8ff][lb]%s → %s] %s[/color]" % [from_t, hud.esc(m.get("to", "")), text_t])
 				else:
-					hud.chat_line("[b]%s:[/b] %s" % [m["from"], m["text"]])
+					hud.chat_line("[b]%s:[/b] %s" % [from_t, text_t])
 		"joined":
 			if hud:
-				hud.chat_line("[color=#9a927f]%s entrou.[/color]" % m["name"])
+				hud.chat_line("[color=#9a927f]%s entrou.[/color]" % hud.esc(m["name"]))
 		"zone":
 			_on_zone(m)
 		"transfer":

@@ -183,7 +183,7 @@ Todo pedido do cliente leva `rid` (texto único por pedido). A resposta é `{ t:
 | `enhance_quote`, `enhance` | npc (ferreiro), instance | custo, chance e prévia; refino com RNG semeado (falha mantém o grau e gasta ouro e materiais) |
 | `storage_list`, `storage_put`, `storage_take` | npc (guarda-volumes), instance | depósito compartilhado pela conta |
 | `interact` na Porta da Última Eclusa (ou `dungeon_enter`) | object | abre/entra na instância do grupo (2–5, Chave de Comporta, nível 16) |
-| `gm` | cmd (give, teleport, xp, gold, quest_done) | só com servidor `--dev` |
+| `gm` | cmd (moderação: kick, ban, unban, mute, unmute, where, announce; teleport; cenário: give, xp, gold, set_enh, quest_progress, quest_done) | papéis `gm`/`admin` (ou `--dev`); cenário só `admin` ou `--dev`, com teto (D138) |
 | `login_transfer` | token | várias zonas: chegada numa zona com o token assinado pelo mundo (conexão nova, sem login antes); responde como o `enter` e deixa a sessão logada |
 
 Com várias zonas, o `enter` de um personagem cujo mapa é de outra zona responde `{ ok, transfer: { url, token, mapId } }`, e um portal para um mapa de outra zona manda o evento `transfer` com os mesmos campos (seção [Múltiplas zonas](#múltiplas-zonas)).

@@ -610,7 +610,7 @@ func _flash(text: String, color: Color) -> void:
 
 func system(text: String) -> void:
 	_flash(text, Theme_.TEXT)
-	chat_line("[color=#9a927f]%s[/color]" % text)
+	chat_line("[color=#9a927f]%s[/color]" % esc(text))
 
 func error(text: String) -> void:
 	_flash(text, Theme_.RED)
@@ -619,6 +619,11 @@ func error(text: String) -> void:
 func chat_line(bb: String) -> void:
 	if chat_log:
 		chat_log.append_text(bb + "\n")
+
+# Texto livre de jogador (fala, mensagem do dia) entra no chat como texto, nunca como BBCode:
+# «[» vira «[lb]», então ninguém muda fonte, cor ou imagem na tela dos outros nem imita o sistema.
+static func esc(t) -> String:
+	return str(t).replace("[", "[lb]")
 
 func show_death() -> void:
 	death_overlay.visible = true

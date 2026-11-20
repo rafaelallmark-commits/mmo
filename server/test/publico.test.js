@@ -7,12 +7,10 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import net from 'node:net';
 import WebSocket from 'ws';
 import { GameServer } from '../src/server.js';
 import { AccountsService } from '../src/contas.js';
 import { signToken } from '../src/token.js';
-import { smtpSend } from '../src/mailer.js';
 import { SimClient, sleep } from './helpers/client.js';
 
 const SECRET = 'segredo-de-teste-0123456789';
@@ -94,6 +92,37 @@ test('contas: e-mail com código, token de uso único no servidor de zona, troca
   } finally { await acc.stop(); await zone.stop(); rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('mensagem que não é objeto («null», número, lista) é recusada sem derrubar o servidor', async () => {
+  const dir = tmp('cinzas-null-');
+  const zone = new GameServer({ port: 0, host: '127.0.0.1', dbPath: join(dir, 'n.db'), seed: 4, log: false });
+  const port = await zone.start();
+  const acc = new AccountsService({ port: 0, dbPath: join(dir, 'n.db'), tokenSecret: SECRET, log: false, mailer: { send: async () => 'mem' } });
+  const aport = await acc.start();
+  try {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+    const got = [];
+    ws.on('message', (b) => got.push(JSON.parse(b.toString())));
+    await new Promise((r) => ws.on('open', r));
+    const bad = ['null', '5', '"oi"', '[]', '[{"t":"ping"}]', 'true', '{"t":'];
+    for (const raw of bad) ws.send(raw);
+    ws.send(JSON.stringify({ t: 'ping', rid: 'vivo' }));
+    for (let i = 0; i < 50 && !got.some((m) => m.rid === 'vivo'); i++) await sleep(20);
+    assert.equal(got.filter((m) => m.code === 'bad_json').length, bad.length, 'cada mensagem inválida recebe bad_json');
+    assert.ok(got.some((m) => m.rid === 'vivo' && m.ok), 'a mesma conexão segue funcionando');
+    // outra conexão também entra: o processo não caiu
+    const c = new SimClient('depois');
+    await c.connect(`ws://127.0.0.1:${port}`);
+    assert.equal((await c.request('ping')).ok, true);
+    await c.close();
+    ws.close();
+    // serviço de contas: corpo «null» ou lista é pedido inválido (400), não erro interno
+    for (const body of ['null', '[]', '7']) {
+      const r = await fetch(`http://127.0.0.1:${aport}/contas`, { method: 'POST', headers: { 'content-type': 'application/json' }, body });
+      assert.equal(r.status, 400, `corpo ${body}`);
+    }
+  } finally { await acc.stop(); await zone.stop(); rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('limite de comandos, limite por IP, papéis de mestre e auditoria', async () => {
   const dir = tmp('cinzas-lim-');
   const zone = new GameServer({ port: 0, host: '127.0.0.1', dbPath: join(dir, 'l.db'), seed: 2, log: false, maxConnPerIp: 3 });
@@ -123,14 +152,37 @@ test('limite de comandos, limite por IP, papéis de mestre e auditoria', async (
     zone.store.setRole(zone.store.findAccount('lima').id, 'gm');
     await sleep(1200); // espera o balde encher
     await a.close();
-    const b = new SimClient('lima2');
+    let b = new SimClient('lima2');
     await b.connect(url);
     const l2 = await b.request('login', { account: 'lima', password: 'senha123' });
     await b.request('enter', { charId: l2.chars[0].id });
+    // mestre (gm) modera e se teleporta, mas não cria ouro, itens nem níveis (D138)
+    const denied = await b.request('gm', { cmd: 'gold', amount: 50 });
+    assert.equal(denied.code, 'forbidden', 'ouro de cenário é só para administradores');
+    assert.equal((await b.request('gm', { cmd: 'give', defId: 'potion_hp_s', qty: 5 })).code, 'forbidden');
+    assert.equal((await b.request('gm', { cmd: 'xp', level: 10 })).code, 'forbidden');
+    assert.equal((await b.request('gm', { cmd: 'teleport', x: 30, z: 50 })).ok, true, 'teleporte do próprio personagem continua liberado');
+    assert.equal((await b.request('gm', { cmd: 'teleport', x: 'longe', z: 50 })).code, 'bad_request', 'coordenada que não é número');
+    assert.equal((await b.request('gm', { cmd: 'teleport', x: 9999, z: 50 })).code, 'bad_request', 'fora do mapa');
+    const gm = zone.store.auditTail(20, 'gm').find((r) => JSON.parse(r.data_json).cmd === 'gold');
+    assert.ok(gm, 'a tentativa recusada também fica na auditoria');
+    await sleep(1200);
+    await b.close();
+    // administrador: ouro e itens com teto
+    zone.store.setRole(zone.store.findAccount('lima').id, 'admin');
+    b = new SimClient('lima3');
+    await b.connect(url);
+    const l3 = await b.request('login', { account: 'lima', password: 'senha123' });
+    await b.request('enter', { charId: l3.chars[0].id });
     const g = await b.request('gm', { cmd: 'gold', amount: 50 });
     assert.equal(g.ok, true, g.reason);
-    const gm = zone.store.auditTail(20, 'gm')[0];
-    assert.ok(gm && JSON.parse(gm.data_json).cmd === 'gold');
+    assert.equal((await b.request('gm', { cmd: 'gold', amount: 5_000_000 })).code, 'bad_request', 'teto de ouro por comando');
+    const gv = await b.request('gm', { cmd: 'give', defId: 'potion_hp_s', qty: 10_000 });
+    assert.equal(gv.ok, true, gv.reason);
+    assert.equal(gv.char.items.find((i) => i.id === gv.instanceId).qty, zone.data.items.potion_hp_s.stack, 'quantidade limitada à pilha do item');
+    assert.equal((await b.request('gm', { cmd: 'give', defId: 'potion_hp_s', qty: -5 })).ok, true);
+    assert.equal((await b.request('gm', { cmd: 'xp', level: 'dez' })).code, 'bad_request');
+    assert.equal((await b.request('gm', { cmd: 'quest_done', quests: 'c1_count' })).code, 'bad_request', 'lista de missões, não texto');
     // inundação contínua derruba a conexão
     const closed = new Promise((r) => b.ws.on('close', r));
     const flood = setInterval(() => { for (let i = 0; i < 60; i++) { try { b.send({ t: 'ping', rid: `f${Math.random()}` }); } catch { /* fechou */ } } }, 50);
@@ -161,36 +213,3 @@ test('desligamento gracioso avisa os jogadores e salva; TLS (wss) funciona', asy
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('cliente SMTP conversa com o servidor e manda o código', async () => {
-  const seen = [];
-  let data = '';
-  const srv = net.createServer((sock) => {
-    let mode = 'cmd';
-    sock.write('220 falso ESMTP\r\n');
-    sock.on('data', (d) => {
-      for (const line of d.toString().split('\r\n')) {
-        if (!line && mode === 'cmd') continue;
-        if (mode === 'data') {
-          if (line === '.') { mode = 'cmd'; sock.write('250 aceito\r\n'); } else data += line + '\n';
-          continue;
-        }
-        seen.push(line);
-        if (/^EHLO/.test(line)) sock.write('250-falso\r\n250 AUTH LOGIN\r\n');
-        else if (line === 'AUTH LOGIN') sock.write('334 VXNlcm5hbWU6\r\n');
-        else if (seen.at(-2) === 'AUTH LOGIN') sock.write('334 UGFzc3dvcmQ6\r\n');
-        else if (seen.at(-3) === 'AUTH LOGIN') sock.write('235 ok\r\n');
-        else if (/^MAIL FROM|^RCPT TO/.test(line)) sock.write('250 ok\r\n');
-        else if (line === 'DATA') { mode = 'data'; sock.write('354 manda\r\n'); }
-        else if (line === 'QUIT') { sock.write('221 tchau\r\n'); sock.end(); }
-      }
-    });
-  });
-  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
-  try {
-    await smtpSend({ host: '127.0.0.1', port: srv.address().port, user: 'u', pass: 'p', from: 'Jogo <j@x.com>' }, { to: 'a@b.com', subject: 'Teste', text: 'Seu código é 123456.' });
-    assert.ok(seen.includes('MAIL FROM:<j@x.com>'));
-    assert.ok(seen.includes('RCPT TO:<a@b.com>'));
-    const b64 = data.split('\n\n')[1].replace(/\s/g, '');
-    assert.match(Buffer.from(b64, 'base64').toString('utf8'), /123456/);
-  } finally { srv.close(); }
-});

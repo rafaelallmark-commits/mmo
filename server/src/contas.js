@@ -89,7 +89,8 @@ export class AccountsService {
       if (body.length > 8192) return send(413, { ok: false, erro: 'Pedido grande demais.' });
     }
     let b;
-    try { b = JSON.parse(body || '{}'); } catch { return send(400, { ok: false, erro: 'JSON inválido.' }); }
+    try { b = JSON.parse(body || '{}'); } catch { b = undefined; }
+    if (!b || typeof b !== 'object' || Array.isArray(b)) return send(400, { ok: false, erro: 'JSON inválido.' });
     try {
       const { status, ...rest } = await this.route(url, b, ip);
       return send(status ?? (rest.ok ? 200 : 400), rest);
