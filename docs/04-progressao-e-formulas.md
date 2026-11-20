@@ -13,39 +13,39 @@ Atributos permanentes = iniciais da classe + pontos distribuídos. São os únic
 
 ## 4.2 Tabela de XP acumulada (níveis 1–25)
 
-Calibração: 3 abates por minuto de caça ativa solo contra monstros do mesmo nível (inclui deslocamento e pausas curtas); XP para o próximo nível = meta em minutos × 3 × XP base do monstro do nível, arredondado para dezenas, com meta = 2 + 1,5 × (nível − 1). A mesma regra vale para os níveis 21–25 (pós-v1). Os tempos são **metas de teste** para o Marco 4 medir e ajustar, não promessas. Missões principais somam cerca de 30% do XP de cada capítulo, então quem faz caça + missões chega ao teto de nível em cerca de 70% do tempo de quem só caça.
+Calibração: a tabela foi montada com 3 abates por minuto de caça ativa solo contra monstros do mesmo nível (inclui deslocamento e pausas curtas): XP para o próximo nível = meta em minutos × 3 × XP da curva de referência do nível (4.3), arredondado para dezenas, com meta = 2 + 1,5 × (nível − 1). A mesma regra vale para os níveis 21–25 (pós-v1). A simulação do Marco 4 ([relatório](relatorio-progressao.md)) mostrou que, com habilidades, tônicos e o equipamento do armeiro, quem só caça mata bem mais do que 3 por minuto (de 3 a 10 conforme o nível; perto de 5 na média): em vez de refazer a tabela, o **XP de cada monstro** foi ajustado nível a nível para o tempo só caçando ficar perto da meta. A coluna "Abates/min para a meta" mostra o ritmo que cada nível pede com o XP atual. Os tempos são **metas de teste** para o Marco 4 medir e ajustar, não promessas. Missões principais somam cerca de 30% do XP de cada capítulo, então quem faz caça + missões chega ao teto de nível em cerca de 70% do tempo de quem só caça.
 
-| Nível | XP acumulada | XP para o próximo | Monstro típico do nível (XP) | Abates solo | Meta só caça | Meta caça + missões | Acumulado só caça |
-|---|---|---|---|---|---|---|---|
-| 1 | 0 | 80 | Rato de Sulco (14) | 6 | 2 min | 1,4 min | 0 h |
-| 2 | 80 | 250 | Besouro-Brasa (24) | 11 | 3,5 min | 2,4 min | 0,1 h |
-| 3 | 330 | 570 | Cão de Ferrugem (38) | 15 | 5 min | 3,5 min | 0,2 h |
-| 4 | 900 | 1.030 | Lagarto de Lastro (53) | 20 | 6,5 min | 4,6 min | 0,3 h |
-| 5 | 1.930 | 1.680 | Javali de Cinza (70) | 24 | 8 min | 5,6 min | 0,4 h |
-| 6 | 3.610 | 2.540 | Enguia de Lodo (89) | 29 | 9,5 min | 6,7 min | 0,6 h |
-| 7 | 6.150 | 3.600 | Válvula Errante (109) | 34 | 11 min | 7,7 min | 0,8 h |
-| 8 | 9.750 | 4.880 | Garça de Ferrugem (130) | 38 | 12,5 min | 8,8 min | 1 h |
-| 9 | 14.630 | 6.430 | Sanguessuga Fervente (153) | 43 | 14 min | 9,8 min | 1,2 h |
-| 10 | 21.060 | 8.230 | Rato-Engrenagem (177) | 47 | 15,5 min | 10,9 min | 1,5 h |
-| 11 | 29.290 | 10.300 | Soldador Cego (202) | 51 | 17 min | 11,9 min | 1,7 h |
-| 12 | 39.590 | 12.650 | Lâmina de Esteira (228) | 56 | 18,5 min | 13 min | 2,1 h |
-| 13 | 52.240 | 15.300 | Larva Térmica (255) | 60 | 20 min | 14 min | 2,4 h |
-| 14 | 67.540 | 18.250 | Ecoante (283) | 65 | 21,5 min | 15,1 min | 2,7 h |
-| 15 | 85.790 | 21.530 | Guardião de Galeria (312) | 70 | 23 min | 16,1 min | 3,1 h |
-| 16 | 107.320 | 25.140 | Aranha de Conduto (342) | 74 | 24,5 min | 17,2 min | 3,5 h |
-| 17 | 132.460 | 29.090 | Draga Viva (373) | 78 | 26 min | 18,2 min | 4 h |
-| 18 | 161.550 | 33.410 | Escória Pressurizada (405) | 83 | 27,5 min | 19,3 min | 4,4 h |
-| 19 | 194.960 | 38.020 | Escória Pressurizada (405) | 94 | 29 min | 20,3 min | 4,9 h |
-| 20 | 232.980 | 43.010 | Salamandra de Cisterna (504) | 86 | 30,5 min | 21,3 min | 5,4 h |
-| 21 | 275.990 | 48.380 | Salamandra de Cisterna (504) | 96 | 32 min | 22,4 min | 6 h |
-| 22 | 324.370 | 54.070 | Sineiro de Bronze (538) | 101 | 33,5 min | 23,5 min | 6,5 h |
-| 23 | 378.440 | 60.270 | Voz Soterrada (574) | 105 | 35 min | 24,5 min | 7,1 h |
-| 24 | 438.710 | 66.800 | Toupeira de Basalto (610) | 110 | 36,5 min | 25,5 min | 7,7 h |
-| 25 | 505.510 | — | — | — | — | — | — |
+| Nível | XP acumulada | XP para o próximo | Monstro típico do nível (XP) | Abates solo | Abates/min para a meta | Meta só caça | Meta caça + missões | Acumulado só caça |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 0 | 80 | Rato de Sulco (5) | 16 | 8 | 2 min | 1,4 min | 0 h |
+| 2 | 80 | 250 | Besouro-Brasa (16) | 16 | 4,6 | 3,5 min | 2,4 min | 0,1 h |
+| 3 | 330 | 570 | Cão de Ferrugem (19) | 30 | 6 | 5 min | 3,5 min | 0,2 h |
+| 4 | 900 | 1.030 | Lagarto de Lastro (45) | 23 | 3,5 | 6,5 min | 4,6 min | 0,3 h |
+| 5 | 1.930 | 1.680 | Javali de Cinza (66) | 26 | 3,3 | 8 min | 5,6 min | 0,4 h |
+| 6 | 3.610 | 2.540 | Enguia de Lodo (89) | 29 | 3,1 | 9,5 min | 6,7 min | 0,6 h |
+| 7 | 6.150 | 3.600 | Válvula Errante (109) | 34 | 3,1 | 11 min | 7,7 min | 0,8 h |
+| 8 | 9.750 | 4.880 | Garça de Ferrugem (112) | 44 | 3,5 | 12,5 min | 8,8 min | 1 h |
+| 9 | 14.630 | 6.430 | Sanguessuga Fervente (153) | 43 | 3,1 | 14 min | 9,8 min | 1,2 h |
+| 10 | 21.060 | 8.230 | Rato-Engrenagem (177) | 47 | 3 | 15,5 min | 10,9 min | 1,5 h |
+| 11 | 29.290 | 10.300 | Soldador Cego (178) | 58 | 3,4 | 17 min | 11,9 min | 1,7 h |
+| 12 | 39.590 | 12.650 | Lâmina de Esteira (160) | 80 | 4,3 | 18,5 min | 13 min | 2,1 h |
+| 13 | 52.240 | 15.300 | Larva Térmica (179) | 86 | 4,3 | 20 min | 14 min | 2,4 h |
+| 14 | 67.540 | 18.250 | Ecoante (184) | 100 | 4,7 | 21,5 min | 15,1 min | 2,7 h |
+| 15 | 85.790 | 21.530 | Guardião de Galeria (206) | 105 | 4,6 | 23 min | 16,1 min | 3,1 h |
+| 16 | 107.320 | 25.140 | Aranha de Conduto (233) | 108 | 4,4 | 24,5 min | 17,2 min | 3,5 h |
+| 17 | 132.460 | 29.090 | Draga Viva (257) | 114 | 4,4 | 26 min | 18,2 min | 4 h |
+| 18 | 161.550 | 33.410 | Escória Pressurizada (283) | 119 | 4,3 | 27,5 min | 19,3 min | 4,4 h |
+| 19 | 194.960 | 38.020 | Escória Pressurizada (283) | 135 | 4,7 | 29 min | 20,3 min | 4,9 h |
+| 20 | 232.980 | 43.010 | Salamandra de Cisterna (317) | 136 | 4,5 | 30,5 min | 21,3 min | 5,4 h |
+| 21 | 275.990 | 48.380 | Salamandra de Cisterna (317) | 153 | 4,8 | 32 min | 22,4 min | 6 h |
+| 22 | 324.370 | 54.070 | Sineiro de Bronze (323) | 168 | 5 | 33,5 min | 23,5 min | 6,5 h |
+| 23 | 378.440 | 60.270 | Voz Soterrada (367) | 165 | 4,7 | 35 min | 24,5 min | 7,1 h |
+| 24 | 438.710 | 66.800 | Toupeira de Basalto (409) | 164 | 4,5 | 36,5 min | 25,5 min | 7,7 h |
+| 25 | 505.510 | — | — | — | — | — | — | — |
 
 ## 4.3 XP por monstro
 
-XP base = round(8 + 6 × nível^1,45). Elite ×4, chefe ×20. O XP recebido é multiplicado pela diferença de nível (monstro − jogador): monstros acima do nível dão mais (e batem mais forte); muito abaixo, quase nada.
+Curva de referência (a que montou a tabela de XP): round(8 + 6 × nível^1,45). O XP de cada monstro normal, na tabela abaixo, é o dessa curva ajustado pela simulação (4.2); elite vale ×4 e chefe ×20 o XP de um monstro normal do mesmo nível. O XP recebido é multiplicado pela diferença de nível (monstro − jogador): monstros acima do nível dão mais (e batem mais forte); muito abaixo, quase nada.
 
 | Diferença (monstro − jogador) | -6 | -5 | -4 | -3 | -2 | -1 | 0 | +1 | +2 | +3 | +4 | +5 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -55,46 +55,46 @@ Fora da tabela vale o extremo (−6 ou menos: ×0,1; +5 ou mais: ×1,4).
 
 | Monstro | Área | Nível | Tipo | Comportamento | Vida | Dano | Defesa | XP base | XP p/ jogador 2 níveis acima |
 |---|---|---|---|---|---|---|---|---|---|
-| Rato de Sulco | A Estrada Velha | 1 | normal | passivo | 45 | 2–4 | 2 | 14 | 12 |
-| Besouro-Brasa | A Estrada Velha | 2 | normal | passivo | 63 | 4–6 | 5 | 24 | 20 |
-| Cão de Ferrugem | A Estrada Velha | 3 | normal | agressivo (8 m) | 81 | 5–7 | 8 | 38 | 32 |
-| Lagarto de Lastro | A Estrada Velha | 4 | normal | passivo | 99 | 7–9 | 11 | 53 | 45 |
-| Javali de Cinza | A Estrada Velha | 5 | normal | agressivo (8 m) | 117 | 8–10 | 14 | 70 | 60 |
-| Capataz Rachado | A Estrada Velha | 4 | elite | agressivo (10 m) | 396 | 11–14 | 14 | 212 | 180 |
-| Sapo-Bomba | Brejo das Bombas | 5 | normal | passivo | 117 | 8–10 | 14 | 70 | 60 |
+| Rato de Sulco | A Estrada Velha | 1 | normal | passivo | 45 | 2–4 | 2 | 5 | 4 |
+| Besouro-Brasa | A Estrada Velha | 2 | normal | passivo | 63 | 4–6 | 5 | 16 | 14 |
+| Cão de Ferrugem | A Estrada Velha | 3 | normal | agressivo (8 m) | 81 | 5–7 | 8 | 19 | 16 |
+| Lagarto de Lastro | A Estrada Velha | 4 | normal | passivo | 99 | 7–9 | 11 | 45 | 38 |
+| Javali de Cinza | A Estrada Velha | 5 | normal | agressivo (8 m) | 117 | 8–10 | 14 | 66 | 56 |
+| Capataz Rachado | A Estrada Velha | 4 | elite | agressivo (10 m) | 396 | 11–14 | 14 | 180 | 153 |
+| Sapo-Bomba | Brejo das Bombas | 5 | normal | passivo | 117 | 8–10 | 14 | 66 | 56 |
 | Enguia de Lodo | Brejo das Bombas | 6 | normal | agressivo (8 m) | 135 | 10–12 | 17 | 89 | 76 |
 | Válvula Errante | Brejo das Bombas | 7 | normal | agressivo (8 m) | 153 | 12–14 | 20 | 109 | 93 |
-| Garça de Ferrugem | Brejo das Bombas | 8 | normal | passivo | 171 | 13–15 | 23 | 130 | 111 |
+| Garça de Ferrugem | Brejo das Bombas | 8 | normal | passivo | 171 | 13–15 | 23 | 112 | 95 |
 | Sanguessuga Fervente | Brejo das Bombas | 9 | normal | agressivo (8 m) | 189 | 15–17 | 26 | 153 | 130 |
-| Bomba-Mestra Desregulada | Brejo das Bombas | 8 | elite | agressivo (10 m) | 684 | 20–23 | 30 | 520 | 442 |
+| Bomba-Mestra Desregulada | Brejo das Bombas | 8 | elite | agressivo (10 m) | 684 | 20–23 | 30 | 448 | 381 |
 | Autômato Escavador | Oficina Soterrada | 9 | normal | agressivo (8 m) | 189 | 15–17 | 26 | 153 | 130 |
 | Rato-Engrenagem | Oficina Soterrada | 10 | normal | agressivo (8 m) | 207 | 16–18 | 29 | 177 | 150 |
-| Soldador Cego | Oficina Soterrada | 11 | normal | agressivo (8 m) | 225 | 18–20 | 32 | 202 | 172 |
-| Lâmina de Esteira | Oficina Soterrada | 12 | normal | passivo | 243 | 20–22 | 35 | 228 | 194 |
-| Supervisor de Turno | Oficina Soterrada | 11 | elite | agressivo (10 m) | 900 | 27–30 | 42 | 808 | 687 |
-| Morcego de Eco | Galerias do Eco | 12 | normal | agressivo (8 m) | 243 | 20–22 | 35 | 228 | 194 |
-| Larva Térmica | Galerias do Eco | 13 | normal | passivo | 261 | 21–23 | 38 | 255 | 217 |
-| Ecoante | Galerias do Eco | 14 | normal | agressivo (8 m) | 279 | 23–25 | 41 | 283 | 241 |
-| Guardião de Galeria | Galerias do Eco | 15 | normal | agressivo (8 m) | 297 | 24–26 | 44 | 312 | 265 |
-| Aranha de Conduto | Galerias do Eco | 16 | normal | agressivo (8 m) | 315 | 26–28 | 47 | 342 | 291 |
-| Mãe do Eco | Galerias do Eco | 15 | elite | agressivo (10 m) | 1188 | 36–39 | 57 | 1248 | 1061 |
-| Vigia de Comporta | Canais da Eclusa | 16 | normal | agressivo (8 m) | 315 | 26–28 | 47 | 342 | 291 |
-| Draga Viva | Canais da Eclusa | 17 | normal | agressivo (8 m) | 333 | 28–30 | 50 | 373 | 317 |
-| Escória Pressurizada | Canais da Eclusa | 18 | normal | agressivo (8 m) | 351 | 29–31 | 53 | 405 | 344 |
-| Fragmento do Custódio | Canais da Eclusa | 19 | elite | agressivo (10 m) | 1476 | 47–50 | 73 | 1748 | 1486 |
-| O Custódio da Eclusa | A Última Eclusa (calabouço) | 20 | chefe | agressivo (10 m) | 9675 | 64–68 | 89 | 9400 | 7990 |
-| Salamandra de Cisterna | A Cava Primeira | 21 | normal | passivo | 405 | 34–36 | 62 | 504 | 428 |
-| Sineiro de Bronze | A Cava Primeira | 22 | normal | agressivo (8 m) | 423 | 36–38 | 65 | 538 | 457 |
-| Voz Soterrada | A Cava Primeira | 23 | normal | agressivo (8 m) | 441 | 37–39 | 68 | 574 | 488 |
-| Toupeira de Basalto | A Cava Primeira | 24 | normal | agressivo (8 m) | 459 | 39–41 | 71 | 610 | 519 |
-| Selador da Porta Funda | A Cava Primeira | 24 | elite | agressivo (10 m) | 1836 | 59–62 | 92 | 2440 | 2074 |
+| Soldador Cego | Oficina Soterrada | 11 | normal | agressivo (8 m) | 225 | 18–20 | 32 | 178 | 151 |
+| Lâmina de Esteira | Oficina Soterrada | 12 | normal | passivo | 243 | 20–22 | 35 | 160 | 136 |
+| Supervisor de Turno | Oficina Soterrada | 11 | elite | agressivo (10 m) | 900 | 27–30 | 42 | 712 | 605 |
+| Morcego de Eco | Galerias do Eco | 12 | normal | agressivo (8 m) | 243 | 20–22 | 35 | 178 | 151 |
+| Larva Térmica | Galerias do Eco | 13 | normal | passivo | 261 | 21–23 | 38 | 179 | 152 |
+| Ecoante | Galerias do Eco | 14 | normal | agressivo (8 m) | 279 | 23–25 | 41 | 184 | 156 |
+| Guardião de Galeria | Galerias do Eco | 15 | normal | agressivo (8 m) | 297 | 24–26 | 44 | 206 | 175 |
+| Aranha de Conduto | Galerias do Eco | 16 | normal | agressivo (8 m) | 315 | 26–28 | 47 | 233 | 198 |
+| Mãe do Eco | Galerias do Eco | 15 | elite | agressivo (10 m) | 1188 | 36–39 | 57 | 824 | 700 |
+| Vigia de Comporta | Canais da Eclusa | 16 | normal | agressivo (8 m) | 315 | 26–28 | 47 | 233 | 198 |
+| Draga Viva | Canais da Eclusa | 17 | normal | agressivo (8 m) | 333 | 28–30 | 50 | 257 | 218 |
+| Escória Pressurizada | Canais da Eclusa | 18 | normal | agressivo (8 m) | 351 | 29–31 | 53 | 283 | 241 |
+| Fragmento do Custódio | Canais da Eclusa | 19 | elite | agressivo (10 m) | 1476 | 47–50 | 73 | 1204 | 1023 |
+| O Custódio da Eclusa | A Última Eclusa (calabouço) | 20 | chefe | agressivo (10 m) | 9675 | 64–68 | 89 | 6400 | 5440 |
+| Salamandra de Cisterna | A Cava Primeira | 21 | normal | passivo | 405 | 34–36 | 62 | 317 | 269 |
+| Sineiro de Bronze | A Cava Primeira | 22 | normal | agressivo (8 m) | 423 | 36–38 | 65 | 323 | 275 |
+| Voz Soterrada | A Cava Primeira | 23 | normal | agressivo (8 m) | 441 | 37–39 | 68 | 367 | 312 |
+| Toupeira de Basalto | A Cava Primeira | 24 | normal | agressivo (8 m) | 459 | 39–41 | 71 | 409 | 348 |
+| Selador da Porta Funda | A Cava Primeira | 24 | elite | agressivo (10 m) | 1836 | 59–62 | 92 | 1636 | 1391 |
 | Construto de Prova | Arena da Prova | 10 | normal | agressivo (40 m) | 180 | 8–11 | 24 | 40 | 34 |
 | Sentinela de Prova | Arena da Prova | 10 | normal | agressivo (40 m) | 320 | 12–15 | 30 | 80 | 68 |
 | Trava da Comporta | A Última Eclusa (calabouço) | 20 | normal | passivo | 900 | 0–0 | 60 | 0 | 0 |
 
 ### Exemplo solo
 
-Quebraferro nível 3 caçando **Cão de Ferrugem** (nível 3, 38 XP). Para o nível 4 faltam 570 XP → 15 abates. A 3 abates/min: **5 min**. Os cães andam em matilha (quem é atingido chama os vizinhos a 8 m), então o solo precisa puxar um por vez pela borda do grupo.
+Quebraferro nível 3 caçando **Cão de Ferrugem** (nível 3, 19 XP). Para o nível 4 faltam 570 XP → 30 abates; a meta de 5 min pede **6 abates/min**, o ritmo de um jogador eficiente nesse nível (os cães caem em poucos golpes). Os cães andam em matilha (quem é atingido chama os vizinhos a 8 m), então o solo precisa puxar um por vez pela borda do grupo.
 
 ### Exemplo em grupo
 
@@ -553,9 +553,9 @@ Mesmo atacante e alvo. Rolagens: acerto 0,30; dano 0,50; crítico 0,02.
 Tecelão da Brasa nível 5 (Esp 25, Tal 14) com **Varinha de Vidro Fosco** (poder mágico 10) e **Foco de Lente de Bomba** (poder mágico 6) contra o mesmo Javali de Cinza (resistência mágica 9). Rolagens: acerto 0,40; crítico 0,90.
 
 1. Magia não usa evasão: acerto = clamp(100 + 4 × (5 − 5), 60, 100) = **100%** → acerta.
-2. Fixo do grau 2 = 14 + 7 × 1 = **21**. Espírito: ⌊25 × 0,9⌋ = **22**. Poder mágico (arma + foco) = **16**. Bruto = **59**.
+2. Fixo do grau 2 = 14 + 7 × 1 = **20**. Espírito: ⌊25 × 0,9⌋ = **8**. Poder mágico (arma + foco) = **4**. Bruto = **32**.
 3. Crítico mágico = 3 + 25 × 0,05 + 14 × 0,1 = **5,7%**; rolagem 90 → sem crítico.
-4. Final = round(59 × 80 / (80 + 9)) = **53** (custa 9 de mana; recarga 2 s).
+4. Final = round(32 × 80 / (80 + 9)) = **29** (custa 13 de mana; recarga 2 s).
 
 ### Exemplo 4 — defesa e precisão do lado do monstro
 

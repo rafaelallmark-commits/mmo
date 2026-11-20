@@ -31,7 +31,11 @@ Bem-vindo a Várdia. Este guia cobre o que você precisa para começar; as regra
 | Nácar | **Tecelão da Brasa** | magia elemental em área e controle | varinha ou cajado |
 
 Cada classe tem seis habilidades: as dos níveis 1 e 5, a do nível 10 (liberada pela **prova de classe** com o
-mestre da sua classe, na sua cidade), as dos níveis 15 e 20 e a do nível 25, o teto de nível.
+mestre da sua classe, na sua cidade), as dos níveis 15 e 20 e a do nível 25, o teto de nível. A Cantora do Véu ganha
+a **Nota Clara** (dano sagrado à distância) no nível 5 e a **Luz Compartilhada** (cura do grupo) no nível 15.
+
+O **escudo** (Bastião e Escudeiro) tem chance de **bloqueio**, de 8% a 21% conforme a peça: o golpe bloqueado não
+causa dano e aparece como "Bloqueio".
 
 ## 3. Controles
 

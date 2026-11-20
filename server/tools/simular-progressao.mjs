@@ -136,6 +136,19 @@ function comparacaoProva(com, sem) {
 }
 
 function nome(c) { return data.classes[c].name; }
+
+// Retrato das mortes a partir das brigas (lutas) e de cada queda registrada pelo bot.
+function textoLutas(ks) {
+  const com = ks.filter(([, k]) => k.lutas?.atacantesNaMorte != null);
+  if (!com.length) return '';
+  const todas = com.map(([, k]) => k.lutas);
+  const porMorte = [...com].filter(([, k]) => k.lutas.mortesPorGrande != null).sort((a, b) => a[1].lutas.mortesPorGrande - b[1].lutas.mortesPorGrande);
+  const ritmo = todas.map((l) => l.grandesPorHora);
+  const atac = todas.map((l) => l.atacantesNaMorte);
+  const tres = todas.map((l) => l.mortes3maisPct);
+  const sem = todas.map((l) => l.semMedioPct).filter((v) => v != null);
+  return ` Quase toda queda é numa briga com vários monstros ao mesmo tempo (de ${fmt(Math.min(...atac), 1)} a ${fmt(Math.max(...atac), 1)} atacantes, em média, nos 10 s antes de cair; ${Math.min(...tres)}% a ${Math.max(...tres)}% das mortes com 3 ou mais). Todas as classes entram em brigas com 4 ou mais monstros num ritmo parecido (${fmt(Math.min(...ritmo), 1)} a ${fmt(Math.max(...ritmo), 1)} por hora: assistência dos iguais a até 8 m, agressão por proximidade e monstros que reaparecem perto); o que muda é quanto cada uma aguenta: mortes por briga dessas de ${fmt(porMorte[0][1].lutas.mortesPorGrande, 2)} (${nome(porMorte[0][0])}) a ${fmt(porMorte.at(-1)[1].lutas.mortesPorGrande, 2)} (${nome(porMorte.at(-1)[0])}).${sem.length ? ` Do nível 9 em diante, ${Math.min(...sem)}% a ${Math.max(...sem)}% das mortes acontecem já sem tônico médio na bolsa (o bot só compra o médio quando o ouro paga 40 e segue caçando com os pequenos quando os médios acabam).` : ''}`;
+}
 function fmt(v, d = 1) { return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d }); }
 
 function problemasEncontrados(rel, runs) {
@@ -160,13 +173,13 @@ function problemasEncontrados(rel, runs) {
   out.push(`**Dano por classe:** ${[...dpm].sort((a, b) => b.causado - a.causado).map((x) => `${nome(x.c)} ${fmt(x.causado, 0)}/min (básico ${fmt(x.basico, 0)}%${x.top ? `, ${fonteNome(x.top[0])} ${fmt(x.top[1], 0)}%` : ''}; recebe ${fmt(x.recebido, 0)}/min)`).join('; ')}. Média: ${fmt(mediaDpm, 0)} de dano causado por minuto.`);
   const basicos = dpm.filter((x) => x.basico >= 80);
   if (basicos.length) out.push(`**Ataque básico ainda é quase todo o dano de:** ${basicos.map((x) => `${nome(x.c)} (${fmt(x.basico, 0)}%)`).join(', ')}.`);
-  // 4. Cantora do Véu antes da Nota Clara (nível 15)
+  // 4. Cantora do Véu antes do nível 15 (a Nota Clara, que era do 15, agora vem no 5)
   const cantora = rel.classes.veilsinger;
   if (cantora) {
     const antes = cantora.niveis.filter((n) => n.nivel < 15);
     const lentaEm = rel.agregado.filter((a) => a.nivel < 15 && a.maisLenta.classId === 'veilsinger').map((a) => a.nivel);
     const desvioAntes = (antes.reduce((s, n) => s + n.minutos, 0) / antes.reduce((s, n) => s + n.meta, 0) - 1) * 100;
-    out.push(`**Cantora do Véu antes do nível 15:** ${sinal(desvioAntes)} da meta somando os níveis 1–14${lentaEm.length ? `; é a classe mais lenta nos níveis ${lentaEm.join(', ')}` : ''}. Nota Clara (nível 15) faz ${fmt(cantora.dano.fontes.clear_note ?? 0, 0)}% do dano da rodada inteira; as curas somam ${fmt(cantora.dano.curaPorMin, 0)} de vida por minuto.`);
+    out.push(`**Cantora do Véu antes do nível 15:** ${sinal(desvioAntes)} da meta somando os níveis 1–14${lentaEm.length ? `; é a classe mais lenta nos níveis ${lentaEm.join(', ')}` : ''}. ${data.skills.clear_note.name} (nível ${data.skills.clear_note.unlockLevel}) faz ${fmt(cantora.dano.fontes.clear_note ?? 0, 0)}% do dano da rodada inteira; as curas somam ${fmt(cantora.dano.curaPorMin, 0)} de vida por minuto.`);
   }
   // 5. curva de XP
   const rapidos = rel.agregado.filter((a) => a.desvioPct < -FAIXA_TOLERANCIA);
@@ -180,7 +193,7 @@ function problemasEncontrados(rel, runs) {
     for (const [, k] of ks) for (const [d, v] of Object.entries(k.mortesPor)) culpa[d] = (culpa[d] || 0) + v;
     const top = Object.entries(culpa).filter(([d]) => data.monsters[d]).sort((a, b) => b[1] - a[1]).slice(0, 5);
     const totalM = ks.reduce((s, [, k]) => s + k.mortes, 0);
-    out.push(`**Onde se morre:** níveis com mais mortes: ${mortes.map((m) => `${m.nivel} (${fmt(m.mortes, 2)} por classe)`).join(', ')}. Monstros que mais derrubam (mortes por execução, somando as classes; um monstro conta em toda morte em que estava batendo): ${top.map(([d, v]) => `${data.monsters[d].name} (nv ${data.monsters[d].level}, ${data.monsters[d].aggro === 'aggressive' ? 'agressivo' : 'passivo'}) ${fmt(v, 1)}`).join(', ')}. Mortes por classe (média por execução): ${ord.map(([c, k]) => `${nome(c)} ${fmt(k.mortes, 1)}`).join(', ')} — ${fmt(totalM / ks.length, 1)} em média.`);
+    out.push(`**Onde se morre:** níveis com mais mortes: ${mortes.map((m) => `${m.nivel} (${fmt(m.mortes, 2)} por classe)`).join(', ')}. Monstros que mais derrubam (mortes por execução, somando as classes; um monstro conta em toda morte em que estava batendo): ${top.map(([d, v]) => `${data.monsters[d].name} (nv ${data.monsters[d].level}, ${data.monsters[d].aggro === 'aggressive' ? 'agressivo' : 'passivo'}) ${fmt(v, 1)}`).join(', ')}. Mortes por classe (média por execução): ${ord.map(([c, k]) => `${nome(c)} ${fmt(k.mortes, 1)}`).join(', ')} — ${fmt(totalM / ks.length, 1)} em média.${textoLutas(ks)}`);
   }
   // 7. economia
   const eco = ks.map(([c, k]) => ({ c, e: k.economia, pocoes: k.economia.gastoPocoes / Math.max(1, k.economia.ouroGanho), equip: k.economia.gastoEquip / Math.max(1, k.economia.ouroGanho) }));
@@ -225,7 +238,7 @@ function textosExtras(rel, runs, p) {
     `**Ações só pelo protocolo:** move, attack, stop, cast, use_item, pickup, equip/unequip, allocate, learn_skill, buy, sell, respawn, quest_accept/trial_start e os comandos de mestre teleport/quest_done. As decisões usam a visão montada pelos snapshots e a ficha devolvida pelo pedido \`char\` (o bot não lê o estado interno da zona). Reação a cada ${p.reacaoMs} ms, no máximo uma habilidade por decisão, respeitando a recarga global; habilidades com conjuração só começam com o personagem parado e o bot não age até o fim (\`cast_end\`). ${fmt(p.pausaAposAbateMs / 1000, 1)} s de pausa depois de cada abate antes de escolher o próximo alvo. É um jogador eficiente: um jogador humano tende a ser mais lento (pausas, erros de posicionamento, distração).`,
     `**Viagem entre mapas:** teleporte de mestre até o posto de guarda do mapa (ou ao lado do NPC, na cidade) seguido de ${p.viagemPorMapaS} s parados por troca de mapa no caminho de portais (busca em largura respeitando o nível mínimo de cada portal). Dentro do mapa o bot anda (move/attack) como um jogador.`,
     '**Área de caça:** grupos de monstros normais com nível em [nível−2, nível+1], preferindo o próprio nível, monstros passivos e grupos agressivos menos densos; elites, chefes e elites diárias ficam de fora (só são enfrentados se atacarem). O alvo é o monstro do grupo com menos vizinhos agressivos a 8,5 m (puxar pela borda). Morte vale 3 pontos de perigo e fuga 1; 3 pontos em 10 min fazem o bot caçar um nível abaixo por 20 min, longe daquela área.',
-    '**Tônicos:** em combate, vida abaixo de 40%; fora de combate, vida abaixo de 55% (sem tônico, descansa com `stop` até 92%). Conjuradores (Tecelão, Cantora): mana abaixo de 20% em combate e de 35% fora (sem tônico, descansa até 85%); as classes físicas não param por mana (lutam com o ataque básico). Tônico Médio só a partir do nível 9 (o servidor confere o nível do item). Foge para o posto abaixo de 20% de vida sem tônico; caído, espera 5 s e volta ao posto (`respawn`, 50% de vida).',
+    '**Tônicos:** em combate, vida abaixo de 40% — 50% com dois monstros batendo e 65% com três ou mais, quando a recarga de 3 s dos tônicos é o gargalo (com três ou mais bebe o maior tônico que tem; senão, o menor que aproveita bem a cura); fora de combate, vida abaixo de 55% (sem tônico, descansa com `stop` até 92%). Conjuradores (Tecelão, Cantora): mana abaixo de 20% em combate e de 35% fora (sem tônico, descansa até 85%); as classes físicas não param por mana (lutam com o ataque básico). Tônico Médio só a partir do nível 9 (o servidor confere o nível do item). Foge para o posto abaixo de 20% de vida sem tônico; caído, espera 5 s e volta ao posto (`respawn`, 50% de vida).',
     '**Cidade:** na cidade da classe (Pedrâmbar ou Vau de Nácar), primeiro o armeiro, depois a loja de tônicos. Vai quando restam menos de 5 tônicos e 80% do ouro compra ao menos 40 Pequenos, quando o ouro paga o equipamento que falta (abaixo) ou quando a bolsa enche. Estoque-alvo: 100 tônicos de vida ou o dobro do gasto no nível anterior (até 200); 60 de mana para conjuradores, 10 para os demais. A ida e a volta custam as mesmas trocas de mapa.',
     '**Equipamento:** ao chegar ao nível 5, 9, 13, 17, 21 ou 25 o bot quer as peças comuns da faixa (arma, mão secundária e 4 de armadura; o Cetro da faixa 17 é raro, então a Cantora usa a Varinha comum nessa faixa) e as **compra no armeiro com ouro** (`buy`, valor × `economy.gearPriceMult`), a arma primeiro, guardando antes o ouro de 60 tônicos de vida (40 de mana para conjuradores). Vai à cidade só por isso quando o ouro que sobra paga o kit que falta ou a próxima peça e 60% do resto (no máximo uma ida dessas a cada 10 min). Com o kit completo e ouro além do estoque cheio de tônicos, compra adiantado o kit da próxima faixa (a até 2 níveis dela) e as joias da faixa. Também recolhe do chão as melhorias da própria classe e equipa quando cumpre os requisitos. Sem refino no ferreiro.',
     '**Venda:** materiais, peças de outras classes e peças substituídas são recolhidos do chão (com mais de 5 espaços livres na bolsa) e vendidos ao comerciante (`sell`, valor × `economy.sellFraction`) a cada visita à cidade; o depósito não é usado.',

@@ -16,6 +16,26 @@ export function bandas(ate) {
   return out;
 }
 
+// Brigas e mortes de uma classe: brigas com 4+ monstros ao mesmo tempo (por hora e % das brigas),
+// mortes por briga dessas, e o retrato médio das mortes (atacantes nos 10 s antes de cair, % com 3+
+// atacantes e, do nível 9 em diante, % sem tônico médio na bolsa).
+function resumoLutas(runs) {
+  const l = {};
+  for (const r of runs) for (const [k, v] of Object.entries(r.lutas ?? {})) l[k] = (l[k] || 0) + v;
+  const total = soma(Object.values(l));
+  const grandes = (l[4] || 0) + (l[5] || 0) + (l[6] || 0);
+  const horas = soma(runs.map((r) => r.minutosTotais / 60)) || 1;
+  const ms = runs.flatMap((r) => r.mortesDetalhe ?? []);
+  const de9 = ms.filter((m) => m.nivel >= 9);
+  return {
+    grandesPorHora: r1(grandes / horas), grandesPct: total ? r1((grandes / total) * 100) : 0,
+    mortesPorGrande: grandes ? r2(ms.length / grandes) : null,
+    atacantesNaMorte: ms.length ? r1(media(ms.map((m) => m.atacantes))) : null,
+    mortes3maisPct: ms.length ? Math.round((ms.filter((m) => m.atacantes >= 3).length / ms.length) * 100) : null,
+    semMedioPct: de9.length ? Math.round((de9.filter((m) => m.medios === 0).length / de9.length) * 100) : null,
+  };
+}
+
 export function agregar(execucoes, data, parametros) {
   const metas = data.xp.targetMinutesToNext;
   const ate = parametros.ateNivel;
@@ -121,6 +141,7 @@ export function agregar(execucoes, data, parametros) {
       rejeicoes: todas.reduce((acc, r) => { for (const [k, v] of Object.entries(r.rejeicoes)) acc[k] = (acc[k] || 0) + v; return acc; }, {}),
       naoConcluidas: todas.filter((r) => !r.concluiu).map((r) => ({ seed: r.seed, nivelFinal: r.nivelFinal })),
       mortesPor: runs.reduce((acc, r) => { for (const [k, v] of Object.entries(r.mortesPor ?? {})) acc[k] = r2((acc[k] || 0) + v / runs.length); return acc; }, {}),
+      lutas: resumoLutas(runs),
       destravamentos: soma(todas.map((r) => r.destravamentos)), trocasPorPerigo: r1(media(runs.map((r) => r.trocasPorPerigo))),
       saquesIgnorados: Math.round(media(runs.map((r) => r.saquesIgnorados))),
       conjuracoes: ['iniciadas', 'concluidas', 'interrompidas'].reduce((acc, k) => ((acc[k] = r1(media(runs.map((r) => r.conjuracoes?.[k] ?? 0)))), acc), {}),

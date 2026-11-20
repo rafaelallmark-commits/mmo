@@ -413,7 +413,7 @@
    "aggroRadius": 0,
    "leashRadius": 25,
    "respawnSec": 20,
-   "xp": 178,
+   "xp": 160,
    "lootTable": "lt_tier_9",
    "description": "Corre em trilhos; dano alto, defesa baixa."
   },

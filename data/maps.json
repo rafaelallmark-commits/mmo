@@ -4967,21 +4967,21 @@
      "monster": "digger_automaton",
      "x": 42,
      "z": 42,
-     "radius": 10,
+     "radius": 12,
      "count": 6
     },
     {
      "monster": "gear_rat",
      "x": 88,
      "z": 62,
-     "radius": 10,
+     "radius": 12,
      "count": 6
     },
     {
      "monster": "blind_welder",
      "x": 140,
      "z": 48,
-     "radius": 10,
+     "radius": 12,
      "count": 5
     },
     {
@@ -14675,28 +14675,28 @@
      "monster": "bronze_bellringer",
      "x": 64,
      "z": 34,
-     "radius": 12,
+     "radius": 14,
      "count": 7
     },
     {
      "monster": "buried_voice",
      "x": 124,
      "z": 32,
-     "radius": 10,
+     "radius": 12,
      "count": 6
     },
     {
      "monster": "basalt_mole",
      "x": 184,
      "z": 122,
-     "radius": 10,
+     "radius": 12,
      "count": 6
     },
     {
      "monster": "basalt_mole",
      "x": 118,
      "z": 130,
-     "radius": 9,
+     "radius": 11,
      "count": 5
     },
     {

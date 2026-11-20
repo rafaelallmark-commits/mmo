@@ -57,10 +57,10 @@ Cidade de pedra, madeira e rotas de superfície.
 
 | Habilidade | Nível | Mana | Recarga | Alcance | Efeito | Valor principal nos graus 1–5 | Marco |
 |---|---|---|---|---|---|---|---|
-| **Placa Dinâmica** | 1 | 8 (+1/grau) | 18 s | si | Placas se reorganizam: +30% de defesa (+8% por grau) por 12 s. | 30% / 38% / 46% / 54% / 62% | M2 |
-| **Pulso de Atração** | 5 | 14 (+2/grau) | 14 s | 7 m | Puxa até 3 monstros num raio de 7 m (+1 a cada 2 graus), causa 60% do dano da arma e gera ameaça triplicada. | 60% / 60% / 60% / 60% / 60% | M2 |
+| **Placa Dinâmica** | 1 | 6 (+1/grau) | 16 s | si | Placas se reorganizam: +30% de defesa (+8% por grau) e +20% de dano físico (+4% por grau) por 12 s. | 30% / 38% / 46% / 54% / 62% | M2 |
+| **Pulso de Atração** | 5 | 7 (+1/grau) | 5 s | 7 m | Puxa até 3 monstros num raio de 7 m (+1 a cada 2 graus), causa 160% do dano da arma (+10% por grau) e gera ameaça triplicada. | 160% / 170% / 180% / 190% / 200% | M2 |
 | **Reforço de Campo** | 10 | 24 (+3/grau) | 35 s | 8 m | Aliados a até 8 m: +15% de defesa (+4% por grau); 20% do dano que sofrem é redirecionado ao Bastião por 10 s. | 15% / 19% / 23% / 27% / 31% | M2 |
-| **Engrenagem Travada** | 15 | 16 (+2/grau) | 15 s | arma | Golpe de garra que trava o alvo: 120% e atordoamento de 1,5 s (+0,25 s por grau). | 120% / 120% / 120% / 120% / 120% | M3 |
+| **Engrenagem Travada** | 15 | 10 (+1/grau) | 6 s | arma | Golpe de garra que trava o alvo: 220% (+15% por grau) e atordoamento de 1,5 s (+0,25 s por grau). | 220% / 235% / 250% / 265% / 280% | M3 |
 | **Bastilha Viva** | 20 | 30 (+3/grau) | 45 s | 8 m | Provoca todos os monstros a até 8 m e reduz o dano recebido em 30% (+3% por grau) por 8 s. | 30% / 33% / 36% / 39% / 42% | M3 |
 | **Toque de Bronze** | 25 | 30 (+3/grau) | 24 s | 4 m | Bate a arma no chão como um badalo: 160% (+12% por grau) em todos a até 4 m e atordoamento de 1,5 s (+0,25 s por grau). Não atordoa chefes. | 160% / 172% / 184% / 196% / 208% | Pós-v1 |
 
@@ -97,8 +97,8 @@ Cidade de pedra, madeira e rotas de superfície.
 
 | Habilidade | Nível | Mana | Recarga | Alcance | Efeito | Valor principal nos graus 1–5 | Marco |
 |---|---|---|---|---|---|---|---|
-| **Marca da Trilha** | 1 | 6 (+1/grau) | 8 s | 20 m | Marca o alvo por 12 s: recebe +10% de dano físico de todas as fontes (+3% por grau) e perde 10 de evasão. | 10% / 13% / 16% / 19% / 22% | M2 |
-| **Flecha de Passagem** | 5 | 12 (+2/grau) | 8 s | 20 m | Flecha que perfura em linha (20 m): 140% (+12% por grau) em todos. | 140% / 152% / 164% / 176% / 188% | M2 |
+| **Marca da Trilha** | 1 | 6 (+1/grau) | 8 s | 20 m | Marca o alvo por 12 s: recebe +6% de dano físico de todas as fontes (+2% por grau) e perde 10 de evasão. | 6% / 8% / 10% / 12% / 14% | M2 |
+| **Flecha de Passagem** | 5 | 12 (+2/grau) | 7 s | 20 m | Flecha que perfura em linha (20 m): 170% (+15% por grau) em todos. | 170% / 185% / 200% / 215% / 230% | M2 |
 | **Chuva de Espinhos** | 10 | 26 (+3/grau) | 16 s | 18 m | Área de 5 m a até 18 m: 5 pulsos de 50% (+5% por grau) em 2,5 s. Habilidade marcante. | 50% / 55% / 60% / 65% / 70% | M2 |
 | **Passo de Recuo** | 15 | 12 (+1/grau) | 18 s | si | Salta 6 m para trás e ganha +20 de evasão (+4 por grau) por 5 s. | 20 / 24 / 28 / 32 / 36 | M3 |
 | **Tiro do Espinhal** | 20 | 30 (+3/grau) | 20 s | 24 m | Disparo carregado (1 s): 400% (+30% por grau); crítico garantido contra alvo com Marca da Trilha. | 400% / 430% / 460% / 490% / 520% | M3 |
@@ -142,9 +142,9 @@ Cidade de condutores que atravessam montanhas e rios.
 
 | Habilidade | Nível | Mana | Recarga | Alcance | Efeito | Valor principal nos graus 1–5 | Marco |
 |---|---|---|---|---|---|---|---|
-| **Arremesso de Retorno** | 1 | 6 (+1/grau) | 5 s | 14 m | A azagaia vai e volta: 130% (+10% por grau) no alvo e num segundo inimigo no retorno. | 130% / 140% / 150% / 160% / 170% | M2 |
-| **Passo Lateral** | 5 | 8 (+1/grau) | 10 s | si | Desliza 5 m para o lado; o próximo ataque causa +40% (+8% por grau). | 40% / 48% / 56% / 64% / 72% | M2 |
-| **Vento a Favor** | 10 | 24 (+3/grau) | 40 s | 10 m | Grupo a até 10 m: +10% de dano físico (+2,5% por grau) e +8% de velocidade por 15 s. Habilidade marcante. | 10% / 12.5% / 15% / 17.5% / 20% | M2 |
+| **Arremesso de Retorno** | 1 | 9 (+1/grau) | 6 s | 14 m | A azagaia vai e volta: 120% (+8% por grau) no alvo e num segundo inimigo no retorno. | 120% / 128% / 136% / 144% / 152% | M2 |
+| **Passo Lateral** | 5 | 8 (+1/grau) | 10 s | si | Desliza 5 m para o lado; o próximo ataque causa +25% (+5% por grau). | 25% / 30% / 35% / 40% / 45% | M2 |
+| **Vento a Favor** | 10 | 24 (+3/grau) | 40 s | 10 m | Grupo a até 10 m: +8% de dano físico (+2% por grau) e +8% de velocidade por 15 s. Habilidade marcante. | 8% / 10% / 12% / 14% / 16% | M2 |
 | **Rajada Cortante** | 15 | 18 (+2/grau) | 12 s | 12 m | Arremessa 3 azagaias em leque (12 m), 90% cada (+8% por grau). | 90% / 98% / 106% / 114% / 122% | M3 |
 | **Olho do Furacão** | 20 | 34 (+3/grau) | 30 s | 4 m | Gira por 4 s: 4 pulsos de 80% (+6% por grau) num raio de 4 m e +30 de evasão. | 80% / 86% / 92% / 98% / 104% | M3 |
 | **Redemoinho de Cinzas** | 25 | 32 (+3/grau) | 20 s | 16 m | Lança um redemoinho a até 16 m: área de 4 m com 5 pulsos de 60% (+5% por grau) em 3 s; quem fica dentro anda 35% mais devagar. | 60% / 65% / 70% / 75% / 80% | Pós-v1 |
@@ -163,9 +163,9 @@ Cidade de condutores que atravessam montanhas e rios.
 | Habilidade | Nível | Mana | Recarga | Alcance | Efeito | Valor principal nos graus 1–5 | Marco |
 |---|---|---|---|---|---|---|---|
 | **Canto de Amparo** | 1 | 10 (+2/grau) | 3 s | 16 m | Cura um aliado (ou a si) em 20 (+10 por grau) + 60% do Espírito. | 20 / 30 / 40 / 50 / 60 | M2 |
-| **Luz Compartilhada** | 5 | 22 (+3/grau) | 10 s | 8 m | Cura todos os aliados a até 8 m em 12 (+6 por grau) + 35% do Espírito. | 12 / 18 / 24 / 30 / 36 | M2 |
+| **Nota Clara** | 5 | 10 (+1/grau) | 4,5 s | 16 m | Dano sagrado de 20 (+6 por grau) + 50% do Espírito + metade do poder mágico da arma e do foco; +50% contra máquinas. | 20 / 26 / 32 / 38 / 44 | M3 |
 | **Selo do Véu** | 10 | 20 (+2/grau) | 12 s | 16 m | Escudo que absorve 30 (+15 por grau) + 80% do Espírito por 10 s; ao se romper, afasta inimigos próximos. Habilidade marcante. | 30 / 45 / 60 / 75 / 90 | M2 |
-| **Nota Clara** | 15 | 12 (+1/grau) | 4 s | 16 m | Dano sagrado de 25 (+10 por grau) + 70% do Espírito; +50% contra máquinas. | 25 / 35 / 45 / 55 / 65 | M3 |
+| **Luz Compartilhada** | 15 | 22 (+3/grau) | 10 s | 8 m | Cura todos os aliados a até 8 m em 12 (+6 por grau) + 35% do Espírito. | 12 / 18 / 24 / 30 / 36 | M2 |
 | **Coro do Recomeço** | 20 | 40 (+3/grau) | 90 s | 12 m | Levanta um aliado caído com 30% da vida (+5% por grau). Conjuração de 2 s. | 30% / 35% / 40% / 45% / 50% | M3 |
 | **Canto de Vigília** | 25 | 38 (+3/grau) | 40 s | 10 m | Grupo a até 10 m (inclusive a Cantora): regenera 2% da vida máxima por segundo (+0,5% por grau) e ganha +10% de defesa durante 10 s. | 2%/s / 2.5%/s / 3%/s / 3.5%/s / 4%/s | Pós-v1 |
 
@@ -182,11 +182,11 @@ Cidade de condutores que atravessam montanhas e rios.
 
 | Habilidade | Nível | Mana | Recarga | Alcance | Efeito | Valor principal nos graus 1–5 | Marco |
 |---|---|---|---|---|---|---|---|
-| **Faísca de Vidro** | 1 | 8 (+1/grau) | 2 s | 16 m | Estilhaço incandescente: dano de fogo de 14 (+7 por grau) + 90% do Espírito + poder mágico da arma. | 14 / 21 / 28 / 35 / 42 | M1 |
-| **Chão em Brasa** | 5 | 20 (+2/grau) | 12 s | 16 m | Incendeia uma área de 4 m a até 16 m: 4 pulsos de 8 (+4 por grau) + 25% do Espírito em 4 s; reduz a velocidade em 30%. | 8 / 12 / 16 / 20 / 24 | M1 |
-| **Círculo de Fuligem** | 10 | 26 (+3/grau) | 20 s | 5 m | Anel de fuligem de 5 m ao redor: enraíza por 2 s (+0,3 s por grau) e causa 30 (+12 por grau) + 60% do Espírito. Habilidade marcante. | 30 / 42 / 54 / 66 / 78 | M2 |
+| **Faísca de Vidro** | 1 | 12 (+1/grau) | 4 s | 16 m | Estilhaço incandescente: dano de fogo de 14 (+6 por grau) + 35% do Espírito + 30% do poder mágico da arma e do foco. | 14 / 20 / 26 / 32 / 38 | M1 |
+| **Chão em Brasa** | 5 | 24 (+2/grau) | 12 s | 16 m | Incendeia uma área de 4 m a até 16 m: 3 pulsos de 5 (+2 por grau) + 12% do Espírito + 25% do poder mágico em 3 s; reduz a velocidade em 30%. | 5 / 7 / 9 / 11 / 13 | M1 |
+| **Círculo de Fuligem** | 10 | 30 (+3/grau) | 20 s | 5 m | Anel de fuligem de 5 m ao redor: enraíza por 2 s (+0,3 s por grau) e causa 22 (+8 por grau) + 50% do Espírito + 60% do poder mágico. Habilidade marcante. | 22 / 30 / 38 / 46 / 54 | M2 |
 | **Véu de Calor** | 15 | 18 (+2/grau) | 25 s | si | Escudo próprio que absorve 25 (+12 por grau) + 60% do Espírito por 8 s; atacantes corpo a corpo sofrem 5 de queimadura. | 25 / 37 / 49 / 61 / 73 | M3 |
-| **Coração da Fornalha** | 20 | 45 (+4/grau) | 35 s | 18 m | Marca uma área de 6 m que explode após 3 s: 90 (+30 por grau) + 200% do Espírito. A marcação é visível para todos. | 90 / 120 / 150 / 180 / 210 | M3 |
+| **Coração da Fornalha** | 20 | 45 (+4/grau) | 35 s | 18 m | Marca uma área de 6 m que explode após 3 s: 60 (+15 por grau) + 160% do Espírito + poder mágico da arma e do foco. A marcação é visível para todos. | 60 / 75 / 90 / 105 / 120 | M3 |
 | **Fio Incandescente** | 25 | 36 (+3/grau) | 12 s | 18 m | O Tecelão estica um fio de brasa até o alvo: dano de fogo de 110 (+32 por grau) + 150% do Espírito + poder mágico da arma, e queimadura de 20 (+6 por grau) por segundo durante 4 s. | 110 / 142 / 174 / 206 / 238 | Pós-v1 |
 
 Ataque básico: todas as classes têm, sem custo, com o intervalo e o alcance da arma. Armas mágicas causam dano mágico no ataque básico (rolagem da arma + 20% do Espírito).

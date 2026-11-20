@@ -796,9 +796,13 @@ func on_hit(m: Dictionary) -> void:
 	var dst: Dictionary = entities.get(m["dst"], {})
 	if dst.is_empty():
 		return
-	var text := "errou" if m.get("miss", false) else str(int(m["dmg"]))
+	# golpe que o escudo segurou chega como "errou" com block: mostra o bloqueio, não um erro
+	var blocked: bool = m.get("block", false)
+	var text := "Bloqueio" if blocked else ("errou" if m.get("miss", false) else str(int(m["dmg"])))
 	var col := Color("#ffffff")
-	if m["dst"] == main.ch.get("eid", ""):
+	if blocked:
+		col = Color("#9fc4ff")
+	elif m["dst"] == main.ch.get("eid", ""):
 		col = Color("#ff5a4f")
 	elif m.get("magic", false):
 		col = Color("#ff9a4a")

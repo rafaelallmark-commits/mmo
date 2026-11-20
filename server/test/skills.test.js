@@ -121,8 +121,9 @@ test('XP de grupo: membros próximos recebem mesmo sem dano; metade igual, metad
   assert.equal(r.find((x) => x.charId === 1).xp, Math.round(153 * coop * (0.5 / 3 + 0.5 * 0.75)));
   assert.ok(r.every((x) => x.lootEligible));
   // sem grupo, comportamento do M1
-  const solo = splitKillXp(data.monsters.cracked_foreman, [{ charId: 1, level: 4, score: 300 }, { charId: 2, level: 4, score: 100 }], data);
-  assert.equal(solo[0].xp, Math.round(212 * 0.75 * 1.1));
+  const foreman = data.monsters.cracked_foreman;
+  const solo = splitKillXp(foreman, [{ charId: 1, level: 4, score: 300 }, { charId: 2, level: 4, score: 100 }], data);
+  assert.equal(solo[0].xp, Math.round(foreman.xp * 0.75 * 1.1));
 });
 
 test('as 16 habilidades dos níveis 15 e 20 executam com o efeito esperado', () => {

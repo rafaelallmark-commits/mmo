@@ -31,7 +31,7 @@ Esse ciclo — **achar algo que ainda não posso usar → decidir a build → ca
 ```
 
 - **Caçar**: monstros por família em cada área, com comportamento legível (passivos, agressivos com raio de agressão, matilhas que chamam vizinhos, elites que justificam voltar ao mapa). Grupos se formam naturalmente em pontos de caça porque monstros juntos demais para um solo dão mais XP por minuto em dupla ou trio.
-- **Subir de nível**: XP calibrado por tempo de caça ativa (meta de ~3 abates por minuto solo), com missões principais valendo ~30% do XP de cada capítulo. Quem prefere só caçar também evolui; quem mistura caça e missões evolui ~30% mais rápido.
+- **Subir de nível**: XP calibrado por tempo de caça ativa (meta em minutos por nível, conferida pela simulação de caça solo; ver [docs/04](04-progressao-e-formulas.md)), com missões principais valendo ~30% do XP de cada capítulo. Quem prefere só caçar também evolui; quem mistura caça e missões evolui ~30% mais rápido.
 - **Equipar**: todo item tem nível mínimo, classe e atributos permanentes exigidos. O bônus do item nunca libera o próprio requisito; tônicos e efeitos temporários não contam. A recusa diz exatamente o que falta ("Nível 9 exigido. Seu nível atual é 7.").
 
 ## Pilares

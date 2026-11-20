@@ -48,8 +48,9 @@ function classesDoc() {
         const ranks = [1, 2, 3, 4, 5].map((r) => {
           if (e.pct !== undefined && e.pct) return `${e.pct + (e.pctPerRank || 0) * (r - 1)}%`;
           if (e.flat !== undefined) return `${e.flat + (e.flatPerRank || 0) * (r - 1)}`;
-          // o primeiro valor que sobe por grau (no Canto de Vigília é a regeneração, não a defesa fixa); sem nenhum, o primeiro presente
-          const keys = ['physDamagePct', 'defensePct', 'physDamageTakenPct', 'absorbPctMaxHp', 'healPctMaxHp', 'hpPct', 'damageTakenDownPct', 'nextAttackPct', 'evasion', 'critPct', 'regenPctMaxHpPerSec'].filter((k) => e[k] !== undefined);
+          // o primeiro valor que sobe por grau (no Canto de Vigília é a regeneração, não a defesa fixa); sem nenhum, o primeiro presente.
+          // Defesa antes de dano: na Placa Dinâmica, que dá os dois, o principal é a defesa
+          const keys = ['defensePct', 'physDamagePct', 'physDamageTakenPct', 'absorbPctMaxHp', 'healPctMaxHp', 'hpPct', 'damageTakenDownPct', 'nextAttackPct', 'evasion', 'critPct', 'regenPctMaxHpPerSec'].filter((k) => e[k] !== undefined);
           const k = keys.find((x) => e[`${x}PerRank`]) ?? keys[0];
           if (k) return `${e[k] + (e[`${k}PerRank`] || 0) * (r - 1)}${k === 'evasion' ? '' : k === 'regenPctMaxHpPerSec' ? '%/s' : '%'}`;
           return '—';
@@ -79,7 +80,7 @@ function progressionDoc() {
   out.push('Atributos permanentes = iniciais da classe + pontos distribuídos. São os únicos que contam para requisitos: bônus de itens, tônicos e efeitos temporários nunca liberam um item. A partir do nível 2 o personagem ganha 5 pontos por nível.\n');
   out.push(table(['Nível', ...Array.from({ length: cap }, (_, i) => String(i + 1))], [['Pontos totais', ...Array.from({ length: cap }, (_, i) => totalAttributePoints(i + 1, data))]]));
   out.push(`\n## 4.2 Tabela de XP acumulada (níveis 1–${cap})\n`);
-  out.push(`Calibração: ${data.xp.killsPerMinuteSolo} abates por minuto de caça ativa solo contra monstros do mesmo nível (inclui deslocamento e pausas curtas); XP para o próximo nível = meta em minutos × ${data.xp.killsPerMinuteSolo} × XP base do monstro do nível, arredondado para dezenas, com meta = 2 + 1,5 × (nível − 1). A mesma regra vale para os níveis 21–${cap} (pós-v1). Os tempos são **metas de teste** para o Marco 4 medir e ajustar, não promessas. Missões principais somam cerca de 30% do XP de cada capítulo, então quem faz caça + missões chega ao teto de nível em cerca de 70% do tempo de quem só caça.\n`);
+  out.push(`Calibração: a tabela foi montada com ${data.xp.killsPerMinuteSolo} abates por minuto de caça ativa solo contra monstros do mesmo nível (inclui deslocamento e pausas curtas): XP para o próximo nível = meta em minutos × ${data.xp.killsPerMinuteSolo} × XP da curva de referência do nível (4.3), arredondado para dezenas, com meta = 2 + 1,5 × (nível − 1). A mesma regra vale para os níveis 21–${cap} (pós-v1). A simulação do Marco 4 ([relatório](relatorio-progressao.md)) mostrou que, com habilidades, tônicos e o equipamento do armeiro, quem só caça mata bem mais do que ${data.xp.killsPerMinuteSolo} por minuto (de 3 a 10 conforme o nível; perto de 5 na média): em vez de refazer a tabela, o **XP de cada monstro** foi ajustado nível a nível para o tempo só caçando ficar perto da meta. A coluna \"Abates/min para a meta\" mostra o ritmo que cada nível pede com o XP atual. Os tempos são **metas de teste** para o Marco 4 medir e ajustar, não promessas. Missões principais somam cerca de 30% do XP de cada capítulo, então quem faz caça + missões chega ao teto de nível em cerca de 70% do tempo de quem só caça.\n`);
   const rows = [];
   let total = 0;
   for (let L = 1; L <= cap; L++) {
@@ -87,11 +88,11 @@ function progressionDoc() {
     const m = L < cap ? normalAt(L) : null;
     const mins = L < cap ? data.xp.targetMinutesToNext[L - 1] : null;
     if (mins) total += mins;
-    rows.push([L, cum[L - 1].toLocaleString('pt-BR'), need ? need.toLocaleString('pt-BR') : '—', m ? `${m[1].name} (${m[1].xp})` : '—', need && m ? Math.ceil(need / m[1].xp) : '—', mins ? `${n1(mins)} min` : '—', mins ? `${n1(mins * 0.7)} min` : '—', mins ? `${n1(total / 60)} h` : '—']);
+    rows.push([L, cum[L - 1].toLocaleString('pt-BR'), need ? need.toLocaleString('pt-BR') : '—', m ? `${m[1].name} (${m[1].xp})` : '—', need && m ? Math.ceil(need / m[1].xp) : '—', need && m && mins ? n1(Math.ceil(need / m[1].xp) / mins) : '—', mins ? `${n1(mins)} min` : '—', mins ? `${n1(mins * 0.7)} min` : '—', mins ? `${n1(total / 60)} h` : '—']);
   }
-  out.push(table(['Nível', 'XP acumulada', 'XP para o próximo', 'Monstro típico do nível (XP)', 'Abates solo', 'Meta só caça', 'Meta caça + missões', 'Acumulado só caça'], rows));
+  out.push(table(['Nível', 'XP acumulada', 'XP para o próximo', 'Monstro típico do nível (XP)', 'Abates solo', 'Abates/min para a meta', 'Meta só caça', 'Meta caça + missões', 'Acumulado só caça'], rows));
   out.push('\n## 4.3 XP por monstro\n');
-  out.push('XP base = round(8 + 6 × nível^1,45). Elite ×4, chefe ×20. O XP recebido é multiplicado pela diferença de nível (monstro − jogador): monstros acima do nível dão mais (e batem mais forte); muito abaixo, quase nada.\n');
+  out.push('Curva de referência (a que montou a tabela de XP): round(8 + 6 × nível^1,45). O XP de cada monstro normal, na tabela abaixo, é o dessa curva ajustado pela simulação (4.2); elite vale ×4 e chefe ×20 o XP de um monstro normal do mesmo nível. O XP recebido é multiplicado pela diferença de nível (monstro − jogador): monstros acima do nível dão mais (e batem mais forte); muito abaixo, quase nada.\n');
   const mod = data.formulas.xp.levelDiffMod;
   out.push(table(['Diferença (monstro − jogador)', ...Object.keys(mod).sort((a, b) => a - b).map((k) => (Number(k) > 0 ? `+${k}` : k))], [['Multiplicador', ...Object.keys(mod).sort((a, b) => a - b).map((k) => n1(mod[k]))]]));
   out.push('\nFora da tabela vale o extremo (−6 ou menos: ×0,1; +5 ou mais: ×1,4).\n');
@@ -100,7 +101,8 @@ function progressionDoc() {
   out.push('\n### Exemplo solo\n');
   const hound = data.monsters.rust_hound;
   const need3 = cum[3] - cum[2];
-  out.push(`Quebraferro nível 3 caçando **${hound.name}** (nível ${hound.level}, ${hound.xp} XP). Para o nível 4 faltam ${need3} XP → ${Math.ceil(need3 / hound.xp)} abates. A ${data.xp.killsPerMinuteSolo} abates/min: **${n1(need3 / hound.xp / 3)} min**. Os cães andam em matilha (quem é atingido chama os vizinhos a 8 m), então o solo precisa puxar um por vez pela borda do grupo.\n`);
+  const meta3 = data.xp.targetMinutesToNext[2];
+  out.push(`Quebraferro nível 3 caçando **${hound.name}** (nível ${hound.level}, ${hound.xp} XP). Para o nível 4 faltam ${need3} XP → ${Math.ceil(need3 / hound.xp)} abates; a meta de ${n1(meta3)} min pede **${n1(Math.ceil(need3 / hound.xp) / meta3)} abates/min**, o ritmo de um jogador eficiente nesse nível (os cães caem em poucos golpes). Os cães andam em matilha (quem é atingido chama os vizinhos a 8 m), então o solo precisa puxar um por vez pela borda do grupo.\n`);
   out.push('### Exemplo em grupo\n');
   const valve = data.monsters.errant_valve;
   const split = splitKillXp(valve, [{ charId: 1, level: 7, score: 50 }, { charId: 2, level: 7, score: 50 }], data);

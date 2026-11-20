@@ -108,7 +108,7 @@ test('tônico acima do nível: não compra nem usa; venda e descarte; item vendi
   });
 });
 
-test('armeiro: peças comuns da classe, faixa atual e próxima; compra a 3× o valor; vende de volta', async () => {
+test('armeiro: peças comuns da classe, faixa atual e próxima; compra a gearPriceMult × o valor; vende de volta', async () => {
   await withServer(async (server, url) => {
     const c = await hero(url, 'Fregues', 'warden');
     const zw = c.waitFor((m) => m.t === 'zone' && m.mapId === 'pedrambar', 5000, 'pedrâmbar');
@@ -125,7 +125,7 @@ test('armeiro: peças comuns da classe, faixa atual e próxima; compra a 3× o v
       assert.equal(d.rarity, 'common');
       assert.ok(!d.classes || d.classes.includes('warden'), `${d.name} serve para a Vigia`);
       assert.ok([9, 13].includes(d.level), `${d.name}: faixa 9 (atual) ou 13 (próxima)`);
-      assert.equal(s.price, Math.round(d.value * 3));
+      assert.equal(s.price, Math.round(d.value * server.data.formulas.economy.gearPriceMult));
     }
     assert.ok(t.shop.some((s) => items[s.defId].family === 'bow' && items[s.defId].level === 9), 'arco da faixa');
     const bow = t.shop.find((s) => items[s.defId].family === 'bow' && items[s.defId].level === 9);

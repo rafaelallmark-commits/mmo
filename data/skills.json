@@ -55,14 +55,14 @@
       "classId": "bastion", "name": "Placa Dinâmica", "unlockLevel": 1, "target": "self",
       "mp": 6, "mpPerRank": 1, "cooldownMs": 16000, "range": 0,
       "effect": { "kind": "buff_self", "durationMs": 12000, "defensePct": 30, "defensePctPerRank": 8, "physDamagePct": 20, "physDamagePctPerRank": 4 },
-      "description": "Placas se reorganizam: +30% de defesa (+8% por grau) por 12 s.",
+      "description": "Placas se reorganizam: +30% de defesa (+8% por grau) e +20% de dano físico (+4% por grau) por 12 s.",
       "implementedIn": "M2"
     },
     "pull_pulse": {
       "classId": "bastion", "name": "Pulso de Atração", "unlockLevel": 5, "target": "area_self",
       "mp": 7, "mpPerRank": 1, "cooldownMs": 5000, "range": 7,
       "effect": { "kind": "pull", "maxTargets": 3, "extraTargetEvery2Ranks": 1, "pct": 160, "pctPerRank": 10, "threatMult": 3 },
-      "description": "Puxa até 3 monstros num raio de 7 m (+1 a cada 2 graus), causa 60% do dano da arma e gera ameaça triplicada.",
+      "description": "Puxa até 3 monstros num raio de 7 m (+1 a cada 2 graus), causa 160% do dano da arma (+10% por grau) e gera ameaça triplicada.",
       "implementedIn": "M2"
     },
     "field_reinforcement": {
@@ -76,7 +76,7 @@
       "classId": "bastion", "name": "Engrenagem Travada", "unlockLevel": 15, "target": "enemy",
       "mp": 10, "mpPerRank": 1, "cooldownMs": 6000, "range": "weapon",
       "effect": { "kind": "strike", "damageType": "phys", "pct": 220, "pctPerRank": 15, "stunMs": 1500, "stunMsPerRank": 250 },
-      "description": "Golpe de garra que trava o alvo: 120% e atordoamento de 1,5 s (+0,25 s por grau).",
+      "description": "Golpe de garra que trava o alvo: 220% (+15% por grau) e atordoamento de 1,5 s (+0,25 s por grau).",
       "implementedIn": "M3"
     },
     "living_bastille": {
@@ -141,14 +141,14 @@
       "classId": "warden", "name": "Marca da Trilha", "unlockLevel": 1, "target": "enemy",
       "mp": 6, "mpPerRank": 1, "cooldownMs": 8000, "range": 20,
       "effect": { "kind": "debuff", "durationMs": 12000, "physDamageTakenPct": 6, "physDamageTakenPctPerRank": 2, "evasionDown": 10 },
-      "description": "Marca o alvo por 12 s: recebe +10% de dano físico de todas as fontes (+3% por grau) e perde 10 de evasão.",
+      "description": "Marca o alvo por 12 s: recebe +6% de dano físico de todas as fontes (+2% por grau) e perde 10 de evasão.",
       "implementedIn": "M2"
     },
     "passage_arrow": {
       "classId": "warden", "name": "Flecha de Passagem", "unlockLevel": 5, "target": "line",
       "mp": 12, "mpPerRank": 2, "cooldownMs": 7000, "range": 20,
       "effect": { "kind": "line_strike", "damageType": "phys", "pct": 170, "pctPerRank": 15, "width": 1.2 },
-      "description": "Flecha que perfura em linha (20 m): 140% (+12% por grau) em todos.",
+      "description": "Flecha que perfura em linha (20 m): 170% (+15% por grau) em todos.",
       "implementedIn": "M2"
     },
     "thorn_rain": {
@@ -227,21 +227,21 @@
       "classId": "windwalker", "name": "Arremesso de Retorno", "unlockLevel": 1, "target": "enemy",
       "mp": 9, "mpPerRank": 1, "cooldownMs": 6000, "range": 14,
       "effect": { "kind": "strike", "damageType": "phys", "pct": 120, "pctPerRank": 8, "bounceTargets": 1 },
-      "description": "A azagaia vai e volta: 130% (+10% por grau) no alvo e num segundo inimigo no retorno.",
+      "description": "A azagaia vai e volta: 120% (+8% por grau) no alvo e num segundo inimigo no retorno.",
       "implementedIn": "M2"
     },
     "side_step": {
       "classId": "windwalker", "name": "Passo Lateral", "unlockLevel": 5, "target": "self",
       "mp": 8, "mpPerRank": 1, "cooldownMs": 10000, "range": 0,
       "effect": { "kind": "dash", "distance": 5, "lateral": true, "nextAttackPct": 25, "nextAttackPctPerRank": 5 },
-      "description": "Desliza 5 m para o lado; o próximo ataque causa +40% (+8% por grau).",
+      "description": "Desliza 5 m para o lado; o próximo ataque causa +25% (+5% por grau).",
       "implementedIn": "M2"
     },
     "tailwind": {
       "classId": "windwalker", "name": "Vento a Favor", "unlockLevel": 10, "target": "party_area",
       "mp": 24, "mpPerRank": 3, "cooldownMs": 40000, "range": 10,
       "effect": { "kind": "party_buff", "durationMs": 15000, "physDamagePct": 8, "physDamagePctPerRank": 2, "moveSpeedPct": 8 },
-      "description": "Grupo a até 10 m: +10% de dano físico (+2,5% por grau) e +8% de velocidade por 15 s. Habilidade marcante.",
+      "description": "Grupo a até 10 m: +8% de dano físico (+2% por grau) e +8% de velocidade por 15 s. Habilidade marcante.",
       "implementedIn": "M2"
     },
     "cutting_gust": {
@@ -291,7 +291,7 @@
       "classId": "veilsinger", "name": "Nota Clara", "unlockLevel": 5, "target": "enemy",
       "mp": 10, "mpPerRank": 1, "cooldownMs": 4500, "range": 16,
       "effect": { "kind": "spell", "damageType": "sacred", "flat": 20, "flatPerRank": 6, "spiCoef": 0.5, "magicPowerPct": 50, "bonusVsFamily": { "machine": 50 } },
-      "description": "Dano sagrado de 25 (+10 por grau) + 70% do Espírito; +50% contra máquinas.",
+      "description": "Dano sagrado de 20 (+6 por grau) + 50% do Espírito + metade do poder mágico da arma e do foco; +50% contra máquinas.",
       "implementedIn": "M3"
     },
     "renewal_choir": {
@@ -313,21 +313,21 @@
       "classId": "emberweaver", "name": "Faísca de Vidro", "unlockLevel": 1, "target": "enemy",
       "mp": 12, "mpPerRank": 1, "cooldownMs": 4000, "range": 16,
       "effect": { "kind": "spell", "damageType": "magic", "flat": 14, "flatPerRank": 6, "spiCoef": 0.35, "magicPowerPct": 30 },
-      "description": "Estilhaço incandescente: dano de fogo de 14 (+7 por grau) + 90% do Espírito + poder mágico da arma.",
+      "description": "Estilhaço incandescente: dano de fogo de 14 (+6 por grau) + 35% do Espírito + 30% do poder mágico da arma e do foco.",
       "implementedIn": "M1"
     },
     "ember_ground": {
       "classId": "emberweaver", "name": "Chão em Brasa", "unlockLevel": 5, "target": "ground",
       "mp": 24, "mpPerRank": 2, "cooldownMs": 12000, "range": 16,
       "effect": { "kind": "ground_aoe", "damageType": "magic", "radius": 4, "pulses": 3, "intervalMs": 1000, "flat": 5, "flatPerRank": 2, "spiCoef": 0.12, "magicPowerPct": 25, "slowPct": 30 },
-      "description": "Incendeia uma área de 4 m a até 16 m: 4 pulsos de 8 (+4 por grau) + 25% do Espírito em 4 s; reduz a velocidade em 30%.",
+      "description": "Incendeia uma área de 4 m a até 16 m: 3 pulsos de 5 (+2 por grau) + 12% do Espírito + 25% do poder mágico em 3 s; reduz a velocidade em 30%.",
       "implementedIn": "M1"
     },
     "soot_circle": {
       "classId": "emberweaver", "name": "Círculo de Fuligem", "unlockLevel": 10, "target": "area_self",
       "mp": 30, "mpPerRank": 3, "cooldownMs": 20000, "range": 5,
       "effect": { "kind": "aoe_spell", "damageType": "magic", "radius": 5, "flat": 22, "flatPerRank": 8, "spiCoef": 0.5, "magicPowerPct": 60, "rootMs": 2000, "rootMsPerRank": 300 },
-      "description": "Anel de fuligem de 5 m ao redor: enraíza por 2 s (+0,3 s por grau) e causa 30 (+12 por grau) + 60% do Espírito. Habilidade marcante.",
+      "description": "Anel de fuligem de 5 m ao redor: enraíza por 2 s (+0,3 s por grau) e causa 22 (+8 por grau) + 50% do Espírito + 60% do poder mágico. Habilidade marcante.",
       "implementedIn": "M2"
     },
     "heat_veil": {
@@ -341,7 +341,7 @@
       "classId": "emberweaver", "name": "Coração da Fornalha", "unlockLevel": 20, "target": "ground",
       "mp": 45, "mpPerRank": 4, "cooldownMs": 35000, "range": 18, "castMs": 1500,
       "effect": { "kind": "delayed_aoe", "damageType": "magic", "radius": 6, "delayMs": 3000, "flat": 60, "flatPerRank": 15, "spiCoef": 1.6 },
-      "description": "Marca uma área de 6 m que explode após 3 s: 90 (+30 por grau) + 200% do Espírito. A marcação é visível para todos.",
+      "description": "Marca uma área de 6 m que explode após 3 s: 60 (+15 por grau) + 160% do Espírito + poder mágico da arma e do foco. A marcação é visível para todos.",
       "implementedIn": "M3"
     },
     "incandescent_thread": {

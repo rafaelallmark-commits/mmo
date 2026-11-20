@@ -97,6 +97,9 @@ export class BotProgressao {
     this.niveis = new Map();
     this.equipamento = []; this.provas = []; this.rejeicoes = {}; this.ignorados = 0; this.viagens = 0;
     this.destravamentos = 0; this.compras = []; this.vendas = { itens: 0, ouro: 0 }; this.anomalias = []; this.viagensPorMotivo = {}; this.mortesPor = {};
+    // golpes recebidos e tônicos de vida bebidos nos últimos 10 s (para descrever cada morte)
+    this.mortesDetalhe = []; this.golpesRecentes = []; this.golesRecentes = [];
+    this.lutas = {}; this.luta = null; // lutas por maior número de atacantes ao mesmo tempo (6 = 6 ou mais)
     this.conjuracoes = { iniciadas: 0, concluidas: 0, interrompidas: 0 };
     this.faixas = {}; // faixa -> { nivel, minutoNivel, minutoKitCompleto }
   }
@@ -190,6 +193,14 @@ export class BotProgressao {
           // quem estava batendo (visão da última decisão) leva a "culpa"
           const culpados = this.ultimosAtacantes?.length ? this.ultimosAtacantes : [this.area?.monster ?? '?'];
           for (const d of new Set(culpados)) this.mortesPor[d] = (this.mortesPor[d] || 0) + 1;
+          // retrato da morte: quantos monstros bateram nos últimos 10 s, quanto dano e com quantos tônicos
+          const recentes = this.golpesRecentes.filter((g) => this.now - g.em <= 10_000);
+          this.mortesDetalhe.push({
+            nivel: this.level, mapa: this.mapa, area: this.area?.monster ?? null, minuto: Math.round(this.now / 60000),
+            atacantes: new Set(recentes.filter((g) => !g.errou).map((g) => g.src)).size, dano10s: recentes.reduce((s, g) => s + g.dmg, 0),
+            golpes10s: recentes.filter((g) => !g.errou).length, errosBloqueios10s: recentes.filter((g) => g.errou).length,
+            vidaMax: this.char?.stats?.maxHp ?? null, tonicosVida: this.bolsa(POCOES_VIDA), medios: this.bolsa(['potion_hp_m']), goles10s: this.golesRecentes.filter((g) => this.now - g.em <= 10_000).map((g) => g.cura), culpados: [...new Set(culpados)],
+          });
           this.registrarPerigo(3);
           this.log('caiu');
         }
@@ -235,7 +246,9 @@ export class BotProgressao {
       if (m.crit) d.criticos++;
       this.met().danoCausado += m.dmg;
     } else if (m.dst === this.eid) {
-      if (m.miss) { d.errosRecebidos++; return; }
+      if (this.golpesRecentes.length > 60) this.golpesRecentes = this.golpesRecentes.filter((g) => this.now - g.em <= 10_000);
+      this.golpesRecentes.push({ em: this.now, src: m.src, dmg: m.miss ? 0 : m.dmg, errou: !!m.miss });
+      if (m.miss) { d.errosRecebidos++; if (m.block) d.bloqueiosRecebidos = (d.bloqueiosRecebidos || 0) + 1; return; }
       d.recebido += m.dmg; d.golpesRecebidos++;
       this.met().danoRecebido += m.dmg;
     }
@@ -278,7 +291,7 @@ export class BotProgressao {
     if (this.conjurando) {
       if (this.now <= this.conjurando.ate) {
         this.atividade = 'combate';
-        if (eu.hp / eu.mhp < 0.3 && this.now >= this.potPronto) this.usarPocao(POCOES_VIDA, eu.mhp - eu.hp, 'pocoesVida');
+        if (eu.hp / eu.mhp < 0.3 && this.now >= this.potPronto) this.usarPocao(POCOES_VIDA, eu.mhp - eu.hp, 'pocoesVida', false, true);
         return;
       }
       this.conjurando = null; // o fim não chegou (não deveria acontecer): segue a vida
@@ -289,6 +302,7 @@ export class BotProgressao {
     if (this.ajuste < 0 && this.now > this.ajusteAte) { this.ajuste++; this.ajusteAte = this.now + 20 * 60_000; this.reavaliarArea = true; }
     const atac = this.atacantes(mundo);
     this.ultimosAtacantes = atac.map((m) => m.def);
+    this.contarLuta(atac.length);
     this.sobreviver(eu, atac);
     // a caminho da cidade, uma briga encerra a coleta do saque antes da viagem
     if (this.tarefa && (atac.length || this.fuga)) this.tarefa.recolheu = true;
@@ -362,7 +376,11 @@ export class BotProgressao {
     const emCombate = atac.length > 0;
     if (this.now >= this.potPronto) {
       let bebeu = false;
-      if (vida < this.op.pocaoVidaPct && (emCombate || vida < 0.25)) bebeu = this.usarPocao(POCOES_VIDA, eu.mhp - eu.hp, 'pocoesVida');
+      // cercado, bebe antes: com vários monstros batendo, a recarga compartilhada de 3 s é o gargalo.
+      // Com 3 ou mais, o tônico maior: o dano que chega até a próxima dose cobre a sobra da cura
+      const cercado = atac.length >= 3;
+      const limiarVida = cercado ? 0.65 : atac.length === 2 ? 0.5 : this.op.pocaoVidaPct;
+      if (vida < limiarVida && (emCombate || vida < 0.25)) bebeu = this.usarPocao(POCOES_VIDA, eu.mhp - eu.hp, 'pocoesVida', false, cercado);
       const mp = this.mpPct();
       if (!bebeu && emCombate && ((this.conjurador && mp < 0.2) || (!this.conjurador && mp < 0.12 && this.bolsa(POCOES_MANA) > 3))) {
         this.usarPocao(POCOES_MANA, this.char.stats.maxMp - this.char.mp, 'pocoesMana');
@@ -379,6 +397,23 @@ export class BotProgressao {
     }
   }
 
+  // Tamanho das lutas: uma luta começa com o primeiro monstro batendo no bot e acaba depois de 3 s
+  // sem nenhum; conta quantas lutas chegaram a 1, 2, 3... atacantes ao mesmo tempo (medição).
+  contarLuta(n) {
+    if (n > 0) {
+      if (!this.luta) this.luta = { max: 0 };
+      this.luta.max = Math.max(this.luta.max, n);
+      this.luta.ultimo = this.now;
+    } else if (this.luta && this.now - this.luta.ultimo > 3000) this.fecharLuta();
+  }
+
+  fecharLuta() {
+    if (!this.luta) return;
+    const k = Math.min(this.luta.max, 6);
+    this.lutas[k] = (this.lutas[k] || 0) + 1;
+    this.luta = null;
+  }
+
   // Morte vale 3, fuga vale 1: 3 pontos em 10 min fazem o bot caçar monstros um nível abaixo
   // por 20 min e evitar a área atual nesse tempo (como um jogador que muda de ponto).
   registrarPerigo(peso) {
@@ -393,16 +428,17 @@ export class BotProgressao {
     this.trocasPorPerigo = (this.trocasPorPerigo ?? 0) + 1;
   }
 
-  usarPocao(tipos, falta, chave, fora = false) {
-    // tônico médio só a partir do nível dele (o servidor não confere: ver relatório)
+  usarPocao(tipos, falta, chave, fora = false, maior = false) {
+    // tônico médio só a partir do nível dele (o servidor confere o nível do item)
     const usaveis = tipos.filter((id) => this.data.items[id].level <= this.level);
     let escolha = null;
     for (const id of usaveis) {
       const it = this.char.items.find((i) => i.loc === 'bag' && i.defId === id);
       if (!it) continue;
       const cura = this.data.items[id].use.healHp ?? this.data.items[id].use.healMp;
-      // o menor tônico que ainda aproveita bem a cura; se nenhum, o maior que houver
-      if (!escolha || (cura <= falta * 1.2 && cura > escolha.cura) || (escolha.cura > falta * 1.2 && cura < escolha.cura)) escolha = { it, cura };
+      // o menor tônico que ainda aproveita bem a cura; se nenhum, o maior que houver. Cercado (maior),
+      // sempre o maior: a cura que sobraria agora é gasta pelos golpes até a próxima dose
+      if (!escolha || (maior ? cura > escolha.cura : (cura <= falta * 1.2 && cura > escolha.cura) || (escolha.cura > falta * 1.2 && cura < escolha.cura))) escolha = { it, cura };
     }
     if (!escolha) return false;
     const r = this.cli.pedir('use_item', { instance: escolha.it.id });
@@ -410,6 +446,10 @@ export class BotProgressao {
     this.recebeChar(r.char);
     this.potPronto = this.now + this.data.formulas.potions.sharedCooldownMs;
     this.met()[chave]++;
+    if (chave === 'pocoesVida') {
+      this.golesRecentes = this.golesRecentes.filter((g) => this.now - g.em <= 10_000);
+      this.golesRecentes.push({ em: this.now, cura: escolha.cura });
+    }
     if (fora) this.met().pocoesFora++;
     return true;
   }
@@ -1069,7 +1109,7 @@ export class BotProgressao {
       }
     };
     // tônico médio (a partir do nível 9) se o orçamento comprar 40 deles; senão o pequeno, que
-    // cura menos por gole mas custa menos por ponto de vida
+    // cura menos por gole e custa quase o mesmo por ponto de vida
     const porCompra = this.conjurador ? orcamento / 2 : orcamento;
     const vida = this.level >= 9 && porCompra >= this.preco('potion_hp_m') * 40 ? 'potion_hp_m' : 'potion_hp_s';
     const mana = this.level >= 9 && porCompra >= this.preco('potion_mp_m') * 40 ? 'potion_mp_m' : 'potion_mp_s';
@@ -1222,7 +1262,7 @@ export class BotProgressao {
       plano: this.plano.fonte, niveis, equipamento: this.equipamento, provas: this.provas, compras: this.compras,
       rejeicoes: this.rejeicoes, saquesIgnorados: this.ignorados, trocasDeArea: this.viagens, destravamentos: this.destravamentos,
       vendas: this.vendas, ouroFinal: this.char?.gold ?? 0, anomalias: this.anomalias, dano: this.dano,
-      trocasPorPerigo: this.trocasPorPerigo ?? 0, viagensPorMotivo: this.viagensPorMotivo, mortesPor: this.mortesPor,
+      trocasPorPerigo: this.trocasPorPerigo ?? 0, viagensPorMotivo: this.viagensPorMotivo, mortesPor: this.mortesPor, mortesDetalhe: this.mortesDetalhe, lutas: this.lutas,
       habilidadesDeAreaEvitadas: this.areaEvitada ?? 0, conjuracoes: this.conjuracoes, faixas: this.faixas,
       equipadoFinal: (this.char?.items ?? []).filter((i) => i.loc === 'equip').map((i) => i.defId),
       protocolo: { ...this.cli.contagem, snapshotsPorDiferenca: this.cli.delta },
