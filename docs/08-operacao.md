@@ -597,12 +597,11 @@ PostgreSQL) mostram isso em produção; alerta sugerido: `db_call_ms_p99 > 5` ou
   normal, para não ficar na fila travando as consultas das zonas antigas.
 - Banco fora do ar: o que gravar no meio do tick lança erro e derruba a zona, como um disco cheio no SQLite; o
   supervisor (systemd/Docker) a reinicia e, enquanto o banco não volta, o servidor sai logo ao subir. Perde-se
-  no máximo o progresso desde o último salvamento (10 s). Um pedido de jogador que falha no banco recebe "Erro
-  interno" e a transação dele é desfeita no banco, mas o que a lógica do jogo já tinha mudado na memória antes da
-  falha não volta, e o salvamento seguinte (ou a saída do jogador) grava o personagem como está na memória: numa
-  queda do banco no meio de um saque, por exemplo, o ouro já somado fica e o saque continua no banco, por pegar.
-  É assim também no SQLite, onde a falha é rara (disco cheio); no PostgreSQL uma queda ou reinício do banco torna
-  isso possível. Pendente: desconectar sem salvar o jogador cujo pedido falhou no banco.
+  no máximo o progresso desde o último salvamento (10 s). Um pedido de jogador que falha no meio (banco, prazo
+  da ponte ou defeito) recebe "Erro interno", a transação dele é desfeita no banco e o jogador **sai sem gravar**
+  (aviso na tela; auditoria `request_error`): o que a lógica do jogo já tinha mudado na memória antes da falha
+  — numa queda no meio de um saque, o ouro já somado — não chega ao banco, e ao entrar de novo ele carrega o que
+  está gravado. Vale nos dois bancos (no SQLite a falha é rara: disco cheio).
 
 **Diferenças conhecidas** (o resto é igual, conferido pelos testes nos dois bancos):
 - Comando que falha dentro de uma transação (erro engolido pelo código) desfaz a transação inteira no PostgreSQL;
