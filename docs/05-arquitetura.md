@@ -270,16 +270,15 @@ Critérios (todos cobertos por `server/test/acceptance.test.js`, exceto onde ind
 - Depósito por conta.
 - **Aceitação**: teste com 3 composições diferentes de grupo simulado (com tanque e curadora; sem tanque; 2 jogadores) vencendo o Custódio com bots que reagem aos avisos; recompensa única de nível 20 entregue uma vez por participante; refino com chance controlada por RNG semeado confere taxas em 10.000 tentativas; na falha, grau mantido e materiais consumidos.
 
-### Marco 4 — Testes de carga, ajuste e documentação (em andamento)
+### Marco 4 — Testes de carga, ajuste e documentação (concluído)
 
-Feito até aqui: métricas do servidor e HTTP de métricas, snapshots por diferença e interesse, teste de carga com 100 clientes ([relatorio-carga.md](relatorio-carga.md): nenhum tick acima de 50 ms; ~9 KB/s por cliente), atraso artificial e indicador de ping, telemetria de nível, migrações versionadas, backup a quente, cenários críticos reproduzíveis ([relatorio-cenarios.md](relatorio-cenarios.md)) e o guia de operação ([08-operacao.md](08-operacao.md)), com CI, exportação do cliente e implantação do teste público (§8.8).
-
+Feito: métricas do servidor e HTTP de métricas, snapshots por diferença e interesse, teste de carga com 100 clientes ([relatorio-carga.md](relatorio-carga.md)), atraso artificial e indicador de ping, telemetria de nível, migrações versionadas, backup a quente, cenários críticos reproduzíveis ([relatorio-cenarios.md](relatorio-cenarios.md)) e o guia de operação ([08-operacao.md](08-operacao.md)), com CI, exportação do cliente e implantação do teste público (§8.8). A **simulação de progressão** ([relatorio-progressao.md](relatorio-progressao.md)) põe um bot por classe caçando pelo protocolo real, num servidor acelerado, do nível 1 ao teto; ela orientou o ajuste de habilidades, monstros e economia (decisões a partir de D127).
 
 - Testes com múltiplos clientes (meta: 100 clientes simulados numa zona, 10 Hz) medindo tempo de tick, latência de ida e volta (ping) e uso de banda por cliente.
 - Medição de latência no cliente (indicador na interface) e tolerância a 150 ms.
-- Revisão da progressão com telemetria de tempo por nível contra as metas da tabela de XP; ajuste de economia (ouro de entrada/saída, preço de tônicos e refino).
+- Revisão da progressão com telemetria de tempo por nível contra as metas da tabela de XP; ajuste de economia (ouro de entrada/saída, preço de tônicos, equipamento do armeiro e refino).
 - Documentação de execução, operação e cenários críticos atualizada.
-- **Aceitação**: relatório com p50/p95/p99 de tick e de latência; nenhum tick > 50 ms com 100 clientes; tempo médio por nível dentro de ±25% da meta; script de cenários críticos reproduzível.
+- **Aceitação**: relatório com p50/p95/p99 de tick e de latência; nenhum tick > 50 ms com 100 clientes; tempo médio por nível dentro de ±25% da meta; script de cenários críticos reproduzível. **Resultado**: com 100 clientes, tick p50/p95/p99 de 5/9/16,9 ms e nenhum acima de 50 ms (~9,6 KB/s por cliente); com 150 ms de atraso, todos conectados e sem erros; na simulação do 1 ao 25, a média das classes fica dentro de ±25% da meta em todos os níveis (7,5 h contra 7,7 h no total) e cada classe a até ±25% do total; `npm run cenarios` reproduz tudo.
 
 ### Pós-v1 — Níveis 21–25
 
