@@ -2,6 +2,8 @@
 // "onde está" e denúncias com o contexto do chat. Comandos de mestre (papel gm/admin) e a ferramenta
 // tools/conta.mjs mexem no banco; o servidor confere o banco a cada minuto, então uma suspensão feita
 // pela ferramenta derruba quem estiver on-line em até 60 s. Tudo vai para a auditoria.
+// Várias zonas: o alvo pode estar em outra zona; expulsão, suspensão e silêncio seguem pela conta
+// através do serviço de mundo (server.modRemote), "onde está" pergunta ao mundo e o anúncio vai a todas.
 export const PERMANENT = 253402300799000; // 31/12/9999: suspensão sem data para acabar
 const CHAT_KEEP = 20;          // últimas falas por personagem guardadas para dar contexto às denúncias
 const REPORTS_PER_HOUR = 5;
@@ -33,13 +35,29 @@ export class Moderation {
   chatBlocked(p, channel, text) {
     const sess = this.s.byChar.get(p.char.id);
     if (sess?.mutedUntil > Date.now()) return { ok: false, code: 'muted', reason: `Você está silenciado ${untilText(sess.mutedUntil)}.` };
-    if (typeof text === 'string') {
-      const log = this.chatLog.get(p.char.id) ?? [];
-      log.push({ at: Date.now(), channel, text: text.slice(0, 200) });
-      if (log.length > CHAT_KEEP) log.shift();
-      this.chatLog.set(p.char.id, log);
-    }
+    if (typeof text === 'string') this.remember(p.char.id, channel, text);
     return null;
+  }
+
+  // guarda uma fala (também as que chegam de outras zonas: sussurro, grupo e clã)
+  remember(charId, channel, text, at = Date.now()) {
+    const log = this.chatLog.get(charId) ?? [];
+    log.push({ at, channel, text: String(text).slice(0, 200) });
+    if (log.length > CHAT_KEEP) log.shift();
+    this.chatLog.set(charId, log);
+  }
+
+  // várias zonas: as falas recentes chegam com o personagem transferido (sem repetir as que já temos)
+  adopt(charId, list) {
+    if (!Array.isArray(list) || !list.length) return;
+    const seen = new Set();
+    const all = [...(this.chatLog.get(charId) ?? []), ...list].filter((l) => {
+      const k = `${l.at}|${l.text}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    }).sort((a, b) => a.at - b.at);
+    this.chatLog.set(charId, all.slice(-CHAT_KEEP));
   }
 
   forget(charId) { this.chatLog.delete(charId); }
@@ -66,7 +84,7 @@ export class Moderation {
     try { s.ws.close(4003, 'moderação'); } catch { /* já fechada */ }
   }
 
-  // alvo por nome de personagem: on-line (sessão) ou só a conta (fora do jogo)
+  // alvo por nome de personagem: on-line (sessão), on-line em outra zona (remote) ou só a conta
   findTarget(name) {
     const key = typeof name === 'string' ? name.trim().toLowerCase() : '';
     if (!key) return null;
@@ -77,7 +95,9 @@ export class Moderation {
       return { charId, name: p?.char.name ?? name, accountId: sess?.accountId ?? p?.char.accountId, sess, p };
     }
     const row = this.st.characterByName?.(name.trim());
-    return row ? { charId: row.id, name: row.name, accountId: row.account_id, sess: null, p: null } : null;
+    if (!row) return null;
+    const remote = this.s.remoteChar?.(name);
+    return { charId: row.id, name: row.name, accountId: row.account_id, sess: null, p: null, remote: remote?.charId === row.id };
   }
 
   // Comandos de mestre de moderação. Devolve null se o comando não é de moderação.
@@ -89,7 +109,8 @@ export class Moderation {
     if (cmd === 'announce') {
       const text = typeof msg.text === 'string' ? msg.text.trim().slice(0, 200) : '';
       if (!text) return { ok: false, code: 'empty', reason: 'Anúncio vazio.' };
-      for (const s of this.s.sessions) if (s.charId != null) this.s.sendTo(s, { t: 'notice', kind: 'announce', text: `Aviso da equipe: ${text}` });
+      this.announce(`Aviso da equipe: ${text}`);
+      this.s.worldAnnounce?.(`Aviso da equipe: ${text}`); // várias zonas: as outras também avisam
       return { ok: true, cache: false };
     }
     const t = this.findTarget(msg.name);
@@ -97,13 +118,17 @@ export class Moderation {
     const reason = typeof msg.reason === 'string' ? msg.reason.trim().slice(0, 140) : '';
     switch (cmd) {
       case 'where':
+        if (t.remote) return this.s.worldWhere(t.name);
         return t.p ? { ok: true, message: `${t.name}: ${t.p.zone.mapId}${t.p.zone.instanceId ? ' (instância)' : ''} em (${t.p.char.x.toFixed(1)}, ${t.p.char.z.toFixed(1)}), nível ${t.p.char.level}.`, cache: false }
           : { ok: true, message: `${t.name} não está on-line.`, cache: false };
-      case 'kick':
-        if (!t.sess) return { ok: false, code: 'offline', reason: `${t.name} não está on-line.` };
+      case 'kick': {
+        if (!t.sess && !t.remote) return { ok: false, code: 'offline', reason: `${t.name} não está on-line.` };
         this.st.audit('mod_kick', { ...by, target: t.charId, reason });
-        this.kickSession(t.sess, `Você foi desconectado pela equipe.${reason ? ` Motivo: ${reason}.` : ''}`);
+        const text = `Você foi desconectado pela equipe.${reason ? ` Motivo: ${reason}.` : ''}`;
+        if (t.sess) this.kickSession(t.sess, text);
+        else this.s.modRemote({ accountId: t.accountId, kick: text }); // na zona onde ele está
         return { ok: true, message: `${t.name} desconectado.`, cache: false };
+      }
       case 'ban': {
         const permanent = msg.hours === 'perm' || msg.permanent === true;
         const hours = Number(msg.hours);
@@ -113,9 +138,10 @@ export class Moderation {
         const until = permanent ? PERMANENT : Date.now() + hours * 3600_000;
         this.st.setBan(t.accountId, until, reason);
         this.st.audit('mod_ban', { ...by, targetAccount: t.accountId, target: t.charId, until, reason });
-        // derruba todas as sessões da conta
+        // derruba todas as sessões da conta (nesta zona e, com várias zonas, nas outras)
         const s = this.s.byAccount.get(t.accountId);
         if (s) this.kickSession(s, `Conta suspensa ${untilText(until)}. Motivo: ${reason}.`);
+        this.s.modRemote?.({ accountId: t.accountId, kick: `Conta suspensa ${untilText(until)}. Motivo: ${reason}.` });
         return { ok: true, message: `Conta de ${t.name} suspensa ${untilText(until)}.`, cache: false };
       }
       case 'unban':
@@ -127,17 +153,36 @@ export class Moderation {
         if (!(minutes > 0)) return { ok: false, code: 'bad_request', reason: 'Use: /gm mute Nome minutos motivo.' };
         const until = Date.now() + minutes * 60_000;
         this.st.setMute(t.accountId, until);
-        if (t.sess) { t.sess.mutedUntil = until; this.s.sendTo(t.sess, { t: 'system', text: `Você foi silenciado ${untilText(until)}.${reason ? ` Motivo: ${reason}.` : ''}` }); }
+        const text = `Você foi silenciado ${untilText(until)}.${reason ? ` Motivo: ${reason}.` : ''}`;
+        if (t.sess) { t.sess.mutedUntil = until; this.s.sendTo(t.sess, { t: 'system', text }); }
+        this.s.modRemote?.({ accountId: t.accountId, mutedUntil: until, text });
         this.st.audit('mod_mute', { ...by, targetAccount: t.accountId, target: t.charId, until, reason });
         return { ok: true, message: `${t.name} silenciado ${untilText(until)}.`, cache: false };
       }
       case 'unmute':
         this.st.setMute(t.accountId, null);
         if (t.sess) t.sess.mutedUntil = 0;
+        this.s.modRemote?.({ accountId: t.accountId, mutedUntil: 0 });
         this.st.audit('mod_unmute', { ...by, targetAccount: t.accountId, target: t.charId });
         return { ok: true, message: `${t.name} pode falar de novo.`, cache: false };
     }
     return null;
+  }
+
+  // aviso da equipe para quem está no mundo nesta zona
+  announce(text) {
+    for (const s of this.s.sessions) if (s.charId != null) this.s.sendTo(s, { t: 'notice', kind: 'announce', text });
+  }
+
+  // várias zonas: expulsão, suspensão ou silêncio que outra zona mandou para a sessão desta conta aqui
+  applyRemote({ accountId, kick, mutedUntil, text }) {
+    const s = this.s.byAccount.get(accountId);
+    if (!s) return;
+    if (typeof mutedUntil === 'number') {
+      s.mutedUntil = mutedUntil;
+      if (text && s.charId != null) this.s.sendTo(s, { t: 'system', text });
+    }
+    if (typeof kick === 'string') this.kickSession(s, kick);
   }
 
   // /denunciar Nome motivo: grava na auditoria com as últimas falas do denunciado

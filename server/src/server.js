@@ -284,6 +284,7 @@ export class GameServer {
   async shutdown(graceS = this.opts.shutdownGraceS) {
     if (this.closing) return;
     this.closing = true;
+    this.world?.notify('draining'); // várias zonas: o mundo não manda mais transferências para cá
     const note = (text) => { for (const s of this.sessions) this.sendTo(s, { t: 'notice', kind: 'shutdown', text, inS: graceS }); };
     if (graceS > 0) {
       note(`O servidor vai reiniciar em ${graceS} s. Seu progresso está salvo.`);
@@ -455,7 +456,11 @@ export class GameServer {
     // acima do limite: responde ao próprio pedido (o cliente não fica esperando) sem executar
     if (!this.allowMessage(s)) return this.sendTo(s, { t: 'res', rid, req: msg.t, ok: false, code: 'rate_limited', reason: 'Muitos comandos; espere um pouco.' });
     // um pedido que espera o serviço de mundo (várias zonas) ainda em curso: os seguintes esperam, em ordem
-    if (s.pending) { s.backlog.push(msg); return; }
+    if (s.pending) {
+      if (s.backlog.length >= 64) return this.sendTo(s, { t: 'res', rid, req: msg.t, ok: false, code: 'busy', reason: 'Aguarde: o pedido anterior ainda está em andamento.' });
+      s.backlog.push(msg);
+      return;
+    }
     this.dispatch(s, msg);
   }
 
@@ -774,7 +779,7 @@ export class GameServer {
       char.mapId = mapId; char.x = sp.x; char.z = sp.z;
       this.store.saveCharacter(char);
     }
-    const t = await this.world.request('transfer', { charId, mapId, x: char.x, z: char.z });
+    const t = await this.world.request('transfer', { charId, mapId, x: char.x, z: char.z, saved: true, chat: this.mod.chatLog.get(charId) ?? null });
     if (!t.ok) {
       release();
       const reason = t.code === 'zone_down' ? `${this.data.maps[mapId]?.name ?? mapId} está fora do ar no momento. Tente em instantes.` : t.reason;
@@ -801,23 +806,38 @@ export class GameServer {
       this.audit('login_fail', { ip: s.ip, via: 'transfer', charId: p.charId });
       return { ok: false, code: 'bad_token', reason: 'Transferência já usada. Entre de novo.' };
     }
-    const acc = this.store.findAccountById(p.accountId);
+    // recusa depois de conferir o token: o mundo libera o personagem (a origem já o gravou)
+    const abort = (res) => { this.world.notify('transfer_abort', { charId: p.charId, jti: p.jti }); return res; };
+    let acc = this.store.findAccountById(p.accountId);
     const row = acc ? this.store.listCharacters(acc.id).find((c) => c.id === p.charId) : null;
-    if (!row) return { ok: false, code: 'bad_char', reason: 'Personagem indisponível.' };
+    if (!row) return abort({ ok: false, code: 'bad_char', reason: 'Personagem indisponível.' });
+    // moderação: conta suspensa não entra nem por transferência (a suspensão pode ter vindo no caminho)
+    const banned = (a) => {
+      const ban = banMessage(a);
+      if (ban) this.audit('login_banned', { accountId: a.id, ip: s.ip, via: 'transfer' });
+      return ban ? { ok: false, code: 'banned', reason: ban } : null;
+    };
+    const b1 = banned(acc);
+    if (b1) return abort(b1);
     const prev = this.byChar.get(p.charId);
     if (prev) this.dropSession(prev);
     const r = await this.world.request('acquire', { charId: p.charId, accountId: acc.id, name: row.name, mapId: p.mapId, transfer: { jti: p.jti, from: p.from } }, this.world.downMs + 10000);
     if (!r.ok) return { ok: false, code: r.code ?? 'busy', reason: r.reason };
     if (!this.sessions.has(s) || s.accountId != null) { this.world.notify('release', { charId: p.charId, epoch: r.epoch }); return undefined; }
+    acc = this.store.findAccountById(acc.id) ?? acc; // dados frescos: suspensão e silêncio podem ter mudado na espera
+    const b2 = banned(acc);
+    if (b2) { this.world.notify('release', { charId: p.charId, epoch: r.epoch }); return b2; }
     const old = this.byAccount.get(acc.id);
     if (old && old !== s) { this.sendTo(old, { t: 'kicked', reason: 'Sua conta entrou em outra conexão.' }); this.dropSession(old); }
     const other = this.byChar.get(p.charId);
     if (other) this.dropSession(other);
     s.accountId = acc.id;
     s.role = acc.role ?? 'player';
+    this.mod.onLogin(s, acc); // o silêncio acompanha a conta
     s.delta = msg.delta === true;
     this.byAccount.set(acc.id, s);
     this.audit('login', { accountId: acc.id, ip: s.ip, via: 'transfer', from: p.from, charId: p.charId });
+    if (r.chat) this.mod.adopt(p.charId, r.chat); // falas recentes vêm junto (contexto de denúncias)
     const char = this.store.loadCharacter(p.charId);
     if (!this.zones.has(char.mapId)) { char.mapId = p.mapId; char.x = p.x; char.z = p.z; }
     return { ...this.enterChar(s, char, r.epoch), account: acc.name, transferred: true, dataVersion: this.dataVersion };
@@ -854,6 +874,8 @@ export class GameServer {
     c.mapId = mapId; c.x = x; c.z = z;
     delete c.saveMapId; delete c.saveX; delete c.saveZ;
     this.store.saveCharacter(c);
+    // gravado e fora daqui: só agora a posse pode seguir para o destino (ou para um login direto)
+    this.world.notify('transfer_saved', { charId, jti: r.jti, chat: this.mod.chatLog.get(charId) ?? null });
     s.charId = null;
     s.leaseEpoch = null;
     this.forgetParty(charId);
@@ -1387,8 +1409,21 @@ export class GameServer {
   // mensagem para um personagem de outra zona (note: efeito na zona de lá, ex.: convite de clã)
   worldSend(charId, msg, note = undefined) { this.world?.notify('send', { to: charId, msg, note }); }
 
-  // eventos de clã para as outras zonas: { clanId, msg, except, attach:[charIds], direct:[{ charId, msg }] }
+  // eventos de clã para as outras zonas: { clanId, msg, except, from, attach:[charIds], direct:[{ charId, msg }] }
   clanRemote(evt) { this.world?.notify('clan', evt); }
+
+  // moderação para a sessão da conta nas outras zonas: { accountId, kick?, mutedUntil?, text? }
+  modRemote(evt) { this.world?.notify('mod', evt); }
+
+  worldAnnounce(text) { this.world?.notify('announce', { text }); }
+
+  // "onde está" de quem está em outra zona (pergunta ao mundo)
+  async worldWhere(name) {
+    const r = await this.world.request('where', { name });
+    if (!r.ok) return { ok: true, message: `${name} não está on-line.`, cache: false };
+    const map = this.data.maps[r.mapId]?.name ?? r.mapId ?? '?';
+    return { ok: true, message: `${r.name}: ${r.mapId ?? '?'} (${map}) na zona ${r.zoneId}${r.transferring ? ', mudando de zona' : ''}.`, cache: false };
+  }
 
   memberSummary(p) {
     const c = p.char;
@@ -1412,6 +1447,17 @@ export class GameServer {
     this.remote.clear();
     this.remoteByName.clear();
     for (const e of m.directory ?? []) this.setPresence({ ...e, online: true });
+    // grupos: o mundo manda de novo os que existem; os que sumiram (mundo reiniciado) fecham aqui
+    const keep = new Set(m.parties ?? []);
+    for (const [pid, v] of [...this.partyCache]) {
+      if (keep.has(pid)) continue;
+      for (const mem of v.members) {
+        if (this.charPartyCache.get(mem.charId) !== pid) continue;
+        this.charPartyCache.delete(mem.charId);
+        this.sendTo(this.byChar.get(mem.charId), { t: 'party', party: null });
+      }
+      this.partyCache.delete(pid);
+    }
   }
 
   onWorldMessage(m) {
@@ -1423,6 +1469,8 @@ export class GameServer {
       case 'party': return this.onWorldParty(m);
       case 'party_clear': return this.onWorldPartyClear(m);
       case 'clan': return this.onWorldClan(m);
+      case 'mod': return this.mod.applyRemote(m);
+      case 'announce': return typeof m.text === 'string' ? this.mod.announce(m.text) : undefined;
     }
   }
 
@@ -1456,6 +1504,8 @@ export class GameServer {
 
   onWorldDeliver({ charId, msg, note }) {
     if (note?.kind === 'clan_invite' && Number.isInteger(note.clanId)) this.clans.invites.set(charId, { clanId: note.clanId, from: note.from, at: Date.now() });
+    // fala de quem está em outra zona (sussurro, grupo): guardada para dar contexto a denúncias daqui
+    if (note?.kind === 'chat' && Number.isInteger(note.from) && msg?.t === 'chat' && typeof msg.text === 'string') this.mod.remember(note.from, msg.channel, msg.text);
     const s = this.byChar.get(charId);
     if (s && msg) this.sendTo(s, msg);
   }
@@ -1484,7 +1534,8 @@ export class GameServer {
     }
   }
 
-  onWorldClan({ clanId, msg, except, attach, direct }) {
+  onWorldClan({ clanId, msg, except, attach, direct, from }) {
+    if (Number.isInteger(from) && msg?.t === 'chat' && typeof msg.text === 'string') this.mod.remember(from, 'clan', msg.text);
     if (msg && clanId != null) {
       for (const m of this.store.clanMembers(clanId)) {
         if (m.char_id === except) continue;
@@ -1664,7 +1715,7 @@ export class GameServer {
       const remote = !targetId && this.world ? this.remoteChar(to) : null;
       if (remote) {
         // várias zonas: a pessoa está em outra zona; o mundo entrega
-        this.world.notify('send', { to: remote.charId, msg: { ...msg, to: remote.name } });
+        this.world.notify('send', { to: remote.charId, msg: { ...msg, to: remote.name }, note: { kind: 'chat', from: p.char.id } });
         this.sendTo(this.byChar.get(p.char.id), { ...msg, to: remote.name });
         return { ok: true, cache: false };
       }

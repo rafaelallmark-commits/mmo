@@ -2,7 +2,9 @@
 // temporário compartilhado, sinal de vida rápido). A hospeda a Estrada Velha e as duas cidades; B, o
 // resto. Confere: registro e autenticação das zonas, transferência na entrada e por portal, tokens
 // (uso único, vencido, para outra zona, falsificado), posse única (o login derruba e salva na outra
-// zona primeiro), sussurro, grupo e clã entre zonas, zona que cai e volta, e troca cancelada.
+// zona primeiro, inclusive no meio de uma transferência), sussurro, grupo e clã entre zonas, zona que
+// cai e volta, mundo que reinicia, desligamento, troca cancelada e moderação (suspensão e silêncio
+// valem na chegada por transferência; expulsão, silêncio, "onde está" e anúncio entre zonas).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -19,12 +21,14 @@ const MAPS_A = ['estrada_velha', 'pedrambar', 'vau_de_nacar'];
 const MAPS_B = ['brejo_bombas', 'oficina_soterrada', 'galerias_eco', 'canais_eclusa'];
 const log = (...a) => console.log('   ·', ...a);
 
-async function withCluster(fn) {
+const WORLD_OPTS = { host: '127.0.0.1', secret: SECRET, heartbeatMs: 100, downAfterMs: 1000, log: false };
+
+async function withCluster(fn, worldOpts = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'cinzas-mz-'));
   const dbPath = join(dir, 'mz.db');
-  const world = new WorldService({ port: 0, host: '127.0.0.1', secret: SECRET, heartbeatMs: 100, downAfterMs: 1000, log: false });
-  await world.start();
-  const worldUrl = `ws://127.0.0.1:${world.port}`;
+  const ctx = { world: new WorldService({ ...WORLD_OPTS, port: 0, ...worldOpts }) };
+  await ctx.world.start();
+  const worldUrl = `ws://127.0.0.1:${ctx.world.port}`;
   const zones = [];
   const zone = async (zoneId, maps, extra = {}) => {
     const z = new GameServer({ port: 0, host: '127.0.0.1', dbPath, seed: 31, dev: true, log: false, rateLimit: 1000, rateBurst: 1000, world: worldUrl, worldSecret: SECRET, zoneId, maps, ...extra });
@@ -35,13 +39,21 @@ async function withCluster(fn) {
   };
   const crash = async (z) => { await z.stop({ crash: true }); zones.splice(zones.indexOf(z), 1); };
   const halt = async (z) => { await z.stop(); zones.splice(zones.indexOf(z), 1); };
+  // reinício do serviço de mundo: para e sobe outro na mesma porta (estado zerado)
+  const restartWorld = async () => {
+    const port = ctx.world.port;
+    await ctx.world.stop();
+    ctx.world = new WorldService({ ...WORLD_OPTS, port, ...worldOpts });
+    await ctx.world.start();
+    return ctx.world;
+  };
   const A = await zone('A', MAPS_A);
   const B = await zone('B', MAPS_B);
   try {
-    await fn({ world, worldUrl, A, B, zone, crash, halt });
+    await fn({ world: ctx.world, worldUrl, A, B, zone, crash, halt, restartWorld, dbPath });
   } finally {
     for (const z of zones) await z.stop().catch(() => {});
-    await world.stop();
+    await ctx.world.stop().catch(() => {});
     rmSync(dir, { recursive: true, force: true });
   }
 }
@@ -400,4 +412,193 @@ test('várias zonas: desligar a zona salva e libera as posses; transferência ca
     log('desligamento de B: personagem salvo e posse liberada na hora');
     x.ws.close(); y.ws.close();
   });
+});
+
+test('várias zonas: login direto no meio de uma transferência e token antigo depois do login', { timeout: 60000 }, async () => {
+  await withCluster(async ({ world, A, B }) => {
+    // 1) a origem ainda não gravou (resposta do mundo atrasada em A): o login direto em B derruba o
+    //    personagem em A, que grava e solta; o token atrasado nunca chega ao cliente antigo
+    const c = await hero(A, 'Corredor');
+    const id = c.char.id;
+    await c.request('gm', { cmd: 'xp', level: 5 });
+    await c.request('gm', { cmd: 'teleport', x: 148.5, z: 92 });
+    const orig = A.world.request.bind(A.world);
+    let delayed = 0;
+    A.world.request = async (t, payload, ms) => {
+      const r = await orig(t, payload, ms);
+      if (t === 'transfer' && payload.charId === id) { delayed++; await sleep(500); }
+      return r;
+    };
+    let gotToken = false;
+    c.waitFor((m) => m.t === 'transfer', 3000).then(() => { gotToken = true; }, () => {});
+    const kicked = c.waitFor((m) => m.t === 'kicked', 5000, 'derrubado em A');
+    assert.equal((await c.request('portal', { portal: 'to_brejo' })).ok, true);
+    await waitUntil(() => world.leases.get(id)?.state === 'transferring', 'posse em transferência');
+    assert.equal(world.leases.get(id).saved, false, 'a origem ainda não gravou');
+    let both = false;
+    const watch = setInterval(() => { if (A.playerOf(id) && B.playerOf(id)) both = true; }, 2);
+    const d = await login(B.url, 'mz_corredor', 'corredor-b');
+    const e = await d.request('enter', { charId: id });
+    clearInterval(watch);
+    assert.equal(e.ok, true, e.reason);
+    await kicked;
+    assert.equal(both, false, 'nunca duas zonas com o personagem');
+    assert.equal(delayed, 1);
+    assert.equal(e.transfer?.url, A.url, 'A gravou na Estrada (não chegou a sair): B manda de volta para A');
+    await sleep(600); // a resposta atrasada chega em A: o personagem já saiu, nada é enviado
+    assert.equal(gotToken, false, 'o cliente antigo não recebe token');
+    A.world.request = orig;
+    const { c: back, r } = await follow(e.transfer, 'corredor-a2');
+    assert.equal(r.ok, true, r.reason);
+    assert.equal(r.char.mapId, 'estrada_velha');
+    assert.ok(Math.hypot(r.char.x - 148.5, r.char.z - 92) < 1, 'posição gravada por A ao soltar');
+    log('login direto durante a transferência (antes de a origem gravar): A soltou primeiro, sem token para o cliente antigo');
+
+    // 2) a origem já gravou e mandou o token, mas o jogador entra de novo direto antes de usá-lo:
+    //    o login vale e o token antigo deixa de servir
+    const pushed = back.waitFor((m) => m.t === 'transfer', 5000, 'transferência');
+    assert.equal((await back.request('portal', { portal: 'to_brejo' })).ok, true);
+    const old = await pushed;
+    await waitUntil(() => world.leases.get(id)?.saved === true, 'origem gravou');
+    const again = await login(A.url, 'mz_corredor', 'corredor-a3');
+    const e2 = await again.request('enter', { charId: id });
+    assert.equal(e2.ok, true, e2.reason);
+    assert.equal(e2.transfer?.mapId, 'brejo_bombas', 'gravado no destino: vai para B com um token novo');
+    assert.notEqual(e2.transfer.token, old.token);
+    const stale = await follow(old, 'token-velho');
+    assert.equal(stale.r.ok, false);
+    assert.equal(stale.r.code, 'stale_transfer');
+    stale.c.ws.close();
+    const { c: fresh, r: r2 } = await follow(e2.transfer, 'corredor-b2');
+    assert.equal(r2.ok, true, r2.reason);
+    assert.ok(B.playerOf(id) && !A.playerOf(id));
+    log('token antigo depois de um login direto: recusado; o token novo entra');
+    for (const x of [c, d, back, again, fresh]) x.ws.close();
+  });
+});
+
+test('várias zonas: moderação na chegada por transferência e entre zonas', { timeout: 60000 }, async () => {
+  await withCluster(async ({ world, A, B }) => {
+    const gm = await hero(A, 'Vigia');
+    const gmId = gm.char.id;
+    A.store.setRole(A.store.findAccount('mz_vigia').id, 'gm');
+    const bad0 = await hero(A, 'Arruaceiro');
+    const bid = bad0.char.id;
+    const accountId = A.store.findAccount('mz_arruaceiro').id;
+    await bad0.request('gm', { cmd: 'xp', level: 5 });
+    const bad = await goRemote(bad0, 'brejo_bombas', 20, 70, 'arruaceiro-b');
+    await waitUntil(() => A.remote.has(bid), 'diretório em A');
+
+    // silêncio dado em A para quem está em B: vale na hora em B e acompanha a conta na volta para A
+    const told = bad.waitFor((m) => m.t === 'system' && /silenciado/.test(m.text), 3000, 'aviso de silêncio em B');
+    let r = await gm.request('gm', { cmd: 'mute', name: 'Arruaceiro', minutes: 10, reason: 'flood' });
+    assert.equal(r.ok, true, r.reason);
+    await told;
+    assert.equal((await bad.request('chat', { text: 'oi brejo' })).code, 'muted');
+    assert.equal((await bad.request('chat', { channel: 'whisper', to: 'Vigia', text: 'ei' })).code, 'muted');
+    const home = await goRemote(bad, 'estrada_velha', 30, 50, 'arruaceiro-a');
+    assert.equal(A.byChar.get(bid).mutedUntil > Date.now(), true, 'silêncio carregado no login por transferência');
+    assert.equal((await home.request('chat', { text: 'voltei' })).code, 'muted');
+    assert.equal((await gm.request('gm', { cmd: 'unmute', name: 'Arruaceiro' })).ok, true);
+    // fala e sussurra de B para a denúncia feita em A ter contexto
+    const there = await goRemote(home, 'brejo_bombas', 22, 70, 'arruaceiro-b2');
+    await waitUntil(() => B.byChar.get(bid)?.mutedUntil === 0 || !B.byChar.get(bid)?.mutedUntil, 'sem silêncio em B');
+    const heard = gm.waitFor((m) => m.t === 'chat' && m.channel === 'whisper' && m.from === 'Arruaceiro', 3000, 'sussurro em A');
+    assert.equal((await there.request('chat', { channel: 'whisper', to: 'Vigia', text: 'vou te pegar' })).ok, true);
+    await heard;
+    r = await gm.request('report', { name: 'Arruaceiro', reason: 'ameaça por sussurro' });
+    assert.equal(r.ok, true, r.reason);
+    const rep = JSON.parse(A.store.auditTail(5, 'report')[0].data_json);
+    assert.equal(rep.target, bid);
+    assert.ok(rep.chat.some((l) => l.text === 'vou te pegar'), 'a fala vinda de B entra no contexto da denúncia');
+    log('silêncio vale em B na hora e volta com a conta para A; denúncia em A tem a fala que veio de B');
+
+    // "onde está", anúncio e expulsão de quem está na outra zona
+    r = await gm.request('gm', { cmd: 'where', name: 'Arruaceiro' });
+    assert.equal(r.ok, true, r.reason);
+    assert.match(r.message, /brejo_bombas .*zona B/);
+    const ann = there.waitFor((m) => m.t === 'notice' && m.kind === 'announce', 3000, 'anúncio em B');
+    assert.equal((await gm.request('gm', { cmd: 'announce', text: 'Manutenção às 22h' })).ok, true);
+    assert.match((await ann).text, /Manutenção às 22h/);
+    const out = there.waitFor((m) => m.t === 'kicked', 3000, 'expulso em B');
+    r = await gm.request('gm', { cmd: 'kick', name: 'Arruaceiro', reason: 'teste' });
+    assert.equal(r.ok, true, r.reason);
+    assert.match((await out).reason, /desconectado pela equipe/);
+    await waitUntil(() => !B.playerOf(bid) && !world.leases.has(bid), 'B soltou e liberou a posse');
+    log('"onde está", anúncio e expulsão de quem está em B, pedidos em A');
+
+    // suspensão com o token na mão: a chegada em B é recusada e a posse fica livre
+    const c1 = await login(A.url, 'mz_arruaceiro', 'arruaceiro-a3');
+    const e = await c1.request('enter', { charId: bid });
+    assert.equal(e.ok, true, e.reason);
+    assert.equal(e.transfer?.mapId, 'brejo_bombas');
+    const kickedA = c1.waitFor((m) => m.t === 'kicked', 3000, 'sessão sem personagem derrubada em A');
+    r = await gm.request('gm', { cmd: 'ban', name: 'Arruaceiro', hours: 2, reason: 'ameaças' });
+    assert.equal(r.ok, true, r.reason);
+    assert.match((await kickedA).reason, /Conta suspensa/);
+    const f = await follow(e.transfer, 'arruaceiro-banido');
+    assert.equal(f.r.ok, false);
+    assert.equal(f.r.code, 'banned');
+    assert.match(f.r.reason, /Conta suspensa até .*ameaças/);
+    f.c.ws.close();
+    assert.equal(B.byAccount.has(accountId), false);
+    await waitUntil(() => !world.leases.has(bid), 'posse liberada depois da recusa');
+    const audit = B.store.auditTail(20, 'login_banned');
+    assert.ok(audit.some((a) => a.account_id === accountId && JSON.parse(a.data_json).via === 'transfer'), 'auditoria da recusa por transferência');
+    log('conta suspensa com token de transferência na mão: recusada em B e posse liberada');
+
+    // o papel de mestre acompanha a sessão transferida (comandos de moderação continuam valendo)
+    const gmB = await goRemote(gm, 'brejo_bombas', 18, 70, 'vigia-b');
+    assert.equal(B.byChar.get(gmId).role, 'gm');
+    assert.equal((await gmB.request('gm', { cmd: 'unban', name: 'Arruaceiro' })).ok, true);
+    for (const x of [bad0, home, c1, gm, gmB]) x.ws.close();
+  });
+});
+
+test('várias zonas: mundo que reinicia recebe as posses de volta das zonas; desligamento recusa chegadas', { timeout: 60000 }, async () => {
+  await withCluster(async ({ A, B, restartWorld, halt }) => {
+    const x = await hero(A, 'Constante');
+    const y0 = await hero(A, 'Andante');
+    await y0.request('gm', { cmd: 'xp', level: 5 });
+    const y = await goRemote(y0, 'brejo_bombas', 20, 70, 'andante-b');
+    const xid = x.char.id, yid = y.char.id;
+    await waitUntil(() => A.remote.has(yid), 'diretório em A');
+    const inv = y.waitFor((m) => m.t === 'party_invite', 3000, 'convite em B');
+    assert.equal((await x.request('party_invite', { name: 'Andante' })).ok, true);
+    assert.equal((await y.request('party_accept', { from: (await inv).fromId })).ok, true);
+    await waitUntil(() => x.party?.members.length === 2 && y.party?.members.length === 2, 'grupo entre zonas');
+    // o mundo reinicia (estado zerado): as zonas se reapresentam com quem têm carregado
+    const w2 = await restartWorld();
+    await waitUntil(() => w2.zones.get('A')?.connected && w2.zones.get('B')?.connected, 'zonas de volta ao mundo novo', 5000);
+    assert.deepEqual([w2.leases.get(xid)?.zoneId, w2.leases.get(yid)?.zoneId], ['A', 'B'], 'posses reconstruídas pelo hello');
+    assert.ok(A.playerOf(xid) && B.playerOf(yid), 'ninguém foi derrubado');
+    await waitUntil(() => A.remote.has(yid) && B.remote.has(xid), 'diretório refeito');
+    // grupos moram na memória do mundo: com ele reiniciado, os painéis fecham nas duas zonas
+    await waitUntil(() => x.party === null && y.party === null && A.partyIdOf(xid) === null && B.partyIdOf(yid) === null, 'grupo antigo fechado');
+    // e continua valendo posse única: login de X por B derruba X em A primeiro
+    const kicked = x.waitFor((m) => m.t === 'kicked', 5000, 'X derrubado em A');
+    const viaB = await login(B.url, 'mz_constante', 'constante-b');
+    const e = await viaB.request('enter', { charId: xid });
+    assert.equal(e.ok, true, e.reason);
+    await kicked;
+    assert.equal(e.transfer?.url, A.url);
+    assert.ok(!A.playerOf(xid) && !B.playerOf(xid));
+    log('mundo reiniciado: A e B devolveram as posses no hello; login por B ainda derruba em A primeiro');
+
+    // desligamento gracioso de B: durante o aviso o mundo não manda ninguém para lá
+    const z = await hero(A, 'Atrasado');
+    await z.request('gm', { cmd: 'xp', level: 5 });
+    await z.request('gm', { cmd: 'teleport', x: 148.5, z: 92 });
+    const down = B.shutdown(1);
+    await waitUntil(() => w2.zones.get('B')?.draining && A.remoteMaps.get('brejo_bombas')?.up === false, 'B em desligamento');
+    const r = await z.request('portal', { portal: 'to_brejo' });
+    assert.equal(r.ok, false);
+    assert.equal(r.code, 'zone_down');
+    assert.match(r.reason, /fora do ar/);
+    await down;
+    assert.equal(w2.leases.has(yid), false, 'B salvou e soltou ao desligar');
+    log('B em desligamento: portal para o Brejo recusado enquanto B se despede');
+    for (const c of [x, y0, y, viaB, z]) c.ws.close();
+    void halt;
+  }, { downAfterMs: 2000 });
 });

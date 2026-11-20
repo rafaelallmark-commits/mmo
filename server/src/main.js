@@ -50,6 +50,7 @@ const opts = {
   maps: textArg('maps', process.env.CINZAS_MAPS),
   publicUrl: textArg('public-url', process.env.CINZAS_PUBLIC_URL),
 };
+if (!opts.world && (opts.maps || opts.zoneId || opts.publicUrl)) console.error('aviso: --maps, --zone-id e --public-url só valem com --world (várias zonas); ignorados.');
 let server;
 try { server = new GameServer(opts); } catch (e) { console.error(`não foi possível iniciar: ${e.message}`); process.exit(2); }
 await server.start();

@@ -338,7 +338,8 @@ test('duelo: contagem, luta até 1 de vida, fuga e desistência', async () => {
     assert.ok(cast.ok || cast.code === 'bad_target', cast.reason);
     const e = await end;
     assert.equal(e.won, false);
-    assert.equal(pb.char.hp, 1, 'ninguém morre em duelo');
+    // fica com 1 de vida; um tique de regeneração pode já ter somado um pouco quando o teste confere
+    assert.ok(pb.char.hp >= 1 && pb.char.hp < 2, `ninguém morre em duelo (vida ${pb.char.hp})`);
     assert.equal(pb.char.dead, false);
     assert.equal(zone.duels.duels.size, 0);
     log(`duelo terminou: ${e.text}`);

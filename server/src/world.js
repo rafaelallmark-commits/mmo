@@ -8,11 +8,22 @@
 //   para salvar e soltar ("kick") e só concede depois da liberação (ou de a zona cair);
 // - o diretório de quem está on-line (nome → personagem, zona e mapa): sussurro, grupo e clã;
 // - os grupos, que neste modo moram aqui: convite, aceite, recusa, saída, expulsão e liderança;
-// - o barramento de mensagens entre zonas e os tokens de transferência (HMAC, 30 s, uso único).
+// - o barramento de mensagens entre zonas e os tokens de transferência (HMAC, 30 s, uso único);
+// - a rota da moderação (expulsão, suspensão e silêncio por conta) e dos anúncios para todas as zonas.
 //
 // Protocolo interno (WebSocket + JSON), só para as zonas. A primeira mensagem da zona é
 //   { t:'hello', zoneId, maps, publicUrl, ts, auth, online }   auth = HMAC-SHA256(segredo, `${zoneId}:${ts}`)
 // Pedidos { t, id, ... } recebem { t:'res', id, ok, ... }; o resto são avisos sem resposta.
+// Pedidos: acquire, transfer, party_invite/accept/decline/leave/kick, where.
+// Avisos da zona: hb, release, transfer_saved, transfer_cancel, transfer_abort, online, moved, send,
+//   party_chat, party_state, clan, mod, announce, draining, bye.
+// Avisos do mundo: welcome, refused, hb_ack, zones, presence, kick, deliver, party, party_clear, clan,
+//   mod, announce.
+//
+// Transferência sem dois donos: a posse passa a "em transferência" quando o mundo emite o token, mas
+// continua contando como da zona de origem até ela avisar que gravou e soltou o personagem
+// (transfer_saved). Antes disso, um login direto derruba o personagem na origem (como um login
+// comum) e a chegada no destino espera o aviso.
 import http from 'node:http';
 import { WebSocketServer } from 'ws';
 import { createHmac, timingSafeEqual, randomBytes, randomUUID } from 'node:crypto';
@@ -20,12 +31,21 @@ import { signToken } from './token.js';
 
 const PARTY_MAX = 5;
 const INVITE_MS = 120000;
+const INBOX_MAX = 32;   // mensagens guardadas para quem está no meio de uma transferência
+const CHAT_KEEP = 20;   // falas que acompanham o personagem na transferência (contexto de denúncias)
 const ZONE_ID_RE = /^[A-Za-z0-9_.-]{1,40}$/;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Autenticação da zona no hello: HMAC-SHA256 do id da zona e do instante, com o segredo do mundo. */
 export function zoneAuth(secret, zoneId, ts) {
   return createHmac('sha256', secret).update(`${zoneId}:${ts}`).digest('hex');
+}
+
+// falas que acompanham o personagem (só o formato esperado, no máximo CHAT_KEEP)
+function chatOf(list) {
+  if (!Array.isArray(list)) return null;
+  return list.filter((l) => l && typeof l.text === 'string').slice(-CHAT_KEEP)
+    .map((l) => ({ at: Number(l.at) || 0, channel: String(l.channel ?? '').slice(0, 16), text: l.text.slice(0, 200) }));
 }
 
 function sameText(a, b) {
@@ -44,7 +64,7 @@ export class WorldService {
     this.seq = 0;
     this.zones = new Map();       // zoneId -> { id, ws, maps:Set, publicUrl, players, lastSeen, connected, since }
     this.mapOwner = new Map();    // mapId -> zoneId
-    this.leases = new Map();      // charId -> { zoneId, state:'online'|'transferring', to, until, epoch, accountId, name, mapId }
+    this.leases = new Map();      // charId -> { zoneId, state:'online'|'transferring', to, until, epoch, accountId, name, mapId, jti, saved, inbox, chat }
     this.online = new Map();      // charId -> { name, accountId, zoneId, mapId } (diretório)
     this.names = new Map();       // nome minúsculo -> charId
     this.parties = new Map();     // partyId -> { id, leader, members:Set, names:Map }
@@ -174,7 +194,10 @@ export class WorldService {
     const claimed = new Map();
     for (const e of list) if (e && Number.isInteger(e.charId) && typeof e.name === 'string') claimed.set(e.charId, e);
     for (const [charId, l] of [...this.leases]) {
-      if (l.state === 'online' && l.zoneId === z.id && !claimed.has(charId)) this.dropLease(charId);
+      if (claimed.has(charId) || l.zoneId !== z.id) continue;
+      if (l.state === 'online') this.dropLease(charId);
+      // saindo dela e ela não tem mais o personagem: já gravou (o aviso se perdeu com a conexão)
+      else if (l.state === 'transferring' && !l.saved) { l.saved = true; this.changed(charId); }
     }
     for (const [charId, e] of claimed) {
       const l = this.leases.get(charId);
@@ -204,10 +227,18 @@ export class WorldService {
     const reply = (r) => { if (m.id != null) this.send(z, { t: 'res', id: m.id, ...r }); };
     switch (m.t) {
       case 'hb': z.players = Number(m.players) || 0; return this.send(z, { t: 'hb_ack' });
-      case 'acquire': return reply(await this.acquire(z, m));
+      case 'acquire': {
+        // o que chegou para o personagem durante a transferência vai depois da resposta (ele já está na zona)
+        const { inbox, ...r } = await this.acquire(z, m);
+        reply(r);
+        for (const it of inbox ?? []) this.deliver(m.charId, it.msg, it.note);
+        return;
+      }
       case 'release': return this.release(z, m);
       case 'transfer': return reply(this.transfer(z, m));
+      case 'transfer_saved': return this.transferSaved(z, m);
       case 'transfer_cancel': return this.transferCancel(z, m);
+      case 'transfer_abort': return this.transferAbort(z, m);
       case 'online': return this.onOnline(z, m);
       case 'moved': return this.onMoved(z, m);
       case 'send': this.deliver(m.to, m.msg, m.note); return;
@@ -219,6 +250,11 @@ export class WorldService {
       case 'party_chat': return this.partyChat(z, m);
       case 'party_state': return this.partyState(z, m);
       case 'clan': { const { id, ...evt } = m; return this.broadcast(evt, z.id); }
+      case 'mod': return this.modRoute(z, m);
+      case 'announce':
+        if (typeof m.text === 'string' && m.text) this.broadcast({ t: 'announce', text: m.text.slice(0, 300) }, z.id);
+        return;
+      case 'where': return reply(this.where(m));
       case 'draining': z.draining = true; return this.broadcastZones(); // desligando: não recebe mais transferências
       case 'bye': return this.zoneDown(z, 'desligada');
       default: return reply({ ok: false, code: 'unknown', reason: `Pedido desconhecido: ${m.t}` });
@@ -252,22 +288,28 @@ export class WorldService {
 
   // Posses que impedem a zona z de pegar o personagem: ele mesmo on-line em outra zona e, como no
   // servidor único, outro personagem da mesma conta on-line em outra zona (uma sessão por conta).
+  // A posse "segura" o personagem na zona l.zoneId: on-line, ou em transferência que a origem ainda
+  // não gravou (ela ainda pode ter o personagem carregado).
+  holds(l) { return l.state === 'online' || (l.state === 'transferring' && !l.saved); }
+
   conflictsFor(z, m) {
     const list = [];
+    let wait = false;
     const l = this.leases.get(m.charId);
     const stale = { ok: false, code: 'stale_transfer', reason: 'Esta transferência não vale mais. Entre de novo.' };
     if (m.transfer) {
       // chegada: só vale a transferência que o mundo emitiu para esta zona (mesmo jti) e que não venceu
       // nem foi cancelada por um login direto; um token copiado não serve depois disso
       if (!l || l.state !== 'transferring' || l.to !== z.id || l.jti !== m.transfer.jti) return { error: stale };
-    } else if (l && l.state === 'online' && l.zoneId !== z.id) {
+      if (!l.saved) wait = true; // a origem ainda não avisou que gravou: espera (não derruba nada)
+    } else if (l && this.holds(l) && l.zoneId !== z.id) {
       list.push([m.charId, l]);
     }
-    // (login comum durante uma transferência: ninguém tem o personagem carregado; ela é cancelada)
+    // (login comum durante uma transferência já gravada: ninguém tem o personagem carregado; ela é cancelada)
     if (m.accountId != null) {
-      for (const [cid, o] of this.leases) if (cid !== m.charId && o.state === 'online' && o.accountId === m.accountId && o.zoneId !== z.id) list.push([cid, o]);
+      for (const [cid, o] of this.leases) if (cid !== m.charId && this.holds(o) && o.accountId === m.accountId && o.zoneId !== z.id) list.push([cid, o]);
     }
-    return { list };
+    return { list, wait };
   }
 
   async acquire(z, m) {
@@ -279,9 +321,9 @@ export class WorldService {
     const deadline = Date.now() + this.opts.downAfterMs + 5000;
     for (;;) {
       if (!this.isCurrent(z)) return { ok: false, code: 'world_down', reason: 'Zona desconectada do mundo.' };
-      const { error, list } = this.conflictsFor(z, m);
+      const { error, list, wait } = this.conflictsFor(z, m);
       if (error) return error;
-      if (!list.length) break;
+      if (!list.length && !wait) break;
       for (const [cid, l] of list) {
         const holder = this.zones.get(l.zoneId);
         if (holder?.connected && !l.kickSent) {
@@ -292,7 +334,7 @@ export class WorldService {
       const left = deadline - Date.now();
       if (left <= 0) return { ok: false, code: 'busy', reason: 'Seu personagem ainda está saindo de outra zona. Tente de novo em instantes.' };
       // a zona que tinha o personagem salva e solta; se ela caiu, a posse é liberada quando ela for dada como fora do ar
-      await this.waitChange(list[0][0], left);
+      await this.waitChange(list.length ? list[0][0] : m.charId, left);
     }
     const epoch = this.nextEpoch();
     const prev = this.leases.get(m.charId);
@@ -303,7 +345,8 @@ export class WorldService {
       if (o) this.setOnline(m.charId, { ...o, zoneId: z.id });
     }
     this.changed(m.charId);
-    return { ok: true, epoch };
+    const arrived = m.transfer && prev?.state === 'transferring';
+    return { ok: true, epoch, ...(arrived && prev.chat ? { chat: prev.chat } : {}), ...(arrived && prev.inbox?.length ? { inbox: prev.inbox } : {}) };
   }
 
   release(z, m) {
@@ -314,6 +357,8 @@ export class WorldService {
   }
 
   // Token de transferência para o mapa de outra zona; a posse fica "em transferência" por 30 s.
+  // saved: a origem já gravou e não tem o personagem carregado (entrada que só redireciona); senão ela
+  // grava, solta e avisa com transfer_saved antes de mandar o token ao cliente.
   transfer(z, m) {
     const l = this.leases.get(m.charId);
     if (!l || l.state !== 'online' || l.zoneId !== z.id) return { ok: false, code: 'no_lease', reason: 'Seu personagem não está nesta zona.' };
@@ -325,20 +370,38 @@ export class WorldService {
     const x = Number(m.x) || 0, zz = Number(m.z) || 0;
     const token = signToken({ typ: 'transfer', charId: m.charId, accountId: l.accountId, from: z.id, to: to.id, mapId: m.mapId, x, z: zz }, this.opts.secret, ttl);
     const jti = JSON.parse(Buffer.from(token.split('.')[0], 'base64url').toString()).jti;
-    Object.assign(l, { state: 'transferring', to: to.id, until: Date.now() + ttl * 1000, mapId: m.mapId, jti });
+    Object.assign(l, { state: 'transferring', to: to.id, until: Date.now() + ttl * 1000, fromMapId: l.mapId, mapId: m.mapId, jti, saved: !!m.saved, inbox: [], chat: chatOf(m.chat), kickSent: false });
     const o = this.online.get(m.charId);
     if (o) this.setOnline(m.charId, { ...o, zoneId: to.id, mapId: m.mapId });
+    if (l.saved) this.changed(m.charId);
     this.log(`transferência: ${l.name} de ${z.id} para ${to.id} (${m.mapId})`);
-    return { ok: true, url: to.publicUrl, token, mapId: m.mapId, to: to.id };
+    return { ok: true, url: to.publicUrl, token, mapId: m.mapId, to: to.id, jti };
+  }
+
+  // A origem gravou e soltou o personagem: a chegada no destino (ou um login direto) pode seguir.
+  transferSaved(z, m) {
+    const l = this.leases.get(m.charId);
+    if (!l || l.state !== 'transferring' || l.zoneId !== z.id || l.jti !== m.jti) return;
+    l.saved = true;
+    if (m.chat) l.chat = chatOf(m.chat);
+    this.changed(m.charId);
   }
 
   // A zona de origem desistiu da transferência (o personagem continua nela).
   transferCancel(z, m) {
     const l = this.leases.get(m.charId);
     if (!l || l.state !== 'transferring' || l.zoneId !== z.id) return;
-    Object.assign(l, { state: 'online', to: null, until: null, jti: null, mapId: m.mapId ?? l.mapId });
+    Object.assign(l, { state: 'online', to: null, until: null, jti: null, saved: false, inbox: null, mapId: m.mapId ?? l.fromMapId ?? l.mapId });
     const o = this.online.get(m.charId);
     if (o) this.setOnline(m.charId, { ...o, zoneId: z.id, mapId: l.mapId });
+  }
+
+  // O destino recusou a chegada depois de conferir o token (ex.: conta suspensa): o personagem, já
+  // gravado pela origem, fica livre.
+  transferAbort(z, m) {
+    const l = this.leases.get(m.charId);
+    if (!l || l.state !== 'transferring' || l.to !== z.id || l.jti !== m.jti || !l.saved) return;
+    this.dropLease(m.charId);
   }
 
   onOnline(z, m) {
@@ -387,7 +450,12 @@ export class WorldService {
     const now = Date.now();
     for (const z of [...this.zones.values()]) if (now - z.lastSeen > this.opts.downAfterMs) this.zoneDown(z, 'sem sinal');
     for (const [charId, l] of [...this.leases]) {
-      if (l.state === 'transferring' && l.until <= now) { this.log(`transferência de ${l.name} venceu sem chegada`); this.dropLease(charId); }
+      if (l.state !== 'transferring' || l.until > now) continue;
+      this.log(`transferência de ${l.name} venceu sem chegada`);
+      // gravada: ninguém tem o personagem; sem aviso da origem: a posse volta para ela (se ela não tiver
+      // mais o personagem, o próximo login pede e ela libera)
+      if (l.saved) this.dropLease(charId);
+      else this.transferCancel(this.zones.get(l.zoneId) ?? { id: l.zoneId }, { charId });
     }
     for (const [cid, inv] of this.invites) if (now - inv.at > INVITE_MS) this.invites.delete(cid);
   }
@@ -398,7 +466,12 @@ export class WorldService {
     for (const [m, id] of [...this.mapOwner]) if (id === z.id) this.mapOwner.delete(m);
     let n = 0;
     for (const [charId, l] of [...this.leases]) {
-      if ((l.state === 'online' && l.zoneId === z.id) || (l.state === 'transferring' && l.to === z.id)) { this.dropLease(charId); n++; }
+      // on-line nela; saindo dela sem ter gravado (a memória dela se perdeu); ou indo para ela já gravado.
+      // Indo para ela sem a origem ter gravado: fica até a origem avisar (ela ainda tem o personagem).
+      const gone = (l.state === 'online' && l.zoneId === z.id)
+        || (l.state === 'transferring' && l.zoneId === z.id && !l.saved)
+        || (l.state === 'transferring' && l.to === z.id && l.saved);
+      if (gone) { this.dropLease(charId); n++; }
     }
     try { z.ws.terminate(); } catch { /* já fechada */ }
     this.log(`zona ${z.id} fora do ar (${why}): ${n} posse(s) liberada(s)`);
@@ -408,11 +481,36 @@ export class WorldService {
   // ---------- mensagens entre zonas ----------
   deliver(charId, msg, note = undefined) {
     const l = this.leases.get(charId);
-    if (!l || l.state !== 'online') return false;
+    if (!l) return false;
+    if (l.state === 'transferring') {
+      // no meio da transferência: entrega quando ele chegar ao destino
+      if (l.inbox && l.inbox.length < INBOX_MAX) l.inbox.push({ msg, note });
+      return true;
+    }
     const z = this.zones.get(l.zoneId);
     if (!z?.connected) return false;
     this.send(z, { t: 'deliver', charId, msg, note });
     return true;
+  }
+
+  // ---------- moderação e anúncios ----------
+  // Expulsão, suspensão e silêncio valem por conta: vai para todas as outras zonas, e cada uma aplica
+  // na sessão da conta que tiver (com ou sem personagem no mundo).
+  modRoute(z, m) {
+    if (!Number.isInteger(m.accountId)) return;
+    const evt = { t: 'mod', accountId: m.accountId };
+    if (typeof m.kick === 'string') evt.kick = m.kick.slice(0, 300);
+    if (typeof m.mutedUntil === 'number') evt.mutedUntil = m.mutedUntil;
+    if (typeof m.text === 'string') evt.text = m.text.slice(0, 300);
+    this.broadcast(evt, z.id);
+  }
+
+  // "onde está" de quem está on-line em outra zona
+  where({ name }) {
+    const charId = typeof name === 'string' ? this.names.get(name.trim().toLowerCase()) : null;
+    const o = charId != null ? this.online.get(charId) : null;
+    if (!o) return { ok: false, code: 'offline' };
+    return { ok: true, charId, name: o.name, zoneId: o.zoneId, mapId: o.mapId ?? null, transferring: this.leases.get(charId)?.state === 'transferring' };
   }
 
   // ---------- grupos ----------
@@ -482,7 +580,7 @@ export class WorldService {
   partyChat(z, { charId, msg }) {
     const pid = this.charParty.get(charId);
     if (!pid || !msg) return;
-    for (const m of this.parties.get(pid).members) if (this.online.get(m)?.zoneId !== z.id) this.deliver(m, msg);
+    for (const m of this.parties.get(pid).members) if (this.online.get(m)?.zoneId !== z.id) this.deliver(m, msg, { kind: 'chat', from: charId });
   }
 
   partyState(z, { members }) {
