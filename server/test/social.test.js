@@ -365,3 +365,46 @@ test('duelo: contagem, luta até 1 de vida, fuga e desistência', async () => {
     A.ws.close(); C.ws.close();
   });
 });
+
+test('casos de borda: empate do duelo por tempo, troca com bolsa cheia, clã com nome ou sigla repetidos', async () => {
+  // relógio de jogo 60x: os 3 minutos do duelo passam em 3 s
+  await withServer(async (server, url) => {
+    const A = await hero(url, 'Teimosa', 'breaker', 10);
+    const B = await hero(url, 'Teimoso', 'breaker', 10);
+    const pa = player(server, A), pb = player(server, B);
+    await tp(A, pa.char.x, pa.char.z);
+    await tp(B, pa.char.x + 2, pa.char.z);
+    // duelo sem ninguém atacar: empate
+    const { push: inv } = await expectPush(B, (m) => m.t === 'duel_invite', () => A.request('duel_request', { name: 'Teimoso' }), 'desafio');
+    const end = A.waitFor((m) => m.t === 'duel' && m.state === 'ended', 10000, 'empate');
+    await B.request('duel_accept', { from: inv.fromId });
+    const e = await end;
+    assert.equal(e.draw, true);
+    assert.match(e.text, /empate/);
+
+    // troca com a bolsa do outro lado cheia: recusa e nada muda
+    const axe = (await A.request('gm', { cmd: 'give', defId: 'axe_1h_t1' })).instanceId;
+    const { bagCount, BAG_CAPACITY } = await import('../src/equipment.js');
+    while (bagCount(pb.char) < BAG_CAPACITY) await B.request('gm', { cmd: 'give', defId: 'claw_t1' });
+    const { push: tinv } = await expectPush(B, (m) => m.t === 'trade_invite', () => A.request('trade_request', { name: 'Teimoso' }), 'troca');
+    await B.request('trade_accept', { from: tinv.fromId });
+    await A.request('trade_offer', { items: [axe] });
+    await A.request('trade_lock');
+    await B.request('trade_lock');
+    await A.request('trade_confirm');
+    const r = await B.request('trade_confirm');
+    assert.equal(r.ok, false);
+    assert.match(r.reason, /Bolsa de Teimoso cheia/);
+    assert.ok(pa.char.items.has(axe) && !pb.char.items.has(axe));
+
+    // clã: nome e sigla únicos (sem diferenciar maiúsculas)
+    await A.request('gm', { cmd: 'gold', amount: 2000 });
+    await B.request('gm', { cmd: 'gold', amount: 2000 });
+    assert.equal((await A.request('clan_create', { name: 'Vigia Norte', tag: 'VN' })).ok, true);
+    assert.equal((await B.request('clan_create', { name: 'vigia norte', tag: 'XY' })).code, 'taken');
+    assert.equal((await B.request('clan_create', { name: 'Outro Clã', tag: 'vn' })).code, 'taken');
+    assert.equal((await B.request('clan_create', { name: 'Outro Clã', tag: 'ABCDE' })).code, 'bad_tag');
+    log('empate por tempo, bolsa cheia e nomes de clã conferidos');
+    A.ws.close(); B.ws.close();
+  }, { timeScale: 60 });
+});

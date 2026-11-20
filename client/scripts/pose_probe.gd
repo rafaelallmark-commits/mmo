@@ -35,10 +35,16 @@ var _g := 0
 var _s := 0
 var _wait := 0
 var only := ""
+var focus := -1   # --focus=k: close no personagem k (0–3) do grupo
+var group_only := 0  # --group=n: só o grupo n (1–4)
 
-func start(dir: String, filter := "") -> void:
+func start(dir: String, filter := "", p_focus := -1, p_group := 0) -> void:
 	out_dir = dir
 	only = filter
+	focus = p_focus
+	group_only = p_group
+	if group_only > 0:
+		_g = group_only - 1
 	var env := WorldEnvironment.new()
 	env.environment = Scenery.environment("pedrambar")
 	env.environment.fog_enabled = false
@@ -72,7 +78,7 @@ func start(dir: String, filter := "") -> void:
 	cam.fov = 34
 	add_child(cam)
 	cam.current = true
-	_build_group(0)
+	_build_group(_g)
 	_wait = 3
 
 func _build_group(i: int) -> void:
@@ -99,7 +105,16 @@ func _apply_state(st: Array) -> void:
 		c.rotation.y = PI / 2.0 if st[5] else 0.0
 		if c.has_method("debug_pose"):
 			c.debug_pose(float(st[1]), float(st[2]), bool(st[3]), float(st[4]))
-	if st[5]:
+	if focus >= 0 and focus < chars.size():
+		# close nas mãos e na arma do personagem escolhido
+		var cx: float = chars[focus].position.x
+		if st[5]:
+			cam.position = Vector3(cx, 1.45, 2.6)
+			cam.look_at(Vector3(cx, 1.15, 0.0))
+		else:
+			cam.position = Vector3(cx + 0.9, 1.6, 2.3)
+			cam.look_at(Vector3(cx, 1.15, 0.0))
+	elif st[5]:
 		cam.position = Vector3(0.0, 1.5, 7.4)
 		cam.look_at(Vector3(0.0, 1.05, 0.0))
 	else:
@@ -115,14 +130,14 @@ func _process(_d: float) -> void:
 		return
 	var st: Array = STATES[_s]
 	if only == "" or only in st[0]:
-		var path := "%s/g%d_%s.png" % [out_dir, _g + 1, st[0]]
+		var path := "%s/g%d%s_%s.png" % [out_dir, _g + 1, ("f%d" % focus) if focus >= 0 else "", st[0]]
 		get_viewport().get_texture().get_image().save_png(path)
 		print("[poseprobe] ", path)
 	_s += 1
 	if _s >= STATES.size():
 		_s = 0
 		_g += 1
-		if _g >= GROUPS.size():
+		if _g >= GROUPS.size() or group_only > 0:
 			print("[poseprobe] OK")
 			get_tree().quit(0)
 			return

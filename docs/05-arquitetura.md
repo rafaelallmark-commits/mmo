@@ -33,6 +33,16 @@ Movimento válido (destino dentro do mapa e fora de áreas bloqueadas e de peça
 ```
 mmo/
 ├── README.md                      como rodar servidor, dois clientes, testes e cenários
+├── .github/workflows/
+│   ├── ci.yml                     a cada push/PR: dados + testes, importação do cliente, build da imagem
+│   └── release.yml                a cada tag v*: exporta e assina o cliente, publica a release e a imagem
+├── deploy/                        implantação do teste público (docs/08 §8.8)
+│   ├── Dockerfile                 imagem do servidor (node:22-bookworm-slim, usuário sem privilégios)
+│   ├── docker-compose.yml         servidor + proxy TLS (Caddy); "contas" e "banco" reservados
+│   ├── Caddyfile                  wss://domínio -> servidor:7777 (métricas não passam)
+│   ├── cinzas.service             systemd sem Docker (endurecido)
+│   └── backup.service/.timer      backup a quente de hora em hora
+├── .dockerignore                  contexto da imagem: só server/ e data/
 ├── data/                          dados do jogo (fonte de verdade, editáveis)
 │   ├── classes.json               atributos, classes, origens, kits iniciais
 │   ├── skills.json                40 habilidades + regras de graus
@@ -52,7 +62,14 @@ mmo/
 │   │   ├── nav.js                 grade de ocupação, A* + suavização, seguidor com aceleração/frenagem
 │   │   ├── skills.js              execução das 40 habilidades (formas e efeitos)
 │   │   ├── quests.js              motor de missões (falar, matar, coletar, interagir, entrar no mapa...)
-│   │   ├── smith.js               ferreiro: custo, chance, prévia e rolagem do refino
+│   │   ├── smith.js               ferreiro: custo, chance, risco (+4..+6), selo e rolagem do refino
+│   │   ├── escort.js              escolta da carroça (capítulo 4): rota, marcos, emboscadas, quebra
+│   │   ├── trade.js               comércio entre jogadores: ofertas, travas, confirmação, troca numa transação
+│   │   ├── clans.js               clãs: fundar, convidar, cargos, liderança, mensagem do dia, chat do clã
+│   │   ├── duel.js                duelos sem morte: pedido, contagem, dano até 1 de vida, fuga e empate
+│   │   ├── moderation.js          suspensão, silêncio, expulsão, anúncio e denúncias com contexto
+│   │   ├── contas.js              serviço de contas (HTTP, processo separado): cadastro, e-mail, token, senha
+│   │   ├── token.js · mailer.js · metrics.js   token HMAC de uso único · SMTP mínimo · métricas/saúde
 │   │   ├── dungeon.js             A Última Eclusa: o Custódio em três fases, avisos, comportas
 │   │   ├── rules.js               regras puras: atributos, estatísticas, dano, acerto, crítico, XP
 │   │   ├── equipment.js           validação de nível/classe/atributos/espaço/empunhadura
@@ -69,6 +86,11 @@ mmo/
 │   │   ├── skills.test.js         as 40 habilidades numa zona real
 │   │   ├── m2.test.js             aceitação do Marco 2 (grupo de 5, prova de classe, missões)
 │   │   ├── m3.test.js             aceitação do Marco 3 (refino, depósito, elite diária, Custódio com bots)
+│   │   ├── ch4.test.js            capítulo 4: canalização, escolta, escolha de diálogo
+│   │   ├── snapshots.test.js · store.test.js   snapshots por diferença · migrações
+│   │   ├── publico.test.js        contas, token, limites, papéis, desligamento, TLS, SMTP
+│   │   ├── social.test.js         refino +4..+6, troca atômica, clãs, duelos
+│   │   ├── moderacao.test.js      silêncio, denúncia, suspensão, ferramenta, anúncio
 │   │   └── helpers/client.js      cliente simulado (mesmo protocolo do Godot)
 │   └── tools/
 │       ├── validate-data.js       validador (também usado nos testes)
@@ -77,12 +99,16 @@ mmo/
 │       ├── partner.mjs            parceiro simulado para ver o calabouço no cliente
 │       └── create-character.js    cria contas/personagens de teste no banco
 ├── tools/poses/                   modelo do braço e gerador da tabela WPOSES (poses guiadas pela arma)
+├── tools/audio/gerar_sons.py      síntese de todos os sons e blocos de música (Python + numpy, determinístico)
 ├── client/                        projeto Godot 4.3
-│   ├── project.godot              autoload Net; cena principal
+│   ├── project.godot              autoloads Net e Sfx; cena principal
+│   ├── export_presets.cfg         presets "Linux", "Windows Desktop" e "macOS" (saída em build/)
 │   ├── scenes/main.tscn
+│   ├── audio/                     sfx/ (efeitos) e music/ (sinos, flauta, bordões, percussão), gerados
 │   ├── shaders/                   cel shading, contorno, terreno, grama, folhagem, água, céu, "vazado"
 │   └── scripts/
 │       ├── net.gd                 WebSocketPeer, pedidos com rid e callbacks
+│       ├── audio.gd               autoload Sfx: pools de efeitos 2D/3D, volumes, música generativa por zona
 │       ├── main.gd                fluxo login → personagens → mundo; estado recebido
 │       ├── world.gd               mundo 3D, câmera suave, entidades interpoladas/previstas, clique
 │       ├── motion.gd              relógio da zona, interpolação de Hermite, previsão do próprio personagem
@@ -92,6 +118,7 @@ mmo/
 │       ├── art.gd / gear.gd / rig.gd  monstros e NPCs procedurais, equipamento, animação dos monstros
 │       ├── vfx.gd                 efeitos de combate: cortes, projéteis, áreas, curas, escudos, avisos
 │       ├── hud.gd                 interface em jogo (barras, atalhos, inventário, ficha, chat, avisos)
+│       ├── social.gd              troca, painel do clã, convites, aviso de duelo, ações sobre outro jogador
 │       ├── item_text.gd           descrição de itens com requisitos em vermelho e comparação
 │       ├── ui_theme.gd            paleta
 │       └── autotest.gd            modos --autotest (headless), --navshots e --sceneshots (capturas)
@@ -231,7 +258,7 @@ Critérios (todos cobertos por `server/test/acceptance.test.js`, exceto onde ind
 
 ### Marco 4 — Testes de carga, ajuste e documentação (em andamento)
 
-Feito até aqui: métricas do servidor e HTTP de métricas, snapshots por diferença e interesse, teste de carga com 100 clientes ([relatorio-carga.md](relatorio-carga.md): nenhum tick acima de 50 ms; ~9 KB/s por cliente), atraso artificial e indicador de ping, telemetria de nível, migrações versionadas, backup a quente, cenários críticos reproduzíveis ([relatorio-cenarios.md](relatorio-cenarios.md)) e o guia de operação ([08-operacao.md](08-operacao.md)).
+Feito até aqui: métricas do servidor e HTTP de métricas, snapshots por diferença e interesse, teste de carga com 100 clientes ([relatorio-carga.md](relatorio-carga.md): nenhum tick acima de 50 ms; ~9 KB/s por cliente), atraso artificial e indicador de ping, telemetria de nível, migrações versionadas, backup a quente, cenários críticos reproduzíveis ([relatorio-cenarios.md](relatorio-cenarios.md)) e o guia de operação ([08-operacao.md](08-operacao.md)), com CI, exportação do cliente e implantação do teste público (§8.8).
 
 
 - Testes com múltiplos clientes (meta: 100 clientes simulados numa zona, 10 Hz) medindo tempo de tick, latência de ida e volta (ping) e uso de banda por cliente.
@@ -255,6 +282,12 @@ Feito até aqui: métricas do servidor e HTTP de métricas, snapshots por difere
 | Cliente | rodado pelo editor | executáveis exportados e assinados (macOS notarizado), verificação de versão do protocolo no `hello` |
 | Dados | lidos do disco no início | versionados; mudanças de balanceamento publicadas com o servidor; validador roda no CI |
 | Privacidade | — | política de privacidade, exclusão de conta, retenção de logs |
+
+Já preparado ([08-operacao.md §8.8](08-operacao.md)): `wss://` atrás de um proxy Caddy com certificado automático,
+serviço gerenciado (Docker com verificação de saúde e reinício, ou systemd endurecido) com desligamento gracioso,
+backup de hora em hora, CI com o validador de dados e os testes, e executáveis exportados para Linux, Windows e macOS,
+assinados e notarizados quando houver certificados. Continua pendente: serviço de contas e PostgreSQL (com lugar
+reservado no compose), limites de taxa por conexão, papéis de mestre e privacidade.
 
 ## O que muda para múltiplas zonas
 

@@ -33,12 +33,17 @@ test('contas: e-mail com código, token de uso único no servidor de zona, troca
   const aport = await acc.start();
   const codeOf = (m) => /(\d{6})/.exec(m.text)[1];
   try {
-    let r = await post(aport, '/contas', { conta: 'aurora', email: 'Aurora@Exemplo.com', senha: 'curta' });
+    let r = await post(aport, '/contas', { conta: 'aurora', email: 'aurora@exemplo.com', senha: 'senha-forte-1' });
+    assert.match(r.erro, /Termos de Uso/, 'sem aceite dos termos não cria');
+    const termos = await fetch(`http://127.0.0.1:${aport}/termos`);
+    assert.equal(termos.status, 200);
+    assert.match(await termos.text(), /Termos de uso/);
+    r = await post(aport, '/contas', { conta: 'aurora', email: 'Aurora@Exemplo.com', senha: 'curta', aceite: true });
     assert.equal(r.ok, false);
-    r = await post(aport, '/contas', { conta: 'aurora', email: 'aurora@exemplo.com', senha: 'senha-forte-1' });
+    r = await post(aport, '/contas', { conta: 'aurora', email: 'aurora@exemplo.com', senha: 'senha-forte-1', aceite: true });
     assert.equal(r.status, 201, r.erro);
     assert.equal(mails.length, 1);
-    assert.equal((await post(aport, '/contas', { conta: 'outra', email: 'AURORA@exemplo.com', senha: 'senha-forte-1' })).status, 409, 'e-mail repetido');
+    assert.equal((await post(aport, '/contas', { conta: 'outra', email: 'AURORA@exemplo.com', senha: 'senha-forte-1', aceite: true })).status, 409, 'e-mail repetido');
     // sem confirmar, não entra
     r = await post(aport, '/sessoes', { conta: 'aurora', senha: 'senha-forte-1' });
     assert.equal(r.status, 403);

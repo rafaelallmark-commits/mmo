@@ -74,6 +74,10 @@ func _ready() -> void:
 	social = Social.new()
 	social.build(self, root)
 	refresh_char()
+	# som ao abrir e fechar painéis (tecla, botão Fechar ou Esc: todos passam por "visible")
+	for p in [inv_panel, sheet_panel, journal_panel, npc_panel, invite_panel]:
+		var panel: Control = p
+		panel.visibility_changed.connect(func(): Sfx.ui("ui_open" if panel.visible else "ui_close"))
 
 func _bar(parent: Control, color: Color, w := 260.0) -> ProgressBar:
 	var b := ProgressBar.new()
@@ -151,6 +155,7 @@ func _build_hotbar(root: Control) -> void:
 		b.focus_mode = Control.FOCUS_NONE
 		b.autowrap_mode = TextServer.AUTOWRAP_WORD
 		b.add_theme_font_size_override("font_size", 11)
+		b.set_meta("sfx_silent", true)   # sem clique: a habilidade ou o tônico já soam
 		var idx := i
 		b.pressed.connect(func(): _hotkey(idx))
 		hotbar.add_child(b)
@@ -437,7 +442,13 @@ func _hotkey(i: int) -> void:
 	else:
 		var it: Dictionary = main.my_item(a["id"])
 		if not it.is_empty():
-			Net.request("use_item", {"instance": it["id"]})
+			_use_item(it["id"])
+
+## Usa um consumível (tônico); o gole soa quando o servidor confirma.
+func _use_item(iid: String) -> void:
+	Net.request("use_item", {"instance": iid}, func(r):
+		if r.get("ok", false):
+			Sfx.ui("potion"))
 
 func refresh_target() -> void:
 	var w = main.world
@@ -509,7 +520,8 @@ func _flash(text: String, color: Color) -> void:
 	msg_box.add_child(l)
 	if msg_box.get_child_count() > 4:
 		msg_box.get_child(0).queue_free()
-	var tw := create_tween()
+	# tween preso ao rótulo: se ele sair antes (excesso de mensagens), o tween morre junto
+	var tw := l.create_tween()
 	tw.tween_interval(3.0)
 	tw.tween_property(l, "modulate:a", 0.0, 0.8)
 	tw.tween_callback(l.queue_free)
@@ -520,6 +532,7 @@ func system(text: String) -> void:
 
 func error(text: String) -> void:
 	_flash(text, Theme_.RED)
+	Sfx.ui("ui_error")
 
 func chat_line(bb: String) -> void:
 	if chat_log:
@@ -580,7 +593,9 @@ func _refresh_inventory() -> void:
 		else:
 			var b := _item_button(it, "%s: " % names[s])
 			var slot: String = s
-			b.pressed.connect(func(): Net.request("unequip", {"slot": slot}))
+			b.pressed.connect(func(): Net.request("unequip", {"slot": slot}, func(r):
+				if r.get("ok", false):
+					Sfx.ui("loot_item", -3.0)))
 			inv_equip.add_child(b)
 	var used := 0
 	for it in main.ch.get("items", []):
@@ -601,10 +616,11 @@ func _refresh_inventory() -> void:
 func _bag_click(inst: Dictionary) -> void:
 	var d: Dictionary = main.defs["items"].get(inst["defId"], {})
 	if d.get("kind", "") == "consumable":
-		Net.request("use_item", {"instance": inst["id"]})
+		_use_item(inst["id"])
 	elif d.get("slot", null) != null:
 		Net.request("equip", {"instance": inst["id"]}, func(r):
 			if r["ok"]:
+				Sfx.ui("loot_item")
 				system("Equipado: %s" % d["name"]))
 
 # ---------------- ficha ----------------
@@ -832,6 +848,7 @@ func show_npc(r: Dictionary) -> void:
 			b.pressed.connect(func():
 				Net.request("quest_turnin", {"quest": qid, "npc": npc["id"]}, func(res):
 					if res["ok"]:
+						Sfx.ui("quest_done")
 						system("Missão concluída: %s" % res["quest"]["title"])
 						if res.has("dialogue"):
 							chat_line("[color=#ffe39a]%s: \"%s\"[/color]" % [npc["name"], res["dialogue"]])
@@ -905,6 +922,7 @@ func show_npc(r: Dictionary) -> void:
 				b.pressed.connect(func():
 					Net.request("buy", {"npc": npc["id"], "item": def_id, "qty": q_amount}, func(res):
 						if res["ok"]:
+							Sfx.ui("loot_coins")
 							system("Comprado por %d ouro." % int(res["cost"]))
 						else:
 							error(res["reason"])))
@@ -1032,9 +1050,11 @@ func _smith_quote(npc: Dictionary, iid: String, box: VBoxContainer) -> void:
 					main.set_char(res["char"])
 				if res["ok"]:
 					if res["success"]:
+						Sfx.ui("refine_ok")
 						system(res["message"])
 					else:
-						error(res["message"])
+						Sfx.ui("refine_fail")
+						_flash(res["message"], Theme_.RED)
 					_smith_quote(npc, iid, box)
 				else:
 					error(res["reason"])))
@@ -1065,6 +1085,8 @@ func _storage_refresh(npc: Dictionary, box: VBoxContainer) -> void:
 						main.set_char(res["char"])
 					if not res["ok"]:
 						error(res["reason"])
+					else:
+						Sfx.ui("loot_item")
 					_storage_refresh(npc, box)))
 			box.add_child(b)
 		_title(box, "Da bolsa", 13)
@@ -1081,6 +1103,8 @@ func _storage_refresh(npc: Dictionary, box: VBoxContainer) -> void:
 						main.set_char(res["char"])
 					if not res["ok"]:
 						error(res["reason"])
+					else:
+						Sfx.ui("loot_item", -2.0)
 					_storage_refresh(npc, box)))
 			box.add_child(b2))
 
