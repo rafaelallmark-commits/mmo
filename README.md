@@ -30,6 +30,8 @@ Personagens: modelos VRM de anime — **Seed-san model by VirtualCast, Inc.** e 
 | [docs/07-navegacao.md](docs/07-navegacao.md) | Telas, camadas dentro do jogo, mapa do mundo, controles, direção gráfica e som |
 | [docs/08-operacao.md](docs/08-operacao.md) | Execução e operação: opções do servidor, métricas, banco e backup, testes e medições; implantação do teste público (CI, releases assinadas, Docker/Compose, systemd, TLS) |
 | [docs/relatorio-progressao.md](docs/relatorio-progressao.md) | Marco 4: tempo medido por nível (1→20) de cada classe caçando solo, contra as metas da tabela de XP; economia de tônicos, equipamento, mortes e problemas encontrados *(gerado pela simulação)* |
+| [docs/GUIA.md](docs/GUIA.md) | Guia do jogador do teste público: entrar, classes, controles, progressão, equipamento, mapas, grupo, troca, clã, duelo e convivência |
+| [docs/TERMOS.md](docs/TERMOS.md) · [docs/PRIVACIDADE.md](docs/PRIVACIDADE.md) | Termos de uso (regras de convivência e jogo limpo) e política de privacidade do teste público (rascunhos) |
 | [docs/DECISOES.md](docs/DECISOES.md) | Todas as decisões tomadas por conta própria e o motivo |
 | [docs/CREDITOS.md](docs/CREDITOS.md) | Créditos e licenças dos modelos de personagem; som e música originais (síntese por `tools/audio/gerar_sons.py`) |
 
