@@ -303,7 +303,7 @@ Se a conexão cair no meio do encontro, a instância espera o jogador por 3 minu
 - **Diálogo**: ILDA: "Li o registro do Custódio até o fim. Ele não fechava as saídas para nos prender: fechava para segurar alguma coisa embaixo. Sem ele, a pressão dos canais desce por um poço de inspeção que não está em mapa nenhum da Companhia. A Mara já desceu. Claro que desceu." · MARA: "Olha estas escadas: talhadas na pedra, não fundidas. Isto é mais velho que a Companhia. Mais velho que as duas cidades."
 - **Recompensa**: 8.000 XP, 600 ouro, Tônicos de Vida Médios ×5.
 - **Pré-requisitos**: 5.4; nível 20 (abaixo disso o poço recusa: "Nível 20 exigido para A Cava Primeira. Seu nível atual é 19.").
-- **Conclusão**: entrar na Cava Primeira + falar com Mara. A oferta de Ilda lembra a resposta dada em 4.4.
+- **Conclusão**: entrar na Cava Primeira + falar com Mara (quem já desceu e aceita a missão com a Ilda do Posto de Escuta tem a entrada contada na hora). A oferta de Ilda lembra a resposta dada em 4.4.
 
 ### 6.2 Os Que Pediram Socorro
 - **NPC**: Mara.
@@ -368,6 +368,6 @@ Missões secundárias apontam lugares bons para caçar em cada faixa e dão moti
 | Draga Perdida | Ilda | 17–20 | Canal Lamacento (Dragas Vivas) | 10 abates | 15.000 XP | Família de Liga Rubra (faixa 17) |
 | Badalos Soltos | Joca | 21–22 | Salão das Placas (Sineiros de Bronze, matilha) | 12 abates | 9.000 XP, Tônicos Médios ×8 | Máquinas em bando: puxar pela borda; faixa 21 |
 | Túneis Novos | Mara | 23–24 | Poço Quente e sul das ruínas (Toupeiras de Basalto) | 12 abates | 10.500 XP, Pó de Refino ×5 | Ponto de grupo; faixa 21 e chance de faixa 25 |
-| Selador da Porta Funda | — (elite diária) | 24–25 | Porta Funda (elite, grupo) | Derrotar o Selador | XP em dobro e saque extra no primeiro abate do dia | Faixa 21 (60%) e faixa 25 (12%) |
+| Selador da Porta Funda | — (elite diária) | 24–25 | Porta Funda (elite, grupo) | Derrotar o Selador | XP em dobro e saque extra no primeiro abate do dia | Faixa 21 (60%), faixa 25 (12%), Pó de Refino Superior e, às vezes, Selo de Proteção |
 
 As missões secundárias seguem o mesmo modelo de dados das principais (NPC, objetivo, recompensa, pré-requisitos, condição de conclusão) e entram no M2 (capítulos 1–3), M3 (capítulos 4–5) e pós-v1 (capítulo 6).

@@ -73,7 +73,7 @@ nenhum acima de 50 ms; CPU do processo ~7% de um núcleo; 144 MB de memória.
 | `npm run cenarios` | Cenários críticos + carga (100 clientes, 60 s) + carga com 150 ms; escreve `docs/relatorio-cenarios.md`. `-- --rapido` encurta a carga. | ~7 min |
 | `npm run carga -- --clientes 100 --duracao 60 --md ../docs/relatorio-carga.md` | Só o teste de carga (sobe um servidor próprio; `--url`/`--metricas` para usar um existente; `--completo` para comparar com snapshots completos). | ~1,5 min |
 | `npm run telemetria -- --db cinzas.db` | Tempo jogado por nível no banco real contra as metas (±25%). | segundos |
-| `npm run simular-progressao` | Simulação acelerada da caça solo do nível 1 ao 20 para as 8 classes; escreve `docs/relatorio-progressao.md`. | ~20 min |
+| `npm run simular-progressao` | Simulação acelerada da caça solo do nível 1 ao teto (25) para as 8 classes; escreve `docs/relatorio-progressao.md` (a versão no git é a rodada 1→20, anterior ao teto 25; `-- --ate-nivel 20 --md ../docs/relatorio-progressao.md` a repete). | ~20 min |
 | `npm run validate-data` | Valida os JSON de `data/`. | segundos |
 
 ## 8.7 Solução de problemas

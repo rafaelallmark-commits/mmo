@@ -544,6 +544,13 @@
      "max": 2
     },
     {
+     "type": "item",
+     "defId": "mat_refine_sup",
+     "chance": 0.02,
+     "min": 1,
+     "max": 1
+    },
+    {
      "type": "pool",
      "pool": [
       "axe_1h_t21",
@@ -1078,7 +1085,7 @@
    ]
   },
   "lt_deep_sealer": {
-   "_doc": "Elite diária da Cava Primeira: faixa 21 com frequência e chance de faixa 25.",
+   "_doc": "Elite diária da Cava Primeira: faixa 21 com frequência, chance de faixa 25, Pó de Refino Superior e, às vezes, Selo de Proteção.",
    "entries": [
     {
      "type": "gold",
@@ -1164,6 +1171,20 @@
       "amulet_t25"
      ],
      "chance": 0.12
+    },
+    {
+     "type": "item",
+     "defId": "mat_refine_sup",
+     "chance": 1,
+     "min": 2,
+     "max": 4
+    },
+    {
+     "type": "item",
+     "defId": "protect_seal",
+     "chance": 0.1,
+     "min": 1,
+     "max": 1
     }
    ]
   },

@@ -46,7 +46,7 @@ mmo/
 ├── data/                          dados do jogo (fonte de verdade, editáveis)
 │   ├── classes.json               atributos, classes, origens, kits iniciais
 │   ├── skills.json                48 habilidades (níveis 1, 5, 10, 15, 20 e 25) + regras de graus
-│   ├── items.json                 250 definições de item (faixas 1–25, raridades, espaços, famílias)
+│   ├── items.json                 252 definições de item (faixas 1–25, raridades, espaços, famílias)
 │   ├── monsters.json              36 monstros (6 áreas, provas, chefe)
 │   ├── loot_tables.json           tabelas de saque (normal, elite, chefe, por classe)
 │   ├── maps.json                  mapas (+ estradas, peças com colisão e casas geradas por gen-scenery)
@@ -270,9 +270,9 @@ Feito até aqui: métricas do servidor e HTTP de métricas, snapshots por difere
 
 ### Pós-v1 — Níveis 21–25
 
-- Teto no nível 25 (`levelCap`), tabela de XP estendida pela mesma regra de calibração; o servidor já lia o teto dos dados, então **nenhum código de servidor mudou** — só dados, ferramentas (`validate-data` com as faixas 21 e 25, `gen-docs` até o teto, `gen-scenery` com o mapa novo) e aparência no cliente.
+- Teto no nível 25 (`levelCap`), tabela de XP estendida pela mesma regra de calibração; o servidor já lia o teto dos dados, então `server.js` e `zone.js` não mudaram; a única mudança de código do servidor é em `quests.js` (um objetivo "entrar no mapa" aceito já dentro do mapa conta na hora, D102). O resto são dados, ferramentas (`validate-data` com as faixas 21 e 25, `gen-docs` até o teto, `gen-scenery` com o mapa novo, kits 21 e 25 na simulação de progressão) e aparência e música da Cava no cliente.
 - A Cava Primeira (níveis 20–25) pelo Poço de Inspeção dos Canais (portal de nível 20), 4 monstros normais (21–24) e o Selador da Porta Funda (elite diária), faixas 21 e 25 para todas as famílias, uma habilidade de nível 25 por classe com tipos de efeito já existentes, capítulo 6 com 5 missões principais e 2 secundárias.
-- **Aceitação** (`server/test/nivel25.test.js`): o teto 25 é respeitado (XP extra e comando de mestre param no 25, `xpNext` nulo); o poço recusa abaixo do nível 20 com o motivo; os monstros novos nascem em lugar livre e dão XP pela diferença de nível, e a elite dá XP em dobro só no primeiro abate do dia; as 8 habilidades do nível 25 não existem no 24, sobem de grau e executam com o efeito esperado; a primeira missão do capítulo 6 é aceita com Ilda nos Canais e entregue a Mara na Cava; o capítulo inteiro e as duas secundárias são concluídos pelo protocolo (canalizações, escolha que muda as falas, abate da elite).
+- **Aceitação** (`server/test/nivel25.test.js`): o teto 25 é respeitado (XP extra e comando de mestre param no 25, `xpNext` nulo); o poço recusa abaixo do nível 20 com o motivo; os monstros novos nascem em lugar livre e dão XP pela diferença de nível, e a elite dá XP em dobro só no primeiro abate do dia; as 8 habilidades do nível 25 não existem no 24, sobem de grau e executam com o efeito esperado; a primeira missão do capítulo 6 é aceita com Ilda nos Canais e entregue a Mara na Cava, e aceita com a Ilda do Posto de Escuta já conta a entrada; o capítulo inteiro e as duas secundárias são concluídos pelo protocolo (canalizações, escolha que muda as falas, abate da elite).
 
 ---
 

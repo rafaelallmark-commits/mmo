@@ -10,6 +10,7 @@ import { GameServer } from '../src/server.js';
 import { loadGameData } from '../src/data.js';
 import { Store } from '../src/store.js';
 import { Zone } from '../src/zone.js';
+import { QuestEngine } from '../src/quests.js';
 import { makeRng } from '../src/rng.js';
 import { levelForXp, xpToNext, levelDiffMod } from '../src/rules.js';
 import { SimClient, sleep } from './helpers/client.js';
@@ -102,6 +103,9 @@ test('Cava Primeira: monstros 21–24 e a elite diária aparecem e dão XP pela 
   const loot = zone.rollLoot({ def: data.monsters.deep_sealer, defId: 'deep_sealer' }, c);
   assert.ok(loot.some((d) => d.gold > 0), 'ouro do Selador');
   for (const d of loot) if (d.defId) assert.ok(data.items[d.defId], d.defId);
+  // refino +4..+6 no teto: o Selador sempre entrega Pó de Refino Superior
+  const sup = loot.find((d) => d.defId === 'mat_refine_sup');
+  assert.ok(sup && sup.qty >= 2 && sup.qty <= 4, 'Pó de Refino Superior ×2–4 do Selador');
 });
 
 // ---------------------------------------------------------------- habilidades do nível 25
@@ -175,6 +179,28 @@ test('as 8 habilidades do nível 25 só existem no 25, sobem de grau e executam 
     }
     if (k === 'strike' || k === 'spell' || k === 'cone_strike' || k === 'aoe_strike') assert.ok(t.hp < hp0.get(t.eid), `${s.name} causou dano`);
   }
+});
+
+// ---------------------------------------------------------------- aceitar já dentro da Cava
+test('aceitar "O Silêncio do Custódio" com a Ilda do Posto de Escuta, já dentro da Cava, conta a entrada na hora', () => {
+  const store = new Store(':memory:');
+  const acc = store.createAccount('dentro', 'senha');
+  const quests = new QuestEngine({ data, store });
+  const mk = (mapId, name) => {
+    const id = store.createCharacter({ accountId: acc, name, classId: 'warden', hp: 99, mp: 99, mapId, x: 22, z: 80, kit: data.classes.warden.startingKit, slotFor: (d) => data.items[d].slot });
+    const c = store.loadCharacter(id);
+    c.quests = new Map(); c.level = 20; c.mapId = mapId;
+    for (const [qid, q] of Object.entries(data.quests)) if (q.chapter <= 5) c.quests.set(qid, { state: 'done', progress: {} });
+    return c;
+  };
+  const fora = mk('canais_eclusa', 'Fora'), dentro = mk('cava_primeira', 'Dentro');
+  assert.equal(quests.accept(fora, 'c6_silence', 'ilda').ok, true);
+  assert.equal(quests.view(fora, 'c6_silence').objectives[0].done, false, 'nos Canais a descida ainda falta');
+  const r = quests.accept(dentro, 'c6_silence', 'ilda');
+  assert.equal(r.ok, true, r.reason);
+  assert.equal(r.quest.objectives[0].done, true, 'na Cava a entrada já conta');
+  assert.equal(r.quest.objectives[1].done, false, 'falta falar com Mara');
+  assert.deepEqual(JSON.parse(store.loadQuests(dentro.id).find((q) => q.quest_id === 'c6_silence').progress_json), { 0: true }, 'progresso gravado');
 });
 
 // ---------------------------------------------------------------- portal e capítulo 6 pelo protocolo

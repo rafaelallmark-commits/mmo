@@ -145,7 +145,7 @@ npm run validate-data
 npm run gen-docs
 ```
 
-Medir a progressão (Marco 4): um bot por classe caça do nível 1 ao 20 num servidor em processo, acelerado (`server.step(100)` em laço, sem rede), e o tempo de cada nível é comparado com as metas de `data/xp_table.json`. A rodada padrão (8 classes × 8 sementes, mais o mesmo lote sem a prova de classe) leva ~5 min e regrava [docs/relatorio-progressao.md](docs/relatorio-progressao.md); o JSON completo vai para `server/relatorio-progressao.json` (fora do git):
+Medir a progressão (Marco 4): um bot por classe caça do nível 1 ao teto (25) num servidor em processo, acelerado (`server.step(100)` em laço, sem rede), e o tempo de cada nível é comparado com as metas de `data/xp_table.json`. A rodada padrão (8 classes × 8 sementes, mais o mesmo lote sem a prova de classe) leva ~5 min e regrava [docs/relatorio-progressao.md](docs/relatorio-progressao.md); o JSON completo vai para `server/relatorio-progressao.json` (fora do git). O relatório versionado ainda é a rodada 1→20, anterior ao teto 25 (`--ate-nivel 20 --md ../docs/relatorio-progressao.md` repete aquela medição; a faixa 20–25 está resumida em D101 de `docs/DECISOES.md`):
 
 ```bash
 npm run simular-progressao

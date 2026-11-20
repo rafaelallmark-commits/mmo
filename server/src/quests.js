@@ -160,7 +160,10 @@ export class QuestEngine {
     if (char.level < q.level) return { ok: false, code: 'level', reason: `Nível ${q.level} exigido. Seu nível atual é ${char.level}.` };
     const missing = q.prereq.filter((pr) => !this.isDone(char, pr));
     if (missing.length) return { ok: false, code: 'prereq', reason: `Conclua antes: ${missing.map((m) => this.quests[m].title).join(', ')}.` };
-    char.quests.set(id, { state: 'active', progress: {} });
+    const progress = {};
+    // "entrar no mapa X" aceita já dentro de X conta na hora (Ilda também atende no Posto de Escuta da Cava)
+    q.objectives.forEach((o, i) => { if (o.type === 'enterMap' && o.map === char.mapId) progress[i] = true; });
+    char.quests.set(id, { state: 'active', progress });
     this.save(char, id);
     return { ok: true, quest: this.view(char, id) };
   }

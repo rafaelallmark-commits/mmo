@@ -124,6 +124,9 @@ const ZONES := {
 	"galerias_eco": {"base": "explore", "scale": "phrygian", "echo": true, "bell_p": 0.08, "flute_p": 0.12, "verb": 0.2},
 	"canais_eclusa": {"base": "explore", "scale": "aeolian", "bpm": 64, "verb": 0.12,
 		"perc": [["perc_gong", [0], 0.5, -12.5, 1.0, 4]]},
+	# pós-v1: obras de antes das cidades — sinos que respondem com eco e um gongo grave e raro
+	"cava_primeira": {"base": "explore", "scale": "phrygian", "bpm": 60, "echo": true, "bell_p": 0.12, "flute_p": 0.08,
+		"deg": [2, 10], "verb": 0.18, "perc": [["perc_gong", [0], 0.35, -14.0, 0.85, 4]]},
 	"ultima_eclusa": {"base": "dungeon", "verb": 0.22},
 	"arena_prova": {"base": "dungeon", "motif": "", "verb": 0.1},
 }
