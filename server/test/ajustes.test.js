@@ -143,3 +143,40 @@ test('armeiro: peças comuns da classe, faixa atual e próxima; compra a gearPri
     c.ws.close();
   });
 });
+
+test('pedido que falha no meio (banco caiu): o jogador sai sem gravar e volta com o que está no banco', async () => {
+  await withServer(async (server, url) => {
+    const A = await hero(url, 'Azarado');
+    const zw = A.waitFor((m) => m.t === 'zone' && m.mapId === 'pedrambar', 5000, 'pedrâmbar');
+    await A.request('gm', { cmd: 'teleport', mapId: 'pedrambar', x: 23, z: 48 });
+    await zw;
+    await A.request('gm', { cmd: 'gold', amount: 500 });
+    const charId = A.char.id;
+    const goldDb = server.store.loadCharacter(charId).gold;
+    const potsDb = [...server.store.loadCharacter(charId).items.values()].filter((x) => x.defId === 'potion_hp_s').reduce((n, x) => n + x.qty, 0);
+    // o banco falha no meio da compra: o ouro já foi tirado na memória quando a gravação do item lança
+    const real = server.store.insertItem.bind(server.store);
+    const realSave = server.store.saveItems.bind(server.store);
+    server.store.insertItem = () => { throw new Error('banco fora do ar (teste)'); };
+    server.store.saveItems = () => { throw new Error('banco fora do ar (teste)'); };
+    const kicked = A.waitFor((m) => m.t === 'kicked', 3000, 'expulsão sem gravar');
+    const r = await A.request('buy', { npc: 'potions_resina', item: 'potion_hp_s', qty: 1 });
+    assert.equal(r.code, 'server_error');
+    assert.match((await kicked).reason, /sem gravar/);
+    await A.closed;
+    server.store.insertItem = real;
+    server.store.saveItems = realSave;
+    // nada pela metade no banco: ouro e tônicos como antes da compra que falhou
+    const after = server.store.loadCharacter(charId);
+    assert.equal(after.gold, goldDb, 'o ouro tirado só na memória não foi gravado');
+    assert.equal([...after.items.values()].filter((x) => x.defId === 'potion_hp_s').reduce((n, x) => n + x.qty, 0), potsDb);
+    assert.ok(server.store.auditTail(5, 'request_error').length >= 1, 'a falha fica na auditoria');
+    // e o jogador entra de novo normalmente
+    const B = new SimClient('Azarado2');
+    await B.connect(url);
+    const l = await B.request('login', { account: 'aj_azarado', password: 'senha123' });
+    assert.equal(l.ok, true);
+    assert.equal((await B.request('enter', { charId })).ok, true);
+    B.ws.close();
+  });
+});

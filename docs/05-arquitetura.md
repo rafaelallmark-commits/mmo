@@ -221,7 +221,8 @@ O teste de aceitação envia o mesmo pedido de coleta 4 vezes (2 simultâneos, 2
 - Cada personagem pertence a exatamente **um** servidor de zona, que processa as mensagens em um único laço: duas operações do mesmo personagem nunca rodam intercaladas.
 - Cada operação que mexe em inventário roda numa transação (SQLite: `BEGIN IMMEDIATE`; PostgreSQL: `BEGIN` na conexão dedicada, com `FOR UPDATE` no saque e no depósito) e só altera a memória depois de validar; trocas (equipar uma arma de duas mãos que desloca a mão secundária) gravam todas as instâncias alteradas juntas.
 - Pedidos repetidos são neutralizados pelo cache de `rid` e pela idempotência do saque.
-- Futuro (comércio, depósito compartilhado entre personagens da mesma conta): operações que envolvem dois donos usarão uma transação única no banco central com verificação de versão por instância (`version` incrementada a cada movimento), para que dois servidores não movam a mesma peça.
+- **Comércio entre jogadores** (feito): os dois personagens estão na mesma zona (a troca exige proximidade e a transferência entre zonas a cancela), e a troca é uma transação só (`transferItem` confere dono e lugar de cada peça; qualquer falha desfaz tudo). A oferta guarda uma foto de cada item (quantidade e grau): mudar um item oferecido depois de travar destrava os dois lados e mostra o valor novo; compra e saque não empilham numa pilha oferecida.
+- **Depósito da conta** (feito): compartilhado entre os personagens da conta, que só pode ter um personagem no mundo por vez (login novo derruba o anterior; com várias zonas, a posse do mundo garante um dono só); retirar usa `FOR UPDATE` no PostgreSQL.
 
 ## Testes automatizados
 
@@ -269,22 +270,26 @@ Critérios (todos cobertos por `server/test/acceptance.test.js`, exceto onde ind
 - Depósito por conta.
 - **Aceitação**: teste com 3 composições diferentes de grupo simulado (com tanque e curadora; sem tanque; 2 jogadores) vencendo o Custódio com bots que reagem aos avisos; recompensa única de nível 20 entregue uma vez por participante; refino com chance controlada por RNG semeado confere taxas em 10.000 tentativas; na falha, grau mantido e materiais consumidos.
 
-### Marco 4 — Testes de carga, ajuste e documentação (em andamento)
+### Marco 4 — Testes de carga, ajuste e documentação (concluído)
 
-Feito até aqui: métricas do servidor e HTTP de métricas, snapshots por diferença e interesse, teste de carga com 100 clientes ([relatorio-carga.md](relatorio-carga.md): nenhum tick acima de 50 ms; ~9 KB/s por cliente), atraso artificial e indicador de ping, telemetria de nível, migrações versionadas, backup a quente, cenários críticos reproduzíveis ([relatorio-cenarios.md](relatorio-cenarios.md)) e o guia de operação ([08-operacao.md](08-operacao.md)), com CI, exportação do cliente e implantação do teste público (§8.8).
-
+Feito: métricas do servidor e HTTP de métricas, snapshots por diferença e interesse, teste de carga com 100 clientes ([relatorio-carga.md](relatorio-carga.md)), atraso artificial e indicador de ping, telemetria de nível, migrações versionadas, backup a quente, cenários críticos reproduzíveis ([relatorio-cenarios.md](relatorio-cenarios.md)) e o guia de operação ([08-operacao.md](08-operacao.md)), com CI, exportação do cliente e implantação do teste público (§8.8). A **simulação de progressão** ([relatorio-progressao.md](relatorio-progressao.md)) põe um bot por classe caçando pelo protocolo real, num servidor acelerado, do nível 1 ao teto; ela orientou o ajuste de habilidades, monstros e economia (decisões a partir de D127).
 
 - Testes com múltiplos clientes (meta: 100 clientes simulados numa zona, 10 Hz) medindo tempo de tick, latência de ida e volta (ping) e uso de banda por cliente.
 - Medição de latência no cliente (indicador na interface) e tolerância a 150 ms.
-- Revisão da progressão com telemetria de tempo por nível contra as metas da tabela de XP; ajuste de economia (ouro de entrada/saída, preço de tônicos e refino).
+- Revisão da progressão com telemetria de tempo por nível contra as metas da tabela de XP; ajuste de economia (ouro de entrada/saída, preço de tônicos, equipamento do armeiro e refino).
 - Documentação de execução, operação e cenários críticos atualizada.
-- **Aceitação**: relatório com p50/p95/p99 de tick e de latência; nenhum tick > 50 ms com 100 clientes; tempo médio por nível dentro de ±25% da meta; script de cenários críticos reproduzível.
+- **Aceitação**: relatório com p50/p95/p99 de tick e de latência; nenhum tick > 50 ms com 100 clientes; tempo médio por nível dentro de ±25% da meta; script de cenários críticos reproduzível. **Resultado**: com 100 clientes, tick p50/p95/p99 de 5/9/16,9 ms e nenhum acima de 50 ms (~9,6 KB/s por cliente); com 150 ms de atraso, todos conectados e sem erros; na simulação do 1 ao 25, a média das classes fica dentro de ±25% da meta em todos os níveis (7,5 h contra 7,7 h no total) e cada classe a até ±25% do total; `npm run cenarios` reproduz tudo.
 
 ### Pós-v1 — Níveis 21–25
 
 - Teto no nível 25 (`levelCap`), tabela de XP estendida pela mesma regra de calibração; o servidor já lia o teto dos dados, então `server.js` e `zone.js` não mudaram; a única mudança de código do servidor é em `quests.js` (um objetivo "entrar no mapa" aceito já dentro do mapa conta na hora, D110). O resto são dados, ferramentas (`validate-data` com as faixas 21 e 25, `gen-docs` até o teto, `gen-scenery` com o mapa novo, kits 21 e 25 na simulação de progressão) e, no cliente, aparência e música da Cava e a 6ª habilidade na barra de atalhos.
 - A Cava Primeira (níveis 20–25) pelo Poço de Inspeção dos Canais (portal de nível 20), 4 monstros normais (21–24) e o Selador da Porta Funda (elite diária), faixas 21 e 25 para todas as famílias, uma habilidade de nível 25 por classe com tipos de efeito já existentes, capítulo 6 com 5 missões principais e 2 secundárias.
 - **Aceitação** (`server/test/nivel25.test.js`): o teto 25 é respeitado (XP extra e comando de mestre param no 25, `xpNext` nulo); o poço recusa abaixo do nível 20 com o motivo; os monstros novos nascem em lugar livre e dão XP pela diferença de nível, e a elite dá XP em dobro só no primeiro abate do dia; as 8 habilidades do nível 25 não existem no 24, sobem de grau e executam com o efeito esperado; a primeira missão do capítulo 6 é aceita com Ilda nos Canais e entregue a Mara na Cava, e aceita com a Ilda do Posto de Escuta já conta a entrada; o capítulo inteiro e as duas secundárias são concluídos pelo protocolo (canalizações, escolha que muda as falas, abate da elite).
+
+### Pós-v1 — Comércio, clãs, refino +4..+6 e duelos
+
+- **Comércio** (`trade.js`): pedido e aceite, ofertas de itens da bolsa e ouro, trava dos dois lados, confirmação dupla e troca atômica numa transação; cancelada por distância, troca de zona, desconexão ou morte. **Clãs** (`clans.js`, migração 4): fundar no nível 10 por 500 de ouro, convidar, cargos (líder, oficial, membro), passar a liderança, mensagem do dia, chat `/c` e sigla no nome. **Refino +4..+6** (`smith.js`): de +3 em diante a falha derruba um grau, a menos que um Selo de Proteção segure (só é gasto quando segura); o sorteio usa RNG criptográfico (D126). **Duelos** (`duel.js`): pedido, contagem de 3 s, dano até 1 de vida (ninguém morre), fuga a mais de 30 m é desistência, empate em 3 min; só golpes e magias de alvo único valem e ninguém de fora cura ou protege.
+- **Aceitação** (`server/test/social.test.js`, `ajustes.test.js`): refino com queda de grau, selo e teto; troca com travas, confirmação dupla, falha no meio desfeita sem nada mudar, bolsa cheia e item oferecido que muda depois de travar; clã com cargos, chat, sigla no snapshot, nome ou sigla repetidos e fim do clã; duelo com contagem, luta até 1 de vida, fuga, desistência, empate por tempo, queda por monstro e escudo absorvendo.
 
 ---
 

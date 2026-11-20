@@ -505,20 +505,21 @@ export class GameServer {
       const cached = this.ridCache.get(s.charId)?.get(rid);
       if (cached && cached.req === msg.t) return this.sendTo(s, { ...cached, duplicate: true });
     }
-    let res;
+    let res, failed = false;
     try {
       res = this.handle(s, msg);
     } catch (e) {
-      this.log('erro ao tratar', msg.t, e);
-      res = { ok: false, code: 'server_error', reason: 'Erro interno do servidor.' };
+      res = this.requestFailed(s, msg, e);
+      failed = true;
     }
     if (res && typeof res.then === 'function') {
       // só no modo de várias zonas (posse, transferência e grupos passam pelo mundo)
       s.pending = true;
-      res.catch((e) => { this.log('erro ao tratar', msg.t, e); return { ok: false, code: 'server_error', reason: 'Erro interno do servidor.' }; })
+      res.catch((e) => { failed = true; return this.requestFailed(s, msg, e); })
         .then((r) => {
           s.pending = false;
           if (r !== undefined && this.sessions.has(s)) this.reply(s, msg, rid, r);
+          if (failed) return this.dropFailed(s);
           const q = s.backlog;
           s.backlog = [];
           while (q.length && !s.pending && this.sessions.has(s)) this.dispatch(s, q.shift());
@@ -528,6 +529,23 @@ export class GameServer {
     }
     if (res === undefined) return;
     this.reply(s, msg, rid, res);
+    if (failed) this.dropFailed(s);
+  }
+
+  // Pedido que lançou erro no meio (banco fora do ar, prazo da ponte, defeito): a transação foi desfeita no
+  // banco, mas a memória pode ter mudado antes da falha (ouro somado, item tirado). Gravar depois levaria
+  // esse estado ao banco — num saque, o ouro sem a baixa do saque, que daria para pegar de novo. Quem está
+  // no mundo sai sem gravar e, ao voltar, carrega o que está no banco (o progresso até o último salvamento).
+  requestFailed(s, msg, e) {
+    this.log('erro ao tratar', msg.t, e);
+    this.audit('request_error', { accountId: s.accountId ?? null, charId: s.charId ?? null, ip: s.ip ?? null, req: String(msg.t).slice(0, 32), error: String(e?.message ?? e).slice(0, 200) });
+    return { ok: false, code: 'server_error', reason: 'Erro interno do servidor.', cache: false };
+  }
+
+  dropFailed(s) {
+    if (s.charId == null || !this.sessions.has(s)) return;
+    s.noSave = true;
+    this.mod.kickSession(s, 'Erro no servidor ao tratar seu pedido. Para nada ficar pela metade, você saiu sem gravar o que estava em andamento: entre de novo para continuar do último salvamento.');
   }
 
   reply(s, msg, rid, res) {
