@@ -25,10 +25,12 @@ export class ClanManager {
   }
 
   refreshOnline(clanId) {
-    for (const m of this.st.clanMembers(clanId)) {
+    const members = this.st.clanMembers(clanId);
+    for (const m of members) {
       const p = this.s.playerOf(m.char_id);
       if (p) this.attach(p.char);
     }
+    this.s.clanRemote({ clanId, attach: members.map((m) => m.char_id) }); // várias zonas: membros nas outras
   }
 
   notifyClan(clanId, msg, exceptCharId = null) {
@@ -37,6 +39,7 @@ export class ClanManager {
       const s = this.s.byChar.get(m.char_id);
       if (s) this.s.sendTo(s, msg);
     }
+    this.s.clanRemote({ clanId, msg, except: exceptCharId }); // várias zonas: membros nas outras
   }
 
   create(p, { name, tag }) {
@@ -67,6 +70,8 @@ export class ClanManager {
     if (!rank || RANK_ORDER[rank] < 2) return { ok: false, code: 'forbidden', reason: 'Só líder e oficiais convidam.' };
     const tid = typeof name === 'string' ? this.s.byName.get(name.trim().toLowerCase()) : null;
     const t = tid != null ? this.s.playerOf(tid) : null;
+    const remote = t ? null : this.s.remoteChar(name);
+    if (remote) return this.inviteRemote(p, remote);
     if (!t) return { ok: false, code: 'offline', reason: 'Jogador não está on-line.' };
     if (t.char.clanId) return { ok: false, code: 'in_clan', reason: `${t.char.name} já tem clã.` };
     if (this.st.clanMembers(p.char.clanId).length >= MAX_MEMBERS) return { ok: false, code: 'full', reason: `O clã já tem ${MAX_MEMBERS} membros.` };
@@ -74,6 +79,15 @@ export class ClanManager {
     this.invites.set(t.char.id, { clanId: clan.id, from: p.char.id, at: Date.now() });
     this.s.sendTo(this.s.byChar.get(t.char.id), { t: 'clan_invite', clan: { id: clan.id, name: clan.name, tag: clan.tag }, from: p.char.name });
     return { ok: true, message: `Convite enviado a ${t.char.name}.` };
+  }
+
+  // várias zonas: convidado em outra zona; o convite fica guardado na zona dele, onde ele aceita
+  inviteRemote(p, t) {
+    if (this.st.clanOfChar(t.charId)) return { ok: false, code: 'in_clan', reason: `${t.name} já tem clã.` };
+    if (this.st.clanMembers(p.char.clanId).length >= MAX_MEMBERS) return { ok: false, code: 'full', reason: `O clã já tem ${MAX_MEMBERS} membros.` };
+    const clan = this.st.clanById(p.char.clanId);
+    this.s.worldSend(t.charId, { t: 'clan_invite', clan: { id: clan.id, name: clan.name, tag: clan.tag }, from: p.char.name }, { kind: 'clan_invite', clanId: clan.id, from: p.char.id });
+    return { ok: true, message: `Convite enviado a ${t.name}.` };
   }
 
   accept(p, { clanId }) {
@@ -118,7 +132,9 @@ export class ClanManager {
     if (err) return err;
     this.st.removeClanMember(charId);
     const t = this.s.playerOf(charId);
-    if (t) { this.attach(t.char); this.s.sendTo(this.s.byChar.get(charId), { t: 'clan_event', text: `Você foi removido do clã ${cl.name}.`, left: true }); }
+    const gone = { t: 'clan_event', text: `Você foi removido do clã ${cl.name}.`, left: true };
+    if (t) { this.attach(t.char); this.s.sendTo(this.s.byChar.get(charId), gone); }
+    else this.s.clanRemote({ clanId: cl.id, attach: [charId], direct: [{ charId, msg: gone }] });
     this.notifyClan(cl.id, { t: 'clan_event', text: `${m.name} foi removido do clã.` });
     this.s.audit('clan_kick', { charId: p.char.id, clan: cl.id, target: charId });
     return { ok: true, clan: this.info(p) };
@@ -154,10 +170,13 @@ export class ClanManager {
     if (cl.rank !== 'leader') return { ok: false, code: 'forbidden', reason: 'Só o líder desfaz o clã.' };
     const members = this.st.clanMembers(cl.id);
     this.st.tx(() => this.st.deleteClan(cl.id));
+    const remote = [];
     for (const m of members) {
       const t = this.s.playerOf(m.char_id);
       if (t) { this.attach(t.char); if (m.char_id !== p.char.id) this.s.sendTo(this.s.byChar.get(m.char_id), { t: 'clan_event', text: `O clã ${cl.name} foi desfeito.`, left: true }); }
+      else remote.push(m.char_id);
     }
+    if (remote.length) this.s.clanRemote({ clanId: cl.id, attach: remote, direct: remote.map((charId) => ({ charId, msg: { t: 'clan_event', text: `O clã ${cl.name} foi desfeito.`, left: true } })) });
     this.s.audit('clan_disband', { charId: p.char.id, clan: cl.id, name: cl.name });
     return { ok: true };
   }
@@ -176,7 +195,7 @@ export class ClanManager {
     if (!cl) return null;
     return {
       id: cl.id, name: cl.name, tag: cl.tag, motd: cl.motd, myRank: cl.rank,
-      members: this.st.clanMembers(cl.id).map((m) => ({ charId: m.char_id, name: m.name, level: m.level, classId: m.class_id, rank: m.rank, online: this.s.byChar.has(m.char_id) })),
+      members: this.st.clanMembers(cl.id).map((m) => ({ charId: m.char_id, name: m.name, level: m.level, classId: m.class_id, rank: m.rank, online: this.s.isOnline(m.char_id) })),
     };
   }
 

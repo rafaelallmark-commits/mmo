@@ -3,6 +3,8 @@
 //   [--auth both|password|token] [--token-secret S | CINZAS_TOKEN_SECRET] [--tls-cert f --tls-key f]
 //   [--rate-limit 20] [--rate-burst 40] [--max-conn-per-ip 0] [--trust-proxy] [--log-format text|json]
 //   [--shutdown-grace 30] [--audit-days 90]
+//   várias zonas: [--world ws://127.0.0.1:7790 --zone-id zona-a --maps estrada_velha,pedrambar
+//                  --public-url ws://host:7777] com o segredo do mundo em CINZAS_WORLD_SECRET (ou --world-secret)
 import { GameServer } from './server.js';
 
 function arg(name, def) {
@@ -12,7 +14,14 @@ function arg(name, def) {
   return v === undefined || v.startsWith('--') ? true : v;
 }
 
-const server = new GameServer({
+// opção que precisa de um valor (texto): sem valor é erro, ausente fica com o padrão
+function textArg(name, def) {
+  const v = arg(name, def ?? undefined);
+  if (v === true) { console.error(`--${name} precisa de um valor.`); process.exit(2); }
+  return v || undefined;
+}
+
+const opts = {
   port: Number(arg('port', process.env.PORT ?? 7777)),
   host: arg('host', '0.0.0.0'),
   dbPath: arg('db', process.env.CINZAS_DB ?? 'cinzas.db'),
@@ -35,7 +44,14 @@ const server = new GameServer({
   logFormat: arg('log-format', process.env.CINZAS_LOG_FORMAT ?? 'text'),
   shutdownGraceS: Number(arg('shutdown-grace', 30)),
   auditDays: Number(arg('audit-days', 90)),
-});
+  world: textArg('world', process.env.CINZAS_WORLD),
+  worldSecret: textArg('world-secret', process.env.CINZAS_WORLD_SECRET),
+  zoneId: textArg('zone-id', process.env.CINZAS_ZONE_ID),
+  maps: textArg('maps', process.env.CINZAS_MAPS),
+  publicUrl: textArg('public-url', process.env.CINZAS_PUBLIC_URL),
+};
+let server;
+try { server = new GameServer(opts); } catch (e) { console.error(`não foi possível iniciar: ${e.message}`); process.exit(2); }
 await server.start();
 if (server.opts.auth === 'token' && !server.opts.tokenSecret) {
   console.error('--auth token exige --token-secret (ou CINZAS_TOKEN_SECRET).');
