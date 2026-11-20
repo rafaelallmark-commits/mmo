@@ -16,6 +16,14 @@ concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+# "shell: bash" explícito = bash --noprofile --norc -eo pipefail. Sem ele o GitHub usa "bash -e" (sem pipefail)
+# e o "godot ... | tee arquivo.log || status=$?" pegaria o código do tee, não o do Godot: um Godot que nem abre
+# (biblioteca faltando, falha ao iniciar) passaria no CI. Um job que tem "defaults.run" próprio substitui este
+# bloco inteiro, por isso o job servidor repete "shell: bash".
+defaults:
+  run:
+    shell: bash
+
 env:
   GODOT_VERSION: 4.3-stable
   # SHA-512 publicado pelo Godot em .../releases/download/4.3-stable/SHA512-SUMS.txt
@@ -28,6 +36,7 @@ jobs:
     timeout-minutes: 20
     defaults:
       run:
+        shell: bash
         working-directory: server
     steps:
       - uses: actions/checkout@v7

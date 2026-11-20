@@ -22,6 +22,13 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
+# "shell: bash" explícito = bash --noprofile --norc -eo pipefail (também no runner macOS). Sem ele o GitHub usa
+# "bash -e", sem pipefail, e o "godot ... | tee arquivo.log || status=$?" da importação e da exportação perderia o
+# código de saída do Godot. Um job com "defaults.run" próprio substitui este bloco inteiro: o job testes repete.
+defaults:
+  run:
+    shell: bash
+
 env:
   GODOT_VERSION: 4.3-stable
   GODOT_TEMPLATES: 4.3.stable
@@ -39,6 +46,7 @@ jobs:
     timeout-minutes: 20
     defaults:
       run:
+        shell: bash
         working-directory: server
     steps:
       - uses: actions/checkout@v7

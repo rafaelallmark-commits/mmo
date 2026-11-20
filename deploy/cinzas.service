@@ -16,10 +16,13 @@ User=cinzas
 Group=cinzas
 WorkingDirectory=/opt/cinzas/server
 Environment=NODE_ENV=production
-# Mesmas opções da imagem Docker, com uma diferença deliberada: aqui as métricas escutam só em
-# 127.0.0.1. (No contêiner o 0.0.0.0 é o da rede interna dele; numa máquina sem Docker exporia as
-# métricas para a internet.) Ajuste o caminho do node se não for /usr/bin/node (`command -v node`).
-ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning src/main.js --port 7777 --db /var/lib/cinzas/cinzas.db --metrics-port 9100 --metrics-host 127.0.0.1
+# Mesmas opções da imagem Docker, com uma diferença deliberada: aqui o jogo (--host) e as métricas
+# escutam só em 127.0.0.1. No contêiner o 0.0.0.0 é o da rede interna dele; numa máquina sem Docker
+# abriria na internet a porta 7777 sem TLS (conta e senha viajam no WebSocket) e as métricas. Os
+# jogadores entram pelo Caddy desta máquina (wss://, reverse_proxy 127.0.0.1:7777; docs/08 §8.8).
+# Só para um teste em rede local sem TLS (ws://IP:7777): troque por --host 0.0.0.0.
+# Ajuste o caminho do node se não for /usr/bin/node (`command -v node`).
+ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning src/main.js --host 127.0.0.1 --port 7777 --db /var/lib/cinzas/cinzas.db --metrics-port 9100 --metrics-host 127.0.0.1
 Restart=always
 RestartSec=5
 # SIGTERM: o servidor salva todos os personagens e fecha o banco antes de sair.

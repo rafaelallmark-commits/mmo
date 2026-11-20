@@ -186,10 +186,24 @@ docker compose logs -f servidor
 - **Atualizar**: baixe a versão nova do repositório e rode `docker compose up -d --build`. Parar ou recriar o
   contêiner manda SIGTERM e dá 45 s (`stop_grace_period`) para o servidor salvar todos os personagens.
 - **Imagem publicada**: troque `build:` por `image: ghcr.io/<dono>/cinzas-servidor:<versão>` no serviço `servidor`.
-- **Backup**: `docker compose exec servidor npm run backup -- --db /data/cinzas.db --para /data/backups`
-  (agende no cron do host) e copie para fora: `docker compose cp servidor:/data/backups ./backups`.
-- **Restaurar**: `docker compose stop servidor`, copie a cópia para o volume como `cinzas.db` (apague `-wal` e
-  `-shm`), `docker compose start servidor`.
+- **Backup**: `docker compose exec servidor npm run backup -- --db /data/cinzas.db --para /data/backups`.
+  Para agendar no cron do host, entre na pasta `deploy/` do repositório (aqui em `/opt/cinzas`) e use `-T`
+  (sem terminal):
+  `0 * * * * cd /opt/cinzas/deploy && docker compose exec -T servidor npm run --silent backup -- --db /data/cinzas.db --para /data/backups`.
+  Copie para fora da máquina: `docker compose cp servidor:/data/backups ./backups`.
+- **Restaurar**: troque o banco **dentro do volume e como o usuário da imagem** (`docker compose run` usa o
+  usuário `cinzas`). Não use `docker compose cp` para pôr o banco no lugar: o arquivo entraria como root e o
+  servidor não conseguiria gravar nele.
+
+  ```bash
+  docker compose stop servidor
+  docker compose run --rm --no-deps servidor ls /data/backups        # escolha a cópia
+  docker compose run --rm --no-deps servidor sh -c 'cp /data/backups/cinzas-AAAA-MM-DDTHH-MM-SS.db /data/cinzas.db && rm -f /data/cinzas.db-wal /data/cinzas.db-shm'
+  docker compose start servidor
+  ```
+
+  Uma cópia que está fora da máquina entra no volume assim (depois use `/data/backups/restaurar.db` no `cp` acima):
+  `docker compose run --rm -T --no-deps servidor sh -c 'cat > /data/backups/restaurar.db' < cinzas-AAAA-MM-DDTHH-MM-SS.db`.
 - `contas` (serviço de contas) e `banco` (PostgreSQL) estão reservados, comentados, no compose e no Caddyfile.
 
 ### TLS pelo proxy
@@ -202,7 +216,8 @@ docker compose logs -f servidor
   autoridades que vem com ele. O campo ainda começa com `ws://127.0.0.1:7777`.
 - O proxy só conhece a porta 7777, que só fala WebSocket (qualquer outra requisição recebe 426): métricas e saúde
   não passam por ele. Recarregar o Caddy não derruba quem está jogando (`stream_close_delay`).
-- Sem Docker, use o mesmo Caddyfile num Caddy instalado na máquina, trocando `servidor:7777` por `127.0.0.1:7777`.
+- Sem Docker, use o mesmo Caddyfile num Caddy instalado na máquina, trocando `servidor:7777` por `127.0.0.1:7777`
+  (o `cinzas.service` escuta só em `127.0.0.1`).
 
 ### systemd (sem Docker)
 
@@ -216,9 +231,11 @@ sudo systemctl enable --now cinzas.service backup.timer
 systemctl status cinzas; journalctl -u cinzas -f; systemctl list-timers backup.timer
 ```
 
-- `cinzas.service` usa as mesmas opções da imagem, mas com as métricas em `127.0.0.1` (no contêiner o `0.0.0.0` é o
-  da rede interna dele). O `node` esperado é `/usr/bin/node` (pacotes do NodeSource); ajuste o `ExecStart` se
-  `command -v node` disser outro caminho.
+- `cinzas.service` usa as mesmas opções da imagem, mas o jogo (`--host 127.0.0.1`) e as métricas escutam só em
+  `127.0.0.1` (no contêiner o `0.0.0.0` é o da rede interna dele). Assim a porta 7777, sem TLS e com conta e senha
+  passando no WebSocket, não fica aberta na internet: os jogadores entram pelo Caddy da máquina (`wss://`). Só para
+  um teste em rede local sem TLS troque por `--host 0.0.0.0`. O `node` esperado é `/usr/bin/node` (pacotes do
+  NodeSource); ajuste o `ExecStart` se `command -v node` disser outro caminho.
 - `Restart=always`; parar manda SIGTERM com 45 s de prazo (`TimeoutStopSec`).
 - Endurecimento: `ProtectSystem=strict` com só `/var/lib/cinzas` gravável, sem *capabilities*, filtro de chamadas
   de sistema, `/home` e dispositivos inacessíveis (`systemd-analyze security cinzas`: 1,5, "OK"). Sem
@@ -226,10 +243,15 @@ systemctl status cinzas; journalctl -u cinzas -f; systemctl list-timers backup.t
 - `backup.timer` roda `npm run backup -- --db /var/lib/cinzas/cinzas.db --para /var/lib/cinzas/backups` de hora em
   hora (mantém as 14 mais recentes; `--manter N` para mais). Leve cópias para fora da máquina (rsync, rclone): um
   disco perdido leva o banco e os backups juntos.
+- **Restaurar** (como o usuário `cinzas`, para o arquivo continuar dele):
+  `sudo systemctl stop cinzas`, depois
+  `sudo -u cinzas cp /var/lib/cinzas/backups/cinzas-AAAA-MM-DDTHH-MM-SS.db /var/lib/cinzas/cinzas.db`,
+  `sudo -u cinzas rm -f /var/lib/cinzas/cinzas.db-wal /var/lib/cinzas/cinzas.db-shm` e `sudo systemctl start cinzas`.
 
 ### Antes de abrir o teste
 
 - DNS e portas 80/443 prontos; `DOMINIO` em `deploy/.env`; servidor **sem** `--dev`.
-- `docker compose ps` saudável; de outra máquina, `curl http://IP:9100/health` **não** pode responder.
+- `docker compose ps` saudável; de outra máquina, `curl http://IP:9100/health` **não** pode responder (nem
+  `curl http://IP:7777/`, que só o proxy alcança).
 - Backup agendado e uma restauração testada.
 - Release publicada; se saiu sem assinatura, avise os jogadores sobre o SmartScreen e o Gatekeeper.

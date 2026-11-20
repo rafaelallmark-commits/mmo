@@ -16,6 +16,7 @@ tools
 server/test
 .env
 **/.env
+deploy/segredos
 **/*.pfx
 **/*.p12
 **/*.pem
