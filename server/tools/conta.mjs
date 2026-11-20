@@ -23,7 +23,7 @@ try {
   if (arg('bugs', false)) {
     for (const a of st.auditTail(Number(arg('n', 50)), 'bug_report').reverse()) {
       const d = JSON.parse(a.data_json);
-      console.log(`${new Date(a.at).toISOString()}  pers=${a.char_id} (${d.classId} nv ${d.level}) ${d.map}${d.instance ? ' [instância]' : ''} (${d.x}, ${d.z}) cliente=${d.client ?? '?'} servidor=${d.server ?? '?'} dados=${d.data ?? '?'}`);
+      console.log(`${new Date(a.at).toISOString()}  pers=${a.char_id} (${d.classId} nv ${d.level}) ${d.map}${d.instance ? ' [instância]' : ''} (${d.x}, ${d.z}) cliente=${safe(d.client ?? '?')} servidor=${d.server ?? '?'} dados=${d.data ?? '?'}`);
       console.log(`    ${safe(d.text)}`);
     }
   } else if (arg('denuncias', false)) {
@@ -34,7 +34,7 @@ try {
     }
   } else if (arg('auditoria', false)) {
     for (const a of st.auditTail(Number(arg('n', 50)), arg('tipo', null) || null).reverse()) {
-      console.log(new Date(a.at).toISOString(), a.kind.padEnd(16), `conta=${a.account_id ?? '-'} pers=${a.char_id ?? '-'} ip=${a.ip ?? '-'}`, a.data_json);
+      console.log(new Date(a.at).toISOString(), a.kind.padEnd(16), `conta=${a.account_id ?? '-'} pers=${a.char_id ?? '-'} ip=${a.ip ?? '-'}`, safe(a.data_json));
     }
   } else {
     let name = arg('conta', null);

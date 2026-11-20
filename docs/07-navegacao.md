@@ -89,9 +89,9 @@ Da mais baixa para a mais alta. Uma camada de cima bloqueia o clique nas de baix
 | Câmera | botão direito arrastando ou Q/E gira; roda aproxima |
 | Atalhos | 1–6 habilidades (a 6ª é a do nível 25; a barra mostra a recarga; depois de cada habilidade há 1 s de recarga global), 7–8 tônicos (o mais forte do seu nível) |
 | Conjuração | habilidades com tempo de conjuração mostram a barra "Conjurando…": fique parado; andar, atacar ou usar item interrompe sem gastar mana |
-| Vender e descartar | bolsa (**I**), botão direito no item: **Vender** (com loja ou ferreiro aberto; metade do valor) ou **Descartar…** (pede confirmação) |
+| Vender e descartar | bolsa (**I**), botão direito no item: **Vender** (com loja, ferreiro ou armeiro aberto; metade do valor) ou **Descartar…** (pede confirmação) |
 | Painéis | I inventário, C ficha, J missões, L clã, Enter chat, Esc fechar/menu |
-| Chat | `/g` grupo · `/s Nome` sussurro · `/c` clã · `/convidar Nome` · `/troca Nome` · `/duelo Nome` · `/cla criar Nome SIGLA` · `/cla convidar Nome` · `/cla sair` |
+| Chat | `/g` grupo · `/s Nome` sussurro · `/c` clã · `/convidar Nome` · `/troca Nome` · `/duelo Nome` · `/cla criar Nome SIGLA` · `/cla convidar Nome` · `/cla sair` · `/denunciar Nome motivo` · `/bug texto` (nome antigo com espaço entre aspas: `/s "Ana Maria" oi`) |
 
 ## 7.5 Direção gráfica: 3D estilizado com traço de anime
 

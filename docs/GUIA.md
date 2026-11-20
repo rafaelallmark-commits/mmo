@@ -14,7 +14,8 @@ Bem-vindo a Várdia. Este guia cobre o que você precisa para começar; as regra
    idade (13 anos ou mais) e de aceite dos termos e toque em *Criar e receber o código*.
 3. Digite o **código de 6 dígitos** que chega por e-mail (vale 30 minutos; dá para pedir outro).
 4. Entre com conta e senha. Esqueceu a senha? *Esqueci a senha* manda um código para o e-mail.
-5. Crie o personagem: escolha a **origem** (Âmbar ou Nácar), a **classe** e o nome.
+5. Crie o personagem: escolha a **origem** (Âmbar ou Nácar), a **classe** e o nome (3 a 16 letras, números,
+   `_` ou `-`, **sem espaços**).
 
 ## 2. As oito classes
 
@@ -71,7 +72,8 @@ Pedrâmbar e Vau de Nácar (cidades) → **A Estrada Velha** (níveis 1–5) →
 ## 6. Junto com os outros
 
 - **Grupo** (até 5): `/convidar Nome` ou clique no jogador → *Grupo*. Quem está perto divide o XP, mesmo sem bater.
-- **Chat**: `/g` grupo · `/s Nome` sussurro · `/c` clã · sem prefixo, o mapa.
+- **Chat**: `/g` grupo · `/s Nome` sussurro · `/c` clã · sem prefixo, o mapa. Nome antigo com espaço vai entre
+  aspas: `/s "Ana Maria" oi`.
 - **Troca**: clique no jogador → *Trocar* (ou `/troca Nome`). Os dois montam a oferta, **travam** e **confirmam**;
   qualquer mudança destrava os dois — confira a oferta antes de confirmar.
 - **Clã**: nível 10 e 500 de ouro para fundar (**L**). A sigla aparece antes do nome dos membros.
@@ -81,8 +83,8 @@ Pedrâmbar e Vau de Nácar (cidades) → **A Estrada Velha** (níveis 1–5) →
 ## 7. Convivência
 
 Respeito no chat e nos nomes; nada de robôs, programas que jogam sozinhos, exploração de falhas ou venda de itens e
-contas por dinheiro. Use **`/denunciar Nome motivo`** para avisar a equipe (as últimas falas do denunciado vão
-junto). A equipe pode silenciar, desconectar ou suspender contas — veja os [Termos de uso](TERMOS.md).
+contas por dinheiro. Use **`/denunciar Nome motivo`** para avisar a equipe (vão junto as últimas falas do
+denunciado que você viu: as do mapa e o que ele disse a você, no grupo ou no clã). A equipe pode silenciar, desconectar ou suspender contas — veja os [Termos de uso](TERMOS.md).
 
 ## 8. Seus dados
 

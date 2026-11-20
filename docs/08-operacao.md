@@ -334,7 +334,8 @@ recompensas de missão, criação/confirmação/exclusão de conta, troca de sen
 | `/gm suspender Nome horas motivo` · `/gm desbloquear Nome` | Suspende a conta (derruba e recusa o login, também no serviço de contas). Mestre: até 72 h; acima disso ou `perm` (sem data), só `admin`. Motivo obrigatório. |
 | `/gm onde Nome` · `/gm anunciar texto` | Mapa e posição do jogador / aviso para todos os conectados. |
 
-Jogadores denunciam com `/denunciar Nome motivo` (5 por hora); a denúncia grava as últimas falas do denunciado.
+Jogadores denunciam com `/denunciar Nome motivo` (5 por hora); a denúncia grava as últimas falas do denunciado que
+o denunciante podia ver (as do mapa e os sussurros, falas de grupo e de clã que chegaram a ele; D123).
 Pela ferramenta, fora do jogo: `npm run conta -- --db cinzas.db --personagem Nome --suspender --horas 24 --motivo "..."`
 (ou `--permanente`, `--retirar-suspensao`, `--silenciar --minutos 60`, `--retirar-silencio`) e
 `npm run conta -- --db cinzas.db --denuncias --n 50`; relatos de problema dos testadores (`/bug texto` no jogo, com mapa,

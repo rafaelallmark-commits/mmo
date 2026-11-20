@@ -80,8 +80,8 @@ test('refino +4..+6: chances, queda de grau e Selo de Proteção', async () => {
     await c.request('gm', { cmd: 'gold', amount: 100000 });
     const it = p.char.items.get(axe);
     const count = (defId) => [...p.char.items.values()].filter((x) => x.loc === 'bag' && x.defId === defId).reduce((s, x) => s + x.qty, 0);
-    const realRng = p.zone.rng;
-    const forced = (v) => { p.zone.rng = () => v; };
+    const realRng = server.refineRng;
+    const forced = (v) => { server.refineRng = () => v; };
     try {
       it.enh = 3;
       let q = await c.request('enhance_quote', { npc: 'smith_gusmao', instance: axe });
@@ -135,7 +135,7 @@ test('refino +4..+6: chances, queda de grau e Selo de Proteção', async () => {
       assert.equal(r.code, 'no_protect');
       assert.equal(p.char.gold, goldBefore);
       log('refino: queda, selo, máximo e recusa conferidos');
-    } finally { p.zone.rng = realRng; }
+    } finally { server.refineRng = realRng; }
     c.ws.close();
   });
 });

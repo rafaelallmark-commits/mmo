@@ -21,7 +21,7 @@
 import { randomUUID, randomBytes, timingSafeEqual, randomInt } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { PgBridge, rowsOf, rowOf } from './pg-bridge.js';
-import { hashPassword, codeHash, charFromRow, charSaveValues } from './store.js';
+import { hashPassword, codeHash, charFromRow, charSaveValues, exportAuditRows } from './store.js';
 
 export const PG_MIGRATIONS = [
   { v: 1, name: 'base (M1–M3)', sql: `
@@ -524,14 +524,16 @@ export class PgStore {
 
   exportAccount(accountId) {
     const mine = 'SELECT id FROM characters WHERE account_id = $1';
-    const [conta, personagens, itens, missoes, auditoria] = this.batch([
-      ['SELECT id, name, email, verified, role, created_at FROM accounts WHERE id = $1', [accountId], 'get'],
+    const [conta, personagens, itens, missoes, clas, auditoria] = this.batch([
+      ['SELECT id, name, email, verified, role, created_at, banned_until, ban_reason, muted_until FROM accounts WHERE id = $1', [accountId], 'get'],
       ['SELECT id, name, class_id, level, xp, gold, map_id, played_s, created_at, updated_at FROM characters WHERE account_id = $1 ORDER BY id', [accountId], 'all'],
       [`SELECT char_id, def_id, qty, enh, loc, slot, source, created_at FROM item_instances WHERE char_id IN (${mine}) ORDER BY char_id, created_at, id COLLATE "C"`, [accountId], 'all'],
       [`SELECT char_id, quest_id, state, updated_at FROM quest_progress WHERE char_id IN (${mine}) ORDER BY char_id, quest_id COLLATE "C"`, [accountId], 'all'],
-      ['SELECT at, kind, char_id, ip, data_json FROM audit_log WHERE account_id = $1 ORDER BY at, id', [accountId], 'all'],
+      [`SELECT m.char_id, c.name, c.tag, m.rank, m.joined_at FROM clan_members m JOIN clans c ON c.id = m.clan_id WHERE m.char_id IN (${mine}) ORDER BY m.char_id`, [accountId], 'all'],
+      // a conta e os personagens dela (as linhas do jogo — saque, compra, venda, refino, troca, clã — têm só o personagem)
+      [`SELECT at, kind, char_id, ip, data_json FROM audit_log WHERE account_id = $1 OR char_id IN (${mine}) ORDER BY at, id`, [accountId], 'all'],
     ]);
-    return { conta, personagens, itens, missoes, auditoria };
+    return { conta, personagens, itens, missoes, clas, auditoria: exportAuditRows(auditoria) };
   }
 
   // ---------- comércio ----------

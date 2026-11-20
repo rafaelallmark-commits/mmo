@@ -78,6 +78,8 @@ func _ready() -> void:
 	_build_channel(root)
 	social = Social.new()
 	social.build(self, root)
+	# o aviso de conexão perdida fica por cima de tudo (painéis de troca e convite não cobrem os botões)
+	disc_overlay.move_to_front()
 	refresh_char()
 	# som ao abrir e fechar painéis (tecla, botão Fechar ou Esc: todos passam por "visible")
 	for p in [inv_panel, sheet_panel, journal_panel, npc_panel, invite_panel]:
@@ -260,6 +262,11 @@ func _build_overlays(root: Control) -> void:
 	var d := _overlay(root, "Conexão perdida.", "Reconectar", func(): main.reconnect())
 	disc_overlay = d
 	disc_label = d.get_meta("label")
+	# saída sempre à mão (conta suspensa, servidor fora do ar): volta ao título
+	var out := Button.new()
+	out.text = "Sair para o título"
+	out.pressed.connect(func(): main.leave_world(true))
+	disc_label.get_parent().add_child(out)
 
 func _overlay(root: Control, text: String, button: String, cb: Callable) -> Control:
 	var o := ColorRect.new()
@@ -622,6 +629,9 @@ func hide_death() -> void:
 func show_disconnect(reason: String) -> void:
 	disc_label.text = "Conexão perdida.\n%s" % reason
 	disc_overlay.visible = true
+	# troca, duelo e convites acabaram com a sessão no servidor (o aviso não chega por um soquete morto)
+	if social:
+		social.reset()
 
 func set_disconnect_text(t: String) -> void:
 	disc_label.text = t
@@ -695,7 +705,7 @@ func _refresh_inventory() -> void:
 ## Último comerciante (loja ou ferreiro) com quem você falou nos últimos 5 min: dá para vender a ele
 ## (o servidor confere se você ainda está perto).
 func _merchant_open() -> bool:
-	return str(npc_open.get("role", "")) in ["shop", "smith"] and Time.get_ticks_msec() - _npc_open_at < 300000
+	return str(npc_open.get("role", "")) in ["shop", "smith", "armorer"] and Time.get_ticks_msec() - _npc_open_at < 300000
 
 func _sell_price(inst: Dictionary) -> int:
 	var d: Dictionary = main.defs["items"].get(inst["defId"], {})
@@ -729,7 +739,7 @@ func _bag_menu(inst: Dictionary) -> void:
 		var label := "Vender%s a %s por %d de ouro" % [" (x%d)" % int(inst["qty"]) if int(inst.get("qty", 1)) > 1 else "", str(npc_open.get("name", "comerciante")).get_slice(",", 0), _sell_price(inst)]
 		_menu_button(v, label, func(): _on_bag_menu(1, inst))
 	else:
-		var off := _menu_button(v, "Vender (fale com uma loja ou ferreiro)", func(): pass)
+		var off := _menu_button(v, "Vender (fale com um comerciante)", func(): pass)
 		off.disabled = true
 	_menu_button(v, "Descartar…", func(): _on_bag_menu(2, inst))
 	_menu_button(v, "Cancelar", func(): pass)
@@ -904,14 +914,13 @@ func _chat_command(t: String) -> void:
 	if t.begins_with("/g "):
 		Net.request("chat", {"channel": "party", "text": t.substr(3)}, cb)
 	elif t.begins_with("/s "):
-		var rest := t.substr(3).strip_edges()
-		var sp := rest.find(" ")
-		if sp <= 0:
-			error("Use: /s Nome mensagem")
+		var nr: Array = Social.split_name(t.substr(3))
+		if nr[0] == "" or nr[1] == "":
+			error("Use: /s Nome mensagem (nome com espaço entre aspas)")
 			return
-		Net.request("chat", {"channel": "whisper", "to": rest.substr(0, sp), "text": rest.substr(sp + 1)}, cb)
+		Net.request("chat", {"channel": "whisper", "to": nr[0], "text": nr[1]}, cb)
 	elif t.begins_with("/convidar "):
-		Net.request("party_invite", {"name": t.substr(10).strip_edges()}, func(r):
+		Net.request("party_invite", {"name": Social.name_arg(t.substr(10))}, func(r):
 			if r["ok"]:
 				system("Convite enviado.")
 			else:

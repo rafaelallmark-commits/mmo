@@ -457,7 +457,7 @@ func _login_with_accounts() -> void:
 	set_status("Entrando pelo serviço de contas...")
 	_accounts_post("/sessoes", {"conta": account, "senha": password}, func(ok: bool, body: Dictionary):
 		if not ok:
-			set_status(str(body.get("erro", "Não foi possível entrar.")), true)
+			_login_failed(str(body.get("erro", "Não foi possível entrar.")))
 			return
 		Net.request("login_token", {"token": body["token"], "delta": true}, _on_login))
 
@@ -486,9 +486,19 @@ func _accounts_post(path: String, body: Dictionary, cb: Callable) -> void:
 		http.queue_free()
 		cb.call(false, {"erro": "Não foi possível falar com o serviço de contas."})
 
+## Login recusado. Reconectando de dentro do mundo (conta suspensa, por exemplo), o motivo vai para o
+## aviso de conexão, que tem também a saída para o título; fora do mundo, para a linha de status.
+func _login_failed(reason: String) -> void:
+	if reconnecting and state == "world" and hud:
+		reconnecting = false
+		hud.show_disconnect(reason)
+		Sfx.ui("ui_error")
+	else:
+		set_status(reason, true)
+
 func _on_login(r: Dictionary) -> void:
 	if not r["ok"]:
-		set_status(r["reason"], true)
+		_login_failed(str(r["reason"]))
 		return
 	chars_cache = r["chars"]
 	classes_cache = r["classes"]
@@ -679,6 +689,7 @@ func enter_world(cid: int) -> void:
 ## diário. A interface (chat, painéis) e as opções continuam as mesmas.
 func _enter_ok(r: Dictionary) -> void:
 	reconnecting = false
+	_kicked_reason = ""
 	state = "world"
 	_clear_screen()
 	if menu_scene:
@@ -692,6 +703,7 @@ func _enter_ok(r: Dictionary) -> void:
 		hud.main = self
 		add_child(hud)
 	hud.visible = true
+	hud.social.reset()  # troca, duelo e convites da conexão anterior já acabaram no servidor
 	set_char(r["char"])
 	snap_cache = {}
 	world.apply_snapshot(r["snapshot"])
@@ -813,6 +825,8 @@ func _on_zone(m: Dictionary) -> void:
 func leave_world(to_title: bool) -> void:
 	in_world = false
 	state = "leaving"
+	_kicked_reason = ""
+	reconnecting = false
 	_transfer = {}  # várias zonas: sair no meio de uma transferência desiste dela (a conexão nova é a de entrada)
 	close_pause_menu()
 	if world:

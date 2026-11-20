@@ -213,6 +213,18 @@ export function charSaveValues(c, now = Date.now()) {
   ];
 }
 
+// Exportação dos dados da conta (LGPD): a denúncia que a conta fez sai sem as falas do denunciado e sem o id
+// da conta dele (dados de outra pessoa, guardados só para a equipe analisar); fica o número de falas.
+export function exportAuditRows(rows) {
+  return rows.map((r) => {
+    if (r.kind !== 'report') return r;
+    try {
+      const { chat, targetAccount, ...d } = JSON.parse(r.data_json);
+      return { ...r, data_json: JSON.stringify({ ...d, chatLines: Array.isArray(chat) ? chat.length : 0 }) };
+    } catch { return r; }
+  });
+}
+
 export class Store {
   constructor(path = ':memory:') {
     this.path = path;
@@ -346,7 +358,7 @@ export class Store {
 
   // Portabilidade (LGPD): tudo o que guardamos da conta, em JSON.
   exportAccount(accountId) {
-    const acc = this.prep('SELECT id, name, email, verified, role, created_at FROM accounts WHERE id = ?').get(accountId);
+    const acc = this.prep('SELECT id, name, email, verified, role, created_at, banned_until, ban_reason, muted_until FROM accounts WHERE id = ?').get(accountId);
     const chars = this.prep('SELECT id, name, class_id, level, xp, gold, map_id, played_s, created_at, updated_at FROM characters WHERE account_id = ?').all(accountId);
     const ids = chars.map((c) => c.id);
     const inChars = (sql) => ids.flatMap((id) => this.prep(sql).all(id));
@@ -355,7 +367,9 @@ export class Store {
       personagens: chars,
       itens: inChars('SELECT char_id, def_id, qty, enh, loc, slot, source, created_at FROM item_instances WHERE char_id = ?'),
       missoes: inChars('SELECT char_id, quest_id, state, updated_at FROM quest_progress WHERE char_id = ?'),
-      auditoria: this.prep('SELECT at, kind, char_id, ip, data_json FROM audit_log WHERE account_id = ? ORDER BY at').all(accountId),
+      clas: inChars('SELECT m.char_id, c.name, c.tag, m.rank, m.joined_at FROM clan_members m JOIN clans c ON c.id = m.clan_id WHERE m.char_id = ?'),
+      // a conta e os personagens dela (as linhas do jogo — saque, compra, venda, refino, troca, clã — têm só o personagem)
+      auditoria: exportAuditRows(this.prep('SELECT at, kind, char_id, ip, data_json FROM audit_log WHERE account_id = ? OR char_id IN (SELECT id FROM characters WHERE account_id = ?) ORDER BY at, id').all(accountId, accountId)),
     };
   }
 

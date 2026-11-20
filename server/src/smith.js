@@ -44,7 +44,8 @@ export function enhancePreview(def, enh, data) {
   return out;
 }
 
-// Rolagem com o RNG semeado da zona: sucesso se rolagem (0–100) < chance.
+// Rolagem (0–100, uma casa) contra a chance: sucesso se rolagem < chance. O servidor passa um RNG
+// criptográfico (server.refineRng); o RNG semeado da zona seria previsível para quem vê as rolagens.
 export function rollEnhance(rng, chancePct) {
   const roll = Math.round(rng() * 1000) / 10;
   return { roll, success: roll < chancePct };

@@ -40,13 +40,9 @@ export class Moderation {
   // no login: guarda o silêncio na sessão (o chat não consulta o banco a cada fala)
   onLogin(s, acc) { s.mutedUntil = acc.muted_until ?? 0; }
 
-  // gancho do chat: recusa se a conta está silenciada; senão guarda a fala para as denúncias
-  chatBlocked(p, channel, text) {
-    const muted = this.mutedReason(p);
-    if (muted) return muted;
-    this.remember(p.char.id, channel, text);
-    return null;
-  }
+  // gancho do chat: recusa se a conta está silenciada. A fala só é guardada (remember) depois de entregue,
+  // com quem a recebeu: sussurro para quem não está on-line ou grupo inexistente não viram contexto.
+  chatBlocked(p) { return this.mutedReason(p); }
 
   // silenciado? (vale para chat e para textos que o clã inteiro recebe, como a mensagem do dia)
   mutedReason(p) {
@@ -55,14 +51,29 @@ export class Moderation {
     return null;
   }
 
-  // guarda uma fala para as denúncias (também as que chegam de outras zonas: sussurro, grupo e clã)
-  remember(charId, channel, text, at = Date.now()) {
+  // Guarda uma fala entregue, para dar contexto às denúncias (também as que chegam de outras zonas:
+  // sussurro, grupo e clã). to = ids dos personagens que a receberam; null = fala do mapa (pública). A
+  // denúncia leva só o que o denunciante podia ver: as falas do mapa e as que chegaram a ele (D86).
+  remember(charId, channel, text, to = null, at = Date.now()) {
     const t = cleanText(text, 200);
     if (!t) return;
+    const ch = CHANNELS.has(channel) ? channel : 'outro';
+    const ids = Array.isArray(to) ? to.filter(Number.isInteger) : null;
     const log = (this.chatLog.get(charId) ?? []).filter((l) => at - l.at <= HOUR);
-    log.push({ at, channel: CHANNELS.has(channel) ? channel : 'outro', text: t });
-    if (log.length > CHAT_KEEP) log.shift();
+    const last = log[log.length - 1];
+    // a mesma fala chegando aos poucos (de outra zona, um destinatário por vez): junta quem recebeu
+    if (ids && last && last.channel === ch && last.text === t && Array.isArray(last.to) && at - last.at < 2000) {
+      for (const id of ids) if (!last.to.includes(id)) last.to.push(id);
+    } else {
+      log.push({ at, channel: ch, text: t, ...(ids ? { to: ids } : {}) });
+      if (log.length > CHAT_KEEP) log.shift();
+    }
     this.chatLog.set(charId, log);
+  }
+
+  // o que o denunciante podia ver: fala do mapa, ou fala que chegou a ele (sussurro, grupo e clã dele)
+  static visibleTo(line, charId) {
+    return line.channel === 'zone' || (Array.isArray(line.to) && line.to.includes(charId));
   }
 
   // várias zonas: as falas recentes chegam com o personagem transferido (sem repetir as que já temos)
@@ -169,6 +180,11 @@ export class Moderation {
         if ((permanent || hours > MAX_GM_BAN_H) && role !== 'admin') return { ok: false, code: 'forbidden', reason: `Mestres suspendem até ${MAX_GM_BAN_H} h; acima disso, só administradores.` };
         if (!reason) return { ok: false, code: 'bad_request', reason: 'Informe o motivo da suspensão.' };
         const until = permanent ? PERMANENT : Date.now() + Math.round(hours * 3600_000);
+        // mestre não encurta uma suspensão maior que já existe (a de um admin, por exemplo): só admin
+        if (role !== 'admin') {
+          const cur = this.st.findAccountById(t.accountId)?.banned_until ?? 0;
+          if (cur > until) return { ok: false, code: 'forbidden', reason: `A conta de ${t.name} já está suspensa ${untilText(cur)}; só administradores encurtam uma suspensão.` };
+        }
         this.st.setBan(t.accountId, until, reason);
         this.st.audit('mod_ban', { ...by, targetAccount: t.accountId, target: t.charId, until, reason });
         // derruba todas as sessões da conta (nesta zona e, com várias zonas, nas outras)
@@ -225,14 +241,14 @@ export class Moderation {
     const now = Date.now();
     const recent = (this.bugs.get(p.char.id) ?? []).filter((t) => now - t < 3600_000);
     if (recent.length >= BUGS_PER_HOUR) return { ok: false, code: 'too_many', reason: 'Você já mandou muitos relatos nesta hora. Obrigado pela paciência!' };
-    const t = typeof text === 'string' ? text.replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 500) : '';
+    const t = cleanText(text, 500);
     if (t.length < 5) return { ok: false, code: 'bad_request', reason: 'Descreva o problema: /bug o que aconteceu.' };
     recent.push(now);
     this.bugs.set(p.char.id, recent);
     const sess = this.s.byChar.get(p.char.id);
     const c = p.char;
     this.st.audit('bug_report', { accountId: sess?.accountId ?? null, charId: c.id, ip: sess?.ip ?? null, text: t, map: p.zone.mapId, instance: p.zone.instanceId ?? null,
-      x: Math.round(c.x * 10) / 10, z: Math.round(c.z * 10) / 10, level: c.level, classId: c.classId, client: typeof client === 'string' ? client.slice(0, 40) : null,
+      x: Math.round(c.x * 10) / 10, z: Math.round(c.z * 10) / 10, level: c.level, classId: c.classId, client: cleanText(client, 40) || null,
       server: this.s.serverVersion ?? null, data: this.s.dataVersion ?? null });
     return { ok: true, message: 'Obrigado! O problema foi registrado com o lugar e a hora em que você está.', cache: false };
   }
@@ -250,7 +266,10 @@ export class Moderation {
     recent.push(now);
     this.reports.set(p.char.id, recent);
     const sess = this.s.byChar.get(p.char.id);
-    const chat = (this.chatLog.get(t.charId) ?? []).filter((l) => now - l.at <= HOUR); // só a última hora (política de privacidade)
+    // só a última hora (política de privacidade) e só o que o denunciante podia ver: as falas do mapa e as
+    // que chegaram a ele; sussurros, grupo e clã de outras pessoas não vão para a denúncia
+    const chat = (this.chatLog.get(t.charId) ?? []).filter((l) => now - l.at <= HOUR && Moderation.visibleTo(l, p.char.id))
+      .map(({ at, channel, text }) => ({ at, channel, text }));
     this.st.audit('report', { accountId: sess?.accountId ?? null, charId: p.char.id, ip: sess?.ip ?? null, target: t.charId, targetName: t.name, targetAccount: t.accountId, reason: why, map: p.zone.mapId, chat });
     return { ok: true, message: 'Denúncia registrada. A equipe vai analisar. Obrigado.', cache: false };
   }
