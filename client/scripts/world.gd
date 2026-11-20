@@ -252,6 +252,8 @@ func apply_snapshot(snap: Dictionary) -> void:
 		var name: String
 		if d["k"] == "p":
 			name = "%s  nv %d" % [d["n"], int(d["lvl"])]
+			if d.get("cl") != null and str(d.get("cl")) != "":
+				name = "[%s] %s" % [str(d["cl"]), name]
 			if d.get("ttl") != null and str(d.get("ttl")) != "":
 				name = "«%s»\n%s" % [str(d["ttl"]), name]
 		elif d["k"] == "e":
@@ -634,8 +636,17 @@ func _click(screen_pos: Vector2) -> void:
 	for eid in entities.keys():
 		var pe: Dictionary = entities[eid]
 		if pe["data"]["k"] == "p" and eid != main.ch.get("eid", "") and _flat_dist(pe["node"].position, gp) < 1.2:
+			if main.hud.social.in_duel_with(eid):
+				# duelo: o oponente vira alvo de ataque
+				selected = eid
+				pending_cast = {}
+				_stop_prediction()
+				Net.request("attack", {"target": eid})
+				main.hud.refresh_target()
+				return
 			ally_selected = eid
 			main.hud.system("Aliado selecionado: %s" % pe["data"]["n"])
+			main.hud.social.show_player_actions(str(pe["data"]["n"]))
 			return
 	var best := ""
 	var best_d := 1.8

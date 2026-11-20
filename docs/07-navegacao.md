@@ -45,8 +45,8 @@ Da mais baixa para a mais alta. Uma camada de cima bloqueia o clique nas de baix
 |---|---|---|
 | 1. Mundo 3D | câmera elevada, personagens, monstros, NPCs, portais | clique: andar, atacar, falar, coletar |
 | 2. HUD fixo | vida/mana/XP, barra de atalhos (1–5), alvo, rastreador de missões, painel de grupo, chat | sempre visível |
-| 3. Painéis | Inventário (**I**), Ficha (**C**), Missões (**J**) — podem ficar abertos juntos | tecla ou **Esc** |
-| 4. Diálogos | NPC (missões, loja, prova de classe), convite de grupo | clique no NPC / **Esc** |
+| 3. Painéis | Inventário (**I**), Ficha (**C**), Missões (**J**), Clã (**L**) — podem ficar abertos juntos | tecla ou **Esc** |
+| 4. Diálogos | NPC (missões, loja, prova de classe, ferreiro), convites (grupo, troca, clã, duelo), janela de troca, ações sobre outro jogador | clique no NPC ou no jogador / **Esc** (fechar a troca a cancela) |
 | 5. Menu de pausa | Continuar, Opções, Trocar de personagem, Sair para o título, Sair do jogo | **Esc** sem nada aberto |
 | 6. Avisos bloqueantes | Você caiu (voltar ao posto) · Conexão perdida (reconectar) | automático |
 
@@ -82,10 +82,12 @@ Da mais baixa para a mais alta. Uma camada de cima bloqueia o clique nas de baix
 | Andar | clique esquerdo no chão |
 | Atacar / selecionar | clique no monstro |
 | Falar, usar objeto, atravessar portal | clique no NPC, objeto ou anel do portal |
-| Selecionar aliado (curas) | clique em outro jogador |
+| Selecionar aliado (curas) e abrir as ações (Trocar, Duelar, Grupo, Clã, Sussurrar) | clique em outro jogador |
+| Atacar o oponente num duelo | clique nele (fora de duelo, jogador não é alvo) |
 | Câmera | botão direito arrastando ou Q/E gira; roda aproxima |
 | Atalhos | 1–3 habilidades, 4–5 tônicos |
-| Painéis | I inventário, C ficha, J missões, Enter chat, Esc fechar/menu |
+| Painéis | I inventário, C ficha, J missões, L clã, Enter chat, Esc fechar/menu |
+| Chat | `/g` grupo · `/s Nome` sussurro · `/c` clã · `/convidar Nome` · `/troca Nome` · `/duelo Nome` · `/cla criar Nome SIGLA` · `/cla convidar Nome` · `/cla sair` |
 
 ## 7.5 Direção gráfica: 3D estilizado com traço de anime
 
@@ -123,3 +125,23 @@ Da mais baixa para a mais alta. Uma camada de cima bloqueia o clique nas de baix
 | | |
 |---|---|
 | ![Prova de classe](img/21_prova.png) | ![Canais da Eclusa](img/22_canais.png) |
+
+## 7.8 Social: troca, clã e duelo
+
+- **Troca**: pedido (ações do jogador ou `/troca Nome`) → o outro aceita → cada um clica nos itens da bolsa
+  para pô-los na oferta e define o ouro → os dois **travam** → os dois **confirmam**. Qualquer mudança de
+  oferta destrava os dois lados e mostra um aviso ("a oferta mudou — confira"). Afastar-se, cair ou mudar
+  de mapa cancela.
+- **Clã** (**L**): sem clã, o painel mostra o formulário de fundação (nível 10, 500 de ouro); com clã, a lista
+  de membros (on-line primeiro, por cargo) e, conforme o cargo, promover/rebaixar, passar a liderança,
+  expulsar, convidar e mudar a mensagem do dia. A sigla aparece antes do nome de todos os membros.
+- **Duelo**: desafio (ações do jogador ou `/duelo Nome`) → aceite → contagem de 3 s no alto da tela →
+  "DUELO contra X" enquanto valer. Clique no oponente para atacar; habilidades de alvo único também valem.
+  Ninguém morre: quem chegaria a 0 fica com 1 de vida e perde.
+- **Ferreiro**: até +6; a partir de +3 → +4 a cotação mostra o risco ("se falhar, cai para +N") e a caixa
+  **Usar Selo de Proteção**.
+
+![Troca travada pelos dois lados](img/social_troca.png)
+![Painel do clã](img/social_cla.png)
+![Duelo](img/social_duelo.png)
+![Ferreiro com risco](img/social_ferreiro.png)

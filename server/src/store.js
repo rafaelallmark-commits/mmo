@@ -125,6 +125,23 @@ export const MIGRATIONS = [
     db.exec('CREATE INDEX IF NOT EXISTS idx_audit_at ON audit_log(at)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_audit_char ON audit_log(char_id, at)');
   } },
+  { v: 4, name: 'clãs (pós-versão 1)', up: (db) => {
+    db.exec(`CREATE TABLE IF NOT EXISTS clans (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      tag TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      leader_char_id INTEGER NOT NULL REFERENCES characters(id),
+      motd TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL
+    )`);
+    db.exec(`CREATE TABLE IF NOT EXISTS clan_members (
+      clan_id INTEGER NOT NULL REFERENCES clans(id),
+      char_id INTEGER NOT NULL PRIMARY KEY REFERENCES characters(id),
+      rank TEXT NOT NULL CHECK (rank IN ('leader','officer','member')),
+      joined_at INTEGER NOT NULL
+    )`);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_clan_members_clan ON clan_members(clan_id)');
+  } },
 ];
 
 export function migrate(db) {
@@ -248,6 +265,13 @@ export class Store {
     return this.tx(() => {
       const chars = this.prep('SELECT id FROM characters WHERE account_id = ?').all(accountId);
       for (const c of chars) {
+        this.prep('DELETE FROM clan_members WHERE char_id = ?').run(c.id);
+        // clã liderado por quem saiu: passa para o oficial (ou membro) mais antigo; vazio, acaba
+        for (const cl of this.prep('SELECT id FROM clans WHERE leader_char_id = ?').all(c.id)) {
+          const next = this.prep("SELECT char_id FROM clan_members WHERE clan_id = ? ORDER BY CASE rank WHEN 'officer' THEN 0 ELSE 1 END, joined_at LIMIT 1").get(cl.id);
+          if (next) { this.prep('UPDATE clans SET leader_char_id = ? WHERE id = ?').run(next.char_id, cl.id); this.prep("UPDATE clan_members SET rank = 'leader' WHERE char_id = ?").run(next.char_id); }
+          else this.prep('DELETE FROM clans WHERE id = ?').run(cl.id);
+        }
         this.prep('DELETE FROM item_instances WHERE char_id = ?').run(c.id);
         this.prep('DELETE FROM quest_progress WHERE char_id = ?').run(c.id);
         this.prep('DELETE FROM loot_drops WHERE char_id = ? AND claimed_at IS NULL').run(c.id);
@@ -272,6 +296,37 @@ export class Store {
       missoes: inChars('SELECT char_id, quest_id, state, updated_at FROM quest_progress WHERE char_id = ?'),
       auditoria: this.prep('SELECT at, kind, char_id, ip, data_json FROM audit_log WHERE account_id = ? ORDER BY at').all(accountId),
     };
+  }
+
+  // ---------- comércio ----------
+  // Passa um item da bolsa de um personagem para a de outro (dentro de tx); false se não estava lá.
+  transferItem(itemId, fromChar, toChar) {
+    return this.prep("UPDATE item_instances SET char_id = ?, loc = 'bag', slot = NULL WHERE id = ? AND char_id = ? AND loc = 'bag'").run(toChar, itemId, fromChar).changes === 1;
+  }
+
+  // ---------- clãs ----------
+  createClan(name, tag, leaderCharId) {
+    const r = this.prep('INSERT INTO clans (name, tag, leader_char_id, created_at) VALUES (?, ?, ?, ?)').run(name, tag, leaderCharId, Date.now());
+    const id = Number(r.lastInsertRowid);
+    this.prep("INSERT INTO clan_members (clan_id, char_id, rank, joined_at) VALUES (?, ?, 'leader', ?)").run(id, leaderCharId, Date.now());
+    return id;
+  }
+  clanById(id) { return this.prep('SELECT * FROM clans WHERE id = ?').get(id); }
+  clanByNameOrTag(name, tag) { return this.prep('SELECT * FROM clans WHERE name = ? OR tag = ?').get(name, tag); }
+  clanOfChar(charId) {
+    return this.prep('SELECT c.id, c.name, c.tag, c.motd, c.leader_char_id, m.rank FROM clan_members m JOIN clans c ON c.id = m.clan_id WHERE m.char_id = ?').get(charId);
+  }
+  clanMembers(clanId) {
+    return this.prep('SELECT m.char_id, m.rank, ch.name, ch.level, ch.class_id FROM clan_members m JOIN characters ch ON ch.id = m.char_id WHERE m.clan_id = ? ORDER BY m.rank, ch.name').all(clanId);
+  }
+  addClanMember(clanId, charId, rank = 'member') { this.prep('INSERT INTO clan_members (clan_id, char_id, rank, joined_at) VALUES (?, ?, ?, ?)').run(clanId, charId, rank, Date.now()); }
+  removeClanMember(charId) { this.prep('DELETE FROM clan_members WHERE char_id = ?').run(charId); }
+  setClanRank(charId, rank) { this.prep('UPDATE clan_members SET rank = ? WHERE char_id = ?').run(rank, charId); }
+  setClanLeader(clanId, charId) { this.prep('UPDATE clans SET leader_char_id = ? WHERE id = ?').run(charId, clanId); }
+  setClanMotd(clanId, motd) { this.prep('UPDATE clans SET motd = ? WHERE id = ?').run(motd, clanId); }
+  deleteClan(clanId) {
+    this.prep('DELETE FROM clan_members WHERE clan_id = ?').run(clanId);
+    this.prep('DELETE FROM clans WHERE id = ?').run(clanId);
   }
 
   // ---------- auditoria ----------

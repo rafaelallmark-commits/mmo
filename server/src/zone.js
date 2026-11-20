@@ -3,6 +3,7 @@
 // simultâneas do mesmo personagem.
 import { randomUUID } from 'node:crypto';
 import { Escort } from './escort.js';
+import { DuelManager } from './duel.js';
 import {
   derivedStats, playerAttack, monsterAttack, splitKillXp, levelForXp, rankCap, totalAttributePoints, rollInt, mitigate,
 } from './rules.js';
@@ -58,6 +59,7 @@ export class Zone {
     this.monsterSeq = 0;
     this.escorts = new Map(); // eid -> Escort
     this.escortSeq = 0;
+    this.duels = new DuelManager(this);
     for (const sp of this.map.spawns ?? []) for (let i = 0; i < sp.count; i++) this.spawnMonster(sp);
   }
 
@@ -102,6 +104,7 @@ export class Zone {
   removePlayer(charId, save = true) {
     const p = this.players.get(charId);
     if (!p) return null;
+    this.duels.forfeit(charId);
     this.players.delete(charId);
     for (const m of this.monsters.values()) {
       m.threat.delete(charId);
@@ -241,6 +244,14 @@ export class Zone {
 
   cmdAttack(p, targetId) {
     if (p.char.dead) return { ok: false, code: 'dead', reason: 'Você está caído.' };
+    if (typeof targetId === 'string' && targetId.startsWith('p')) {
+      // jogador só é alvo no duelo
+      const op = this.entityById(targetId);
+      if (!op || !this.duels.active(p, op)) return { ok: false, code: 'bad_target', reason: 'Só dá para atacar jogadores num duelo.' };
+      if (p.channel) this.cancelChannel(p, 'Interrompido: você atacou.');
+      p.targetId = targetId; p.dest = null; p.path = null;
+      return { ok: true };
+    }
     const m = this.monsters.get(targetId);
     if (!m || m.state === 'dead') return { ok: false, code: 'bad_target', reason: 'Alvo inválido.' };
     if (p.channel) this.cancelChannel(p, 'Interrompido: você atacou.');
@@ -279,6 +290,19 @@ export class Zone {
     const tol = this.f.movement.rangeTolerance;
     let target = null, ally = null;
     const needsEnemy = s.target === 'enemy' || ['charge'].includes(s.effect.kind);
+    if (needsEnemy && typeof targetId === 'string' && targetId.startsWith('p')) {
+      // duelo: habilidade de alvo único no oponente (só o dano; efeitos de controle não valem em duelo)
+      const op = this.entityById(targetId);
+      if (!op || !this.duels.active(p, op)) return { ok: false, code: 'bad_target', reason: 'Só dá para atacar jogadores num duelo.' };
+      const d = dist(c, op.char);
+      if (d > range + tol) return { ok: false, code: 'out_of_range', reason: `Alvo fora de alcance (${d.toFixed(1)} m; alcance ${range} m).` };
+      this.duels.attack(p, op, { def: s, rank }, skillId);
+      c.mp -= cost;
+      p.cooldowns[skillId] = this.now + s.cooldownMs;
+      p.targetId = op.eid;
+      this.broadcast({ t: 'cast', eid: p.eid, skill: skillId, target: op.eid });
+      return { ok: true, mp: Math.floor(c.mp), cooldownMs: s.cooldownMs, hits: 1 };
+    }
     if (needsEnemy) {
       target = this.monsters.get(targetId);
       if (!target || target.state === 'dead') return { ok: false, code: 'bad_target', reason: 'Alvo inválido.' };
@@ -500,6 +524,7 @@ export class Zone {
     this.lastDt = dtMs;
     const dt = dtMs / 1000;
     for (const p of this.players.values()) this.tickPlayer(p, dt);
+    this.duels.tick();
     for (const m of this.monsters.values()) this.tickMonster(m, dt);
     for (const [eid, e] of this.escorts) {
       const r = e.tick(dt);
@@ -565,7 +590,21 @@ export class Zone {
     const ox = c.x, oz = c.z;
     if (p.stunUntil > this.now) { brake(c, dt, this.mv.decel * 2); return; } // atordoado (descarga do chefe)
     const opts = { accel: this.mv.accel, decel: this.mv.decel };
-    if (p.targetId) {
+    if (p.targetId && p.targetId.startsWith('p')) {
+      // duelo: persegue e golpeia o oponente
+      const op = this.entityById(p.targetId);
+      if (!op || op.char.dead || !this.duels.active(p, op)) { p.targetId = null; c.chase = null; brake(c, dt, this.mv.decel); }
+      else {
+        const range = p.stats.range;
+        const d = dist(c, op.char);
+        if (d > range) this.chase(c, op.char, Math.max(0.5, range - 0.3), speed, dt, opts);
+        else {
+          brake(c, dt, this.mv.decel * 1.5);
+          if (this.now >= p.nextAttackAt) { p.nextAttackAt = this.now + p.stats.attackIntervalMs; this.duels.attack(p, op); }
+        }
+        p.facing = { x: (op.char.x - c.x) / (d || 1), z: (op.char.z - c.z) / (d || 1) };
+      }
+    } else if (p.targetId) {
       const t = this.monsters.get(p.targetId);
       if (!t || t.state === 'dead') { p.targetId = null; c.chase = null; brake(c, dt, this.mv.decel); }
       else {
@@ -899,7 +938,7 @@ export class Zone {
     const ents = [];
     for (const p of this.players.values()) {
       const c = p.char;
-      ents.push({ id: p.eid, k: 'p', n: c.name, cls: c.classId, lvl: c.level, x: r2(c.x), z: r2(c.z), vx: r2(c.vx || 0), vz: r2(c.vz || 0), hp: Math.ceil(c.hp), mhp: p.stats.maxHp, dead: c.dead, tgt: p.targetId, w: p.weaponDefId ?? null, party: this.hooks.partyIdOf?.(c.id) ?? null, sh: p.shield ? Math.round(p.shield.amount) : 0, ttl: c.title ?? null });
+      ents.push({ id: p.eid, k: 'p', n: c.name, cls: c.classId, lvl: c.level, x: r2(c.x), z: r2(c.z), vx: r2(c.vx || 0), vz: r2(c.vz || 0), hp: Math.ceil(c.hp), mhp: p.stats.maxHp, dead: c.dead, tgt: p.targetId, w: p.weaponDefId ?? null, party: this.hooks.partyIdOf?.(c.id) ?? null, sh: p.shield ? Math.round(p.shield.amount) : 0, ttl: c.title ?? null, cl: c.clanTag ?? null });
     }
     for (const m of this.monsters.values()) {
       if (m.state === 'dead') continue;
@@ -920,7 +959,7 @@ export class Zone {
       const px = r2(c.x), pz = r2(c.z), vx = r2(c.vx || 0), vz = r2(c.vz || 0);
       recs.push({
         id: p.eid, x: c.x, z: c.z, px, pz, vx, vz,
-        A: `"k":"p","n":${JSON.stringify(c.name)},"cls":"${c.classId}","lvl":${c.level},"mhp":${p.stats.maxHp},"w":${p.weaponDefId ? `"${p.weaponDefId}"` : 'null'},"party":${JSON.stringify(this.hooks.partyIdOf?.(c.id) ?? null)},"ttl":${JSON.stringify(c.title ?? null)}`,
+        A: `"k":"p","n":${JSON.stringify(c.name)},"cls":"${c.classId}","lvl":${c.level},"mhp":${p.stats.maxHp},"w":${p.weaponDefId ? `"${p.weaponDefId}"` : 'null'},"party":${JSON.stringify(this.hooks.partyIdOf?.(c.id) ?? null)},"ttl":${JSON.stringify(c.title ?? null)},"cl":${JSON.stringify(c.clanTag ?? null)}`,
         P: `"x":${px},"z":${pz}`,
         V: `"vx":${vx},"vz":${vz}`,
         C: `"hp":${Math.ceil(c.hp)},"dead":${!!c.dead},"tgt":${p.targetId ? `"${p.targetId}"` : 'null'},"sh":${p.shield ? Math.round(p.shield.amount) : 0}`,

@@ -928,6 +928,8 @@ func _on_message(m: Dictionary) -> void:
 				var ch_name: String = m.get("channel", "zone")
 				if ch_name == "party":
 					hud.chat_line("[color=#9fd3d1][Grupo] [b]%s:[/b] %s[/color]" % [m["from"], m["text"]])
+				elif ch_name == "clan":
+					hud.chat_line("[color=#e3a548][%s] [b]%s:[/b] %s[/color]" % [m.get("tag", "Clã"), m["from"], m["text"]])
 				elif ch_name == "whisper":
 					hud.chat_line("[color=#d7a8ff][%s → %s] %s[/color]" % [m["from"], m.get("to", ""), m["text"]])
 				else:
@@ -956,6 +958,9 @@ func _on_message(m: Dictionary) -> void:
 		"party_invite":
 			if hud:
 				hud.show_invite(m["from"], int(m["fromId"]))
+		"trade_invite", "trade", "trade_done", "trade_closed", "clan_invite", "clan_event", "duel_invite", "duel", "duel_start", "duel_end":
+			if hud and hud.social:
+				hud.social.on_message(m)
 		"trial":
 			if hud:
 				match m["state"]:

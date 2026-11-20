@@ -182,6 +182,18 @@ E, em outro terminal, da raiz do repositório:
 
 Com `--trial` no lugar de `--dungeon=...`, o mesmo modo faz a prova de classe na arena.
 
+Troca, clã, duelo e ferreiro com risco no cliente (servidor com `npm run dev`): um parceiro simulado aceita a troca (oferecendo 25 de ouro), entra no clã e aceita o duelo. Num terminal, dentro de `server/`:
+
+```bash
+node tools/parceiro-social.mjs --url ws://127.0.0.1:7777 --nome Parceira
+```
+
+E, em outro terminal, da raiz do repositório:
+
+```bash
+/Applications/Godot.app/Contents/MacOS/Godot --path client -- --sceneshots=/tmp/social --social=Parceira --server=ws://127.0.0.1:7777 --account=mercador --password=mercador123 --name=Mercador
+```
+
 ## 5. Reproduzir os cenários críticos à mão
 
 Prepare (servidor parado ou rodando):

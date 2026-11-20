@@ -126,3 +126,12 @@ Decisões tomadas por conta própria durante a sessão que criou o Marco 1. Cada
 | D78 | **Desligamento gracioso** no `SIGTERM` (aviso com contagem, recusa de novos logins, salvar, sair) e `hello` com protocolo 3, versão do servidor e hash dos dados. | Reinícios sem perda e sem surpresa para quem joga; cliente desatualizado recebe mensagem clara. |
 | D79 | **TLS direto opcional** (`--tls-cert/--tls-key`) além do proxy. | Permite `wss://` sem proxy em instalações pequenas; em produção o proxy (Caddy) renova certificados sozinho. |
 
+
+## Pós-versão 1: comércio, clãs, refino +4..+6 e duelos
+
+| # | Decisão | Motivo |
+|---|---|---|
+| D82 | **Refino até +6** com chances 30/20/12% para +4/+5/+6 e Pó de Refino Superior; **a falha a partir de +3 → +4 derruba um grau**, a menos que se use um **Selo de Proteção** (vendido pelo ferreiro e raro em elites e chefes), **gasto só quando segura uma falha**. | Dá um objetivo longo para o equipamento sem destruir itens; o risco é escolha do jogador e o selo nunca é desperdiçado num sucesso. |
+| D83 | **Comércio direto** com pedido e aceite, ofertas de itens da bolsa e ouro, **trava dos dois lados e confirmação dupla**; qualquer mudança de oferta destrava os dois; afastar-se (12 m), cair, trocar de mapa ou sair cancela. A troca roda **numa transação**: se qualquer item falhar, nada muda (nem o ouro em memória). | Troca segura contra golpes de "troquei no último segundo" e contra duplicação; tudo vai para a auditoria. |
+| D84 | **Clãs** com fundador nível 10 e 500 de ouro, sigla de 2 a 4 letras **mostrada antes do nome**, cargos líder/oficial/membro, convite, expulsão, liderança transferível, mensagem do dia e **canal de chat do clã** (`/c`). Até 50 membros. Excluir a conta passa a liderança adiante ou desfaz o clã. | O social que segura jogadores sem mexer no equilíbrio de combate. |
+| D85 | **Duelo voluntário sem morte**: pedido e aceite a até 10 m, contagem de 3 s, só os dois se atingem (ataque básico e habilidades de alvo único; efeitos de controle e áreas não valem); quem chegaria a 0 fica com **1 de vida e perde**; afastar-se 30 m do centro, sair ou desconectar é desistência; 3 minutos é empate. Sem XP, saque ou penalidade. | PvP por diversão sem abrir PvP de mundo (docs/01 não prevê PvP de mundo); nada a perder evita abuso. Fora de duelo, jogador continua não sendo alvo. |
