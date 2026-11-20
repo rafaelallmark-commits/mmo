@@ -69,6 +69,8 @@ mmo/
 │   │   ├── duel.js                duelos sem morte: pedido, contagem, dano até 1 de vida, fuga e empate
 │   │   ├── moderation.js          suspensão, silêncio, expulsão, anúncio e denúncias com contexto
 │   │   ├── contas.js              serviço de contas (HTTP, processo separado): cadastro, e-mail, token, senha
+│   │   ├── world.js · world-main.js   serviço de mundo (várias zonas): registro, posse, transferência, grupos
+│   │   ├── worldlink.js           ligação da zona com o mundo: hello com HMAC, sinal de vida, pedidos, cerca
 │   │   ├── token.js · mailer.js · metrics.js   token HMAC de uso único · SMTP mínimo · métricas/saúde
 │   │   ├── dungeon.js             A Última Eclusa: o Custódio em três fases, avisos, comportas
 │   │   ├── rules.js               regras puras: atributos, estatísticas, dano, acerto, crítico, XP
@@ -92,12 +94,14 @@ mmo/
 │   │   ├── social.test.js         refino +4..+6, troca atômica, clãs, duelos
 │   │   ├── moderacao.test.js      silêncio, denúncia, suspensão, ferramenta, anúncio
 │   │   ├── nivel25.test.js        pós-v1: teto 25, Cava Primeira, habilidades do 25 e o capítulo 6 inteiro
+│   │   ├── multizona.test.js      mundo + 2 zonas: transferência, tokens, posse única, grupo/clã, quedas
 │   │   └── helpers/client.js      cliente simulado (mesmo protocolo do Godot)
 │   └── tools/
 │       ├── validate-data.js       validador (também usado nos testes)
 │       ├── gen-docs.js            gera docs/03 e docs/04 a partir dos dados
 │       ├── gen-scenery.js         gera estradas, peças e casas de cada mapa (semente fixa)
 │       ├── partner.mjs            parceiro simulado para ver o calabouço no cliente
+│       ├── multizona.mjs          sobe o mundo + N zonas localmente (npm run multizona -- --zonas 2)
 │       └── create-character.js    cria contas/personagens de teste no banco
 ├── tools/poses/                   modelo do braço e gerador da tabela WPOSES (poses guiadas pela arma)
 ├── tools/audio/gerar_sons.py      síntese de todos os sons e blocos de música (Python + numpy, determinístico)
@@ -122,7 +126,7 @@ mmo/
 │       ├── social.gd              troca, painel do clã, convites, aviso de duelo, ações sobre outro jogador
 │       ├── item_text.gd           descrição de itens com requisitos em vermelho e comparação
 │       ├── ui_theme.gd            paleta
-│       └── autotest.gd            modos --autotest (headless), --navshots e --sceneshots (capturas)
+│       └── autotest.gd            modos --autotest (headless; --transfer cruza para outra zona), --navshots e --sceneshots
 └── docs/                          este conjunto de documentos
 ```
 
@@ -175,6 +179,9 @@ Todo pedido do cliente leva `rid` (texto único por pedido). A resposta é `{ t:
 | `storage_list`, `storage_put`, `storage_take` | npc (guarda-volumes), instance | depósito compartilhado pela conta |
 | `interact` na Porta da Última Eclusa (ou `dungeon_enter`) | object | abre/entra na instância do grupo (2–5, Chave de Comporta, nível 16) |
 | `gm` | cmd (give, teleport, xp, gold, quest_done) | só com servidor `--dev` |
+| `login_transfer` | token | várias zonas: chegada numa zona com o token assinado pelo mundo (conexão nova, sem login antes); responde como o `enter` e deixa a sessão logada |
+
+Com várias zonas, o `enter` de um personagem cujo mapa é de outra zona responde `{ ok, transfer: { url, token, mapId } }`, e um portal para um mapa de outra zona manda o evento `transfer` com os mesmos campos (seção [Múltiplas zonas](#múltiplas-zonas)).
 
 Eventos do servidor: `hello`, `defs`, `snap` (10 Hz: `now` = relógio da zona em ms; por entidade id, tipo, posição, velocidade `vx`/`vz`, vida, alvo), `hit` (origem, destino, dano, crítico, errou, habilidade), `death`, `spawn`, `loot` (só para o dono), `xp`, `level_up`, `char`, `buff`, `ground`, `cast`, `player_dead`, `respawn`, `joined`, `left`, `chat`, `kicked`, `cast` (habilidade usada, para os efeitos), `shield`, `quest_update`, `party`, `trial`, `boss` (fase, vida, proteção, válvula, comportas) e `warn` (aviso de perigo: círculo ou linha, duração).
 
@@ -296,11 +303,70 @@ backup de hora em hora, CI com o validador de dados e os testes, e executáveis 
 assinados e notarizados quando houver certificados. Continua pendente: serviço de contas e PostgreSQL (com lugar
 reservado no compose), limites de taxa por conexão, papéis de mestre e privacidade.
 
-## O que muda para múltiplas zonas
+## Múltiplas zonas
 
-- **Um processo por zona** (mapa), cada um dono dos personagens que estão nele. Um **serviço de mundo** (diretório) sabe qual zona hospeda cada personagem e encaminha o cliente.
-- **Troca de zona** = transferência de posse: a zona de origem grava o personagem e libera a posse no banco central (`characters.zone_owner`, com versão); a zona de destino só carrega depois de adquirir a posse. O cliente recebe o endereço da nova zona e um token de transferência de uso único.
-- **Instâncias** (calabouço, provas de classe) são zonas efêmeras criadas sob demanda pelo serviço de mundo para um grupo.
-- **Grupos e chat** entre zonas passam por um serviço de mensagens (ex.: Redis pub/sub ou NATS); a regra de XP por proximidade continua local à zona.
-- **Saque e inventário** continuam com transações no banco central; com posse única por personagem, não há escrita concorrente de duas zonas no mesmo inventário.
-- **Interesse por área**: snapshots passam a ser filtrados por raio (hoje a zona inteira é enviada, o que basta para um mapa de 160 × 100 m).
+Modo **opcional** (`--world`): os mapas abertos se dividem entre processos de zona e um **serviço de mundo**
+coordena. Sem `--world`, um processo hospeda tudo, como antes. Operação em [08-operacao.md §8.10](08-operacao.md#810-múltiplas-zonas);
+decisões D111–D118 em [DECISOES.md](DECISOES.md).
+
+```
+                     ┌──────────────────────────────────────────────┐
+                     │ Serviço de mundo (world.js · npm run mundo)  │
+                     │ zonas e sinal de vida · posse por personagem │
+                     │ diretório on-line · grupos · recados · token │
+                     └──────────▲───────────────────────▲───────────┘
+                WebSocket interno (hello com HMAC, rede interna)
+                     ┌──────────┴──────────┐ ┌──────────┴──────────┐
+ cliente ──ws/wss──► │ Zona A              │ │ Zona B              │ ◄──ws/wss── cliente
+                     │ Estrada Velha,      │ │ Brejo, Oficina,     │
+                     │ Pedrâmbar, Vau      │ │ Galerias, Canais    │
+                     │ (+ provas de classe)│ │ (+ Última Eclusa)   │
+                     └──────────┬──────────┘ └──────────┬──────────┘
+                                └──── cinzas.db (SQLite WAL) ─────┘
+```
+
+- **Registro**: cada zona se apresenta com `{ t:'hello', zoneId, maps, publicUrl, ts, auth }`
+  (`auth` = HMAC-SHA256 do segredo sobre `zoneId:ts`; instante vencido, MAC errado, hello repetido e mapa
+  já reivindicado são recusados) e manda sinal de vida a cada 2 s com o número de jogadores; calada por
+  10 s, é dada como fora do ar e as posses dela são liberadas. `GET /saude` no mundo mostra zonas e posses.
+- **Posse** (`charId → zona, estado, época`): uma zona só carrega personagem de que tem a posse. O `enter`
+  pede a posse; se o personagem está em outra zona, o mundo manda ela **gravar e soltar** (`kick`) e espera
+  a liberação. A zona que perde contato com o mundo salva e desconecta todos antes de o mundo liberar as
+  posses (cerca a 60% do prazo; para de gravar a 80%). Ao reconectar — ou quando o mundo reinicia — a zona
+  diz quem tem carregado e o mundo refaz as posses.
+- **Transferência** (portal, teleporte de mestre ou `enter` de quem está salvo num mapa de outra zona):
+
+```
+cliente           zona A (origem)            mundo                      zona B (destino)
+  │ portal ───────► │ cancela troca e duelo     │                            │
+  │                 │ transfer ───────────────► │ posse: em transferência    │
+  │                 │ ◄──────── token (30 s) ── │ (ainda da origem)          │
+  │                 │ tira do mapa e grava no destino                        │
+  │                 │ transfer_saved ─────────► │ posse: gravada             │
+  │ ◄── transfer { url, token, mapId }          │                            │
+  │ ── conexão nova + login_transfer { token } ─────────────────────────────► │ confere assinatura,
+  │                 │                           │ ◄── acquire (mesmo jti) ── │ destino e uso único
+  │                 │                           │ ── posse (época nova) ───► │ lê o personagem do banco
+  │ ◄──────────────────────────────── res (ficha, snapshot, saques, diário) ─ │
+```
+
+  Login direto antes do `transfer_saved` derruba o personagem na origem (que grava) e só depois concede;
+  depois dele, o login vale e o token antigo passa a ser recusado. Recados para quem está em trânsito
+  ficam guardados e saem na chegada; recargas de habilidade e de tônico e as últimas falas (contexto de
+  denúncias) vão junto com o `transfer_saved`.
+- **Instâncias**: a prova de classe nasce na zona da cidade do mestre e a Última Eclusa na zona dos
+  Canais, como hoje (o grupo precisa estar junto na porta).
+- **Social**: sussurro e convite de grupo acham a pessoa pelo diretório do mundo; **grupos moram no mundo**
+  (cada zona guarda uma cópia para o XP dividido e o calabouço, que continuam valendo só na mesma zona) e o
+  painel mostra quem está em outra zona com o mapa dela; chat e eventos do **clã** vão a todas as zonas e
+  cada uma entrega aos seus membros. Troca e duelo continuam na mesma zona; a transferência cancela os dois.
+- **Moderação**: suspensão e silêncio valem também na chegada por transferência; expulsão, suspensão e
+  silêncio de mestre seguem a conta para qualquer zona; "onde está" pergunta ao mundo; o anúncio sai em todas.
+- **Banco**: todos os processos usam o mesmo arquivo (WAL, espera pela trava); com posse única, duas zonas
+  nunca escrevem o mesmo personagem. Saque e inventário continuam em transações.
+- **Cliente**: `transfer` mostra a tela Carregando, abre a conexão da outra zona, faz `login_transfer` e
+  segue pelo mesmo caminho do `enter` (chat e opções continuam); se falhar, volta à lista de personagens
+  com o motivo.
+
+Ainda falta para muitas zonas em produção: PostgreSQL no lugar do arquivo (em preparo), instâncias como
+zonas efêmeras sob demanda, barramento de mensagens externo se o mundo virar gargalo e grupos persistentes.

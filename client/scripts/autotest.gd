@@ -3,6 +3,8 @@ extends Node
 ## entra no mundo pela mesma rotina da interface, anda, ataca um monstro, coleta o saque
 ## e sai com código 0 em caso de sucesso. Uso:
 ##   godot --headless --path client -- --autotest --server=ws://127.0.0.1:7777 --account=bot --password=bot123 --class=breaker --name=Robo
+## Com --transfer (servidor em várias zonas, --dev): em vez de lutar, atravessa o portal para um mapa de
+## outra zona e confere que o cliente reconectou no endereço novo e está no mapa novo.
 
 var main
 var step := "connect"
@@ -16,6 +18,12 @@ var zone_changed := ""
 var rescue_i := 0
 var wait_until := 0
 var log_lines := []
+# --transfer (várias zonas)
+var tr_url := ""
+var tr_from := ""
+var tr_to := ""
+var tr_portal := ""
+var tr_hud = null
 
 func say(s: String) -> void:
 	print("[autotest] ", s)
@@ -34,7 +42,13 @@ func fail(why: String) -> void:
 	say("FALHOU: " + why)
 	get_tree().quit(1)
 
+## main.gd avisa quando uma transferência entre zonas falha
+func transfer_failed(msg: String) -> void:
+	fail(msg)
+
 func _connected() -> void:
+	if not main._transfer.is_empty():
+		return  # conexão nova de uma transferência (várias zonas): main.gd faz o login_transfer
 	# espera o "hello": servidor do teste público (--auth token) entra pelo serviço de contas
 	main._when_hello(func():
 		if str(main.server_hello.get("auth", "both")) == "token":
@@ -94,10 +108,56 @@ func _process(_d: float) -> void:
 					step = "scene"
 					scene_until = Time.get_ticks_msec() + 2500
 					return
+				if main.args.has("transfer"):
+					step = "tr_prep"
+					return
 				Net.request("move", {"x": 30.0, "z": 50.0})
 				step = "moving"
 		"scene":
 			_scene_tick()
+		"tr_prep":
+			# portal da Estrada para o Brejo (ou o contrário, se o personagem já estava lá)
+			tr_url = Net.url
+			tr_from = main.map_id
+			tr_portal = "to_brejo" if tr_from == "estrada_velha" else "to_estrada"
+			tr_to = "brejo_bombas" if tr_from == "estrada_velha" else "estrada_velha"
+			if not main.world.portal_nodes.has(tr_portal):
+				fail("portal %s não existe em %s" % [tr_portal, tr_from])
+				return
+			var pp: Vector3 = main.world.portal_nodes[tr_portal]["pos"]
+			var off := 3.0 if pp.x < 20.0 else -3.0
+			step = "tr_wait"
+			# nível 5 (exigido no portal do Brejo) e teleporte para perto do portal (servidor --dev)
+			Net.request("gm", {"cmd": "xp", "level": 5}, func(_r):
+				Net.request("gm", {"cmd": "teleport", "x": pp.x + off, "z": pp.z}, func(r2):
+					if not r2["ok"]:
+						fail("teleporte recusado: %s" % r2.get("reason", ""))
+						return
+					wait_until = Time.get_ticks_msec() + 600
+					step = "tr_walk"))
+		"tr_walk":
+			if Time.get_ticks_msec() < wait_until:
+				return
+			say("em %s (servidor %s); indo ao portal %s, que leva a %s" % [tr_from, tr_url, tr_portal, tr_to])
+			tr_hud = main.hud
+			_act("portal", tr_portal)
+			step = "tr_wait_transfer"
+		"tr_wait_transfer":
+			if Net.url != tr_url and main.in_world and main.map_id == tr_to and main.world and not main.world.me().is_empty():
+				var c: Dictionary = main.ch
+				say("transferido: agora em %s pelo servidor %s, em (%.1f, %.1f); %d entidades visíveis" % [main.map_def().get("name", tr_to), Net.url, float(c["x"]), float(c["z"]), main.world.entities.size()])
+				if main.hud != tr_hud:
+					fail("a interface foi recriada na transferência (chat perdido)")
+					return
+				var p: Vector3 = main.world.my_pos()
+				step = "tr_wait"
+				Net.request("move", {"x": p.x + 3.0, "z": p.z}, func(r):
+					if not r["ok"]:
+						fail("a zona nova recusou o movimento: %s" % r.get("reason", ""))
+						return
+					say("a zona nova responde (movimento aceito); interface e chat mantidos")
+					say("OK")
+					get_tree().quit(0))
 		"moving":
 			var p: Vector3 = main.world.my_pos()
 			if Vector2(p.x, p.z).distance_to(Vector2(30, 50)) < 1.0:

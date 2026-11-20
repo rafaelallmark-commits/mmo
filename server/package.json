@@ -22,7 +22,9 @@
     "backup": "node --disable-warning=ExperimentalWarning tools/backup.mjs",
     "contas": "node --disable-warning=ExperimentalWarning src/contas-main.js",
     "conta": "node --disable-warning=ExperimentalWarning tools/conta.mjs",
-    "simular-progressao": "node --disable-warning=ExperimentalWarning tools/simular-progressao.mjs"
+    "simular-progressao": "node --disable-warning=ExperimentalWarning tools/simular-progressao.mjs",
+    "mundo": "node --disable-warning=ExperimentalWarning src/world-main.js",
+    "multizona": "node --disable-warning=ExperimentalWarning tools/multizona.mjs"
   },
   "dependencies": {
     "ws": "8.18.3"

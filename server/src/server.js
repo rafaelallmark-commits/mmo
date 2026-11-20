@@ -21,6 +21,7 @@ import { QuestEngine } from './quests.js';
 import { Dungeon } from './dungeon.js';
 import { checkEquip, applyEquip, checkUnequip, revalidateEquipment, bagCount, BAG_CAPACITY, EQUIP_SLOTS } from './equipment.js';
 import { totalAttributePoints, derivedStats } from './rules.js';
+import { WorldLink } from './worldlink.js';
 
 import { Metrics, startMetricsServer } from './metrics.js';
 
@@ -43,6 +44,9 @@ export class GameServer {
       // teste público: limites, autenticação, TLS, logs, desligamento e retenção
       rateLimit: 20, rateBurst: 40, chatPer5s: 6, maxConnPerIp: 0, trustProxy: false,
       auth: 'both', tokenSecret: null, tlsCert: null, tlsKey: null, logFormat: 'text', shutdownGraceS: 30, auditDays: 90,
+      // várias zonas: endereço do serviço de mundo, segredo compartilhado, id desta zona, mapas que ela
+      // hospeda (lista separada por vírgula; padrão: todos) e o endereço que os clientes usam para chegar aqui
+      world: null, worldSecret: null, zoneId: null, maps: null, publicUrl: null, worldWaitMs: 10000,
       ...Object.fromEntries(Object.entries(opts).filter(([, v]) => v !== undefined)),
     };
     this.data = opts.data ?? loadGameData(opts.dataDir);
@@ -71,10 +75,33 @@ export class GameServer {
     this.trials = new Map();
     this.dungeons = new Map();      // chave da instância -> Dungeon
     this.partyDungeon = new Map();  // grupo -> chave da instância // chave da instância -> estado da prova
+    this.world = null;
+    if (this.opts.world) {
+      // várias zonas: só os mapas desta zona; instâncias continuam nascendo onde fica a porta/arena
+      if (!this.opts.worldSecret) throw new Error('--world exige --world-secret (ou CINZAS_WORLD_SECRET)');
+      const list = Array.isArray(this.opts.maps) ? this.opts.maps : typeof this.opts.maps === 'string' ? this.opts.maps.split(',').map((x) => x.trim()).filter(Boolean) : null;
+      const open = Object.keys(this.data.maps).filter((id) => this.openMap(id));
+      for (const id of list ?? []) if (!this.openMap(id)) throw new Error(`mapa "${id}" não existe ou não é um mapa aberto (abertos: ${open.join(', ')})`);
+      this.hosted = new Set(list?.length ? list : open);
+      this.world = new WorldLink(this, { url: this.opts.world, secret: this.opts.worldSecret });
+      this.transferReplay = new ReplayGuard();
+      this.arriving = new Map();       // charId -> recados que chegaram antes de o login_transfer terminar
+      this.remoteMaps = new Map();     // mapId -> { zoneId, up } (mapas das outras zonas)
+      this.remote = new Map();         // charId -> { name, zoneId } (on-line em outra zona)
+      this.remoteByName = new Map();   // nome minúsculo -> charId (on-line em outra zona)
+      this.partyCache = new Map();     // partyId -> visão do grupo vinda do mundo
+      this.charPartyCache = new Map(); // charId -> partyId
+    }
     for (const [mapId, m] of Object.entries(this.data.maps)) {
-      if (m.implementedIn && !m.instanced && (m.spawns || m.city)) this.createZone(mapId);
+      if (m.implementedIn && !m.instanced && (m.spawns || m.city) && (!this.hosted || this.hosted.has(mapId))) this.createZone(mapId);
     }
     this.tickCount = 0;
+  }
+
+  // mapa aberto (não instância) que algum servidor de zona pode hospedar
+  openMap(mapId) {
+    const m = this.data.maps[mapId];
+    return !!(m && m.implementedIn && !m.instanced && (m.spawns || m.city));
   }
 
   // compatibilidade com o M1: a "zona" principal é a Estrada Velha
@@ -89,7 +116,7 @@ export class GameServer {
       send: (charId, msg) => this.sendTo(this.byChar.get(charId), msg),
       broadcast: (msg) => this.broadcastZone(key, msg),
       hooks: {
-        partyIdOf: (charId) => this.charParty.get(charId) ?? null,
+        partyIdOf: (charId) => this.partyIdOf(charId),
         onKillCredit: (p, monsterId) => this.onKillCredit(zone, p, monsterId),
         onLevelUp: (p, level) => this.store.logLevel(p.char.id, level, p.char.classId, p.char.playedS ?? 0),
         onEscortArrived: (escort, credited) => { for (const p of credited) this.notifyQuests(p, this.quests.onEscort(p.char, escort.defId)); },
@@ -148,8 +175,21 @@ export class GameServer {
         this.metricsPort = this.metricsSrv.address().port;
         this.log(`métricas em http://${this.opts.metricsHost}:${this.metricsPort}/metrics`);
       }
+      if (this.world) await this.startWorldLink();
       return port;
     });
+  }
+
+  // várias zonas: apresenta esta zona ao serviço de mundo (e segue tentando em segundo plano)
+  async startWorldLink() {
+    const host = ['0.0.0.0', '::', ''].includes(this.opts.host) ? '127.0.0.1' : this.opts.host;
+    this.zoneId = this.opts.zoneId ?? `zona-${this.port}`;
+    this.publicUrl = this.opts.publicUrl ?? `${this.tls ? 'wss' : 'ws'}://${host}:${this.port}`;
+    Object.assign(this.world, { zoneId: this.zoneId, publicUrl: this.publicUrl, maps: [...this.hosted] });
+    this.world.start();
+    const ok = await this.world.ready(this.opts.worldWaitMs);
+    this.log(ok ? `zona ${this.zoneId} registrada no mundo (${this.opts.world}): ${[...this.hosted].join(', ')}; clientes chegam por ${this.publicUrl}`
+      : `serviço de mundo (${this.opts.world}) ainda não respondeu; tentando em segundo plano`);
   }
 
   collectMetrics() {
@@ -169,7 +209,12 @@ export class GameServer {
     this.tickTrials();
     this.tickDungeons();
     this.tickCount++;
-    if (this.tickCount % this.opts.tickHz === 0) { for (const pid of this.parties.keys()) this.sendPartyUpdate(pid); this.trades.check(); this.mod.sweep(); }
+    if (this.tickCount % this.opts.tickHz === 0) {
+      for (const pid of this.parties.keys()) this.sendPartyUpdate(pid);
+      if (this.world) this.worldPartyTick();
+      this.trades.check();
+      this.mod.sweep();
+    }
     this.metrics.recordTick(performance.now() - t0);
   }
 
@@ -235,6 +280,7 @@ export class GameServer {
   }
 
   saveAll() {
+    if (this.world && !this.world.canSave()) return; // sem o mundo há tempo demais: as posses podem já ter sido liberadas
     for (const z of this.zones.values()) for (const p of z.players.values()) this.store.saveCharacter(p.char);
   }
 
@@ -242,6 +288,7 @@ export class GameServer {
   async shutdown(graceS = this.opts.shutdownGraceS) {
     if (this.closing) return;
     this.closing = true;
+    this.world?.notify('draining'); // várias zonas: o mundo não manda mais transferências para cá
     const note = (text) => { for (const s of this.sessions) this.sendTo(s, { t: 'notice', kind: 'shutdown', text, inS: graceS }); };
     if (graceS > 0) {
       note(`O servidor vai reiniciar em ${graceS} s. Seu progresso está salvo.`);
@@ -256,9 +303,12 @@ export class GameServer {
     await this.stop();
   }
 
-  async stop() {
+  // crash: true (testes de queda) para como se o processo morresse: sem salvar e sem avisar o mundo
+  async stop({ crash = false } = {}) {
     clearInterval(this.timer); clearInterval(this.saveTimer); clearInterval(this.purgeTimer);
-    for (const s of [...this.sessions]) this.dropSession(s);
+    if (crash) { this.crashed = true; this.world?.kill(); }
+    for (const s of [...this.sessions]) this.dropSession(s); // salva e libera a posse de cada personagem
+    if (this.world && !crash) await this.world.stop();
     for (const ws of this.wss.clients) ws.terminate();
     await new Promise((r) => this.wss.close(() => r()));
     if (this.tls) await new Promise((r) => this.tls.close(() => r()));
@@ -281,7 +331,7 @@ export class GameServer {
       return;
     }
     this.ipConns.set(ip, n + 1);
-    const s = { id: randomUUID(), ws, ip, accountId: null, charId: null, role: 'player', bucket: { tokens: this.opts.rateBurst, at: performance.now(), over: 0, overAt: 0 }, chat: [] };
+    const s = { id: randomUUID(), ws, ip, accountId: null, charId: null, role: 'player', bucket: { tokens: this.opts.rateBurst, at: performance.now(), over: 0, overAt: 0 }, chat: [], pending: false, backlog: [] };
     this.sessions.add(s);
     ws.on('message', (buf) => {
       const lag = this.lagDelay();
@@ -313,7 +363,10 @@ export class GameServer {
       const c = this.zones.get(key)?.players.get(charId)?.char;
       if (c) dg.away.set(charId, { x: c.x, z: c.z, hp: c.hp, mp: c.mp, dead: c.dead, until: Date.now() + dg.f.reconnectWaitMs });
     }
-    const p = this.zones.get(this.charZone.get(charId))?.removePlayer(charId);
+    // grava ao sair, a menos que o processo "caiu" (teste), o mundo mandou soltar sem gravar ou o mundo
+    // sumiu há tanto tempo que a posse pode já ser de outra zona
+    const save = !this.crashed && !s.noSave && (!this.world || this.world.canSave());
+    const p = this.zones.get(this.charZone.get(charId))?.removePlayer(charId, save);
     this.charZone.delete(charId);
     if (this.byChar.get(charId) === s) this.byChar.delete(charId);
     if (p) {
@@ -326,6 +379,12 @@ export class GameServer {
       const party = this.parties.get(pid);
       if (party && ![...party.members].some((m) => this.byChar.has(m))) this.disbandParty(pid);
       else this.sendPartyUpdate(pid);
+    }
+    if (this.world) {
+      // várias zonas: devolve a posse ao mundo (que avisa grupo e diretório)
+      if (s.leaseEpoch != null) this.world.notify('release', { charId, epoch: s.leaseEpoch });
+      s.leaseEpoch = null;
+      this.forgetParty(charId);
     }
     s.charId = null;
   }
@@ -400,6 +459,17 @@ export class GameServer {
     const rid = typeof msg.rid === 'string' || typeof msg.rid === 'number' ? msg.rid : null;
     // acima do limite: responde ao próprio pedido (o cliente não fica esperando) sem executar
     if (!this.allowMessage(s)) return this.sendTo(s, { t: 'res', rid, req: msg.t, ok: false, code: 'rate_limited', reason: 'Muitos comandos; espere um pouco.' });
+    // um pedido que espera o serviço de mundo (várias zonas) ainda em curso: os seguintes esperam, em ordem
+    if (s.pending) {
+      if (s.backlog.length >= 64) return this.sendTo(s, { t: 'res', rid, req: msg.t, ok: false, code: 'busy', reason: 'Aguarde: o pedido anterior ainda está em andamento.' });
+      s.backlog.push(msg);
+      return;
+    }
+    this.dispatch(s, msg);
+  }
+
+  dispatch(s, msg) {
+    const rid = typeof msg.rid === 'string' || typeof msg.rid === 'number' ? msg.rid : null;
     // Pedido repetido (mesmo rid e mesmo tipo, mesmo personagem): mesma resposta, sem reexecutar.
     if (rid != null && s.charId != null) {
       const cached = this.ridCache.get(s.charId)?.get(rid);
@@ -412,7 +482,25 @@ export class GameServer {
       this.log('erro ao tratar', msg.t, e);
       res = { ok: false, code: 'server_error', reason: 'Erro interno do servidor.' };
     }
+    if (res && typeof res.then === 'function') {
+      // só no modo de várias zonas (posse, transferência e grupos passam pelo mundo)
+      s.pending = true;
+      res.catch((e) => { this.log('erro ao tratar', msg.t, e); return { ok: false, code: 'server_error', reason: 'Erro interno do servidor.' }; })
+        .then((r) => {
+          s.pending = false;
+          if (r !== undefined && this.sessions.has(s)) this.reply(s, msg, rid, r);
+          const q = s.backlog;
+          s.backlog = [];
+          while (q.length && !s.pending && this.sessions.has(s)) this.dispatch(s, q.shift());
+          if (q.length) s.backlog.unshift(...q);
+        });
+      return;
+    }
     if (res === undefined) return;
+    this.reply(s, msg, rid, res);
+  }
+
+  reply(s, msg, rid, res) {
     const after = res.after;
     delete res.after;
     if (s.charId != null && ITEM_MUTATING.has(msg.t) && this.trades.byChar.has(s.charId)) this.trades.refresh(s.charId);
@@ -434,6 +522,7 @@ export class GameServer {
       case 'register': return this.opts.auth === 'token' ? { ok: false, code: 'use_accounts', reason: 'Crie sua conta pelo site/serviço de contas.' } : this.hRegister(s, msg);
       case 'login': return this.opts.auth === 'token' ? { ok: false, code: 'use_accounts', reason: 'Entre pelo serviço de contas (token).' } : this.hLogin(s, msg);
       case 'login_token': return this.hLoginToken(s, msg);
+      case 'login_transfer': return this.hLoginTransfer(s, msg);
     }
     if (s.accountId == null) return { ok: false, code: 'not_logged', reason: 'Faça login primeiro.' };
     switch (msg.t) {
@@ -446,6 +535,8 @@ export class GameServer {
     const zone = this.zoneOfChar(s.charId);
     const p = zone?.players.get(s.charId);
     if (!p) return { ok: false, code: 'not_in_world', reason: 'Personagem fora do mundo.' };
+    // indo para outra zona (várias zonas): nada que mude de mapa até a transferência terminar
+    if (p.transferring && ['portal', 'gm', 'trial_start', 'dungeon_enter', 'interact'].includes(msg.t)) return { ok: false, code: 'busy', reason: 'Mudando de área...', cache: false };
     switch (msg.t) {
       case 'move': return this.nc(zone.cmdMove(p, msg.x, msg.z));
       case 'attack': return this.nc(zone.cmdAttack(p, msg.target));
@@ -546,6 +637,7 @@ export class GameServer {
   // Exclusão da própria conta (privacidade), confirmada com a senha; fora do mundo.
   hDeleteAccount(s, { password }) {
     if (s.charId != null) return { ok: false, code: 'in_world', reason: 'Saia do mundo antes de excluir a conta.' };
+    if (this.world && this.store.listCharacters(s.accountId).some((c) => this.isOnline(c.id))) return { ok: false, code: 'in_world', reason: 'Um personagem desta conta ainda está no mundo. Saia dele antes de excluir a conta.' };
     const acc = this.store.findAccountById(s.accountId);
     if (!acc || typeof password !== 'string' || !this.store.checkPassword(acc, password)) return { ok: false, code: 'bad_password', reason: 'Senha incorreta.' };
     const n = this.store.deleteAccount(acc.id);
@@ -625,9 +717,16 @@ export class GameServer {
     if (s.charId != null) return { ok: false, code: 'already', reason: 'Você já está no mundo.' };
     const row = this.store.listCharacters(s.accountId).find((c) => c.id === charId);
     if (!row) return { ok: false, code: 'bad_char', reason: 'Personagem não encontrado nesta conta.' };
+    if (this.world) return this.enterViaWorld(s, row);
     const prev = this.byChar.get(charId);
     if (prev) this.dropSession(prev);
-    const char = this.store.loadCharacter(charId);
+    return this.enterChar(s, this.store.loadCharacter(charId));
+  }
+
+  // Coloca no mundo um personagem já carregado do banco (entrada normal ou chegada por transferência).
+  // leaseEpoch: posse concedida pelo serviço de mundo (várias zonas).
+  enterChar(s, char, leaseEpoch = null) {
+    const charId = char.id;
     this.quests.load(char);
     this.clans.attach(char);
     const wasDead = char.dead;
@@ -654,9 +753,170 @@ export class GameServer {
     this.charZone.set(charId, zone.key);
     this.log(`entrou: ${char.name} nv${char.level} em ${zone.mapId}${wasDead ? ' (estava caído: restaurado no posto)' : ''}`);
     this.broadcastZone(zone.key, { t: 'joined', eid: p.eid, name: char.name });
-    const pid = this.charParty.get(charId);
+    const pid = this.partyIdOf(charId); // (várias zonas: o grupo vem do mundo e já está na cópia daqui)
     if (pid) this.sendPartyUpdate(pid);
+    if (this.world) {
+      s.leaseEpoch = leaseEpoch;
+      this.world.notify('online', { charId, name: char.name, mapId: zone.mapId, state: this.memberSummary(p) });
+    }
     return { ok: true, char: zone.charView(p), snapshot: zone.snapshot(), loot: this.lootFor(charId, zone.mapId), journal: this.quests.journal(char), restoredFromDeath: wasDead && !back, rejoinedDungeon: !!back, cache: false };
+  }
+
+  // ---------- várias zonas: entrada, chegada e saída por transferência ----------
+  // Entrada (várias zonas): pede a posse ao mundo (que derruba o personagem de outra zona, salvo, se
+  // preciso), lê o personagem do banco e entra aqui se o mapa é desta zona; se não, devolve um token
+  // de transferência para o cliente ir à zona certa (sem carregar nada aqui).
+  async enterViaWorld(s, row) {
+    const charId = row.id;
+    if (this.closing) return { ok: false, code: 'closing', reason: 'O servidor está reiniciando. Tente em instantes.' };
+    const prev = this.byChar.get(charId);
+    if (prev) this.dropSession(prev); // a sessão antiga nesta zona sai antes (salva e devolve a posse)
+    const r = await this.world.request('acquire', { charId, accountId: s.accountId, name: row.name, mapId: row.map_id }, this.world.downMs * 2 + 10000);
+    if (!r.ok) return { ok: false, code: r.code ?? 'busy', reason: r.reason, cache: false };
+    const release = () => this.world.notify('release', { charId, epoch: r.epoch });
+    if (!this.sessions.has(s) || s.charId != null) { release(); return undefined; } // a conexão caiu enquanto esperava
+    const other = this.byChar.get(charId);
+    if (other) this.dropSession(other);
+    const char = this.store.loadCharacter(charId); // do banco: quem tinha o personagem já salvou
+    if (!char) { release(); return { ok: false, code: 'bad_char', reason: 'Personagem não encontrado nesta conta.', cache: false }; }
+    const mapId = this.openMap(char.mapId) ? char.mapId : DEFAULT_MAP;
+    if (this.zones.has(mapId)) return this.enterChar(s, char, r.epoch);
+    if (mapId !== char.mapId) {
+      // mapa salvo que não existe mais: vai para o início da Estrada Velha, na zona que a hospeda
+      const sp = this.data.maps[mapId].spawnPoint;
+      char.mapId = mapId; char.x = sp.x; char.z = sp.z;
+      this.store.saveCharacter(char);
+    }
+    const t = await this.world.request('transfer', { charId, mapId, x: char.x, z: char.z, saved: true, chat: this.mod.chatLog.get(charId) ?? null });
+    if (!t.ok) {
+      release();
+      const reason = t.code === 'zone_down' ? `${this.data.maps[mapId]?.name ?? mapId} está fora do ar no momento. Tente em instantes.` : t.reason;
+      return { ok: false, code: t.code ?? 'zone_down', reason, cache: false };
+    }
+    this.audit('transfer', { accountId: s.accountId, charId, from: this.zoneId, to: t.to, mapId, via: 'enter' });
+    return { ok: true, transfer: { url: t.url, token: t.token, mapId }, cache: false };
+  }
+
+  // Chegada por transferência (conexão nova, antes de qualquer login): confere o token assinado pelo
+  // mundo (validade de 30 s, para esta zona, uso único), confirma a posse e carrega o personagem do
+  // banco, que a zona de origem acabou de gravar. Responde como o "enter" e deixa a sessão logada.
+  async hLoginTransfer(s, msg) {
+    if (s.accountId != null) return { ok: false, code: 'already', reason: 'Sessão já autenticada.' };
+    if (!this.world) return { ok: false, code: 'no_transfer', reason: 'Este servidor não recebe transferências.' };
+    if (this.closing) return { ok: false, code: 'closing', reason: 'O servidor está reiniciando. Tente em instantes.' };
+    const p = verifyToken(msg.token, this.opts.worldSecret);
+    if (!p || p.typ !== 'transfer' || !Number.isInteger(p.charId) || typeof p.mapId !== 'string') {
+      this.audit('login_fail', { ip: s.ip, via: 'transfer' });
+      return { ok: false, code: 'bad_token', reason: 'Transferência inválida ou vencida. Entre de novo.' };
+    }
+    if (p.to !== this.zoneId || !this.zones.has(p.mapId)) return { ok: false, code: 'wrong_zone', reason: 'Esta transferência é para outra zona.' };
+    if (!this.transferReplay.use(p)) {
+      this.audit('login_fail', { ip: s.ip, via: 'transfer', charId: p.charId });
+      return { ok: false, code: 'bad_token', reason: 'Transferência já usada. Entre de novo.' };
+    }
+    // recusa depois de conferir o token: o mundo libera o personagem (a origem já o gravou)
+    const abort = (res) => { this.world.notify('transfer_abort', { charId: p.charId, jti: p.jti }); return res; };
+    let acc = this.store.findAccountById(p.accountId);
+    const row = acc ? this.store.listCharacters(acc.id).find((c) => c.id === p.charId) : null;
+    if (!row) return abort({ ok: false, code: 'bad_char', reason: 'Personagem indisponível.' });
+    // moderação: conta suspensa não entra nem por transferência (a suspensão pode ter vindo no caminho)
+    const banned = (a) => {
+      const ban = banMessage(a);
+      if (ban) this.audit('login_banned', { accountId: a.id, ip: s.ip, via: 'transfer' });
+      return ban ? { ok: false, code: 'banned', reason: ban } : null;
+    };
+    const b1 = banned(acc);
+    if (b1) return abort(b1);
+    const prev = this.byChar.get(p.charId);
+    if (prev) this.dropSession(prev);
+    // recados para ele que chegarem enquanto a posse é confirmada ficam guardados (saem depois da resposta)
+    const early = [];
+    this.arriving.set(p.charId, early);
+    let r;
+    try {
+      r = await this.world.request('acquire', { charId: p.charId, accountId: acc.id, name: row.name, mapId: p.mapId, transfer: { jti: p.jti, from: p.from } }, this.world.downMs * 2 + 10000);
+    } finally {
+      if (this.arriving.get(p.charId) === early) this.arriving.delete(p.charId);
+    }
+    if (!r.ok) return { ok: false, code: r.code ?? 'busy', reason: r.reason };
+    if (!this.sessions.has(s) || s.accountId != null) { this.world.notify('release', { charId: p.charId, epoch: r.epoch }); return undefined; }
+    acc = this.store.findAccountById(acc.id) ?? acc; // dados frescos: suspensão e silêncio podem ter mudado na espera
+    const b2 = banned(acc);
+    if (b2) { this.world.notify('release', { charId: p.charId, epoch: r.epoch }); return b2; }
+    const old = this.byAccount.get(acc.id);
+    if (old && old !== s) { this.sendTo(old, { t: 'kicked', reason: 'Sua conta entrou em outra conexão.' }); this.dropSession(old); }
+    const other = this.byChar.get(p.charId);
+    if (other) this.dropSession(other);
+    s.accountId = acc.id;
+    s.role = acc.role ?? 'player';
+    this.mod.onLogin(s, acc); // o silêncio acompanha a conta
+    s.delta = msg.delta === true;
+    this.byAccount.set(acc.id, s);
+    this.audit('login', { accountId: acc.id, ip: s.ip, via: 'transfer', from: p.from, charId: p.charId });
+    if (r.chat) this.mod.adopt(p.charId, r.chat); // falas recentes vêm junto (contexto de denúncias)
+    const char = this.store.loadCharacter(p.charId);
+    if (!this.zones.has(char.mapId)) { char.mapId = p.mapId; char.x = p.x; char.z = p.z; }
+    const res = this.enterChar(s, char, r.epoch);
+    const np = this.playerOf(p.charId);
+    if (r.timers && np) {
+      // recargas e tônico que vieram da zona de origem (tempo restante)
+      for (const [k, ms] of Object.entries(r.timers.cd ?? {})) np.cooldowns[k] = np.zone.now + ms;
+      np.potionReadyAt = np.zone.now + (r.timers.potion || 0);
+      res.char = np.zone.charView(np);
+    }
+    // depois da resposta: o que o mundo guardou durante a viagem e o que chegou enquanto a posse era confirmada
+    const mail = [...(r.inbox ?? []), ...early];
+    return { ...res, account: acc.name, transferred: true, dataVersion: this.dataVersion,
+      after: mail.length ? () => { for (const it of mail) this.onWorldDeliver({ charId: p.charId, msg: it.msg, note: it.note }); } : undefined };
+  }
+
+  // Leva o personagem para um mapa de outra zona: cancela troca e duelo, pede o token ao mundo (a
+  // posse fica "em transferência" para a zona de destino por 30 s), grava o personagem já na posição
+  // de destino, tira daqui e manda o cliente se conectar lá com { t:'transfer', url, token, mapId }.
+  async transferOut(p, mapId, x, z) {
+    const charId = p.char.id;
+    const s = this.byChar.get(charId);
+    if (!s || p.transferring || !this.world) return false;
+    p.transferring = true;
+    this.trades.cancel(charId, 'Troca cancelada: troca de mapa.');
+    p.zone.duels.forfeit(charId);
+    const r = await this.world.request('transfer', { charId, mapId, x, z });
+    p.transferring = false;
+    if (this.byChar.get(charId) !== s || this.playerOf(charId) !== p) {
+      // saiu ou mudou de mapa enquanto esperava: se ainda está aqui, a posse volta a ser desta zona
+      if (r.ok && this.byChar.has(charId)) this.world.notify('transfer_cancel', { charId, mapId: this.playerOf(charId)?.zone.mapId });
+      return false;
+    }
+    if (!r.ok) {
+      const name = this.data.maps[mapId]?.name ?? mapId;
+      this.sendTo(s, { t: 'system', text: r.code === 'zone_down' ? `${name} está fora do ar no momento. Tente em instantes.` : r.reason });
+      return false;
+    }
+    const zone = p.zone, c = p.char;
+    zone.removePlayer(charId, false);
+    this.broadcastZone(zone.key, { t: 'left', eid: p.eid });
+    this.charZone.delete(charId);
+    this.byChar.delete(charId);
+    this.byName.delete(c.name.toLowerCase());
+    c.mapId = mapId; c.x = x; c.z = z;
+    delete c.saveMapId; delete c.saveX; delete c.saveZ;
+    this.store.saveCharacter(c);
+    // gravado e fora daqui: só agora a posse pode seguir para o destino (ou para um login direto). As
+    // recargas e o tônico vão junto como tempo restante (como na troca de mapa dentro do processo).
+    const timers = {
+      cd: Object.fromEntries(Object.entries(p.cooldowns).map(([k, t]) => [k, Math.round(t - zone.now)]).filter(([, ms]) => ms > 0)),
+      potion: Math.max(0, Math.round((p.potionReadyAt || 0) - zone.now)),
+    };
+    this.world.notify('transfer_saved', { charId, jti: r.jti, chat: this.mod.chatLog.get(charId) ?? null, timers });
+    s.charId = null;
+    s.leaseEpoch = null;
+    this.forgetParty(charId);
+    this.audit('transfer', { accountId: s.accountId, charId, from: this.zoneId, to: r.to, mapId });
+    this.log(`transferido: ${c.name} para ${mapId} (zona ${r.to})`);
+    this.sendTo(s, { t: 'transfer', url: r.url, token: r.token, mapId });
+    // o cliente fecha esta conexão e abre a da outra zona; se não fechar, fecha depois de um tempo
+    setTimeout(() => { if (this.sessions.has(s) && s.charId == null) this.dropSession(s); }, 15000).unref();
+    return true;
   }
 
   lootFor(charId, mapId) {
@@ -686,14 +946,24 @@ export class GameServer {
     this.broadcastZone(destKey, { t: 'joined', eid: np.eid, name: p.char.name });
     this.sendTo(this.byChar.get(charId), { t: 'zone', mapId: dest.mapId, instance: dest.instanceId, char: dest.charView(np), snapshot: dest.snapshot(), loot: this.lootFor(charId, dest.mapId) });
     this.notifyQuests(np, this.quests.onEnterMap(p.char, dest.mapId));
+    this.world?.notify('moved', { charId, mapId: dest.mapId });
     return np;
   }
 
   hPortal(s, p, { portal }) {
     const r = p.zone.cmdPortal(p, portal);
     if (!r.ok) return r;
-    if (!this.zones.has(r.to)) return { ok: false, code: 'closed', reason: 'Esta área ainda não está aberta.' };
+    if (!this.zones.has(r.to)) {
+      if (this.world && this.openMap(r.to)) return this.remoteMove(p, r.to, r.x, r.z);
+      return { ok: false, code: 'closed', reason: 'Esta área ainda não está aberta.' };
+    }
     return { ok: true, to: r.to, cache: false, after: () => this.moveToZone(p, r.to, r.x, r.z) };
+  }
+
+  // várias zonas: o mapa é de outra zona (portal ou teleporte de mestre)
+  remoteMove(p, mapId, x, z) {
+    if (!this.remoteMaps.get(mapId)?.up) return { ok: false, code: 'zone_down', reason: `${this.data.maps[mapId]?.name ?? mapId} está fora do ar no momento. Tente em instantes.` };
+    return { ok: true, to: mapId, transfer: true, cache: false, after: () => { this.transferOut(p, mapId, x, z).catch((e) => this.log('transferência falhou', e)); } };
   }
 
   // ---------- NPCs, objetos, loja e missões ----------
@@ -1002,10 +1272,9 @@ export class GameServer {
     const o = p.zone.objectNear(p, object);
     if (!o || o.kind !== 'dungeon') return { ok: false, code: 'too_far', reason: 'Chegue mais perto da porta da Eclusa.' };
     const c = p.char;
-    const pid = this.charParty.get(c.id);
-    const party = pid ? this.parties.get(pid) : null;
-    if (!party || party.members.size < 2) return { ok: false, code: 'party', reason: 'A Última Eclusa exige um grupo de 2 a 5 jogadores.' };
-    const members = [...party.members];
+    const pid = this.partyIdOf(c.id);
+    const members = pid ? this.partyMemberIds(pid) : [];
+    if (members.length < 2) return { ok: false, code: 'party', reason: 'A Última Eclusa exige um grupo de 2 a 5 jogadores.' };
     const keyOk = members.some((id) => {
       const m = this.playerOf(id)?.char;
       return m && (this.quests.isDone(m, 'c5_fragment') || m.quests.get('c5_eclusa')?.state === 'active');
@@ -1094,6 +1363,7 @@ export class GameServer {
 
   // ---------- grupos ----------
   partyView(pid) {
+    if (this.world) return this.partyViewWorld(pid);
     const party = this.parties.get(pid);
     if (!party) return null;
     return {
@@ -1101,19 +1371,43 @@ export class GameServer {
       members: [...party.members].map((charId) => {
         const p = this.playerOf(charId);
         if (!p) return { charId, name: party.names.get(charId), online: false };
-        const c = p.char;
-        return { charId, eid: p.eid, name: c.name, classId: c.classId, level: c.level, hp: Math.ceil(c.hp), mhp: p.stats.maxHp, mp: Math.floor(c.mp), mmp: p.stats.maxMp, mapId: p.zone.mapId, x: Math.round(c.x), z: Math.round(c.z), dead: c.dead, online: true };
+        return this.livePartyMember(p);
       }),
     };
+  }
+
+  livePartyMember(p) {
+    const c = p.char;
+    return { charId: c.id, eid: p.eid, name: c.name, classId: c.classId, level: c.level, hp: Math.ceil(c.hp), mhp: p.stats.maxHp, mp: Math.floor(c.mp), mmp: p.stats.maxMp, mapId: p.zone.mapId, x: Math.round(c.x), z: Math.round(c.z), dead: c.dead, online: true };
   }
 
   sendPartyUpdate(pid) {
     const v = this.partyView(pid);
     if (!v) return;
-    for (const charId of this.parties.get(pid).members) this.sendTo(this.byChar.get(charId), { t: 'party', party: v });
+    for (const charId of this.partyMemberIds(pid)) this.sendTo(this.byChar.get(charId), { t: 'party', party: v });
+  }
+
+  partyIdOf(charId) { return (this.world ? this.charPartyCache.get(charId) : this.charParty.get(charId)) ?? null; }
+
+  partyMemberIds(pid) {
+    if (this.world) return this.partyCache.get(pid)?.members.map((m) => m.charId) ?? [];
+    return [...(this.parties.get(pid)?.members ?? [])];
+  }
+
+  // várias zonas: visão do grupo que veio do mundo, com os dados ao vivo de quem está nesta zona
+  partyViewWorld(pid) {
+    const v = this.partyCache.get(pid);
+    if (!v) return null;
+    return { id: pid, leader: v.leader, members: v.members.map((m) => { const p = this.playerOf(m.charId); return p ? this.livePartyMember(p) : m; }) };
+  }
+
+  // várias zonas: convite, aceite, recusa, saída e expulsão de grupo moram no serviço de mundo
+  worldParty(t, payload) {
+    return this.world.request(t, payload).then(({ pid, party, ...r }) => ({ ...r, ...(party ? { party: this.partyView(pid) ?? party } : {}), cache: false }));
   }
 
   hPartyInvite(p, { name }) {
+    if (this.world) return this.worldParty('party_invite', { charId: p.char.id, name });
     const c = p.char;
     const targetId = typeof name === 'string' ? this.byName.get(name.trim().toLowerCase()) : null;
     if (!targetId) return { ok: false, code: 'offline', reason: `${name} não está conectado.` };
@@ -1128,6 +1422,7 @@ export class GameServer {
   }
 
   hPartyAccept(p, { from }) {
+    if (this.world) return this.worldParty('party_accept', { charId: p.char.id, from });
     const c = p.char;
     const inv = this.invites.get(c.id);
     if (!inv || (from != null && inv.from !== from) || Date.now() - inv.at > 120000) return { ok: false, code: 'no_invite', reason: 'Convite inexistente ou expirado.' };
@@ -1150,6 +1445,7 @@ export class GameServer {
   }
 
   hPartyDecline(p) {
+    if (this.world) return this.worldParty('party_decline', { charId: p.char.id });
     const inv = this.invites.get(p.char.id);
     this.invites.delete(p.char.id);
     if (inv) this.sendTo(this.byChar.get(inv.from), { t: 'system', text: `${p.char.name} recusou o convite.` });
@@ -1176,12 +1472,14 @@ export class GameServer {
   }
 
   hPartyLeave(p) {
+    if (this.world) return this.worldParty('party_leave', { charId: p.char.id });
     if (!this.charParty.has(p.char.id)) return { ok: false, code: 'no_party', reason: 'Você não está em um grupo.' };
     this.removeFromParty(p.char.id);
     return { ok: true, cache: false };
   }
 
   hPartyKick(p, { charId }) {
+    if (this.world) return this.worldParty('party_kick', { charId: p.char.id, target: charId });
     const pid = this.charParty.get(p.char.id);
     const party = pid && this.parties.get(pid);
     if (!party) return { ok: false, code: 'no_party', reason: 'Você não está em um grupo.' };
@@ -1189,6 +1487,190 @@ export class GameServer {
     if (!party.members.has(charId) || charId === p.char.id) return { ok: false, code: 'bad_target', reason: 'Membro inválido.' };
     this.removeFromParty(charId);
     return { ok: true, cache: false };
+  }
+
+  // ---------- várias zonas: o que vem do serviço de mundo ----------
+  isOnline(charId) { return this.byChar.has(charId) || !!this.remote?.has(charId); }
+
+  // personagem on-line em outra zona, pelo nome ({ charId, name } ou null)
+  remoteChar(name) {
+    if (!this.world || typeof name !== 'string') return null;
+    const charId = this.remoteByName.get(name.trim().toLowerCase());
+    return charId != null ? { charId, name: this.remote.get(charId).name } : null;
+  }
+
+  // mensagem para um personagem de outra zona (note: efeito na zona de lá, ex.: convite de clã)
+  worldSend(charId, msg, note = undefined) { this.world?.notify('send', { to: charId, msg, note }); }
+
+  // eventos de clã para as outras zonas: { clanId, msg, except, from, attach:[charIds], direct:[{ charId, msg }] }
+  clanRemote(evt) { this.world?.notify('clan', evt); }
+
+  // moderação para a sessão da conta nas outras zonas: { accountId, kick?, mutedUntil?, text? }
+  modRemote(evt) { this.world?.notify('mod', evt); }
+
+  worldAnnounce(text) { this.world?.notify('announce', { text }); }
+
+  // "onde está" de quem está em outra zona (pergunta ao mundo)
+  async worldWhere(name) {
+    const r = await this.world.request('where', { name });
+    if (!r.ok) return { ok: true, message: `${name} não está on-line.`, cache: false };
+    const map = this.data.maps[r.mapId]?.name ?? r.mapId ?? '?';
+    return { ok: true, message: `${r.name}: ${r.mapId ?? '?'} (${map}) na zona ${r.zoneId}${r.transferring ? ', mudando de zona' : ''}.`, cache: false };
+  }
+
+  memberSummary(p) {
+    const c = p.char;
+    return { charId: c.id, classId: c.classId, level: c.level, hp: Math.ceil(c.hp), mhp: p.stats.maxHp, mp: Math.floor(c.mp), mmp: p.stats.maxMp, mapId: p.zone.mapId, x: Math.round(c.x), z: Math.round(c.z), dead: !!c.dead };
+  }
+
+  // quem esta zona tem carregado (vai no hello ao mundo, que confere as posses)
+  worldOnlineList() {
+    const out = [];
+    for (const [charId, s] of this.byChar) {
+      const p = this.playerOf(charId);
+      if (p) out.push({ charId, accountId: s.accountId, name: p.char.name, mapId: p.zone.mapId, epoch: s.leaseEpoch ?? null });
+    }
+    return out;
+  }
+
+  playerCount() { let n = 0; for (const z of this.zones.values()) n += z.players.size; return n; }
+
+  onWorldWelcome(m) {
+    this.setRemoteZones(m.zones ?? []);
+    this.remote.clear();
+    this.remoteByName.clear();
+    for (const e of m.directory ?? []) this.setPresence({ ...e, online: true });
+    // grupos: o mundo manda de novo os que existem; os que sumiram (mundo reiniciado) fecham aqui
+    const keep = new Set(m.parties ?? []);
+    for (const [pid, v] of [...this.partyCache]) {
+      if (keep.has(pid)) continue;
+      for (const mem of v.members) {
+        if (this.charPartyCache.get(mem.charId) !== pid) continue;
+        this.charPartyCache.delete(mem.charId);
+        this.sendTo(this.byChar.get(mem.charId), { t: 'party', party: null });
+      }
+      this.partyCache.delete(pid);
+    }
+  }
+
+  onWorldMessage(m) {
+    switch (m.t) {
+      case 'zones': return this.setRemoteZones(m.zones ?? []);
+      case 'presence': return this.setPresence(m);
+      case 'kick': return this.onWorldKick(m);
+      case 'deliver': return this.onWorldDeliver(m);
+      case 'party': return this.onWorldParty(m);
+      case 'party_clear': return this.onWorldPartyClear(m);
+      case 'clan': return this.onWorldClan(m);
+      case 'mod': return this.mod.applyRemote(m);
+      case 'announce': return typeof m.text === 'string' ? this.mod.announce(m.text) : undefined;
+    }
+  }
+
+  setRemoteZones(list) {
+    this.remoteMaps.clear();
+    for (const z of list) if (z.id !== this.zoneId) for (const mapId of z.maps ?? []) this.remoteMaps.set(mapId, { zoneId: z.id, up: !!z.up });
+  }
+
+  setPresence({ charId, name, zoneId, online }) {
+    const prev = this.remote.get(charId);
+    if (prev && this.remoteByName.get(prev.name.toLowerCase()) === charId) this.remoteByName.delete(prev.name.toLowerCase());
+    this.remote.delete(charId);
+    if (online && zoneId !== this.zoneId && typeof name === 'string') {
+      this.remote.set(charId, { name, zoneId });
+      this.remoteByName.set(name.toLowerCase(), charId);
+    }
+  }
+
+  // o mundo pede para soltar o personagem (ele entrou por outra zona): salva (a menos que o mundo diga
+  // que a posse já é de outra) e desconecta; a liberação da posse sai em leaveWorld
+  onWorldKick({ charId, epoch, reason, nosave }) {
+    const s = this.byChar.get(charId);
+    if (s && (epoch == null || s.leaseEpoch == null || s.leaseEpoch === epoch)) {
+      if (nosave) s.noSave = true;
+      this.sendTo(s, { t: 'kicked', reason: reason ?? 'Sua conta entrou em outra conexão.' });
+      this.dropSession(s);
+    } else {
+      this.world.notify('release', { charId, epoch }); // não está aqui: libera para o mundo seguir
+    }
+  }
+
+  onWorldDeliver({ charId, msg, note }) {
+    const s = this.byChar.get(charId);
+    const early = s ? null : this.arriving.get(charId);
+    if (early) { if (early.length < 32) early.push({ msg, note }); return; } // chegando: entrega depois do login_transfer
+    if (note?.kind === 'clan_invite' && Number.isInteger(note.clanId)) this.clans.invites.set(charId, { clanId: note.clanId, from: note.from, at: Date.now() });
+    // fala de quem está em outra zona (sussurro, grupo): guardada para dar contexto a denúncias daqui
+    if (note?.kind === 'chat' && Number.isInteger(note.from) && msg?.t === 'chat' && typeof msg.text === 'string') this.mod.remember(note.from, msg.channel, msg.text);
+    if (s && msg) this.sendTo(s, msg);
+  }
+
+  onWorldParty({ pid, view }) {
+    if (!view) return;
+    const old = this.partyCache.get(pid);
+    if (old) for (const m of old.members) if (this.charPartyCache.get(m.charId) === pid) this.charPartyCache.delete(m.charId);
+    this.partyCache.set(pid, view);
+    for (const m of view.members) this.charPartyCache.set(m.charId, pid);
+    this.sendPartyUpdate(pid);
+  }
+
+  onWorldPartyClear({ pid, charIds, disband }) {
+    for (const charId of charIds ?? []) {
+      if (this.charPartyCache.get(charId) === pid) this.charPartyCache.delete(charId);
+      const s = this.byChar.get(charId);
+      if (s) this.sendTo(s, { t: 'party', party: null });
+    }
+    const v = this.partyCache.get(pid);
+    if (v && disband) {
+      for (const m of v.members) if (this.charPartyCache.get(m.charId) === pid) this.charPartyCache.delete(m.charId);
+      this.partyCache.delete(pid);
+    } else if (v) {
+      v.members = v.members.filter((m) => !(charIds ?? []).includes(m.charId));
+    }
+  }
+
+  onWorldClan({ clanId, msg, except, attach, direct, from }) {
+    if (Number.isInteger(from) && msg?.t === 'chat' && typeof msg.text === 'string') this.mod.remember(from, 'clan', msg.text);
+    if (msg && clanId != null) {
+      for (const m of this.store.clanMembers(clanId)) {
+        if (m.char_id === except) continue;
+        const s = this.byChar.get(m.char_id);
+        if (s) this.sendTo(s, msg);
+      }
+    }
+    for (const charId of attach ?? []) { const p = this.playerOf(charId); if (p) this.clans.attach(p.char); }
+    for (const d of direct ?? []) { const s = this.byChar.get(d.charId); if (s) this.sendTo(s, d.msg); }
+  }
+
+  // Sem notícia do mundo perto do prazo em que ele daria esta zona como fora do ar: salva e
+  // desconecta todos, para que ninguém fique carregado aqui depois de a posse ser liberada.
+  onWorldLost() {
+    const inWorld = [...this.sessions].filter((s) => s.charId != null);
+    if (!inWorld.length) return;
+    this.log(`sem notícia do serviço de mundo: salvando e desconectando ${inWorld.length} jogador(es)`);
+    for (const s of inWorld) {
+      this.sendTo(s, { t: 'kicked', reason: 'Conexão com o mundo perdida. Seu progresso foi salvo; entre de novo em instantes.' });
+      this.dropSession(s);
+    }
+  }
+
+  // a cada segundo: painel do grupo para os membros daqui e resumo deles para o mundo
+  worldPartyTick() {
+    const members = [];
+    for (const pid of this.partyCache.keys()) {
+      this.sendPartyUpdate(pid);
+      for (const charId of this.partyMemberIds(pid)) { const p = this.playerOf(charId); if (p) members.push(this.memberSummary(p)); }
+    }
+    if (members.length) this.world.notify('party_state', { members });
+  }
+
+  // a zona deixou de ter este personagem: esquece os grupos que só ele trazia para cá
+  forgetParty(charId) {
+    const pid = this.charPartyCache.get(charId);
+    const v = pid ? this.partyCache.get(pid) : null;
+    if (!v || v.members.some((m) => m.charId !== charId && this.byChar.has(m.charId))) return;
+    for (const m of v.members) if (this.charPartyCache.get(m.charId) === pid) this.charPartyCache.delete(m.charId);
+    this.partyCache.delete(pid);
   }
 
   // ---------- inventário ----------
@@ -1313,12 +1795,25 @@ export class GameServer {
     if (!clean) return { ok: false, code: 'empty', reason: 'Mensagem vazia.' };
     const msg = { t: 'chat', channel, from: p.char.name, eid: p.eid, text: clean };
     if (channel === 'zone') this.broadcastZone(p.zone.key, msg);
-    else if (channel === 'party') {
+    else if (channel === 'party' && this.world) {
+      // várias zonas: entrega aqui aos membros desta zona; o mundo leva aos das outras
+      const pid = this.partyIdOf(p.char.id);
+      if (!pid) return { ok: false, code: 'no_party', reason: 'Você não está em um grupo.' };
+      for (const m of this.partyMemberIds(pid)) this.sendTo(this.byChar.get(m), msg);
+      this.world.notify('party_chat', { charId: p.char.id, msg });
+    } else if (channel === 'party') {
       const pid = this.charParty.get(p.char.id);
       if (!pid) return { ok: false, code: 'no_party', reason: 'Você não está em um grupo.' };
       for (const m of this.parties.get(pid).members) this.sendTo(this.byChar.get(m), msg);
     } else if (channel === 'whisper') {
       const targetId = typeof to === 'string' ? this.byName.get(to.trim().toLowerCase()) : null;
+      const remote = !targetId && this.world ? this.remoteChar(to) : null;
+      if (remote) {
+        // várias zonas: a pessoa está em outra zona; o mundo entrega
+        this.world.notify('send', { to: remote.charId, msg: { ...msg, to: remote.name }, note: { kind: 'chat', from: p.char.id } });
+        this.sendTo(this.byChar.get(p.char.id), { ...msg, to: remote.name });
+        return { ok: true, cache: false };
+      }
       if (!targetId) return { ok: false, code: 'offline', reason: `${to} não está conectado.` };
       this.sendTo(this.byChar.get(targetId), { ...msg, to: this.playerOf(targetId).char.name });
       this.sendTo(this.byChar.get(p.char.id), { ...msg, to: this.playerOf(targetId).char.name });
@@ -1345,7 +1840,13 @@ export class GameServer {
     }
     if (msg.cmd === 'teleport') {
       if (msg.mapId && msg.mapId !== p.zone.mapId) {
-        if (!this.zones.has(msg.mapId)) return { ok: false, code: 'bad_map', reason: 'Mapa inexistente.' };
+        if (!this.zones.has(msg.mapId)) {
+          if (this.world && this.openMap(msg.mapId)) {
+            const sp = this.data.maps[msg.mapId].spawnPoint;
+            return this.remoteMove(p, msg.mapId, typeof msg.x === 'number' ? msg.x : sp.x, typeof msg.z === 'number' ? msg.z : sp.z);
+          }
+          return { ok: false, code: 'bad_map', reason: 'Mapa inexistente.' };
+        }
         return { ok: true, cache: false, after: () => this.moveToZone(p, msg.mapId, msg.x, msg.z) };
       }
       c.x = msg.x; c.z = msg.z; p.dest = null;
