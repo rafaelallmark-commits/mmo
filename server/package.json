@@ -15,7 +15,8 @@
     "validate-data": "node --disable-warning=ExperimentalWarning tools/validate-data.js",
     "gen-docs": "node --disable-warning=ExperimentalWarning tools/gen-docs.js",
     "create-character": "node --disable-warning=ExperimentalWarning tools/create-character.js",
-    "gen-scenery": "node --disable-warning=ExperimentalWarning tools/gen-scenery.js"
+    "gen-scenery": "node --disable-warning=ExperimentalWarning tools/gen-scenery.js",
+    "simular-progressao": "node --disable-warning=ExperimentalWarning tools/simular-progressao.mjs"
   },
   "dependencies": {
     "ws": "8.18.3"
