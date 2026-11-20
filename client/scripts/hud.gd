@@ -495,7 +495,7 @@ func on_cast_end(m: Dictionary) -> void:
 	if m.get("ok", false):
 		if m.has("cooldownMs"):
 			cd_until[str(m["skill"])] = Time.get_ticks_msec() + int(m["cooldownMs"])
-	else:
+	elif str(m.get("code", "")) != "switched":  # trocar de habilidade não é erro
 		error(str(m.get("reason", "Conjuração interrompida.")))
 		gcd_until = mini(gcd_until, Time.get_ticks_msec() + 300)
 	_refresh_hotbar()

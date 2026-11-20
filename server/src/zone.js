@@ -281,7 +281,7 @@ export class Zone {
     const gcd = this.f.skills?.globalCooldownMs ?? 1000;
     if (p.casting) {
       // trocar de ideia no meio da conjuração: a anterior não saiu (nada gasto) e a nova pode sair já
-      this.cancelCast(p, 'Conjuração interrompida: você usou outra habilidade.');
+      this.cancelCast(p, 'Conjuração interrompida: você usou outra habilidade.', 'switched');
       p.gcdUntil = Math.min(p.gcdUntil || 0, this.now);
     }
     if (s && !s.offGcd && this.now < (p.gcdUntil || 0)) return { ok: false, code: 'gcd', reason: `Recarga global: ${((p.gcdUntil - this.now) / 1000).toFixed(1)} s.` };
@@ -299,12 +299,12 @@ export class Zone {
     return r;
   }
 
-  cancelCast(p, reason) {
+  cancelCast(p, reason, code = 'interrupted') {
     if (!p.casting) return;
     const cs = p.casting;
     p.casting = null;
     p.gcdUntil = Math.min(p.gcdUntil || 0, this.now + 300); // interrompida: libera logo outra ação
-    this.send(p.char.id, { t: 'cast_end', ok: false, skill: cs.skillId, reason });
+    this.send(p.char.id, { t: 'cast_end', ok: false, skill: cs.skillId, reason, code });
     this.broadcast({ t: 'cast_cancel', eid: p.eid, skill: cs.skillId });
   }
 
