@@ -96,6 +96,10 @@ import copy
 SPEC['sword_2h'] = copy.deepcopy(SPEC['axe_2h'])
 SPEC['sword_2h']['guard']['two'] = -0.11
 SPEC['sword_2h']['attack'][0]['two'] = -0.11
+# preparo da espada de duas mãos "do teto": mãos acima do ombro direito e lâmina quase em pé, um pouco
+# para trás (à vista por cima da cabeça). Copiado do machado, a lâmina deitava atrás da cabeça e, de
+# frente, só se via a mão junto ao rosto.
+SPEC['sword_2h']['attack'][0].update(p=(-0.15,0.12,0.06), a=(-0.12,0.86,-0.5))
 out=["const WPOSES := {"]
 for fam,sp in SPEC.items():
     c=CFG[fam]; sgn=1 if c['side']=='l' else -1

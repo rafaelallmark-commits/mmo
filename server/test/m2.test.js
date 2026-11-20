@@ -69,7 +69,10 @@ async function kill(c, eid, skill, { ally } = {}) {
   let done = false;
   const dead = c.waitFor((m) => m.t === 'death' && m.eid === eid, 60000, `morte de ${eid}`).then(() => { done = true; });
   const a = await c.request('attack', { target: eid });
-  if (!a.ok) { dead.catch(() => {}); return; } // alvo já morto (snapshot atrasado): o chamador escolhe outro
+  // alvo já morto (snapshot atrasado): espera o próximo snapshot antes de o chamador escolher outro. Sem a
+  // espera, com a máquina carregada o laço repetia o ataque recusado sem parar, estourava o limite de
+  // comandos (20/s) e o servidor expulsava o cliente no meio da prova (D75).
+  if (!a.ok) { dead.catch(() => {}); await sleep(150); return; }
   let nextCast = 0;
   while (!done) {
     await sleep(60);

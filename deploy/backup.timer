@@ -1,0 +1,14 @@
+# Backup de hora em hora do banco de CINZAS DO MERIDIANO (aciona backup.service).
+#   systemctl enable --now backup.timer   |   systemctl list-timers backup.timer
+[Unit]
+Description=CINZAS DO MERIDIANO - backup do banco de hora em hora
+Documentation=file:///opt/cinzas/docs/08-operacao.md
+
+[Timer]
+OnCalendar=hourly
+# espalha o horário em até 2 min e recupera o backup perdido se a máquina estava desligada
+RandomizedDelaySec=120
+Persistent=true
+
+[Install]
+WantedBy=timers.target

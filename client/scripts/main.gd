@@ -19,6 +19,7 @@ const TIPS := [
 	"O mestre da sua classe ensina a ler os requisitos dos itens.",
 ]
 
+var _kicked_reason := ""  # motivo da última expulsão (mostrado no lugar do aviso genérico de queda)
 var defs := {}
 var ch := {}
 var account := ""
@@ -57,6 +58,8 @@ func _ready() -> void:
 		var s: String = a.trim_prefix("--")
 		var kv := s.split("=", true, 1)
 		args[kv[0]] = kv[1] if kv.size() > 1 else "true"
+	# endereço padrão do campo "Servidor": a release do teste público grava cinzas/servidor_padrao no projeto
+	server_url = str(ProjectSettings.get_setting("cinzas/servidor_padrao", server_url))
 	server_url = args.get("server", server_url)
 	accounts_url = args.get("accounts", accounts_url)
 	account = args.get("account", "")
@@ -91,7 +94,7 @@ func _ready() -> void:
 	if args.has("poseprobe"):
 		var pp = preload("res://scripts/pose_probe.gd").new()
 		add_child(pp)
-		pp.start(args["poseprobe"], args.get("only", ""))
+		pp.start(args["poseprobe"], args.get("only", ""), int(args.get("focus", "-1")), int(args.get("group", "0")))
 		return
 	if args.has("sceneshots"):
 		autotest = preload("res://scripts/autotest.gd").new()
@@ -221,12 +224,15 @@ func set_status(text: String, bad := false) -> void:
 	if status_label:
 		status_label.text = text
 		status_label.add_theme_color_override("font_color", Theme_.RED if bad else Theme_.MUTED)
+	if bad:
+		Sfx.ui("ui_error")
 
 # ---------------- TÍTULO ----------------
 func show_title() -> void:
 	state = "title"
 	_ensure_menu_scene()
 	menu_scene.set_view("title")
+	Sfx.set_mood("title")   # abertura: o primeiro e o segundo toque dos sinos
 	_clear_screen()
 	var root := Control.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -308,6 +314,7 @@ func show_login() -> void:
 
 func connect_and_login(register: bool) -> void:
 	_pending_register = register
+	_kicked_reason = ""
 	server_hello = {}
 	set_status("Conectando a %s..." % server_url)
 	if Net.is_open():
@@ -342,9 +349,26 @@ func show_register_accounts() -> void:
 	var e_acc := _field(box, "Conta", account)
 	var e_mail := _field(box, "E-mail", "")
 	var e_pass := _field(box, "Senha (8 ou mais caracteres)", password, true)
+	# aceite dos termos (o serviço de contas recusa o cadastro sem ele)
+	var agree := CheckBox.new()
+	agree.text = "Tenho 13 anos ou mais e aceito os Termos de Uso e a Política de Privacidade"
+	agree.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	agree.custom_minimum_size = Vector2(360, 0)
+	box.add_child(agree)
+	var links := HBoxContainer.new()
+	box.add_child(links)
+	for spec in [["Ler os Termos de Uso", "/termos"], ["Ler a Política de Privacidade", "/privacidade"]]:
+		var lb := LinkButton.new()
+		lb.text = spec[0]
+		var path: String = spec[1]
+		lb.pressed.connect(func(): OS.shell_open(_accounts_base() + path))
+		links.add_child(lb)
 	_button(box, "Criar e receber o código", func():
+		if not agree.button_pressed:
+			set_status("Para criar a conta, marque a confirmação de idade e de aceite dos termos.", true)
+			return
 		account = e_acc.text.strip_edges(); password = e_pass.text
-		_accounts_post("/contas", {"conta": account, "email": e_mail.text.strip_edges(), "senha": password}, func(ok: bool, b: Dictionary):
+		_accounts_post("/contas", {"conta": account, "email": e_mail.text.strip_edges(), "senha": password, "aceite": true}, func(ok: bool, b: Dictionary):
 			if ok:
 				show_verify_accounts(str(b.get("mensagem", "")))
 			else:
@@ -641,6 +665,7 @@ func enter_world(cid: int) -> void:
 			menu_scene = null
 		map_id = r["char"].get("mapId", "estrada_velha")
 		_rebuild_world()
+		Sfx.set_zone(map_id)
 		if hud == null:
 			hud = HudScript.new()
 			hud.main = self
@@ -709,7 +734,9 @@ func _on_zone(m: Dictionary) -> void:
 	map_id = m["mapId"]
 	snap_cache = {}
 	show_loading(map_def().get("name", map_id))
+	Sfx.ui("portal")
 	_rebuild_world()
+	Sfx.set_zone(map_id)
 	set_char(m["char"])
 	world.apply_snapshot(m["snapshot"])
 	for l in m.get("loot", []):
@@ -731,6 +758,8 @@ func leave_world(to_title: bool) -> void:
 	party = null
 	journal = {}
 	Net.close()
+	Sfx.set_zone("")
+	Sfx.set_mood("title")
 	_ensure_menu_scene()
 	if to_title:
 		show_title()
@@ -756,6 +785,7 @@ func toggle_pause_menu() -> void:
 	if pause_menu:
 		close_pause_menu()
 		return
+	Sfx.ui("ui_open")
 	pause_menu = ColorRect.new()
 	pause_menu.color = Color(0.04, 0.02, 0.05, 0.55)
 	pause_menu.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -792,6 +822,7 @@ func close_pause_menu() -> void:
 	if pause_menu:
 		pause_menu.queue_free()
 		pause_menu = null
+		Sfx.ui("ui_close")
 
 func show_options() -> void:
 	if options_panel:
@@ -840,16 +871,59 @@ func show_options() -> void:
 	names.button_pressed = bool(settings["show_names"])
 	names.toggled.connect(func(on): settings["show_names"] = on)
 	v.add_child(names)
+	_sound_sliders(v)
 	_button(v, "Salvar e fechar", func():
 		_save_settings()
+		close_options(), true)
+	Sfx.ui("ui_open")
+
+## Som: volume geral, da música e dos efeitos (valem na hora; salvos em user://settings.cfg).
+func _sound_sliders(v: VBoxContainer) -> void:
+	var t := Label.new()
+	t.text = "Som"
+	t.add_theme_color_override("font_color", Theme_.AMBER)
+	v.add_child(t)
+	for row in [["master", "Geral"], ["music", "Música"], ["sfx", "Efeitos"]]:
+		var kind: String = row[0]
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 8)
+		v.add_child(h)
+		var l := Label.new()
+		l.text = row[1]
+		l.custom_minimum_size = Vector2(70, 0)
+		h.add_child(l)
+		var s := HSlider.new()
+		s.min_value = 0.0
+		s.max_value = 1.0
+		s.step = 0.05
+		s.value = Sfx.get_volume(kind)
+		s.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		s.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		h.add_child(s)
+		var pct := Label.new()
+		pct.text = "%d%%" % roundi(s.value * 100.0)
+		pct.custom_minimum_size = Vector2(44, 0)
+		pct.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		pct.add_theme_color_override("font_color", Theme_.MUTED)
+		h.add_child(pct)
+		s.value_changed.connect(func(x: float):
+			Sfx.set_volume(kind, x)
+			pct.text = "%d%%" % roundi(x * 100.0))
+		if kind != "music":
+			# amostra do volume novo ao soltar o controle
+			s.drag_ended.connect(func(_changed: bool): Sfx.ui("loot_coins"))
+
+func close_options() -> void:
+	if options_panel:
 		options_panel.queue_free()
-		options_panel = null, true)
+		options_panel = null
+		Sfx.save_settings()
+		Sfx.ui("ui_close")
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and (event as InputEventKey).keycode == KEY_ESCAPE:
 		if options_panel:
-			options_panel.queue_free()
-			options_panel = null
+			close_options()
 		elif state == "world" and in_world:
 			if hud and hud.close_top_panel():
 				pass
@@ -914,20 +988,26 @@ func _on_message(m: Dictionary) -> void:
 				world.on_death(m["eid"])
 		"loot":
 			if world:
-				world.add_loot(m["loot"])
+				world.on_loot_drop(m["loot"])
 		"xp":
 			if hud:
 				hud.system("+%d XP" % int(m["gained"]))
 		"char":
 			set_char(m["char"])
 		"level_up":
-			if hud and m["eid"] == ch.get("eid", ""):
-				hud.system("Nível %d! Você ganhou pontos de atributo e de habilidade (C)." % int(m["level"]))
+			if m["eid"] == ch.get("eid", ""):
+				Sfx.ui("level_up")   # fanfarra de sinos
+				if hud:
+					hud.system("Nível %d! Você ganhou pontos de atributo e de habilidade (C)." % int(m["level"]))
+			elif world:
+				world.sound_at(m["eid"], "level_up", -8.0)
 		"chat":
 			if hud:
 				var ch_name: String = m.get("channel", "zone")
 				if ch_name == "party":
 					hud.chat_line("[color=#9fd3d1][Grupo] [b]%s:[/b] %s[/color]" % [m["from"], m["text"]])
+				elif ch_name == "clan":
+					hud.chat_line("[color=#e3a548][%s] [b]%s:[/b] %s[/color]" % [m.get("tag", "Clã"), m["from"], m["text"]])
 				elif ch_name == "whisper":
 					hud.chat_line("[color=#d7a8ff][%s → %s] %s[/color]" % [m["from"], m.get("to", ""), m["text"]])
 				else:
@@ -943,6 +1023,8 @@ func _on_message(m: Dictionary) -> void:
 				if hud:
 					hud.refresh_quests())
 			for q in m["quests"]:
+				if q.get("ready", false):
+					Sfx.ui("quest_done", -6.0)   # objetivos completos: hora de entregar
 				if hud:
 					var done := 0
 					for o in q["objectives"]:
@@ -956,7 +1038,19 @@ func _on_message(m: Dictionary) -> void:
 		"party_invite":
 			if hud:
 				hud.show_invite(m["from"], int(m["fromId"]))
+		"trade_invite", "trade", "trade_done", "trade_closed", "clan_invite", "clan_event", "duel_invite", "duel", "duel_start", "duel_end":
+			if hud and hud.social:
+				hud.social.on_message(m)
 		"trial":
+			match m["state"]:
+				"started":
+					Sfx.warn("line")
+				"wave":
+					Sfx.warn("valve")
+				"success":
+					Sfx.ui("quest_done")
+				"failed":
+					Sfx.ui("refine_fail")
 			if hud:
 				match m["state"]:
 					"started":
@@ -971,12 +1065,17 @@ func _on_message(m: Dictionary) -> void:
 			if hud:
 				hud.system(m["text"])
 		"player_dead":
-			if hud and m["eid"] == ch.get("eid", ""):
-				ch["dead"] = true
-				hud.show_death()
+			if m["eid"] == ch.get("eid", ""):
+				Sfx.ui("player_die")
+				if hud:
+					ch["dead"] = true
+					hud.show_death()
+			elif world:
+				world.sound_at(m["eid"], "player_die", -8.0)
 		"respawn":
 			if hud and m["eid"] == ch.get("eid", ""):
 				hud.hide_death()
+				Sfx.ui("heal_chime" if m.get("revived", false) else "portal")
 		"ground":
 			if world:
 				world.ground_effect(m)
@@ -998,19 +1097,28 @@ func _on_message(m: Dictionary) -> void:
 			if hud:
 				hud.show_boss(m)
 		"kicked":
-			if hud:
-				hud.show_disconnect(m.get("reason", "Desconectado."))
+			# o motivo (ex.: suspensão) fica na tela; o fechamento da conexão que vem depois não o troca
+			_kicked_reason = str(m.get("reason", "Desconectado."))
+			if hud and state == "world":
+				hud.show_disconnect(_kicked_reason)
+				Sfx.ui("ui_error")
+			else:
+				set_status(_kicked_reason, true)  # já toca o som de erro
 			in_world = false
 
 func _on_disconnected(reason: String) -> void:
+	if _kicked_reason != "":
+		return
 	if state == "world" and hud:
 		hud.show_disconnect(reason)
 		in_world = false
+		Sfx.ui("ui_error")
 	elif status_label:
 		set_status("Sem conexão: %s" % reason, true)
 
 func reconnect() -> void:
 	reconnecting = true
+	_kicked_reason = ""
 	if hud:
 		hud.set_disconnect_text("Reconectando...")
 	Net.close()

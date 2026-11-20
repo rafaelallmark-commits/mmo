@@ -1,21 +1,33 @@
-// Ferreiro: refino +1 a +3 com custo, chance e prévia (regras puras, testáveis).
+// Ferreiro: refino +1 a +6 com custo, chance, risco e prévia (regras puras, testáveis).
 import { derivedStats } from './rules.js';
 
 export function enhanceable(def) {
   return !!def && ['weapon', 'armor', 'offhand', 'jewel'].includes(def.kind);
 }
 
-// Custo e chance para ir do grau atual ao próximo; null se já está no máximo.
+// Custo e chance para ir do grau atual ao próximo; null se já está no máximo. A partir de +3 → +4
+// (downgradeFrom), a falha derruba um grau, a menos que se gaste um Selo de Proteção.
 export function enhanceQuote(def, enh, data) {
   const f = data.formulas.enhance;
   if (enh >= f.maxLevel) return null;
+  const risky = f.downgradeFrom != null && enh >= f.downgradeFrom;
   return {
     from: enh, to: enh + 1,
     chancePct: f.chancePct[enh],
     gold: f.goldBase * (enh + 1) * Math.max(1, def.level || 1),
-    material: f.material,
+    material: f.materialByGrade?.[enh] ?? f.material,
     materialQty: f.materials[enh],
+    downgradeOnFail: risky,
+    protectItem: risky ? f.protectItem ?? null : null,
   };
+}
+
+// Resultado de uma tentativa: novo grau e se o selo foi gasto.
+export function enhanceOutcome(enh, success, quote, useProtect) {
+  if (success) return { enh: enh + 1, protectUsed: false, downgraded: false };
+  if (!quote.downgradeOnFail) return { enh, protectUsed: false, downgraded: false };
+  if (useProtect) return { enh, protectUsed: true, downgraded: false };
+  return { enh: Math.max(0, enh - 1), protectUsed: false, downgraded: true };
 }
 
 // Prévia: o que muda na peça (dano da arma, defesa, poder mágico) com o próximo grau.

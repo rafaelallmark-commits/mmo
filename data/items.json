@@ -6066,6 +6066,34 @@
    "req": {},
    "stack": 99,
    "value": 6
+  },
+  "mat_refine_sup": {
+   "id": "mat_refine_sup",
+   "name": "Pó de Refino Superior",
+   "family": "material",
+   "kind": "material",
+   "slot": null,
+   "level": 13,
+   "rarity": "rare",
+   "classes": null,
+   "req": {},
+   "stack": 99,
+   "value": 40,
+   "description": "Pó fino tirado de engrenagens antigas. Necessário para refinar de +3 a +6."
+  },
+  "protect_seal": {
+   "id": "protect_seal",
+   "name": "Selo de Proteção",
+   "family": "material",
+   "kind": "material",
+   "slot": null,
+   "level": 13,
+   "rarity": "rare",
+   "classes": null,
+   "req": {},
+   "stack": 20,
+   "value": 750,
+   "description": "Usado no refino a partir de +4: se falhar, a peça não perde o grau. O selo é gasto mesmo assim."
   }
  }
 }

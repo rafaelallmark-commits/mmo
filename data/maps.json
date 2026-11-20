@@ -14958,7 +14958,11 @@
      "name": "Gusmão, ferreiro",
      "x": 12,
      "z": 44,
-     "role": "smith"
+     "role": "smith",
+     "shop": [
+      "protect_seal",
+      "mat_refine"
+     ]
     },
     {
      "id": "potions_resina",
@@ -15503,7 +15507,11 @@
      "name": "Tiela Martelo-Fino",
      "x": 48,
      "z": 44,
-     "role": "smith"
+     "role": "smith",
+     "shop": [
+      "protect_seal",
+      "mat_refine"
+     ]
     },
     {
      "id": "potions_lume",

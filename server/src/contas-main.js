@@ -1,7 +1,7 @@
 // Ponto de entrada do serviço de contas:
 //   node src/contas-main.js --port 7780 --db cinzas.db --token-secret S
 //     [--email console|arquivo|smtp] [--email-dir emails] [--smtp-host h --smtp-port 587 --smtp-user u
-//      --smtp-pass p --smtp-from "Nome <x@y>" --smtp-starttls] [--trust-proxy]
+//      --smtp-pass p --smtp-from "Nome <x@y>" --smtp-starttls] [--trust-proxy] [--docs-dir ../docs]
 // O servidor de zona precisa do mesmo segredo (--token-secret ou CINZAS_TOKEN_SECRET) e de --auth token.
 import { AccountsService } from './contas.js';
 
@@ -22,8 +22,9 @@ const svc = new AccountsService({
   host: arg('host', '0.0.0.0'),
   dbPath: arg('db', process.env.CINZAS_DB ?? 'cinzas.db'),
   tokenSecret: arg('token-secret', process.env.CINZAS_TOKEN_SECRET ?? null),
-  trustProxy: !!arg('trust-proxy', false),
+  trustProxy: !!arg('trust-proxy', ['1', 'true', 'sim'].includes(String(process.env.CINZAS_TRUST_PROXY ?? '').toLowerCase())),
   mail,
+  ...(arg('docs-dir', process.env.CINZAS_DOCS_DIR ?? null) ? { docsDir: arg('docs-dir', process.env.CINZAS_DOCS_DIR) } : {}),
 });
 await svc.start();
 const stop = async () => { await svc.stop(); process.exit(0); };
