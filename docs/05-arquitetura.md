@@ -103,24 +103,35 @@ mmo/
 │   │   ├── rules.test.js          fórmulas com rolagens fixas
 │   │   ├── equipment.test.js      todas as recusas e trocas de equipamento
 │   │   ├── data.test.js           coerência dos dados e alcançabilidade dos requisitos
+│   │   ├── db.test.js             contrato do banco nos dois backends (SQLite e PostgreSQL)
 │   │   ├── death.test.js          queda de conexão durante a morte
 │   │   ├── nav.test.js            caminhos, desvios, destinos inalcançáveis, aceleração e mapas reais
-│   │   ├── skills.test.js         as 40 habilidades numa zona real
+│   │   ├── skills.test.js         as 48 habilidades numa zona real
+│   │   ├── mechanics.test.js      mecânicas dos monstros: golpes avisados, explosão, puxão, drenagem, eco, reforços, território
 │   │   ├── m2.test.js             aceitação do Marco 2 (grupo de 5, prova de classe, missões)
 │   │   ├── m3.test.js             aceitação do Marco 3 (refino, depósito, elite diária, Custódio com bots)
 │   │   ├── ch4.test.js            capítulo 4: canalização, escolta, escolha de diálogo
+│   │   ├── campanha.test.js       toda missão aceita, cumprida e entregue pelo protocolo; a Última Eclusa pela porta
 │   │   ├── secundarias.test.js    secundárias: coleta só com a missão, diárias, armadura, títulos, defesa, quadro, fontes
 │   │   ├── tutorial.test.js       tutorial: sete passos, resgatados escoltados até o posto, só para o dono, mapa
 │   │   ├── estrada.test.js        estrada segura: do posto ao Vau no nível 2 sem ataque (pior caso e caminhada)
+│   │   ├── criterios.test.js      critérios do Marco 2 que não tinham teste (arma de faixa 9 em toda classe, Cantora e tônicos)
+│   │   ├── integracao.test.js     o que só aparece quando duas frentes se encontram (perigos do mapa, ninho e resgates)
 │   │   ├── snapshots.test.js · store.test.js   snapshots por diferença · migrações
+│   │   ├── store-pg.test.js       migrações, conexões e importação no PostgreSQL (npm run test:pg)
 │   │   ├── publico.test.js        contas, token, limites, papéis, desligamento, TLS, SMTP
 │   │   ├── contas.test.js         confirmar depois, conta não confirmada vence, limites de e-mail e de código, termos novos
+│   │   ├── email.test.js          e-mail do serviço de contas: configuração, TLS antes do AUTH, remetente
 │   │   ├── social.test.js         refino +4..+6, troca atômica, clãs, duelos
 │   │   ├── moderacao.test.js      silêncio, denúncia, suspensão, ferramenta, anúncio
 │   │   ├── personagens.test.js    excluir personagem, senha fora do laço (o tick anda), nomes reservados, /gm de admin
 │   │   ├── convivencia.test.js    ignorados, intervalo do convite, marca [Equipe], papel relido, avisos à equipe
 │   │   ├── nivel25.test.js        pós-v1: teto 25, Cava Primeira, habilidades do 25 e o capítulo 6 inteiro
 │   │   ├── multizona.test.js      mundo + 2 zonas: transferência, tokens, posse única, grupo/clã, quedas
+│   │   ├── progressao.test.js     simulador de progressão: planos de atributos e uma rodada curta
+│   │   ├── telemetria.test.js     telemetria do teste: mortes, sessões, missões aceitas e calabouço na auditoria
+│   │   ├── operacao.test.js       métricas como contadores, saúde 503, teto de jogadores, painel e alertas
+│   │   ├── backup.test.js         backup, rotação, ensaio de restauração e cópia externa (SQLite e PostgreSQL)
 │   │   ├── versao.test.js         versão da release (CINZAS_VERSION) no hello, no registro e no /bug
 │   │   ├── site.test.js           página do jogo sem rastreadores e as rotas do Caddyfile
 │   │   ├── helpers/tutorial.js    roteiro do tutorial para clientes simulados
