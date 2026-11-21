@@ -9,7 +9,10 @@ Siga na ordem; cada item diz onde fica o passo técnico detalhado.
 - [ ] Mesclar o PR no ramo padrão (`main`). Hoje o `main` só tem o commit inicial, e o disparo manual da
       Release só aparece depois disso.
 - [ ] Rodar a **Release** à mão uma vez (Actions → Release → Run workflow) e abrir os pacotes de Windows,
-      macOS e Linux em máquinas de verdade: o jogo abre, conecta e mostra a versão certa.
+      macOS e Linux em máquinas de verdade: o jogo abre, conecta e mostra a versão certa no rodapé do título
+      (a Release roda o CI inteiro antes — testes no SQLite e no PostgreSQL, autotest do cliente e teste do
+      contêiner — e só publica com tudo verde, D152). Confira também o ícone nas propriedades do `.exe`: não
+      deu para conferir o `rcedit` fora do GitHub.
 - [ ] Só então criar a tag da versão do teste (ex.: `v0.4.0-teste.1`). Passo a passo: [08-operacao §8.8,
       "Releases"](08-operacao.md#releases-releaseyml).
 
@@ -23,7 +26,11 @@ Siga na ordem; cada item diz onde fica o passo técnico detalhado.
       compose não sobe sem os três, e zona e contas recusam segredo curto ou de exemplo. Descomente o e-mail
       de aviso do certificado no `deploy/Caddyfile`.
 - [ ] Variável do repositório **`SERVIDOR_PADRAO=wss://seu-dominio`** (Settings → Secrets and variables →
-      Actions → Variables): sem ela, os pacotes abrem apontando para `ws://127.0.0.1:7777`.
+      Actions → Variables) **antes da tag**: sem ela, os pacotes abrem apontando para `ws://127.0.0.1:7777`.
+      `PAGINA_DOWNLOAD` só se a página de download não for a do jogo (`https://seu-dominio/`, D150).
+- [ ] Página do jogo (`deploy/site/index.html`, servida pelo Caddy em `https://seu-dominio/`) e guia
+      (`docs/GUIA.md`, em `/guia`): trocar o marcador **`[e-mail da equipe]`** pelo contato real e manter a
+      seção *Avisos* em dia — os Termos e a Política dizem que mudanças são avisadas ali.
 - [ ] Primeira conta de administrador: criar e confirmar a conta pelo cliente e dar o papel `admin`
       ([08-operacao §8.8, "Antes de abrir o teste"](08-operacao.md#antes-de-abrir-o-teste)).
 
@@ -47,18 +54,29 @@ Siga na ordem; cada item diz onde fica o passo técnico detalhado.
 
 ## 5. Alguém precisa ser avisado
 
-- [ ] Escolher o canal dos alertas (e-mail, Telegram ou Discord) e preencher as credenciais no
-      `deploy/.env` para o Alertmanager do perfil `monitoramento` ([08-operacao §8.3](08-operacao.md#83-métricas-e-saúde)).
-- [ ] Um monitor externo de disponibilidade apontando para `https://seu-dominio/contas/saude` (se a máquina
-      cair, o alerta interno cai junto).
+- [ ] Escolher o canal dos alertas (e-mail, Telegram ou Discord) e preencher as variáveis `ALERTA_*` no
+      `deploy/.env` (`ALERTA_SMTP_*` e `ALERTA_EMAIL_PARA`, `ALERTA_TELEGRAM_TOKEN`/`_CHAT` ou
+      `ALERTA_DISCORD_WEBHOOK`) para o Alertmanager do perfil `monitoramento`; subir com
+      `docker compose --profile monitoramento up -d` e mandar o **alerta de teste** do guia
+      ([08-operacao §8.3, "Alertas que chegam a alguém"](08-operacao.md#alertas-que-chegam-a-alguém)).
+- [ ] Um monitor externo de disponibilidade (UptimeRobot, Better Stack, Healthchecks.io ou um Uptime Kuma em
+      outra máquina) apontando para `https://seu-dominio/contas/saude`, esperando `200`: se a máquina cair, o
+      alerta interno cai junto.
 - [ ] Quem da equipe responde a denúncias e `/bug` durante o teste (os mestres on-line recebem o aviso).
 
 ## 6. Backups fora da máquina
 
-- [ ] Um destino fora da máquina (armazenamento de objetos ou outro servidor) e as credenciais dele; a
-      retenção precisa caber nos 14 dias da política de privacidade.
-- [ ] Um **ensaio de restauração** antes de abrir: restaurar a cópia mais recente numa máquina de teste e
-      entrar com um personagem ([08-operacao §8.8, "Docker e Compose"](08-operacao.md#docker-e-compose)).
+O backup de hora em hora já roda sozinho no Compose (serviço `backup`, ou `backup-banco` com o PostgreSQL),
+guardando as cópias dos últimos 14 dias na própria máquina (D148). Falta o que depende de conta:
+
+- [ ] Um armazenamento compatível com S3 (Backblaze B2, Cloudflare R2, Wasabi, AWS...) com um balde só para
+      isso, **sem versões antigas** guardadas pelo provedor (senão as cópias passam dos 14 dias da política
+      de privacidade), e as variáveis `COPIA_DESTINO`, `COPIA_S3_*` e `COPIA_SENHA_CIFRA` no `deploy/.env`
+      com o perfil `copia-externa` ([08-operacao §8.8, "Backups e cópia fora da máquina"](08-operacao.md#backups-e-cópia-fora-da-máquina)).
+      Guarde a senha da cifra **fora** da máquina: sem ela, a cópia externa não serve para nada.
+- [ ] Citar o provedor da cópia externa na Política de Privacidade (é um operador de dados).
+- [ ] Um **ensaio de restauração** antes de abrir, seguindo o passo a passo
+      ([08-operacao §8.8, "Ensaio de restauração"](08-operacao.md#ensaio-de-restauração)).
 
 ## 7. Assinatura dos executáveis (opcional, mas reduz desconfiança)
 
@@ -71,8 +89,10 @@ Siga na ordem; cada item diz onde fica o passo técnico detalhado.
 ## 8. Decisões de produto
 
 - [ ] **Teste aberto ou por convite?** O repositório é público e a Release grava o servidor no cliente: quem
-      achar o projeto entra. Teto de jogadores simultâneos (`CINZAS_MAX_PLAYERS`; a carga foi medida até 100
-      numa zona).
+      achar o projeto entra.
+- [ ] **Teto de jogadores simultâneos**: `CINZAS_MAX_PLAYERS` vem com 200 no Compose (D149; a carga foi medida
+      até 100 numa zona, com folga). Cheio, quem tenta entrar vê "Servidor cheio"; mestres e administradores
+      entram sempre.
 - [ ] **Redistribuir atributos**: continua grátis durante o teste (D155) ou passa a custar um item (D22)?
 - [ ] **Poderes de mestre voluntário**: hoje o papel `gm` modera e só `admin` cria ouro, itens e níveis
       (D138). Mudar isso é uma linha em `server/src/server.js`.
