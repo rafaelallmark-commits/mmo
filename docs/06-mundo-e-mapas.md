@@ -73,7 +73,7 @@ Cinco áreas na versão 1 e, no pós-v1, a sexta (A Cava Primeira, níveis 20–
 ### Lugares que as missões mudam
 
 - **Brejo das Bombas — Válvula principal** (109, 56), ao lado do Joca na frente da Casa das Bombas: com "O Teste de Pressão" (2.2) ativa, começa a defesa. O Joca da defesa (900 de vida, com o nome e a vida em cima) toma o lugar do NPC parado; por 3 minutos, uma onda a cada 30 s (Válvulas Errantes e Enguias de Lodo) sai do lado do canal, (96, 64) e (100, 70), e mira nele até alguém chamar a atenção. Se ele cair, ou o grupo inteiro cair, as ondas somem e ele tenta de novo 30 s depois; um cronômetro no alto da tela mostra o tempo que falta. Uma defesa por jogador ou grupo, como a escolta da carroça.
-- **Oficina Soterrada — Trilhos da Esteira** (x 108–140, z 126–154): com "Esteira Desgovernada" ativa, a esteira varre faixas do chão a cada 7 s, com aviso de 2 s (as mesmas faixas acesas do Custódio, em cinco padrões que se repetem); quem estiver numa faixa varrida perde 12% da vida e a contagem de abates seguidos da missão volta a zero. Sem ninguém com a missão na área, a esteira fica parada.
+- **Oficina Soterrada — Trilhos da Esteira** (x 108–140, z 126–154): com "Esteira Desgovernada" ativa, a esteira varre faixas do chão a cada 7 s, com aviso de 2 s (as mesmas faixas acesas do Custódio, em cinco padrões que se repetem); quem estiver numa faixa varrida perde 12% da vida e a contagem de abates seguidos da missão volta a zero. A esteira é só de quem está com a missão: só essas pessoas veem o aviso e são varridas, e quem caça as Lâminas sem ela não é afetado. Sem ninguém com a missão na área, a esteira fica parada.
 
 ### A Estrada Velha (implementada no M1)
 

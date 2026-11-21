@@ -436,10 +436,20 @@ func _tick_defense(delta: float) -> void:
 	defense_label.text = "Válvula: %d:%02d" % [s / 60, s % 60]
 	defense_label.visible = true
 
-## "em 5 h 12 min" (até a virada do dia UTC, quando a diária volta)
+## Ao trocar de mapa (sair do Brejo no meio da defesa, reconexão): o cronômetro da válvula não fica preso na
+## tela contando até 0:00. Voltando ao Brejo, a próxima mensagem da defesa mostra o tempo de novo.
+func clear_defense() -> void:
+	_defense_on = false
+	_defense_left = 0.0
+	if defense_label:
+		defense_label.visible = false
+
+## "em 5 h 12 min" (até a virada do dia UTC, quando a diária volta); arredonda para cima em minutos
+## inteiros antes de separar as horas ("em 2 h 0 min", nunca "em 1 h 60 min")
 func _wait_text(seconds: int) -> String:
-	var h := seconds / 3600
-	var m := int(ceil(float(seconds % 3600) / 60.0))
+	var total := int(ceil(float(maxi(seconds, 0)) / 60.0))
+	var h := total / 60
+	var m := total % 60
 	return ("em %d h %d min" % [h, m]) if h > 0 else ("em %d min" % m)
 
 func _tick_ping(delta: float) -> void:

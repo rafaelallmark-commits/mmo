@@ -269,7 +269,7 @@ Cada missão principal lista **NPC**, **objetivo**, **diálogo curto**, **recomp
 - **NPC**: Ilda Varen (porta da Eclusa).
 - **Objetivo**: entrar com um grupo de 2–5 e impedir que o Custódio feche as saídas da câmara.
 - **Diálogo**: ILDA: "Lá dentro não tem rota alternativa." · CUSTÓDIO (ao entrar): "Pressão acima do limite. Equipe não autorizada. Iniciando contenção."
-- **Recompensa**: 15.000 XP; saque individual do chefe: **arma única de nível 20 da classe** (ex.: Grande Machado da Última Eclusa, Cajado da Câmara Rubra) e Anel do Meridiano ou Amuleto da Resposta.
+- **Recompensa**: 15.000 XP; saque individual do chefe: **arma única de nível 20 da classe** (a da família da arma equipada; ex.: Grande Machado da Última Eclusa, Cajado da Câmara Rubra) e Anel do Meridiano ou Amuleto da Resposta, uma única vez por personagem; e, a cada vitória, **uma peça única de armadura ou de mão secundária da classe** que o personagem ainda não ganhou do Custódio, até fechar o conjunto (4 vitórias, ou 5 para quem usa mão secundária). Depois disso, o chefe dá ouro e materiais.
 - **Pré-requisitos**: 5.2; Chave de Comporta com qualquer membro do grupo.
 - **Conclusão**: morte do Custódio com participação registrada.
 

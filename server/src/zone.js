@@ -232,8 +232,10 @@ export class Zone {
 
   // ---------- perigos do mapa ----------
   // A esteira desgovernada da Oficina: só liga enquanto alguém na área precisa dela (missão "Esteira
-  // Desgovernada"); então avisa as faixas que vai varrer (o mesmo aviso de linha do Custódio) e, depois do
-  // aviso, atinge quem estiver nelas (dano em % da vida; o gancho zera os abates seguidos da missão).
+  // Desgovernada") e só para essas pessoas ("Pina religa a esteira só para quem está com a missão"): elas
+  // recebem o aviso das faixas que vão ser varridas (o mesmo aviso de linha do Custódio) e, depois dele, quem
+  // delas estiver numa faixa é atingido (dano em % da vida; o gancho zera os abates seguidos da missão). Quem
+  // caça as Lâminas sem a missão não vê, não ouve o sino do aviso nem leva a varrida.
   hazardLines(h, k) {
     const a = h.def.area;
     const pats = h.def.patterns ?? [];
@@ -250,14 +252,18 @@ export class Zone {
       const inside = [...this.players.values()].filter((p) => !p.char.dead && this.inArea(d.area, p.char));
       if (h.state === 'idle') {
         if (this.now < h.at) continue;
-        if (!inside.some((p) => this.hooks.hazardWanted?.(p, h.id))) { h.at = this.now + 1000; continue; }
+        const targets = inside.filter((p) => this.hooks.hazardWanted?.(p, h.id));
+        if (!targets.length) { h.at = this.now + 1000; continue; }
         h.list = this.hazardLines(h, h.pattern++);
         h.state = 'warning';
         h.at = this.now + d.warnMs;
-        for (const l of h.list) this.broadcast({ t: 'warn', shape: 'line', x: l.x, z: l.z, yaw: l.yaw, length: l.length, width: d.width, ms: d.warnMs, kind: 'line', hazard: h.id });
+        // só quem recebeu o aviso pode ser varrido nesta passada (ninguém leva dano sem ter visto as faixas)
+        h.warned = new Set(targets.map((p) => p.char.id));
+        for (const p of targets) for (const l of h.list) this.send(p.char.id, { t: 'warn', shape: 'line', x: l.x, z: l.z, yaw: l.yaw, length: l.length, width: d.width, ms: d.warnMs, kind: 'line', hazard: h.id });
       } else if (this.now >= h.at) {
         for (const p of inside) {
           const c = p.char;
+          if (!h.warned?.has(c.id)) continue;
           if (!h.list.some((l) => Math.abs((l.axis === 'z' ? c.z : c.x) - l.at) <= d.width / 2 + 0.3)) continue;
           const dmg = Math.max(1, Math.round(p.stats.maxHp * d.damagePctMaxHp / 100));
           this.broadcast({ t: 'hit', src: `hz:${h.id}`, dst: p.eid, dmg, crit: false, miss: false, skill: 'hazard', magic: false });
@@ -266,6 +272,7 @@ export class Zone {
         }
         h.state = 'idle';
         h.list = [];
+        h.warned = null;
         h.at = this.now + Math.max(500, d.periodMs - d.warnMs);
       }
     }
@@ -944,9 +951,26 @@ export class Zone {
       else if (e.type === 'pool') out.push({ defId: e.pool[Math.floor(this.rng() * e.pool.length)], qty: 1, gold: 0 });
       else if (e.type === 'classDrop' && e.byClass[char.classId]) out.push({ defId: this.classDropPick(e.byClass[char.classId], char), qty: 1, gold: 0 });
       // uma peça sorteada da lista da classe (ex.: armadura ou mão secundária única do Custódio)
-      else if (e.type === 'classPool' && e.byClass[char.classId]?.length) { const list = e.byClass[char.classId]; out.push({ defId: list[Math.floor(this.rng() * list.length)], qty: 1, gold: 0 }); }
+      else if (e.type === 'classPool' && e.byClass[char.classId]?.length) {
+        const defId = this.classPoolPick(m, e.byClass[char.classId], char);
+        if (defId) out.push({ defId, qty: 1, gold: 0 });
+      }
     }
     return out;
+  }
+
+  // classPool: uma peça sorteada da lista da classe. No chefe, cada peça sai uma única vez por personagem,
+  // como a arma e a joia (D60): sorteia a ordem e fica com a primeira que ele ainda não ganhou (a chave
+  // permanente em daily_claims só é gravada para a peça entregue). Com o conjunto completo, nada: o Custódio
+  // não vira fonte sem fim de peças únicas para vender, trocar ou passar pelo depósito (D160).
+  classPoolPick(m, list, char) {
+    if (m.def.rank !== 'boss') return list[Math.floor(this.rng() * list.length)];
+    const order = [...list];
+    for (let i = order.length - 1; i > 0; i--) {
+      const j = Math.floor(this.rng() * (i + 1));
+      [order[i], order[j]] = [order[j], order[i]];
+    }
+    return order.find((id) => this.store.claimDaily(char.id, `unique:${m.defId}:${id}`, 'sempre')) ?? null;
   }
 
   // classDrop com várias armas para a classe: a da família que o personagem tem equipada (o Quebraferro de
