@@ -67,6 +67,8 @@ Da mais baixa para a mais alta. Uma camada de cima bloqueia o clique nas de baix
 
 **Trocar de personagem** desconecta e volta direto para Personagens (login refeito automaticamente). **Sair para o título** desconecta e vai ao Título.
 
+**Reconectar** (aviso de conexão perdida) refaz o login e volta ao mundo. Se o serviço de contas recusar pedindo o código do e-mail ou o aceite de termos novos, o jogo sai do mundo e abre *Confirmar e-mail* ou *Termos atualizados*, com a conexão nova aberta para a próxima tentativa; aceitos os termos, segue para Personagens.
+
 ## 7.3 Mapa do mundo
 
 ```

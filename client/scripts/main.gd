@@ -662,6 +662,7 @@ func show_delete_account(via_accounts := false, back := Callable()) -> void:
 # ---------------- BAIXAR MEUS DADOS (direito de acesso da LGPD) ----------------
 const EXPORT_DIR := "user://dados"
 var _export_text := ""  # último JSON baixado, para salvar uma cópia em outro lugar
+var _export_box: VBoxContainer = null  # caminho do arquivo e botões da tela aberta (sai com a tela)
 
 ## Pede a senha, chama POST /contas/dados no serviço de contas e grava o JSON em user://dados (mostrando o
 ## caminho, com um botão para abrir a pasta); dá para salvar uma cópia onde o jogador quiser (FileDialog).
@@ -673,13 +674,18 @@ func show_export_data(back := Callable()) -> void:
 	var e_pass := _field(box, "Senha", "", true)
 	var result := VBoxContainer.new()  # caminho do arquivo e botões, depois de baixar
 	result.add_theme_constant_override("separation", 8)
+	_export_box = result
 	var fetch := func():
 		set_status("Baixando seus dados...")
+		# a resposta usa _export_box, não a variável local: quem sai da tela antes dela chegar desistiu do download
+		# (a tela já foi apagada e não há onde mostrar o caminho)
 		_accounts_post("/contas/dados", {"conta": account, "senha": e_pass.text}, func(ok: bool, b: Dictionary):
+			if not is_instance_valid(_export_box):
+				return
 			if not ok or not (b.get("dados") is Dictionary):
 				set_status(str(b.get("erro", "Não foi possível baixar os dados.")), true)
 				return
-			_export_save(result, JSON.stringify(b["dados"], "  ", false)))
+			_export_save(_export_box, JSON.stringify(b["dados"], "  ", false)))
 	_button(box, "Baixar", fetch, true)
 	box.add_child(result)
 	_button(box, "Voltar", func():
@@ -805,13 +811,15 @@ func _login_with_accounts() -> void:
 
 ## Login recusado pelo serviço de contas com um caminho a seguir: e-mail não confirmado abre a tela do código
 ## (com a conta preenchida e a explicação); termos novos abrem a tela de aceite. Se a recusa vier ao
-## reconectar de dentro do mundo, sai do mundo antes. Devolve false para as outras recusas (senha, suspensão).
+## reconectar de dentro do mundo, sai do mundo antes, mantendo aberta a conexão nova da reconexão (ainda sem
+## login): a próxima tentativa a reaproveita, e o fim dela não aparece na tela como "Sem conexão". Devolve
+## false para as outras recusas (senha, suspensão).
 func _accounts_login_blocked(body: Dictionary) -> bool:
 	var code := str(body.get("codigo", ""))
 	if code != "confirmar" and code != "termos":
 		return false
 	if state == "world" or in_world or reconnecting:
-		leave_world(true)
+		leave_world(true, true)
 	if code == "confirmar":
 		show_verify_accounts(str(body.get("erro", "Confirme seu e-mail antes de entrar: digite o código que enviamos para o e-mail do cadastro (ou peça outro).")), account)
 	else:
@@ -1249,8 +1257,9 @@ func _on_zone(m: Dictionary) -> void:
 	hud.system("Local: %s." % map_def().get("name", map_id))
 	hide_loading(0.4)
 
-## Sai do mundo e volta para Personagens (login refeito) ou para o Título.
-func leave_world(to_title: bool) -> void:
+## Sai do mundo e volta para Personagens (login refeito) ou para o Título. keep_conn: a conexão atual fica
+## aberta (a da reconexão recusada pelo serviço de contas, que ainda não fez login).
+func leave_world(to_title: bool, keep_conn := false) -> void:
 	in_world = false
 	state = "leaving"
 	_kicked_reason = ""
@@ -1268,7 +1277,8 @@ func leave_world(to_title: bool) -> void:
 		hud = null
 	party = null
 	journal = {}
-	Net.close()
+	if not keep_conn:
+		Net.close()
 	Sfx.set_zone("")
 	Sfx.set_mood("title")
 	_ensure_menu_scene()

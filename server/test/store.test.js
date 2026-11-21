@@ -71,3 +71,37 @@ test('migração 6: contas antigas ficam com os termos na versão 1 e a data do 
     } finally { st.close(); }
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('migração 6 num banco grande: a data do aceite sai de uma passada só pela auditoria (não uma por conta)', { skip: SQLITE_ONLY }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cinzas-store-'));
+  try {
+    const path = join(dir, 'v5-grande.db');
+    // 1.500 contas, só uma em cada 10 ainda com a linha account_created (as outras: criadas há mais de 90 dias,
+    // com a auditoria já apagada, ou direto na zona) e 150.000 linhas de auditoria do jogo. Com uma subconsulta
+    // por conta, cada conta sem a linha percorria a auditoria inteira (dezenas de segundos aqui, minutos num
+    // banco de produção, com o banco travado e a zona sem subir).
+    const old = new DatabaseSync(path);
+    old.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)');
+    for (const m of MIGRATIONS.filter((x) => x.v <= 5)) m.up(old);
+    old.exec('INSERT INTO schema_version (version) VALUES (5); BEGIN');
+    const acc = old.prepare('INSERT INTO accounts (name, pass_hash, salt, created_at) VALUES (?, ?, ?, ?)');
+    const aud = old.prepare('INSERT INTO audit_log (at, kind, account_id, char_id, ip, data_json) VALUES (?, ?, ?, ?, ?, ?)');
+    for (let i = 1; i <= 1500; i++) {
+      acc.run(`conta${i}`, 'x', 'y', i);
+      if (i % 10 === 1) aud.run(1000 + i, 'account_created', i, null, '10.0.0.1', '{"terms":1}');
+    }
+    for (let i = 0; i < 150_000; i++) aud.run(10_000 + i, i % 4 ? 'loot' : 'login', i % 4 ? null : 1 + (i % 1500), i % 4 ? 1 + (i % 50) : null, '10.0.0.2', '{"gold":12}');
+    old.exec('COMMIT');
+    old.close();
+    const t0 = Date.now();
+    const st = new Store(path);
+    const ms = Date.now() - t0;
+    try {
+      assert.deepEqual(st.migrated, MIGRATIONS.filter((x) => x.v >= 6).map((x) => x.v), 'da 6 em diante');
+      assert.ok(ms < 3000, `migração 6 levou ${ms} ms`);
+      const rows = st.db.prepare('SELECT id, terms_at FROM accounts ORDER BY id').all();
+      assert.equal(rows.filter((r) => r.terms_at != null).length, 150);
+      assert.ok(rows.every((r) => (r.id % 10 === 1 ? r.terms_at === 1000 + r.id : r.terms_at === null)), 'a data vem da linha account_created de cada conta');
+    } finally { st.close(); }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

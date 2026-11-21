@@ -771,7 +771,8 @@ repositório).
 
 **Termos novos**: para publicar uma versão nova dos Termos ou da Política, edite os textos, troque o número da versão
 no topo de `docs/TERMOS.md` e de `docs/PRIVACIDADE.md` (os dois andam com o mesmo número) e suba `TERMS_VERSION` em
-`server/src/contas.js` (textos e número vão juntos na mesma imagem de zona e contas). No login seguinte, cada conta que aceitou uma versão anterior recebe `403` com `codigo: 'termos'`
+`server/src/contas.js` (textos e número vão juntos na mesma imagem de zona e contas; `test/contas.test.js` falha se os
+três números não baterem). No login seguinte, cada conta que aceitou uma versão anterior recebe `403` com `codigo: 'termos'`
 e vê a tela *Termos atualizados*; `POST /termos/aceitar` (conta, senha, `aceite: true`) grava a versão e a data e o
 login segue. Exportar e excluir a conta não dependem do aceite (a mesma tela oferece as duas coisas). O login por
 senha direto na zona (`--auth both` ou `password`, só para desenvolvimento) não passa por essa conferência: no teste
@@ -977,7 +978,9 @@ Uma tabela só (ex.: auditoria): `pg_restore -t audit_log ...`. As sequências d
 **Do SQLite para o PostgreSQL**: `npm run sqlite-para-pg -- --de cinzas.db --para "$CINZAS_DB"` tira uma foto
 consistente do arquivo (pode ser com o servidor rodando; o arquivo não é alterado), migra a foto, exige as
 tabelas do PostgreSQL vazias, copia tudo numa transação com os mesmos ids (clãs e membros inclusive), acerta as
-sequências e confere as contagens. Os nomes valem igual nos dois bancos (`nocase()` = `NOCASE`): o que o SQLite
+sequências depois do maior id que o SQLite já deu (mesmo o de uma conta nunca confirmada que a limpeza apagou: a
+auditoria dela fica 90 dias e não pode passar para uma conta nova) e confere as contagens. Os nomes valem igual nos
+dois bancos (`nocase()` = `NOCASE`): o que o SQLite
 aceitou, os índices únicos do PostgreSQL aceitam. Fração guardada numa coluna inteira do SQLite (que aceita; ex.
 fim de suspensão gravado por versões anteriores ao arredondamento) é arredondada, e a contagem aparece no log.
 

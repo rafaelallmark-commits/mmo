@@ -5,7 +5,8 @@
 //    até a última versão — o arquivo original não é alterado.
 // 2. Abre o PostgreSQL (migrações rodam se faltar) e exige as tabelas do jogo vazias.
 // 3. Copia tudo numa transação só, na ordem das chaves estrangeiras, com os mesmos ids; acerta as
-//    sequências de identidade; confere a contagem de linhas de cada tabela. Fração guardada numa coluna
+//    sequências de identidade (depois do maior id que o SQLite já deu, mesmo de uma linha apagada);
+//    confere a contagem de linhas de cada tabela. Fração guardada numa coluna
 //    INTEGER do SQLite (que aceita) é arredondada (o BIGINT do PostgreSQL recusaria).
 // Os nomes valem igual nos dois bancos (nocase() do PostgreSQL = COLLATE NOCASE do SQLite, só no ASCII):
 // o que o SQLite aceitou, os índices únicos do PostgreSQL aceitam.
@@ -30,6 +31,12 @@ export function importSqliteToPg(sqlitePath, pg, { log = () => {} } = {}) {
     src.exec(`VACUUM INTO '${snap.replace(/'/g, "''")}'`);
     src.close();
     const lite = new Store(snap); // migra a foto, não o original
+    // maior id que o SQLite já deu: o MAX da tabela ou, se maior, o contador do AUTOINCREMENT (sqlite_sequence).
+    // A limpeza apaga de vez a conta nunca confirmada (purgeOld) e a auditoria dela fica 90 dias: recomeçar a
+    // identidade no MAX daria o id dela a uma conta nova, que herdaria a auditoria (com o IP) de outra pessoa
+    const usedId = (t) => {
+      try { return Number(lite.db.prepare('SELECT seq FROM sqlite_sequence WHERE name = ?').get(t)?.seq ?? 0); } catch { return 0; }
+    };
     try {
       for (const t of TABLES) {
         if (pg.query(`SELECT EXISTS (SELECT 1 FROM ${t}) AS cheio`)[0].cheio) throw new Error(`a tabela ${t} do PostgreSQL não está vazia: importe num banco (ou esquema) novo`);
@@ -52,7 +59,9 @@ export function importSqliteToPg(sqlitePath, pg, { log = () => {} } = {}) {
           const sql = `INSERT INTO ${t} (${cols.join(', ')}) VALUES (${cols.map((_, i) => `$${i + 1}`).join(', ')})`;
           const rows = lite.db.prepare(`SELECT ${cols.join(', ')} FROM ${t} ORDER BY rowid`).all();
           for (let i = 0; i < rows.length; i += CHUNK) pg.batch(rows.slice(i, i + CHUNK).map((r) => [sql, cols.map((c, j) => value(r, c, j))]));
-          if (IDENTITY[t]) pg.query(`SELECT setval(pg_get_serial_sequence('${t}', '${IDENTITY[t]}'), COALESCE((SELECT MAX(${IDENTITY[t]}) FROM ${t}), 0) + 1, false)`);
+          if (IDENTITY[t]) {
+            pg.query(`SELECT setval(pg_get_serial_sequence('${t}', '${IDENTITY[t]}'), GREATEST(COALESCE((SELECT MAX(${IDENTITY[t]}) FROM ${t}), 0), $1::bigint) + 1, false)`, [usedId(t)]);
+          }
           counts[t] = rows.length;
           log(`  ${t}: ${rows.length}`);
         }

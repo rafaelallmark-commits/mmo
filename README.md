@@ -190,8 +190,10 @@ Percorrer todas as telas e salvar uma captura de cada (precisa de janela, não u
 ```
 
 Telas de conta do teste público pela interface, apertando os botões de verdade (roda com `--headless`): cadastro,
-"fecha o jogo" sem confirmar, a recusa do login abre a tela do código com a conta preenchida, o reenvio é barrado
-pelo limite de um e-mail por minuto, confirma com o código lido do e-mail, entra e usa *Baixar meus dados*. Precisa de
+"fecha o jogo" sem confirmar, a recusa do login abre a tela do código com a conta preenchida (também quando vem
+numa reconexão, como de dentro do mundo, sem derrubar a conexão nova), o reenvio é barrado
+pelo limite de um e-mail por minuto, confirma com o código lido do e-mail, entra, usa *Baixar meus dados* e salva uma
+cópia pelo diálogo de arquivo (escolhendo o caminho pelo sinal do diálogo, na pasta dos e-mails). Precisa de
 uma zona com login por token e do serviço de contas gravando os e-mails numa pasta, com o mesmo segredo nos dois
 terminais (gere um com `openssl rand -hex 32` e exporte em `CINZAS_TOKEN_SECRET` nos dois; dentro de `server/`, banco
 novo):

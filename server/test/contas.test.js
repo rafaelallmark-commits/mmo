@@ -4,7 +4,7 @@
 // antes do e-mail e novo aceite quando a versão dos termos sobe.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -288,4 +288,12 @@ test('aceite dos termos: gravado na conta antes do e-mail; versão nova pede nov
     assert.deepEqual([exp.dados.conta.terms_version, exp.dados.conta.terms_at], [TERMS_VERSION + 1, after.terms_at]);
     assert.ok(exp.dados.auditoria.some((a) => a.kind === 'terms_accepted'));
   } finally { await svc.stop(); await zone.stop(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('versão dos termos: TERMS_VERSION é o número no topo de docs/TERMOS.md e de docs/PRIVACIDADE.md (o texto que o cliente abre)', () => {
+  // subir só o número (ou só o texto) pediria o aceite de uma versão que não é a que o jogador lê em /termos
+  for (const f of ['TERMOS.md', 'PRIVACIDADE.md']) {
+    const text = readFileSync(new URL(`../../docs/${f}`, import.meta.url), 'utf8');
+    assert.equal(Number(/\*Versão (\d+)/.exec(text)?.[1]), TERMS_VERSION, `${f}: a versão no topo do texto`);
+  }
 });
