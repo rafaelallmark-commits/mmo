@@ -130,6 +130,31 @@ test('PostgreSQL: migração 6 — contas antigas com os termos na versão 1 e a
   } finally { st.close(); }
 });
 
+test('PostgreSQL: migração 6 num banco grande — a data do aceite sai de uma passada só pela auditoria', { skip }, () => {
+  const schema = schemaOf('v5grande');
+  const old = new PgStore(PG_URL, { schema, targetVersion: 5 });
+  try {
+    // 1.500 contas, só uma em cada 10 com a linha account_created, e 150.000 linhas de auditoria do jogo: com uma
+    // subconsulta por conta, cada conta sem a linha percorria a auditoria inteira
+    old.exec(`INSERT INTO accounts (name, pass_hash, salt, created_at) SELECT 'conta' || g, 'x', 'y', g FROM generate_series(1, 1500) g;
+      INSERT INTO audit_log (at, kind, account_id, ip, data_json) SELECT 1000 + g, 'account_created', g, '10.0.0.1', '{"terms":1}' FROM generate_series(1, 1500, 10) g;
+      INSERT INTO audit_log (at, kind, account_id, char_id, ip, data_json)
+        SELECT 10000 + g, CASE WHEN g % 4 = 0 THEN 'login' ELSE 'loot' END, CASE WHEN g % 4 = 0 THEN 1 + g % 1500 END, CASE WHEN g % 4 <> 0 THEN 1 + g % 50 END, '10.0.0.2', '{"gold":12}'
+        FROM generate_series(0, 149999) g;
+      ANALYZE accounts; ANALYZE audit_log;`);
+  } finally { old.close(); }
+  const t0 = Date.now();
+  const st = new PgStore(PG_URL, { schema, dropSchemaOnClose: true });
+  const ms = Date.now() - t0;
+  try {
+    assert.deepEqual(st.migrated, [6]);
+    assert.ok(ms < 5000, `migração 6 levou ${ms} ms`);
+    const rows = st.query('SELECT id, terms_at FROM accounts ORDER BY id');
+    assert.equal(rows.filter((r) => r.terms_at != null).length, 150);
+    assert.ok(rows.every((r) => (r.id % 10 === 1 ? r.terms_at === 1000 + r.id : r.terms_at === null)), 'a data vem da linha account_created de cada conta');
+  } finally { st.close(); }
+});
+
 test('PostgreSQL: três processos subindo juntos no mesmo esquema aplicam cada migração uma vez', { skip }, async () => {
   const schema = schemaOf('corrida');
   const code = `import { PgStore } from ${JSON.stringify(new URL('../src/store-pg.js', import.meta.url).href)};
@@ -255,6 +280,31 @@ test('PostgreSQL: importação arredonda fração guardada numa coluna inteira d
     assert.equal(importSqliteToPg(join(dir, 'origem.db'), pg, { log: (l) => log.push(l) }).accounts, 1);
     assert.deepEqual([pg.findAccount('FRACAO').banned_until, pg.findAccount('fracao').ban_reason], [Math.round(until), 'teste']);
     assert.ok(log.some((l) => /1 valor/.test(l)), 'a importação conta o que arredondou');
+  } finally { pg.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('PostgreSQL: importação depois da limpeza não dá a uma conta nova o id de uma conta apagada (nem a auditoria dela)', { skip }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cinzas-import-'));
+  const pg = new PgStore(PG_URL, { schema: schemaOf('apagada'), dropSchemaOnClose: true });
+  try {
+    // a conta mais nova do SQLite nunca foi confirmada e a limpeza a apagou de vez; a auditoria dela (com o IP de
+    // quem se cadastrou) fica por 90 dias
+    const lite = new Store(join(dir, 'origem.db'));
+    const kept = lite.createAccount('ficou', 'senha', { email: 'ficou@exemplo.com' });
+    const gone = lite.createAccount('sumiu', 'senha', { email: 'sumiu@exemplo.com', verified: false });
+    lite.audit('account_created', { accountId: gone, ip: '10.9.9.9', terms: 1 });
+    lite.noteAccountEvent('mail', gone, 'sumiu@exemplo.com');
+    lite.db.prepare('UPDATE accounts SET created_at = ? WHERE id = ?').run(Date.now() - 8 * 86400000, gone);
+    assert.equal(lite.purgeOld(90).unverified, 1);
+    assert.ok(lite.createAccount('local', 'senha') > gone, 'no SQLite (AUTOINCREMENT) o id apagado não volta');
+    lite.db.prepare("DELETE FROM accounts WHERE name = 'local'").run();
+    lite.close();
+    importSqliteToPg(join(dir, 'origem.db'), pg);
+    const nova = pg.createAccount('nova', 'senha', { email: 'nova@exemplo.com' });
+    assert.ok(nova > gone, `a conta nova pegou o id ${nova}, de uma conta apagada`);
+    assert.deepEqual(pg.exportAccount(nova).auditoria, [], 'a exportação da conta nova não traz a auditoria (nem o IP) de outra pessoa');
+    assert.equal(pg.accountEventStats('mail', nova, null, 0).account.n, 0, 'nem os limites dela');
+    assert.ok(pg.findAccountById(kept), 'a conta que ficou foi importada');
   } finally { pg.close(); rmSync(dir, { recursive: true, force: true }); }
 });
 

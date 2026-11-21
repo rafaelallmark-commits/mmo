@@ -430,11 +430,15 @@ func _nav_tick() -> void:
 # ---------------- telas de conta (--contastest=pasta_dos_emails) ----------------
 # Servidor com --auth token e serviço de contas com --email arquivo --email-dir pasta_dos_emails. Percorre as
 # telas como o jogador (campos e botões de verdade): cria a conta, "fecha o jogo" sem confirmar, tenta entrar
-# (a recusa abre a tela do código com a conta preenchida), pede outro código (barrado: um e-mail por minuto),
-# confirma com o código lido do e-mail, entra pela mesma conexão, baixa os dados (arquivo em user://dados) e,
-# com --termos=conta:senha (conta que aceitou uma versão anterior dos termos), aceita os termos novos e entra.
+# (a recusa abre a tela do código com a conta preenchida; recusada também ao reconectar, como de dentro do mundo,
+# a tela volta sem "Sem conexão" e com a conexão aberta), pede outro código (barrado: um e-mail por minuto),
+# confirma com o código lido do e-mail, entra pela mesma conexão, baixa os dados (arquivo em user://dados), salva
+# uma cópia pelo diálogo de arquivo (na pasta dos e-mails) e, com --termos=conta:senha (conta que aceitou uma
+# versão anterior dos termos), aceita os termos novos e entra.
 var ac_step := 0
 var ac_until := 0
+var ac_data_path := ""
+var ac_screen = null  # tela do código antes da reconexão (sai quando a recusa abre a tela de novo)
 
 func start_accounts(m) -> void:
 	main = m
@@ -533,9 +537,24 @@ func _accounts_tick() -> void:
 				fail("a conta não veio preenchida na tela do código")
 				return
 			say("login recusado abriu a tela do código com a conta preenchida")
+			# a mesma recusa ao reconectar de dentro do mundo (conexão caiu, "Reconectar"): sai do mundo e abre a
+			# tela do código, mantendo a conexão nova aberta (sem "Sem conexão" na linha de status)
+			ac_screen = main.screen
+			main.reconnect()
+		5:
+			if is_instance_valid(ac_screen) or _ui_title() != "Confirmar e-mail":
+				return
+			ac_until = Time.get_ticks_msec() + 1500  # tempo de sobra para um fechamento de conexão chegar
+			ac_step += 1
+			return
+		6:
+			if _ui_status().contains("Sem conexão") or not Net.is_open():
+				fail("a recusa ao reconectar deixou a tela do código sem conexão: «%s»" % _ui_status())
+				return
+			say("recusa ao reconectar: tela do código de novo, com a conexão aberta")
 			if not _ui_press("Reenviar código"):
 				return
-		5:
+		7:
 			if not _ui_status().contains("Espere"):
 				return
 			say("reenviar logo depois do cadastro: " + _ui_status())
@@ -546,25 +565,25 @@ func _accounts_tick() -> void:
 			_ui_fill([null, code])
 			if not _ui_press("Confirmar"):
 				return
-		6:
+		8:
 			if _ui_title() != "Entrar" or not _ui_status().contains("confirmada"):
 				return
 			say("conta confirmada; entrando pela mesma conexão")
 			if not _ui_press("Entrar"):
 				return
-		7:
+		9:
 			if main.state != "chars":
 				return
 			say("lista de personagens de %s" % main.account)
 			if not _ui_press("Baixar meus dados"):
 				return
-		8:
+		10:
 			if _ui_title() != "Baixar meus dados":
 				return
 			_ui_fill([pw])
 			if not _ui_press("Baixar"):
 				return
-		9:
+		11:
 			if not _ui_status().begins_with("Pronto"):
 				return
 			var edits := _ui_nodes("LineEdit")
@@ -574,37 +593,52 @@ func _accounts_tick() -> void:
 				fail("arquivo de dados inválido em " + path)
 				return
 			say("dados baixados em %s (termos aceitos: versão %d)" % [path, int(data["conta"]["terms_version"])])
+			ac_data_path = path
+			if not _ui_press("Salvar uma cópia em outro lugar..."):
+				return
+		12:
+			# o diálogo de arquivo (nativo, quando o sistema tem) não dá para clicar sem tela: escolhe o caminho
+			# pelo sinal, como o diálogo faria, e confere a cópia
+			var dlgs: Array = main.ui.find_children("*", "FileDialog", true, false)
+			if dlgs.is_empty():
+				return
+			var copy: String = str(main.args["contastest"]).path_join("copia-dos-dados.json")
+			(dlgs[0] as FileDialog).file_selected.emit(copy)
+			if not _ui_status().begins_with("Cópia salva") or FileAccess.get_file_as_string(copy) != FileAccess.get_file_as_string(ac_data_path):
+				fail("a cópia escolhida no diálogo não confere: %s (%s)" % [copy, _ui_status()])
+				return
+			say("cópia salva pelo diálogo em " + copy)
 			if not main.args.has("termos"):
 				say("OK")
 				get_tree().quit(0)
 				return
 			if not _ui_press("Voltar"):
 				return
-		10:
+		13:
 			if main.state != "chars":
 				return
 			if not _ui_press("Voltar"):
 				return
-		11:
+		14:
 			if _ui_title() != "Entrar":
 				return
 			var t: PackedStringArray = str(main.args["termos"]).split(":", true, 1)
 			_ui_fill([null, t[0], t[1] if t.size() > 1 else ""])
 			if not _ui_press("Entrar"):
 				return
-		12:
+		15:
 			if _ui_title() != "Termos atualizados":
 				return
 			say("tela de termos novos: " + str(main.screen.find_children("*", "Label", true, false)[2].text))
 			if not _ui_press("Aceitar e entrar"):  # sem marcar a caixa: recusa
 				return
-		13:
+		16:
 			if not _ui_status().contains("marque"):
 				return
 			(_ui_button("Li e aceito", true) as CheckBox).button_pressed = true
 			if not _ui_press("Aceitar e entrar"):
 				return
-		14:
+		17:
 			if main.state != "chars":
 				return
 			say("termos aceitos; lista de personagens de %s" % main.account)

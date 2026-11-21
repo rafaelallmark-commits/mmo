@@ -166,8 +166,9 @@ ALTER TABLE accounts ADD COLUMN muted_until BIGINT;` },
   { v: 6, name: 'contas: aceite dos termos na conta e limites de e-mail e de tentativas', sql: `
 ALTER TABLE accounts ADD COLUMN terms_version BIGINT NOT NULL DEFAULT 1;
 ALTER TABLE accounts ADD COLUMN terms_at BIGINT;
-UPDATE accounts SET terms_at = (SELECT MIN(a.at) FROM audit_log a
-  WHERE a.kind = 'account_created' AND a.account_id = accounts.id AND a.data_json LIKE '%"terms":%');
+UPDATE accounts SET terms_at = c.at FROM (SELECT account_id, MIN(at) AS at FROM audit_log
+  WHERE kind = 'account_created' AND account_id IS NOT NULL AND data_json LIKE '%"terms":%' GROUP BY account_id) AS c
+  WHERE c.account_id = accounts.id;
 CREATE TABLE IF NOT EXISTS account_events (
   kind TEXT NOT NULL CHECK (kind IN ('mail','code_fail')),
   account_id BIGINT,

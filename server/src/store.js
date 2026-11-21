@@ -155,8 +155,11 @@ export const MIGRATIONS = [
     // com a versão 1 (a única até aqui) e a data da linha account_created da auditoria, se ela ainda existir
     db.exec('ALTER TABLE accounts ADD COLUMN terms_version INTEGER NOT NULL DEFAULT 1');
     db.exec('ALTER TABLE accounts ADD COLUMN terms_at INTEGER');
-    db.exec(`UPDATE accounts SET terms_at = (SELECT MIN(a.at) FROM audit_log a
-      WHERE a.kind = 'account_created' AND a.account_id = accounts.id AND a.data_json LIKE '%"terms":%')`);
+    // uma passada só pela auditoria (agrupada por conta): uma subconsulta por conta percorreria a auditoria
+    // inteira para cada conta sem a linha (criada há mais de 90 dias ou direto na zona)
+    db.exec(`UPDATE accounts SET terms_at = c.at FROM (SELECT account_id, MIN(at) AS at FROM audit_log
+      WHERE kind = 'account_created' AND account_id IS NOT NULL AND data_json LIKE '%"terms":%' GROUP BY account_id) AS c
+      WHERE c.account_id = accounts.id`);
     // e-mails mandados ('mail', com o resumo do endereço de destino) e códigos errados ('code_fail'), para os
     // limites por conta e por endereço; sem chave estrangeira: o contador do endereço sobrevive à exclusão
     db.exec(`CREATE TABLE IF NOT EXISTS account_events (
