@@ -566,6 +566,7 @@ func show_chars(select_id := -1) -> void:
 		l.text = "Nenhum personagem ainda.\nCrie um voluntário das caravanas."
 		l.add_theme_color_override("font_color", Theme_.MUTED)
 		box.add_child(l)
+		menu_scene.clear_character() # (o último acabou de ser excluído: a prévia dele sai)
 	if select_id < 0 and not chars_cache.is_empty():
 		select_id = int(chars_cache[0]["id"])
 	_selected_char = select_id

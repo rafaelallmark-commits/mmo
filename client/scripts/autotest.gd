@@ -343,6 +343,7 @@ func _act(kind: String, id: String) -> void:
 # ---------------- capturas da navegação (--navshots=pasta) ----------------
 var nav_step := 0
 var nav_until := 0
+var nav_delete_shown := false
 
 func start_nav(m) -> void:
 	main = m
@@ -396,7 +397,15 @@ func _nav_tick() -> void:
 				main.show_chars()
 			next_wait = 1500
 		5:
-			_nav_shot("05_personagens")
+			if not nav_delete_shown:
+				# tela de excluir personagem: só a captura (nada é enviado ao servidor)
+				_nav_shot("05_personagens")
+				main.show_delete_char(main._selected_char)
+				nav_delete_shown = true
+				nav_until = Time.get_ticks_msec() + 800
+				return
+			_nav_shot("05b_excluir_personagem")
+			main.show_chars(main._selected_char)
 			main.enter_world(main._selected_char)
 			next_wait = 250
 		6:

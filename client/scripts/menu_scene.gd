@@ -66,6 +66,12 @@ func set_view(v: String) -> void:
 	if preview:
 		preview.visible = v in ["chars", "create"]
 
+## Tira o personagem da prévia (conta sem personagens, depois de excluir o último).
+func clear_character() -> void:
+	if preview:
+		preview.queue_free()
+		preview = null
+
 ## Mostra (ou troca) o personagem da prévia.
 func show_character(class_id: String, weapon_family: String) -> void:
 	if preview:

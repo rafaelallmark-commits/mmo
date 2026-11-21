@@ -15,8 +15,9 @@ Bem-vindo a Várdia. Este guia cobre o que você precisa para começar; as regra
 3. Digite o **código de 6 dígitos** que chega por e-mail (vale 30 minutos; dá para pedir outro).
 4. Entre com conta e senha. Esqueceu a senha? *Esqueci a senha* manda um código para o e-mail.
 5. Crie o personagem: escolha a **origem** (Âmbar ou Nácar), a **classe** e o nome (3 a 16 letras, números,
-   `_` ou `-`, **sem espaços** e sem palavras da equipe, como GM, Admin, Moderador, Suporte ou Mestre — nem no
-   começo nem no fim do nome).
+   `_` ou `-`, **sem espaços** e sem imitar a equipe: Admin, Moderador, Suporte, Mestre e as outras palavras da
+   equipe não podem abrir nem fechar o nome, e GM, ADM, MOD e DEV não podem aparecer soltas, como em GM_Ana,
+   Ana-Mod ou Dev1 — Modesto e Gmelina valem).
 
 ## 2. As oito classes
 

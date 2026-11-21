@@ -9,6 +9,7 @@ const Scenery = preload("res://scripts/scenery.gd")
 const Motion = preload("res://scripts/motion.gd")
 const Vfx = preload("res://scripts/vfx.gd")
 const STAFF_LABEL_COLOR := Color("#8fd0ff") # nome de quem é da equipe (a mesma cor da marca no chat)
+const PLAYER_LABEL_COLOR := Color("#f2ead8") # nome dos outros jogadores
 
 var main # main.gd
 var scenery: Scenery
@@ -276,7 +277,7 @@ func apply_snapshot(snap: Dictionary) -> void:
 			var staff: bool = d.get("staff", false) == true
 			if staff:
 				name = "[Equipe] %s" % name
-			e["label"].modulate = STAFF_LABEL_COLOR if staff else Color.WHITE
+			e["label"].modulate = STAFF_LABEL_COLOR if staff else PLAYER_LABEL_COLOR
 			if d.get("ttl") != null and str(d.get("ttl")) != "":
 				name = "«%s»\n%s" % [str(d["ttl"]), name]
 		elif d["k"] == "e":
@@ -342,7 +343,7 @@ func _spawn_entity(d: Dictionary) -> Dictionary:
 		root = Art.monster(md)
 	root.scale = Vector3.ONE * (1.3 if d["k"] == "p" else (1.0 if d["k"] == "e" else 1.15))
 	add_child(root)
-	var label := _label("", 34, Color("#f2ead8") if d["k"] == "p" else (Color("#9fe3ff") if d["k"] == "e" else Color("#ffcf9a")))
+	var label := _label("", 34, PLAYER_LABEL_COLOR if d["k"] == "p" else (Color("#9fe3ff") if d["k"] == "e" else Color("#ffcf9a")))
 	label.position.y = 2.1 if d["k"] == "p" else (2.5 if d["k"] == "e" else 1.8)
 	root.add_child(label)
 	var x := float(d["x"])

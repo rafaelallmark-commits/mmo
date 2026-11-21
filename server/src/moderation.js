@@ -262,11 +262,9 @@ export class Moderation {
 
   // ---------- administração (D146): só admin, personagem on-line (memória) ou fora do ar (banco) ----------
   // Personagem on-line em outra zona (várias zonas): a memória de lá é que vale, e ela gravaria por cima do
-  // ouro e dos itens mexidos aqui no banco. Nome: o banco muda e ele é desconectado lá (o salvamento não
-  // grava o nome); itens e ouro: recusado, com o caminho (/gm onde e o comando na zona dele).
-  otherZone(t) {
-    return { ok: false, code: 'other_zone', reason: `${t.name} está on-line em outra zona: veja onde com /gm onde ${t.name} e use o comando de lá, ou espere ele sair.`, cache: false };
-  }
+  // que mudasse aqui no banco. server.withCharHeld pede a posse dele ao mundo antes (a zona dele o grava e o
+  // desconecta com o aviso) e devolve depois; fora do ar, a posse só impede que ele entre no meio.
+  static HELD_KICK = 'A equipe precisou revisar seu personagem. Entre de novo em instantes.';
 
   // /gm renomear Nome NovoNome: as regras de nome da criação (formato, reservados, duplicata)
   renameChar(t, msg, by, reason) {
@@ -274,11 +272,13 @@ export class Moderation {
     if (v.err) return { ...v.err, cache: false };
     const old = t.name;
     if (v.name === old) return { ok: false, code: 'same', reason: 'O nome novo é igual ao atual.', cache: false };
-    try { this.st.renameCharacter(t.charId, v.name); } catch { return { ok: false, code: 'name_taken', reason: 'Esse nome já está em uso.', cache: false }; }
-    if (t.p) this.s.renameOnline(t.p, v.name);
-    else if (t.remote) this.s.modRemote?.({ accountId: t.accountId, kick: `A equipe renomeou seu personagem para ${v.name}. Entre de novo.` });
-    this.st.audit('mod_rename', { ...by, targetAccount: t.accountId, target: t.charId, from: old, to: v.name, reason, online: !!t.p, otherZone: !!t.remote });
-    return { ok: true, message: `${old} agora se chama ${v.name}.`, cache: false };
+    return this.s.withCharHeld(t.charId, t.name, `A equipe renomeou seu personagem para ${v.name}. Entre de novo.`, () => {
+      try { this.st.renameCharacter(t.charId, v.name); } catch { return { ok: false, code: 'name_taken', reason: 'Esse nome já está em uso.', cache: false }; }
+      const p = this.s.playerOf(t.charId);
+      if (p) this.s.renameOnline(p, v.name);
+      this.st.audit('mod_rename', { ...by, targetAccount: t.accountId, target: t.charId, from: old, to: v.name, reason, online: !!p, otherZone: !!t.remote });
+      return { ok: true, message: `${old} agora se chama ${v.name}.`, cache: false };
+    });
   }
 
   // /gm renomear_cla SIGLA Novo Nome: as regras da fundação (formato, reservados, duplicata)
@@ -302,22 +302,24 @@ export class Moderation {
     if (!def) return { ok: false, code: 'bad_item', reason: `Item inexistente: ${cleanText(String(msg.defId ?? ''), 40)}.`, cache: false };
     const want = msg.qty == null ? Infinity : msg.qty;
     if (want !== Infinity && !(Number.isInteger(want) && want >= 1)) return { ok: false, code: 'bad_request', reason: 'Use: /gm retirar Nome item [quantidade].', cache: false };
-    if (t.remote) return this.otherZone(t);
-    const r = this.s.takeItemsOf(t.charId, def.id, want);
-    if (!r.qty) return { ok: false, code: 'not_found', reason: `${t.name} não tem ${def.name}.`, cache: false };
-    this.st.audit('mod_take_item', { ...by, targetAccount: t.accountId, target: t.charId, item: def.id, qty: r.qty, instances: r.instances, reason, online: !!t.p });
-    return { ok: true, message: `Retirado de ${t.name}: ${def.name} ×${r.qty}.`, qty: r.qty, cache: false };
+    return this.s.withCharHeld(t.charId, t.name, Moderation.HELD_KICK, () => {
+      const r = this.s.takeItemsOf(t.charId, def.id, want);
+      if (!r.qty) return { ok: false, code: 'not_found', reason: `${t.name} não tem ${def.name}.`, cache: false };
+      this.st.audit('mod_take_item', { ...by, targetAccount: t.accountId, target: t.charId, item: def.id, qty: r.qty, instances: r.instances, reason, online: !!r.online, otherZone: !!t.remote });
+      return { ok: true, message: `Retirado de ${t.name}: ${def.name} ×${r.qty}.`, qty: r.qty, cache: false };
+    });
   }
 
   // /gm retirar_ouro Nome N: até o que ele tem
   takeGold(t, msg, by, reason) {
     const n = Number(msg.amount);
     if (!Number.isInteger(n) || n < 1 || n > TAKE_GOLD_MAX) return { ok: false, code: 'bad_request', reason: 'Use: /gm retirar_ouro Nome quantia (número inteiro).', cache: false };
-    if (t.remote) return this.otherZone(t);
-    const r = this.s.takeGoldOf(t.charId, n);
-    if (!r.taken) return { ok: false, code: 'no_gold', reason: `${t.name} não tem ouro.`, cache: false };
-    this.st.audit('mod_take_gold', { ...by, targetAccount: t.accountId, target: t.charId, amount: r.taken, goldAfter: r.gold, reason, online: !!t.p });
-    return { ok: true, message: `Retirado de ${t.name}: ${r.taken} de ouro (ficou com ${r.gold}).`, cache: false };
+    return this.s.withCharHeld(t.charId, t.name, Moderation.HELD_KICK, () => {
+      const r = this.s.takeGoldOf(t.charId, n);
+      if (!r.taken) return { ok: false, code: 'no_gold', reason: `${t.name} não tem ouro.`, cache: false };
+      this.st.audit('mod_take_gold', { ...by, targetAccount: t.accountId, target: t.charId, amount: r.taken, goldAfter: r.gold, reason, online: !!r.online, otherZone: !!t.remote });
+      return { ok: true, message: `Retirado de ${t.name}: ${r.taken} de ouro (ficou com ${r.gold}).`, cache: false };
+    });
   }
 
   // aviso da equipe para quem está no mundo nesta zona
