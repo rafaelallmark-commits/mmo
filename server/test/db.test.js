@@ -400,3 +400,112 @@ test('comércio: transferItem só move item da bolsa do dono certo; moderação:
     assert.deepEqual(st.findAccountsByIds([]), []);
   } finally { st.close(); }
 });
+
+test('excluir um personagem: clã passa ao maior cargo, some o que é dele (menos o depósito da conta) e o nome fica livre', () => {
+  const st = createStore(':memory:');
+  try {
+    const dono = st.createAccount('dono1', 'senha');
+    const outra = st.createAccount('outra1', 'senha');
+    const lider = newChar(st, dono, 'Lider', { kit: { equip: [], bag: [['potion_hp_s', 2]] } });
+    const irmao = newChar(st, dono, 'Irmao');
+    const [membro, oficial, fiel] = ['Membro', 'Oficial', 'Fiel'].map((n) => newChar(st, outra, n));
+    let clan;
+    st.tx(() => { clan = st.createClan('Casa do Teste', 'CDT', lider); });
+    st.addClanMember(clan, membro);
+    st.addClanMember(clan, oficial, 'officer');
+    const base = Date.now() - 10_000;
+    st.db.prepare('UPDATE clan_members SET joined_at = ? WHERE char_id = ?').run(base, membro);
+    st.db.prepare('UPDATE clan_members SET joined_at = ? WHERE char_id = ?').run(base + 1, oficial);
+    // peça no depósito da conta guardada pelo Lider, missão, saque e listas de ignorados nos dois sentidos
+    st.insertItem({ ...item(lider, 'no-deposito', 4), loc: 'storage' });
+    st.saveQuest(lider, 'c1_x', 'active', { 0: 1 });
+    const now = Date.now();
+    st.insertLoot({ id: 'saque-lider', charId: lider, defId: 'potion_hp_s', qty: 1, gold: 0, mapId: 'estrada_velha', x: 1, z: 2, monsterDef: 'rat', killId: 'k', createdAt: now, expiresAt: now + 60000 });
+    st.addIgnore(lider, membro);
+    st.addIgnore(fiel, lider);
+    st.addIgnore(fiel, membro);
+
+    assert.equal(st.deleteCharacter(outra, lider), null, 'personagem de outra conta: nada muda');
+    assert.equal(st.deleteCharacter(dono, lider), 'Lider');
+    assert.equal(st.deleteCharacter(dono, lider), null, 'já excluído');
+    assert.deepEqual(st.listCharacters(dono).map((c) => c.name), ['Irmao'], 'a conta continua com o outro personagem');
+    assert.ok(st.findAccountById(dono), 'a conta não foi excluída');
+    assert.equal(st.characterNameTaken('lider'), false, 'nome liberado');
+    assert.equal(st.loadCharacter(lider).name, `excluido_${lider}`);
+    assert.equal(st.loadCharacter(lider).gold, 0);
+    assert.equal(st.clanById(clan).leader_char_id, oficial, 'o oficial (maior cargo) herda, mesmo tendo entrado depois do membro');
+    assert.equal(st.clanOfChar(oficial).rank, 'leader');
+    assert.equal(st.clanOfChar(lider), undefined);
+    assert.deepEqual(st.characterItems(lider).map((i) => [i.id, i.loc, i.qty]), [['no-deposito', 'storage', 4]], 'só a peça do depósito fica');
+    assert.deepEqual(st.listAccountStorage(dono).map((r) => [r.id, r.owner]), [['no-deposito', `excluido_${lider}`]]);
+    assert.equal(st.takeFromStorage(dono, 'no-deposito', irmao)?.id, 'no-deposito', 'outro personagem da conta pega a peça');
+    assert.deepEqual(st.loadQuests(lider), []);
+    assert.deepEqual(st.unclaimedLoot(lider, now), []);
+    assert.deepEqual(st.listIgnored(lider), []);
+    assert.deepEqual(st.listIgnored(fiel).map((r) => r.name), ['Membro'], 'as entradas dele nas listas dos outros saem');
+    // o último membro excluído desfaz o clã
+    let solo;
+    st.tx(() => { solo = st.createClan('Sozinha', 'SZN', irmao); });
+    assert.equal(st.deleteCharacter(dono, irmao), 'Irmao');
+    assert.equal(st.clanById(solo), undefined);
+    assert.deepEqual(st.listCharacters(dono), []);
+  } finally { st.close(); }
+});
+
+test('lista de ignorados por personagem: adicionar, repetir, tirar, por nome, e some com a conta', () => {
+  const st = createStore(':memory:');
+  try {
+    const acc = st.createAccount('ign', 'senha');
+    const outra = st.createAccount('ign2', 'senha');
+    const [ana, beto, caio] = ['Ana', 'beto', 'Caio'].map((n) => newChar(st, acc, n));
+    const zed = newChar(st, outra, 'Zed');
+    assert.equal(st.addIgnore(ana, caio), true);
+    assert.equal(st.addIgnore(ana, beto), true);
+    assert.equal(st.addIgnore(ana, beto), false, 'repetido não duplica');
+    assert.equal(st.addIgnore(zed, ana), true);
+    assert.deepEqual(st.listIgnored(ana).map((r) => [r.name, r.ignored_id]), [['beto', beto], ['Caio', caio]], 'por nome sem diferença de maiúsculas');
+    assert.deepEqual(Object.keys(st.listIgnored(ana)[0]), ['ignored_id', 'name']);
+    assert.equal(st.isIgnoring(ana, beto), true);
+    assert.equal(st.isIgnoring(beto, ana), false, 'ignorar vale num sentido só');
+    assert.equal(st.removeIgnore(ana, beto), true);
+    assert.equal(st.removeIgnore(ana, beto), false);
+    assert.equal(st.isIgnoring(ana, beto), false);
+    // renomeado: a lista mostra o nome de agora
+    st.renameCharacter(caio, 'Caetano');
+    assert.deepEqual(st.listIgnored(ana).map((r) => r.name), ['Caetano']);
+    // a exportação de dados leva a lista
+    assert.deepEqual(st.exportAccount(acc).ignorados.map((r) => [r.char_id, r.ignorado]), [[ana, 'Caetano']]);
+    // excluir a conta apaga as listas dos personagens dela e as entradas deles nas listas dos outros
+    st.deleteAccount(acc);
+    assert.deepEqual(st.listIgnored(ana), []);
+    assert.deepEqual(st.listIgnored(zed), []);
+  } finally { st.close(); }
+});
+
+test('administração no banco: renomear personagem e clã, peças do personagem (com o depósito) e ouro', () => {
+  const st = createStore(':memory:');
+  try {
+    const acc = st.createAccount('adm1', 'senha');
+    const id = newChar(st, acc, 'Feio', { kit: { equip: [], bag: [['potion_hp_s', 3]] } });
+    const other = newChar(st, acc, 'Outro');
+    st.renameCharacter(id, 'Bonito');
+    assert.equal(st.characterByName('BONITO').id, id);
+    assert.equal(st.characterNameTaken('Feio'), false);
+    assert.throws(() => st.renameCharacter(id, 'outro'), 'nome repetido (sem diferença de maiúsculas) é recusado pelo banco');
+    let clan;
+    st.tx(() => { clan = st.createClan('Clã Feio', 'FEI', id); });
+    assert.equal(st.clanByTag('fei').id, clan, 'sigla sem diferença de maiúsculas');
+    assert.equal(st.clanByName('clã feio').id, clan);
+    assert.equal(st.clanByTag('XYZ'), undefined);
+    st.renameClan(clan, 'Guarda Nova');
+    assert.equal(st.clanById(clan).name, 'Guarda Nova');
+    assert.equal(st.clanByName('Clã Feio'), undefined);
+    st.insertItem({ ...item(id, 'guardado', 2), loc: 'storage' });
+    const items = st.characterItems(id);
+    assert.deepEqual(items.map((i) => i.loc).sort(), ['bag', 'storage']);
+    assert.deepEqual(Object.keys(items[0]), ['id', 'def_id', 'qty', 'enh', 'loc', 'slot']);
+    st.setCharacterGold(id, 1234);
+    assert.equal(st.loadCharacter(id).gold, 1234);
+    assert.equal(st.loadCharacter(other).gold, 0);
+  } finally { st.close(); }
+});

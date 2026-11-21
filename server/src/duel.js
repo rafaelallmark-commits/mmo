@@ -28,6 +28,8 @@ export class DuelManager {
     if (dist(p.char, t.char) > START_RANGE) return { ok: false, code: 'too_far', reason: `Chegue mais perto (até ${START_RANGE} m).` };
     if (p.char.dead || t.char.dead) return { ok: false, code: 'dead', reason: 'Ninguém duela caído.' };
     if (this.byChar.has(p.char.id) || this.byChar.has(t.char.id)) return { ok: false, code: 'busy', reason: 'Um de vocês já está num duelo.' };
+    // quem desafia está na lista de ignorados do desafiado (e não é da equipe): recusado em silêncio
+    if (!p.char.staff && t.char.ignored?.has(p.char.id)) return { ok: true, message: `Desafio enviado a ${t.char.name}.` };
     this.invites.set(t.char.id, { from: p.char.id, at: Date.now() });
     z.send(t.char.id, { t: 'duel_invite', from: p.char.name, fromId: p.char.id });
     return { ok: true, message: `Desafio enviado a ${t.char.name}.` };

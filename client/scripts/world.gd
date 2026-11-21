@@ -8,6 +8,7 @@ const Art = preload("res://scripts/art.gd")
 const Scenery = preload("res://scripts/scenery.gd")
 const Motion = preload("res://scripts/motion.gd")
 const Vfx = preload("res://scripts/vfx.gd")
+const STAFF_LABEL_COLOR := Color("#8fd0ff") # nome de quem é da equipe (a mesma cor da marca no chat)
 
 var main # main.gd
 var scenery: Scenery
@@ -272,6 +273,11 @@ func apply_snapshot(snap: Dictionary) -> void:
 			name = "%s  nv %d" % [d["n"], int(d["lvl"])]
 			if d.get("cl") != null and str(d.get("cl")) != "":
 				name = "[%s] %s" % [str(d["cl"]), name]
+			# marca da equipe (papel gm/admin), só pelo campo do servidor; nome e sigla não a imitam (D145)
+			var staff: bool = d.get("staff", false) == true
+			if staff:
+				name = "[Equipe] %s" % name
+			e["label"].modulate = STAFF_LABEL_COLOR if staff else Color.WHITE
 			if d.get("ttl") != null and str(d.get("ttl")) != "":
 				name = "«%s»\n%s" % [str(d["ttl"]), name]
 		elif d["k"] == "e":

@@ -588,6 +588,59 @@
           "mode": "multi"
         }
       }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Denúncias e /bug (aumento em 1 h)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "cinzas-prom"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "cinzas-prom"
+          },
+          "expr": "increase(cinzas_reports_total[1h])",
+          "legendFormat": "denúncias"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "cinzas-prom"
+          },
+          "expr": "increase(cinzas_bug_reports_total[1h])",
+          "legendFormat": "/bug"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
     }
   ],
   "editable": true,

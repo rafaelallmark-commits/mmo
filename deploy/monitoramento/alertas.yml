@@ -26,3 +26,10 @@ groups:
         labels: { gravidade: aviso }
         annotations:
           resumo: "Memória acima de 600 MB e crescendo sem parar há 30 minutos (possível vazamento)."
+      # denúncia de jogador gravada (a equipe on-line também recebe um aviso no jogo); o alerta fica ativo por
+      # 10 minutos depois da última. Os relatos de /bug contam em cinzas_bug_reports_total (sem alerta).
+      - alert: DenunciaNova
+        expr: increase(cinzas_reports_total[10m]) > 0
+        labels: { gravidade: aviso }
+        annotations:
+          resumo: "Denúncia nova de jogador nos últimos 10 minutos: npm run conta -- --db ... --denuncias."

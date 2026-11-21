@@ -539,9 +539,12 @@ func refresh_target() -> void:
 	var rank_names := {"elite": "elite", "boss": "chefe"}
 	if md.get("rank", "normal") != "normal":
 		rank = " (%s)" % rank_names.get(md["rank"], md["rank"])
+	var who: String = str(md.get("name", d.get("n", "?")))
 	if d.get("k", "") == "p":
 		rank = " (caído)" if d.get("dead", false) else " (duelo)"
-	target_label.text = "%s · nível %d%s" % [md.get("name", d.get("n", "?")), int(d["lvl"]), rank]
+		if d.get("staff", false):
+			who = "[Equipe] " + who
+	target_label.text = "%s · nível %d%s" % [who, int(d["lvl"]), rank]
 	target_bar.max_value = float(d["mhp"])
 	target_bar.value = float(d["hp"])
 
@@ -625,6 +628,9 @@ func chat_line(bb: String) -> void:
 # «[» vira «[lb]», então ninguém muda fonte, cor ou imagem na tela dos outros nem imita o sistema.
 static func esc(t) -> String:
 	return str(t).replace("[", "[lb]")
+
+# Marca da equipe (papel gm ou admin) antes do nome no chat; o servidor manda staff: true (D145).
+const STAFF_MARK := "[color=#8fd0ff][lb]Equipe][/color] "
 
 func show_death() -> void:
 	death_overlay.visible = true

@@ -122,7 +122,7 @@ test('PostgreSQL: migração 6 — contas antigas com os termos na versão 1 e a
   } finally { old.close(); }
   const st = new PgStore(PG_URL, { schema, dropSchemaOnClose: true });
   try {
-    assert.deepEqual(st.migrated, [6]);
+    assert.deepEqual(st.migrated, MIGRATIONS.filter((x) => x.v > 5).map((x) => x.v), 'aplica da 6 em diante (mesmos números nos dois bancos)');
     assert.deepEqual([st.findAccount('CADASTRO').terms_version, st.findAccount('cadastro').terms_at], [1, 1500]);
     assert.deepEqual([st.findAccount('dazona').terms_version, st.findAccount('dazona').terms_at], [1, null]);
     st.noteAccountEvent('mail', 1, 'c@exemplo.com');
@@ -198,6 +198,7 @@ test('PostgreSQL: banco SQLite importado (sqlite-para-pg) responde igual nos doi
     lite.logLevel(c1, 2, 'breaker', 100.5);
     lite.logLevel(c1, 3, 'breaker', 300);
     lite.insertItem({ id: 'guardado', charId: c2, defId: 'potion_hp_s', qty: 5, enh: 0, loc: 'storage', slot: null, source: 'teste' });
+    lite.addIgnore(c1, c2);
     lite.issueCode(a1, 'verify');
     lite.noteAccountEvent('mail', a1, 'Aurora@Exemplo.com');
     lite.setTermsAccepted(a1, 1, now - 5000);
@@ -213,7 +214,7 @@ test('PostgreSQL: banco SQLite importado (sqlite-para-pg) responde igual nos doi
 
     pg = new PgStore(PG_URL, { schema, dropSchemaOnClose: true });
     const counts = importSqliteToPg(join(dir, 'origem.db'), pg);
-    assert.deepEqual(counts, { accounts: 2, characters: 3, clans: 1, clan_members: 2, item_instances: 3, loot_drops: 2, daily_claims: 1, quest_progress: 3, level_log: 2, account_codes: 1, account_events: 1, audit_log: 2 });
+    assert.deepEqual(counts, { accounts: 2, characters: 3, clans: 1, clan_members: 2, item_instances: 3, loot_drops: 2, daily_claims: 1, quest_progress: 3, level_log: 2, char_ignores: 1, account_codes: 1, account_events: 1, audit_log: 2 });
     assert.throws(() => importSqliteToPg(join(dir, 'origem.db'), pg), /não está vazia/, 'não importa por cima de dados');
 
     const src = new Store(join(dir, 'origem.db'));
@@ -229,6 +230,7 @@ test('PostgreSQL: banco SQLite importado (sqlite-para-pg) responde igual nos doi
         ['clanOfChar', (s) => s.clanOfChar(c2)], ['clanMembers', (s) => s.clanMembers(s.clanOfChar(c1).id)], ['clanByNameOrTag', (s) => s.clanByNameOrTag('guarda do sal', 'x')],
         ['characterByName', (s) => s.characterByName('YARA')], ['findAccountsByIds', (s) => s.findAccountsByIds([a2, a1])], ['findAccount banida', (s) => s.findAccount('bento')],
         ['accountEventStats', (s) => s.accountEventStats('mail', a1, 'aurora@exemplo.com', 0)],
+        ['listIgnored', (s) => s.listIgnored(c1)], ['isIgnoring', (s) => [s.isIgnoring(c1, c2), s.isIgnoring(c2, c1)]], ['characterItems', (s) => s.characterItems(c2)],
       ]) assert.deepStrictEqual(f(pg), f(src), `${what}: mesmo resultado nos dois bancos`);
       assert.throws(() => pg.tx(() => pg.createClan('GUARDA DO SAL', 'NOVA', c2)), 'nome importado continua único');
       let novo;

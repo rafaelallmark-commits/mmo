@@ -21,7 +21,7 @@
 import { randomUUID, randomBytes, timingSafeEqual, randomInt } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { PgBridge, rowsOf, rowOf } from './pg-bridge.js';
-import { hashPassword, codeHash, addressHash, eventStat, UNVERIFIED_TTL_MS, ACCOUNT_EVENTS_TTL_MS, charFromRow, charSaveValues, exportAuditRows } from './store.js';
+import { hashPassword, checkPasswordAsync, codeHash, addressHash, eventStat, UNVERIFIED_TTL_MS, ACCOUNT_EVENTS_TTL_MS, charFromRow, charSaveValues, exportAuditRows } from './store.js';
 
 export const PG_MIGRATIONS = [
   { v: 1, name: 'base (M1–M3)', sql: `
@@ -176,6 +176,14 @@ CREATE TABLE IF NOT EXISTS account_events (
 );
 CREATE INDEX IF NOT EXISTS idx_account_events_account ON account_events (account_id, kind, at);
 CREATE INDEX IF NOT EXISTS idx_account_events_addr ON account_events (addr_hash, kind, at);` },
+  { v: 7, name: 'lista de ignorados por personagem', sql: `
+CREATE TABLE IF NOT EXISTS char_ignores (
+  char_id BIGINT NOT NULL REFERENCES characters(id),
+  ignored_id BIGINT NOT NULL REFERENCES characters(id),
+  created_at BIGINT NOT NULL,
+  PRIMARY KEY (char_id, ignored_id)
+);
+CREATE INDEX IF NOT EXISTS idx_ignores_ignored ON char_ignores (ignored_id);` },
 ];
 
 const SCHEMA_RE = /^[A-Za-z_][A-Za-z0-9_]{0,62}$/;
@@ -471,6 +479,9 @@ export class PgStore {
     return a.length === b.length && timingSafeEqual(a, b);
   }
 
+  // a mesma conferência sem parar a thread do jogo (promessa; não usa o banco)
+  checkPasswordAsync(acc, password) { return checkPasswordAsync(acc, password); }
+
   setPassword(accountId, password) {
     const salt = randomBytes(16).toString('hex');
     this.run('UPDATE accounts SET pass_hash = $1, salt = $2 WHERE id = $3', hashPassword(password, salt), salt, accountId);
@@ -524,31 +535,35 @@ export class PgStore {
     return false;
   }
 
+  // Tira o personagem do clã (dentro de tx). Clã liderado por quem saiu: passa para o oficial (ou membro)
+  // mais antigo; vazio, acaba — um personagem por vez, como no SQLite (outro personagem da mesma conta pode
+  // herdar e sair depois).
+  leaveClans(charId) {
+    const [, led] = this.batch([
+      ['DELETE FROM clan_members WHERE char_id = $1', [charId]],
+      ['SELECT id FROM clans WHERE leader_char_id = $1 ORDER BY id', [charId], 'all'],
+    ]);
+    for (const cl of led) {
+      const next = this.get("SELECT char_id FROM clan_members WHERE clan_id = $1 ORDER BY CASE rank WHEN 'officer' THEN 0 ELSE 1 END, joined_at, char_id LIMIT 1", cl.id);
+      if (next) {
+        this.batch([
+          ['UPDATE clans SET leader_char_id = $1 WHERE id = $2', [next.char_id, cl.id]],
+          ["UPDATE clan_members SET rank = 'leader' WHERE char_id = $1", [next.char_id]],
+        ]);
+      } else this.run('DELETE FROM clans WHERE id = $1', cl.id);
+    }
+  }
+
   deleteAccount(accountId) {
     const mine = 'SELECT id FROM characters WHERE account_id = $1';
     return this.tx(() => {
       const chars = this.all('SELECT id FROM characters WHERE account_id = $1 ORDER BY id', accountId);
-      for (const c of chars) {
-        // clã liderado por quem saiu: passa para o oficial (ou membro) mais antigo; vazio, acaba — um
-        // personagem por vez, como no SQLite (outro personagem da mesma conta pode herdar e sair depois)
-        const [, led] = this.batch([
-          ['DELETE FROM clan_members WHERE char_id = $1', [c.id]],
-          ['SELECT id FROM clans WHERE leader_char_id = $1 ORDER BY id', [c.id], 'all'],
-        ]);
-        for (const cl of led) {
-          const next = this.get("SELECT char_id FROM clan_members WHERE clan_id = $1 ORDER BY CASE rank WHEN 'officer' THEN 0 ELSE 1 END, joined_at, char_id LIMIT 1", cl.id);
-          if (next) {
-            this.batch([
-              ['UPDATE clans SET leader_char_id = $1 WHERE id = $2', [next.char_id, cl.id]],
-              ["UPDATE clan_members SET rank = 'leader' WHERE char_id = $1", [next.char_id]],
-            ]);
-          } else this.run('DELETE FROM clans WHERE id = $1', cl.id);
-        }
-      }
+      for (const c of chars) this.leaveClans(c.id);
       this.batch([
         [`DELETE FROM item_instances WHERE char_id IN (${mine})`, [accountId]],
         [`DELETE FROM quest_progress WHERE char_id IN (${mine})`, [accountId]],
         [`DELETE FROM loot_drops WHERE claimed_at IS NULL AND char_id IN (${mine})`, [accountId]],
+        [`DELETE FROM char_ignores WHERE char_id IN (${mine}) OR ignored_id IN (${mine})`, [accountId]],
         ["UPDATE characters SET name = 'excluido_' || id, gold = 0, flags_json = '{}' WHERE account_id = $1", [accountId]],
         ['DELETE FROM account_codes WHERE account_id = $1', [accountId]],
         ["UPDATE accounts SET name = $1, email = NULL, pass_hash = '', salt = '', deleted_at = $2 WHERE id = $3", [`excluida_${accountId}`, Date.now(), accountId]],
@@ -557,18 +572,36 @@ export class PgStore {
     });
   }
 
+  // Um personagem da conta (a conta continua): a mesma limpeza, com as peças do depósito da conta mantidas.
+  deleteCharacter(accountId, charId) {
+    return this.tx(() => {
+      const row = this.get("SELECT id, name FROM characters WHERE id = $1 AND account_id = $2 AND nocase(name) NOT LIKE 'excluido\\_%' ESCAPE '\\'", charId, accountId);
+      if (!row) return null;
+      this.leaveClans(row.id);
+      this.batch([
+        ["DELETE FROM item_instances WHERE char_id = $1 AND loc <> 'storage'", [row.id]],
+        ['DELETE FROM quest_progress WHERE char_id = $1', [row.id]],
+        ['DELETE FROM loot_drops WHERE char_id = $1 AND claimed_at IS NULL', [row.id]],
+        ['DELETE FROM char_ignores WHERE char_id = $1 OR ignored_id = $1', [row.id]],
+        ["UPDATE characters SET name = 'excluido_' || id, gold = 0, flags_json = '{}' WHERE id = $1", [row.id]],
+      ]);
+      return row.name;
+    });
+  }
+
   exportAccount(accountId) {
     const mine = 'SELECT id FROM characters WHERE account_id = $1';
-    const [conta, personagens, itens, missoes, clas, auditoria] = this.batch([
+    const [conta, personagens, itens, missoes, clas, ignorados, auditoria] = this.batch([
       ['SELECT id, name, email, verified, role, created_at, terms_version, terms_at, banned_until, ban_reason, muted_until FROM accounts WHERE id = $1', [accountId], 'get'],
       ['SELECT id, name, class_id, level, xp, gold, map_id, played_s, created_at, updated_at FROM characters WHERE account_id = $1 ORDER BY id', [accountId], 'all'],
       [`SELECT char_id, def_id, qty, enh, loc, slot, source, created_at FROM item_instances WHERE char_id IN (${mine}) ORDER BY char_id, created_at, id COLLATE "C"`, [accountId], 'all'],
       [`SELECT char_id, quest_id, state, updated_at FROM quest_progress WHERE char_id IN (${mine}) ORDER BY char_id, quest_id COLLATE "C"`, [accountId], 'all'],
       [`SELECT m.char_id, c.name, c.tag, m.rank, m.joined_at FROM clan_members m JOIN clans c ON c.id = m.clan_id WHERE m.char_id IN (${mine}) ORDER BY m.char_id`, [accountId], 'all'],
+      [`SELECT i.char_id, c.name AS ignorado, i.created_at FROM char_ignores i JOIN characters c ON c.id = i.ignored_id WHERE i.char_id IN (${mine}) ORDER BY i.char_id, i.created_at, i.ignored_id`, [accountId], 'all'],
       // a conta e os personagens dela (as linhas do jogo — saque, compra, venda, refino, troca, clã — têm só o personagem)
       [`SELECT at, kind, char_id, ip, data_json FROM audit_log WHERE account_id = $1 OR char_id IN (${mine}) ORDER BY at, id`, [accountId], 'all'],
     ]);
-    return { conta, personagens, itens, missoes, clas, auditoria: exportAuditRows(auditoria) };
+    return { conta, personagens, itens, missoes, clas, ignorados, auditoria: exportAuditRows(auditoria) };
   }
 
   // ---------- comércio ----------
@@ -588,6 +621,9 @@ export class PgStore {
 
   clanById(id) { return this.get('SELECT * FROM clans WHERE id = $1', id); }
   clanByNameOrTag(name, tag) { return this.get('SELECT * FROM clans WHERE nocase(name) = nocase($1) OR nocase(tag) = nocase($2) ORDER BY id LIMIT 1', name, tag); }
+  clanByName(name) { return this.get('SELECT * FROM clans WHERE nocase(name) = nocase($1)', name); }
+  clanByTag(tag) { return this.get('SELECT * FROM clans WHERE nocase(tag) = nocase($1)', tag); }
+  renameClan(clanId, name) { this.run('UPDATE clans SET name = $1 WHERE id = $2', name, clanId); }
   clanOfChar(charId) {
     return this.get('SELECT c.id, c.name, c.tag, c.motd, c.leader_char_id, m.rank FROM clan_members m JOIN clans c ON c.id = m.clan_id WHERE m.char_id = $1', charId);
   }
@@ -654,6 +690,29 @@ export class PgStore {
 
   characterByName(name) {
     return this.get('SELECT id, name, account_id FROM characters WHERE nocase(name) = nocase($1)', name);
+  }
+
+  // administração (/gm renomear, retirar, retirar_ouro), inclusive de personagem fora do ar
+  renameCharacter(charId, name) { this.run('UPDATE characters SET name = $1 WHERE id = $2', name, charId); }
+  setCharacterGold(charId, gold) { this.run('UPDATE characters SET gold = $1 WHERE id = $2', gold, charId); }
+  characterItems(charId) {
+    return this.all('SELECT id, def_id, qty, enh, loc, slot FROM item_instances WHERE char_id = $1 ORDER BY created_at, id COLLATE "C"', charId);
+  }
+
+  // ---------- lista de ignorados (por personagem) ----------
+  // por nome sem diferença de maiúsculas (characters.name é NOCASE no SQLite)
+  listIgnored(charId) {
+    return this.all(`SELECT i.ignored_id, c.name FROM char_ignores i JOIN characters c ON c.id = i.ignored_id
+      WHERE i.char_id = $1 ORDER BY nocase(c.name) COLLATE "C", i.ignored_id`, charId);
+  }
+  addIgnore(charId, ignoredId) {
+    return this.run('INSERT INTO char_ignores (char_id, ignored_id, created_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', charId, ignoredId, Date.now()).changes > 0;
+  }
+  removeIgnore(charId, ignoredId) {
+    return this.run('DELETE FROM char_ignores WHERE char_id = $1 AND ignored_id = $2', charId, ignoredId).changes > 0;
+  }
+  isIgnoring(charId, otherId) {
+    return !!this.get('SELECT 1 AS ok FROM char_ignores WHERE char_id = $1 AND ignored_id = $2', charId, otherId);
   }
 
   createCharacter({ accountId, name, classId, hp, mp, mapId, x, z, kit, slotFor }) {

@@ -64,7 +64,7 @@ test('migração 6: contas antigas ficam com os termos na versão 1 e a data do 
     old.close();
     const st = new Store(path);
     try {
-      assert.deepEqual(st.migrated, [6]);
+      assert.deepEqual(st.migrated, MIGRATIONS.filter((x) => x.v > 5).map((x) => x.v), 'aplica da 6 em diante');
       assert.deepEqual([st.findAccount('cadastro').terms_version, st.findAccount('cadastro').terms_at], [1, 1500]);
       assert.deepEqual([st.findAccount('dazona').terms_version, st.findAccount('dazona').terms_at], [1, null]);
       assert.deepEqual(st.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'account_events'").all().map((r) => r.name), ['account_events']);

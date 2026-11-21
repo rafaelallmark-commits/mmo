@@ -4,7 +4,7 @@
 // escolhido por createStore em db.js). Toda migração nova precisa existir nos dois (MIGRATIONS aqui e
 // PG_MIGRATIONS em store-pg.js, com a mesma versão e o mesmo nome).
 import { DatabaseSync } from 'node:sqlite';
-import { randomUUID, scryptSync, randomBytes, timingSafeEqual, createHash, randomInt } from 'node:crypto';
+import { randomUUID, scryptSync, scrypt, randomBytes, timingSafeEqual, createHash, randomInt } from 'node:crypto';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS accounts (
@@ -168,6 +168,15 @@ export const MIGRATIONS = [
     db.exec('CREATE INDEX IF NOT EXISTS idx_account_events_account ON account_events(account_id, kind, at)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_account_events_addr ON account_events(addr_hash, kind, at)');
   } },
+  { v: 7, name: 'lista de ignorados por personagem', up: (db) => {
+    db.exec(`CREATE TABLE IF NOT EXISTS char_ignores (
+      char_id INTEGER NOT NULL REFERENCES characters(id),
+      ignored_id INTEGER NOT NULL REFERENCES characters(id),
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (char_id, ignored_id)
+    )`);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_ignores_ignored ON char_ignores(ignored_id)');
+  } },
 ];
 
 export function migrate(db) {
@@ -201,6 +210,19 @@ export function migrate(db) {
 // ---------- partes puras, compartilhadas com o PostgreSQL (store-pg.js) ----------
 export function hashPassword(password, salt) {
   return scryptSync(password, salt, 32).toString('hex');
+}
+
+// Mesma conta de hashPassword, fora da thread do jogo (o scrypt roda no pool do libuv): a conferência de
+// senha dentro do servidor de zona (excluir conta ou personagem) não para o tick de ninguém (D144).
+export function hashPasswordAsync(password, salt) {
+  return new Promise((resolve, reject) => scrypt(password, salt, 32, (err, key) => (err ? reject(err) : resolve(key.toString('hex')))));
+}
+
+export async function checkPasswordAsync(acc, password) {
+  if (!acc?.salt || !acc?.pass_hash || typeof password !== 'string') return false;
+  const a = Buffer.from(await hashPasswordAsync(password, acc.salt), 'hex');
+  const b = Buffer.from(acc.pass_hash, 'hex');
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 // hash do código de 6 dígitos (só ele fica no banco)
@@ -337,6 +359,9 @@ export class Store {
     return a.length === b.length && timingSafeEqual(a, b);
   }
 
+  // a mesma conferência sem parar a thread do jogo (promessa)
+  checkPasswordAsync(acc, password) { return checkPasswordAsync(acc, password); }
+
   setPassword(accountId, password) {
     const salt = randomBytes(16).toString('hex');
     this.prep('UPDATE accounts SET pass_hash = ?, salt = ? WHERE id = ?').run(hashPassword(password, salt), salt, accountId);
@@ -392,27 +417,45 @@ export class Store {
     return ok;
   }
 
+  // Apaga o que é de um personagem (dentro de tx): sai do clã — o clã que ele liderava passa para o oficial
+  // (ou membro) mais antigo e, vazio, acaba —, itens, missões, saques não pegos e as listas de ignorados (a
+  // dele e as entradas dele nas dos outros); o nome vira excluido_<id> (liberado) e o ouro some. A linha fica,
+  // anônima, para a integridade das referências (saque, auditoria). keepStorage: as peças que ele guardou no
+  // depósito continuam no depósito da conta, que não acaba com o personagem (D144).
+  wipeCharacter(charId, { keepStorage = false } = {}) {
+    this.prep('DELETE FROM clan_members WHERE char_id = ?').run(charId);
+    for (const cl of this.prep('SELECT id FROM clans WHERE leader_char_id = ?').all(charId)) {
+      const next = this.prep("SELECT char_id FROM clan_members WHERE clan_id = ? ORDER BY CASE rank WHEN 'officer' THEN 0 ELSE 1 END, joined_at, char_id LIMIT 1").get(cl.id);
+      if (next) { this.prep('UPDATE clans SET leader_char_id = ? WHERE id = ?').run(next.char_id, cl.id); this.prep("UPDATE clan_members SET rank = 'leader' WHERE char_id = ?").run(next.char_id); }
+      else this.prep('DELETE FROM clans WHERE id = ?').run(cl.id);
+    }
+    this.prep(keepStorage ? "DELETE FROM item_instances WHERE char_id = ? AND loc <> 'storage'" : 'DELETE FROM item_instances WHERE char_id = ?').run(charId);
+    this.prep('DELETE FROM quest_progress WHERE char_id = ?').run(charId);
+    this.prep('DELETE FROM loot_drops WHERE char_id = ? AND claimed_at IS NULL').run(charId);
+    this.prep('DELETE FROM char_ignores WHERE char_id = ? OR ignored_id = ?').run(charId, charId);
+    this.prep("UPDATE characters SET name = ?, gold = 0, flags_json = '{}' WHERE id = ?").run(`excluido_${charId}`, charId);
+  }
+
   // Exclusão de conta (privacidade): apaga dados pessoais e itens, mantém linhas anônimas para a
   // integridade das referências (saque, auditoria).
   deleteAccount(accountId) {
     return this.tx(() => {
       const chars = this.prep('SELECT id FROM characters WHERE account_id = ?').all(accountId);
-      for (const c of chars) {
-        this.prep('DELETE FROM clan_members WHERE char_id = ?').run(c.id);
-        // clã liderado por quem saiu: passa para o oficial (ou membro) mais antigo; vazio, acaba
-        for (const cl of this.prep('SELECT id FROM clans WHERE leader_char_id = ?').all(c.id)) {
-          const next = this.prep("SELECT char_id FROM clan_members WHERE clan_id = ? ORDER BY CASE rank WHEN 'officer' THEN 0 ELSE 1 END, joined_at LIMIT 1").get(cl.id);
-          if (next) { this.prep('UPDATE clans SET leader_char_id = ? WHERE id = ?').run(next.char_id, cl.id); this.prep("UPDATE clan_members SET rank = 'leader' WHERE char_id = ?").run(next.char_id); }
-          else this.prep('DELETE FROM clans WHERE id = ?').run(cl.id);
-        }
-        this.prep('DELETE FROM item_instances WHERE char_id = ?').run(c.id);
-        this.prep('DELETE FROM quest_progress WHERE char_id = ?').run(c.id);
-        this.prep('DELETE FROM loot_drops WHERE char_id = ? AND claimed_at IS NULL').run(c.id);
-        this.prep("UPDATE characters SET name = ?, account_id = account_id, gold = 0, flags_json = '{}' WHERE id = ?").run(`excluido_${c.id}`, c.id);
-      }
+      for (const c of chars) this.wipeCharacter(c.id);
       this.prep('DELETE FROM account_codes WHERE account_id = ?').run(accountId);
       this.prep("UPDATE accounts SET name = ?, email = NULL, pass_hash = '', salt = '', deleted_at = ? WHERE id = ?").run(`excluida_${accountId}`, Date.now(), accountId);
       return chars.length;
+    });
+  }
+
+  // Exclusão de um personagem da conta (a conta continua): a mesma limpeza da exclusão de conta para ele.
+  // Devolve o nome que ele tinha, ou null se o personagem não é desta conta (ou já foi excluído).
+  deleteCharacter(accountId, charId) {
+    return this.tx(() => {
+      const row = this.prep("SELECT id, name FROM characters WHERE id = ? AND account_id = ? AND name NOT LIKE 'excluido\\_%' ESCAPE '\\'").get(charId, accountId);
+      if (!row) return null;
+      this.wipeCharacter(row.id, { keepStorage: true });
+      return row.name;
     });
   }
 
@@ -428,6 +471,7 @@ export class Store {
       itens: inChars('SELECT char_id, def_id, qty, enh, loc, slot, source, created_at FROM item_instances WHERE char_id = ?'),
       missoes: inChars('SELECT char_id, quest_id, state, updated_at FROM quest_progress WHERE char_id = ?'),
       clas: inChars('SELECT m.char_id, c.name, c.tag, m.rank, m.joined_at FROM clan_members m JOIN clans c ON c.id = m.clan_id WHERE m.char_id = ?'),
+      ignorados: inChars('SELECT i.char_id, c.name AS ignorado, i.created_at FROM char_ignores i JOIN characters c ON c.id = i.ignored_id WHERE i.char_id = ? ORDER BY i.created_at, i.ignored_id'),
       // a conta e os personagens dela (as linhas do jogo — saque, compra, venda, refino, troca, clã — têm só o personagem)
       auditoria: exportAuditRows(this.prep('SELECT at, kind, char_id, ip, data_json FROM audit_log WHERE account_id = ? OR char_id IN (SELECT id FROM characters WHERE account_id = ?) ORDER BY at, id').all(accountId, accountId)),
     };
@@ -448,6 +492,9 @@ export class Store {
   }
   clanById(id) { return this.prep('SELECT * FROM clans WHERE id = ?').get(id); }
   clanByNameOrTag(name, tag) { return this.prep('SELECT * FROM clans WHERE name = ? OR tag = ?').get(name, tag); }
+  clanByName(name) { return this.prep('SELECT * FROM clans WHERE name = ?').get(name); }
+  clanByTag(tag) { return this.prep('SELECT * FROM clans WHERE tag = ?').get(tag); }
+  renameClan(clanId, name) { this.prep('UPDATE clans SET name = ? WHERE id = ?').run(name, clanId); }
   clanOfChar(charId) {
     return this.prep('SELECT c.id, c.name, c.tag, c.motd, c.leader_char_id, m.rank FROM clan_members m JOIN clans c ON c.id = m.clan_id WHERE m.char_id = ?').get(charId);
   }
@@ -504,6 +551,28 @@ export class Store {
 
   characterByName(name) {
     return this.prep('SELECT id, name, account_id FROM characters WHERE name = ? COLLATE NOCASE').get(name);
+  }
+
+  // administração (/gm renomear, retirar, retirar_ouro), inclusive de personagem fora do ar
+  renameCharacter(charId, name) { this.prep('UPDATE characters SET name = ? WHERE id = ?').run(name, charId); }
+  setCharacterGold(charId, gold) { this.prep('UPDATE characters SET gold = ? WHERE id = ?').run(gold, charId); }
+  // todas as peças do personagem, inclusive as que ele guardou no depósito da conta
+  characterItems(charId) {
+    return this.prep('SELECT id, def_id, qty, enh, loc, slot FROM item_instances WHERE char_id = ? ORDER BY created_at, id').all(charId);
+  }
+
+  // ---------- lista de ignorados (por personagem) ----------
+  listIgnored(charId) {
+    return this.prep('SELECT i.ignored_id, c.name FROM char_ignores i JOIN characters c ON c.id = i.ignored_id WHERE i.char_id = ? ORDER BY c.name, i.ignored_id').all(charId);
+  }
+  addIgnore(charId, ignoredId) {
+    return this.prep('INSERT OR IGNORE INTO char_ignores (char_id, ignored_id, created_at) VALUES (?, ?, ?)').run(charId, ignoredId, Date.now()).changes > 0;
+  }
+  removeIgnore(charId, ignoredId) {
+    return this.prep('DELETE FROM char_ignores WHERE char_id = ? AND ignored_id = ?').run(charId, ignoredId).changes > 0;
+  }
+  isIgnoring(charId, otherId) {
+    return !!this.prep('SELECT 1 FROM char_ignores WHERE char_id = ? AND ignored_id = ?').get(charId, otherId);
   }
 
   // kit: { equip: [defId], bag: [[defId, qty]] }; slotFor: defId -> slot

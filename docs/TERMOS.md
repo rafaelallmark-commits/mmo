@@ -23,7 +23,8 @@ responsáveis) e aceita estes termos e a [Política de Privacidade](PRIVACIDADE.
 - A conta precisa ser confirmada pelo código enviado ao e-mail; conta não confirmada em 7 dias é
   apagada.
 - Você pode baixar seus dados (**Baixar meus dados**) ou excluir a conta (**Excluir conta**) a qualquer
-  momento, na tela de personagens do jogo; o serviço de contas oferece o mesmo.
+  momento, na tela de personagens do jogo; o serviço de contas oferece o mesmo. Um personagem só pode ser
+  excluído na tela de personagens.
 
 ## 3. Convivência
 
@@ -38,7 +39,11 @@ Vale no chat, nos nomes de personagem e de clã e no jogo em geral. **Não é pe
 - spam, propaganda e inundação do chat;
 - nomes de personagem ou de clã ofensivos ou que imitem a equipe.
 
-Use **/denunciar Nome motivo** para avisar a equipe. Denúncias falsas de propósito também são infração.
+A equipe aparece no jogo com a marca **[Equipe]** antes do nome; nomes de personagem e de clã com palavras da
+equipe (como GM, Admin, Moderador, Suporte ou Mestre) e siglas de clã como GM, ADM ou MOD são recusados.
+
+Use **/denunciar Nome motivo** para avisar a equipe. Denúncias falsas de propósito também são infração. Para não
+ver mais as falas e os convites de alguém, use **/ignorar Nome** (a equipe não pode ser ignorada).
 
 ## 4. Jogo limpo
 
@@ -55,9 +60,10 @@ Use **/denunciar Nome motivo** para avisar a equipe. Denúncias falsas de propó
 ## 5. Moderação
 
 Conforme a gravidade e a repetição, a equipe pode **avisar**, **silenciar** a conta no chat,
-**desconectar**, **suspender por tempo determinado** ou **suspender sem data para acabar**, e remover
-itens obtidos de forma irregular. As decisões ficam registradas (motivo, prazo e quem decidiu). Para
-contestar, escreva para o contato acima informando o nome da conta.
+**desconectar**, **suspender por tempo determinado** ou **suspender sem data para acabar**, **trocar o
+nome** de um personagem ou de um clã que viole estes termos e **remover itens e ouro** obtidos de forma
+irregular. As decisões ficam registradas (motivo, prazo e quem decidiu). Para contestar, escreva para o
+contato acima informando o nome da conta.
 
 ## 6. Conteúdo do jogo
 

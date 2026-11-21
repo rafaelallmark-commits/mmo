@@ -33,7 +33,7 @@ async function withCluster(fn, worldOpts = {}) {
   const worldUrl = `ws://127.0.0.1:${ctx.world.port}`;
   const zones = [];
   const zone = async (zoneId, maps, extra = {}) => {
-    const z = new GameServer({ port: 0, host: '127.0.0.1', dbPath, seed: 31, dev: true, log: false, rateLimit: 1000, rateBurst: 1000, world: worldUrl, worldSecret: SECRET, zoneId, maps, ...extra });
+    const z = new GameServer({ port: 0, host: '127.0.0.1', dbPath, seed: 31, dev: true, log: false, rateLimit: 1000, rateBurst: 1000, partyInviteGapMs: 0, world: worldUrl, worldSecret: SECRET, zoneId, maps, ...extra });
     await z.start();
     z.url = `ws://127.0.0.1:${z.port}`;
     zones.push(z);
@@ -770,5 +770,90 @@ test('várias zonas: resposta da transferência que não chega a tempo devolve a
     await got;
     log('resposta da transferência perdida: posse de volta a A na hora; troca e duelo recusados durante a espera');
     x.ws.close(); y.ws.close();
+  });
+});
+
+test('várias zonas: lista de ignorados, marca da equipe, renomear e aviso para a equipe entre zonas', { timeout: 60000 }, async () => {
+  await withCluster(async ({ world, A, B }) => {
+    // Zelo: mestre em A (papel antes do login); Anabela em A; Bruno em B
+    A.store.createAccount('mz_zelo', 'senha123');
+    A.store.setRole(A.store.findAccount('mz_zelo').id, 'gm');
+    const zelo = await hero(A, 'Zelo');
+    const ana = await hero(A, 'Anabela');
+    const bru0 = await hero(A, 'Bruno', 'warden');
+    await bru0.request('gm', { cmd: 'xp', level: 10 });
+    const bru = await goRemote(bru0, 'brejo_bombas', 20, 70, 'bruno-b');
+    const aid = ana.char.id, bid = bru.char.id, zid = zelo.char.id;
+    await waitUntil(() => A.remote.has(bid) && B.remote.has(aid) && B.remote.has(zid), 'diretório nas duas zonas');
+    // grupo com os três (antes de ignorar)
+    for (const [c, n] of [[bru, 'Bruno'], [zelo, 'Zelo']]) {
+      const inv = c.waitFor((m) => m.t === 'party_invite', 3000, `convite para ${n}`);
+      assert.equal((await ana.request('party_invite', { name: n })).ok, true);
+      assert.equal((await c.request('party_accept', { from: (await inv).fromId })).ok, true);
+    }
+    await waitUntil(() => ana.party?.members.length === 3 && bru.party?.members.length === 3, 'grupo de três');
+
+    // Anabela (A) ignora Bruno (B): a lista fica no banco que as duas zonas usam
+    assert.equal((await ana.request('ignore_add', { name: 'Bruno' })).ok, true);
+    assert.equal(B.store.isIgnoring(aid, bid), true);
+    const echo = bru.waitFor((m) => m.t === 'chat' && m.channel === 'whisper' && m.text === 'de B', 3000, 'eco em B');
+    assert.equal((await bru.request('chat', { channel: 'whisper', to: 'Anabela', text: 'de B' })).ok, true);
+    await echo;
+    // fala de grupo de B: o mundo entrega em A; A descarta para quem ignora e entrega ao Zelo
+    const zp = zelo.waitFor((m) => m.t === 'chat' && m.channel === 'party' && m.text === 'grupo de B', 3000, 'grupo em A');
+    assert.equal((await bru.request('chat', { channel: 'party', text: 'grupo de B' })).ok, true);
+    await zp;
+    // clã: a fala de B chega ao Zelo em A, não à Anabela
+    let clan;
+    A.store.tx(() => { clan = A.store.createClan('Vigília do Vau', 'VDV', aid); });
+    A.store.addClanMember(clan, bid);
+    A.store.addClanMember(clan, zid);
+    for (const id of [aid, zid]) A.clans.attach(A.playerOf(id).char);
+    B.clans.attach(B.playerOf(bid).char);
+    const zc = zelo.waitFor((m) => m.t === 'chat' && m.channel === 'clan' && m.text === 'clã de B', 3000, 'clã em A');
+    assert.equal((await bru.request('chat', { channel: 'clan', text: 'clã de B' })).ok, true);
+    await zc;
+    // convite de grupo de quem ela ignora, vindo de B: mesma resposta, nada chega
+    assert.equal((await bru.request('party_invite', { name: 'Anabela' })).ok, true);
+    await sleep(300);
+    assert.ok(!ana.events.some((m) => (m.t === 'chat' && m.from === 'Bruno') || m.t === 'party_invite'), 'nada do Bruno chegou à Anabela');
+    assert.equal(world.invites.has(aid), false, 'o convite nem foi ao mundo');
+    log('ignorado em outra zona: sussurro, fala de grupo e de clã e convite de grupo não chegam; os outros recebem');
+
+    // marca da equipe atravessa zonas; denúncia e /bug feitos em B avisam a equipe em A
+    const wz = bru.waitFor((m) => m.t === 'chat' && m.channel === 'whisper' && m.from === 'Zelo', 3000, 'sussurro da equipe em B');
+    await zelo.request('chat', { channel: 'whisper', to: 'Bruno', text: 'tudo certo?' });
+    assert.equal((await wz).staff, true);
+    const note = zelo.waitFor((m) => m.t === 'notice' && m.kind === 'staff' && /\/bug de Bruno em brejo_bombas/.test(m.text), 3000, 'aviso de /bug em A');
+    assert.equal((await bru.request('bug_report', { text: 'a bomba do brejo não liga' })).ok, true);
+    await note;
+    const rep = zelo.waitFor((m) => m.t === 'notice' && m.kind === 'staff' && /denúncia de Bruno contra Anabela/.test(m.text), 3000, 'aviso de denúncia em A');
+    assert.equal((await bru.request('report', { name: 'Anabela', reason: 'teste entre zonas' })).ok, true);
+    await rep;
+    assert.ok(!ana.events.some((m) => m.t === 'notice' && m.kind === 'staff'), 'jogador não recebe aviso da equipe');
+
+    // renomear quem está em outra zona: o banco muda e ele sai de lá (o salvamento não grava o nome); itens e
+    // ouro de quem está em outra zona são recusados (a memória de lá gravaria por cima)
+    A.store.setRole(A.store.findAccount('mz_zelo').id, 'admin');
+    A.mod.lastSweep = 0;
+    A.mod.sweep();
+    let r = await zelo.request('gm', { cmd: 'take_gold', name: 'Bruno', amount: 1 });
+    assert.equal(r.code, 'other_zone');
+    assert.equal((await zelo.request('gm', { cmd: 'take_item', name: 'Bruno', defId: 'potion_hp_s' })).code, 'other_zone');
+    const out = bru.waitFor((m) => m.t === 'kicked' && /renomeou seu personagem para Brunildo/.test(m.reason), 3000, 'saída em B');
+    r = await zelo.request('gm', { cmd: 'rename', name: 'Bruno', newName: 'Brunildo' });
+    assert.equal(r.ok, true, r.reason);
+    await out;
+    await waitUntil(() => !B.playerOf(bid) && !world.leases.has(bid), 'B soltou o personagem');
+    assert.equal(A.store.characterByName('Brunildo').id, bid);
+    // renomear quem está on-line nesta zona: a memória muda aqui e o diretório das outras zonas acha o nome novo
+    const told = ana.waitFor((m) => m.t === 'system' && /agora você é Anabelle/.test(m.text), 3000, 'aviso à renomeada');
+    r = await zelo.request('gm', { cmd: 'rename', name: 'Anabela', newName: 'Anabelle' });
+    assert.equal(r.ok, true, r.reason);
+    await told;
+    assert.equal(A.byName.get('anabelle'), aid);
+    await waitUntil(() => B.remoteByName.get('anabelle') === aid && !B.remoteByName.has('anabela'), 'nome novo no diretório de B');
+    log('marca da equipe e avisos de denúncia e /bug entre zonas; renomear em outra zona derruba lá, itens e ouro recusados');
+    for (const c of [zelo, ana, bru0, bru]) c.ws.close();
   });
 });

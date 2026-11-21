@@ -68,7 +68,9 @@ mmo/
 │   │   ├── trade.js               comércio entre jogadores: ofertas, travas, confirmação, troca numa transação
 │   │   ├── clans.js               clãs: fundar, convidar, cargos, liderança, mensagem do dia, chat do clã
 │   │   ├── duel.js                duelos sem morte: pedido, contagem, dano até 1 de vida, fuga e empate
-│   │   ├── moderation.js          suspensão, silêncio, expulsão, anúncio e denúncias com contexto
+│   │   ├── moderation.js          suspensão, silêncio, expulsão, anúncio, denúncias com contexto, administração
+│   │   │                          (renomear, retirar itens e ouro), papel relido a cada minuto e avisos à equipe
+│   │   ├── names.js               nomes de personagem e de clã: formato, prefixos da exclusão e palavras da equipe
 │   │   ├── contas.js              serviço de contas (HTTP, processo separado): cadastro, e-mail, token, senha,
 │   │   │                          aceite dos termos (versão na conta), limites de e-mail e de código, exportação
 │   │   ├── world.js · world-main.js   serviço de mundo (várias zonas): registro, posse, transferência, grupos
@@ -100,6 +102,8 @@ mmo/
 │   │   ├── contas.test.js         confirmar depois, conta não confirmada vence, limites de e-mail e de código, termos novos
 │   │   ├── social.test.js         refino +4..+6, troca atômica, clãs, duelos
 │   │   ├── moderacao.test.js      silêncio, denúncia, suspensão, ferramenta, anúncio
+│   │   ├── personagens.test.js    excluir personagem, senha fora do laço (o tick anda), nomes reservados, /gm de admin
+│   │   ├── convivencia.test.js    ignorados, intervalo do convite, marca [Equipe], papel relido, avisos à equipe
 │   │   ├── nivel25.test.js        pós-v1: teto 25, Cava Primeira, habilidades do 25 e o capítulo 6 inteiro
 │   │   ├── multizona.test.js      mundo + 2 zonas: transferência, tokens, posse única, grupo/clã, quedas
 │   │   └── helpers/client.js      cliente simulado (mesmo protocolo do Godot)
@@ -163,7 +167,9 @@ Todo pedido do cliente leva `rid` (texto único por pedido). A resposta é `{ t:
 |---|---|---|
 | `register` | account, password | cria conta (senha com scrypt + sal) |
 | `login` | account, password | envia `defs` (dados do jogo), devolve personagens e classes criáveis; derruba sessão antiga da mesma conta |
-| `list_chars`, `create_char` | name, classId | personagem com kit inicial (M1: Quebraferro e Tecelão) |
+| `list_chars`, `create_char` | name, classId | personagem com kit inicial (M1: Quebraferro e Tecelão); nomes com palavras da equipe são recusados (D145) |
+| `delete_char` | charId, password | só fora do mundo: exclui o personagem (clã, grupo, itens, missões, ignorados; nome liberado; depósito da conta mantido) e devolve a lista nova (D144) |
+| `delete_account` | password | só fora do mundo: exclui a conta e encerra a sessão. Nos dois, a senha é conferida fora da thread do jogo, com no máximo 5 erradas por conta a cada 10 min (`too_many`) |
 | `enter` | charId | ficha, snapshot, saques não reivindicados do personagem |
 | `move` | x, z | calcula o caminho (A*); devolve `dest` (ponto livre mais próximo) e `path` ([[x,z],…]) para o cliente prever o movimento; recusa destino bloqueado ou inalcançável |
 | `attack` | target | define alvo; servidor aproxima e ataca |
@@ -182,16 +188,17 @@ Todo pedido do cliente leva `rid` (texto único por pedido). A resposta é `{ t:
 | `char` | — | ficha atual |
 | `talk`, `interact`, `buy`, `quests`, `quest_accept`, `quest_turnin` | npc / object / item | NPCs, objetos de missão, loja e diário |
 | `trial_start` | npc | prova de classe (instância solo) |
-| `party_invite`, `party_accept`, `party_decline`, `party_leave`, `party_kick` | name / from | grupos de até 5 |
+| `party_invite`, `party_accept`, `party_decline`, `party_leave`, `party_kick` | name / from | grupos de até 5; no máximo 1 convite a cada 10 s por quem convida (`too_fast`) |
+| `ignore_add`, `ignore_remove`, `ignore_list` | name | lista de ignorados do personagem (até 100, no banco): falas e convites de quem está nela não chegam; a equipe não pode ser ignorada (D145) |
 | `enhance_quote`, `enhance` | npc (ferreiro), instance | custo, chance e prévia; refino com RNG semeado (falha mantém o grau e gasta ouro e materiais) |
 | `storage_list`, `storage_put`, `storage_take` | npc (guarda-volumes), instance | depósito compartilhado pela conta |
 | `interact` na Porta da Última Eclusa (ou `dungeon_enter`) | object | abre/entra na instância do grupo (2–5, Chave de Comporta, nível 16) |
-| `gm` | cmd (moderação: kick, ban, unban, mute, unmute, where, announce; teleport; cenário: give, xp, gold, set_enh, quest_progress, quest_done) | papéis `gm`/`admin` (ou `--dev`); cenário só `admin` ou `--dev`, com teto (D138) |
+| `gm` | cmd (moderação: kick, ban, unban, mute, unmute, where, announce; teleport; cenário: give, xp, gold, set_enh, quest_progress, quest_done; administração: rename, rename_clan, take_item, take_gold) | papéis `gm`/`admin` (ou `--dev`); cenário e administração só `admin` ou `--dev`, com teto (D138, D146) |
 | `login_transfer` | token | várias zonas: chegada numa zona com o token assinado pelo mundo (conexão nova, sem login antes); responde como o `enter` e deixa a sessão logada |
 
 Com várias zonas, o `enter` de um personagem cujo mapa é de outra zona responde `{ ok, transfer: { url, token, mapId } }`, e um portal para um mapa de outra zona manda o evento `transfer` com os mesmos campos (seção [Múltiplas zonas](#múltiplas-zonas)).
 
-Eventos do servidor: `hello`, `defs`, `snap` (10 Hz: `now` = relógio da zona em ms; por entidade id, tipo, posição, velocidade `vx`/`vz`, vida, alvo), `hit` (origem, destino, dano, crítico, errou, habilidade), `death`, `spawn`, `loot` (só para o dono), `xp`, `level_up`, `char`, `buff`, `ground`, `cast`, `player_dead`, `respawn`, `joined`, `left`, `chat`, `kicked`, `cast` (habilidade usada, para os efeitos), `shield`, `quest_update`, `party`, `trial`, `boss` (fase, vida, proteção, válvula, comportas) e `warn` (aviso de perigo: círculo ou linha, duração).
+Eventos do servidor: `hello`, `defs`, `snap` (10 Hz: `now` = relógio da zona em ms; por entidade id, tipo, posição, velocidade `vx`/`vz`, vida, alvo; nos personagens, `staff` — verdadeiro para contas `gm`/`admin`, que o cliente mostra como **[Equipe]**), `hit` (origem, destino, dano, crítico, errou, habilidade), `death`, `spawn`, `loot` (só para o dono), `xp`, `level_up`, `char`, `buff`, `ground`, `cast`, `player_dead`, `respawn`, `joined`, `left`, `chat` (com `staff: true` quando quem fala é da equipe), `kicked`, `cast` (habilidade usada, para os efeitos), `shield`, `quest_update`, `party`, `trial`, `boss` (fase, vida, proteção, válvula, comportas), `warn` (aviso de perigo: círculo ou linha, duração) e `notice` (`kind`: `shutdown`, `announce` ou `staff` — denúncia nova ou `/bug`, só para a equipe).
 
 ## Movimento no cliente
 

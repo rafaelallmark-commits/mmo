@@ -15,7 +15,8 @@ Bem-vindo a Várdia. Este guia cobre o que você precisa para começar; as regra
 3. Digite o **código de 6 dígitos** que chega por e-mail (vale 30 minutos).
 4. Entre com conta e senha. Esqueceu a senha? *Esqueci a senha* manda um código para o e-mail.
 5. Crie o personagem: escolha a **origem** (Âmbar ou Nácar), a **classe** e o nome (3 a 16 letras, números,
-   `_` ou `-`, **sem espaços**).
+   `_` ou `-`, **sem espaços** e sem palavras da equipe, como GM, Admin, Moderador, Suporte ou Mestre — nem no
+   começo nem no fim do nome).
 
 **Fechou o jogo antes de confirmar?** Na tela Entrar, toque em *Confirmar e-mail* e digite a conta e o código. Se
 você tentar entrar sem ter confirmado, o jogo abre essa mesma tela, já com a conta preenchida. Conta que não é
@@ -93,12 +94,14 @@ Pedrâmbar e Vau de Nácar (cidades) → **A Estrada Velha** (níveis 1–5) →
 
 ## 6. Junto com os outros
 
-- **Grupo** (até 5): `/convidar Nome` ou clique no jogador → *Grupo*. Quem está perto divide o XP, mesmo sem bater.
+- **Grupo** (até 5): `/convidar Nome` ou clique no jogador → *Grupo* (um convite a cada 10 s). Quem está perto
+  divide o XP, mesmo sem bater.
 - **Chat**: `/g` grupo · `/s Nome` sussurro · `/c` clã · sem prefixo, o mapa. Nome antigo com espaço vai entre
   aspas: `/s "Ana Maria" oi`.
 - **Troca**: clique no jogador → *Trocar* (ou `/troca Nome`). Os dois montam a oferta, **travam** e **confirmam**;
   qualquer mudança destrava os dois — confira a oferta antes de confirmar.
-- **Clã**: nível 10 e 500 de ouro para fundar (**L**). A sigla aparece antes do nome dos membros.
+- **Clã**: nível 10 e 500 de ouro para fundar (**L**). A sigla aparece antes do nome dos membros (nome e sigla
+  também não podem imitar a equipe: siglas como GM, ADM, MOD, DEV, STAF e EQP são recusadas).
 - **Duelo**: clique no jogador → *Duelar* (ou `/duelo Nome`). Ninguém morre: quem chegaria a 0 fica com 1 de vida
   e perde; afastar-se demais é desistência. Fora de duelo, jogadores não se atacam.
 - **Levantar quem caiu**: clique no jogador caído → *Levantar (5 s)*. Qualquer um levanta (não precisa ser do
@@ -112,16 +115,27 @@ Pedrâmbar e Vau de Nácar (cidades) → **A Estrada Velha** (níveis 1–5) →
 
 Respeito no chat e nos nomes; nada de robôs, programas que jogam sozinhos, exploração de falhas ou venda de itens e
 contas por dinheiro. Use **`/denunciar Nome motivo`** para avisar a equipe (vão junto as últimas falas do
-denunciado que você viu: as do mapa e o que ele disse a você, no grupo ou no clã). A equipe pode silenciar, desconectar ou suspender contas — veja os [Termos de uso](TERMOS.md).
+denunciado que você viu: as do mapa e o que ele disse a você, no grupo ou no clã; quem da equipe está no jogo recebe
+um aviso na hora). A equipe pode silenciar, desconectar ou suspender contas, trocar nomes ofensivos e retirar itens
+obtidos de forma irregular — veja os [Termos de uso](TERMOS.md).
+
+- **A equipe tem a marca [Equipe]** (em azul) antes do nome, sobre o personagem e no chat. Ninguém mais consegue
+  ter essa marca: desconfie de quem diz ser da equipe sem ela.
+- **Ignorar alguém**: **`/ignorar Nome`** (ou clique no jogador → *Ignorar*). Você deixa de ver os sussurros e as
+  falas dele no mapa, no grupo e no clã, e os convites dele (grupo, clã, troca e duelo) não chegam até você; ele
+  não fica sabendo. **`/designorar Nome`** desfaz e **`/ignorados`** mostra a lista (até 100 nomes, guardada no seu
+  personagem). A equipe não pode ser ignorada.
 
 ## 8. Seus dados
 
 Na tela de personagens:
 
 - **Baixar meus dados**: digite a senha e toque em *Baixar*. O jogo grava um arquivo JSON com tudo o que guardamos
-  da sua conta (e-mail, aceite dos termos, personagens, itens, missões, clãs e registros de segurança) na pasta de
-  dados do jogo e mostra o caminho; *Abrir a pasta* mostra o arquivo e *Salvar uma cópia em outro lugar...* deixa
-  escolher onde guardar outra cópia.
+  da sua conta (e-mail, aceite dos termos, personagens, itens, missões, clãs, listas de ignorados e registros de
+  segurança) na pasta de dados do jogo e mostra o caminho; *Abrir a pasta* mostra o arquivo e *Salvar uma cópia em
+  outro lugar...* deixa escolher onde guardar outra cópia.
+- **Excluir personagem**: digite o nome dele e a senha da conta. Os itens, o ouro e as missões dele somem, ele sai do
+  clã e o nome fica livre; o que ele guardou no depósito continua com a conta.
 - **Excluir conta**: apaga a conta, os personagens, os itens e o e-mail. Não dá para desfazer.
 
-Detalhes na [Política de privacidade](PRIVACIDADE.md).
+Depois de 5 senhas erradas, espere 10 minutos para tentar de novo. Detalhes na [Política de privacidade](PRIVACIDADE.md).

@@ -20,7 +20,7 @@ const d2 = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 
 async function withServer(fn, opts = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'cinzas-m3-'));
-  const server = new GameServer({ port: 0, host: '127.0.0.1', dbPath: join(dir, 'm3.db'), timeScale: 4, seed: 777, dev: true, log: false, ...opts });
+  const server = new GameServer({ port: 0, host: '127.0.0.1', dbPath: join(dir, 'm3.db'), timeScale: 4, seed: 777, dev: true, log: false, partyInviteGapMs: 0, ...opts });
   const port = await server.start();
   try { await fn(server, `ws://127.0.0.1:${port}`); } finally { await server.stop().catch(() => {}); rmSync(dir, { recursive: true, force: true }); }
 }

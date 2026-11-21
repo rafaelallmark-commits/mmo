@@ -576,6 +576,7 @@ func show_delete_account(via_accounts := false, back := Callable()) -> void:
 				else:
 					set_status(str(b.get("erro", "Não foi possível excluir a conta.")), true))
 			return
+		set_status("Conferindo a senha...")
 		Net.request("delete_account", {"password": e_pass.text}, func(r):
 			if r["ok"]:
 				done.call()
@@ -663,6 +664,46 @@ func _write_text(path: String, text: String) -> bool:
 	f.store_string(text)
 	f.close()
 	return true
+## Exclusão de um personagem (a conta continua). Confirmação dupla: digitar o nome do personagem (aqui, no
+## cliente) e a senha da conta (conferida no servidor, com limite de tentativas).
+func show_delete_char(cid: int) -> void:
+	var c: Dictionary = {}
+	for x in chars_cache:
+		if int(x["id"]) == cid:
+			c = x
+	if c.is_empty():
+		show_chars()
+		return
+	var char_name: String = str(c["name"])
+	var box := _menu_panel("Excluir personagem")
+	var warn := Label.new()
+	warn.text = "Isto apaga %s: itens, ouro, missões e o lugar no clã (se for o líder, a liderança passa para quem tem o maior cargo). As peças guardadas no depósito da conta continuam lá. Não dá para desfazer." % char_name
+	warn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	warn.add_theme_color_override("font_color", Color("#ff8a7a"))
+	box.add_child(warn)
+	var e_name := _field(box, "Digite o nome do personagem (%s)" % char_name, "")
+	var e_pass := _field(box, "Senha da conta", "", true)
+	_button(box, "Excluir personagem para sempre", func():
+		if e_name.text.strip_edges() != char_name:
+			set_status("O nome digitado não confere com %s." % char_name, true)
+			return
+		if e_pass.text == "":
+			set_status("Digite a senha da conta.", true)
+			return
+		set_status("Conferindo a senha...")
+		Net.request("delete_char", {"charId": cid, "password": e_pass.text}, func(r):
+			if not r["ok"]:
+				set_status(str(r["reason"]), true)
+				return
+			chars_cache = r.get("chars", [])
+			if r.has("classes"):
+				classes_cache = r["classes"]
+			if char_id == cid:
+				char_id = -1
+			show_chars()
+			set_status("%s foi excluído." % char_name)))
+	_button(box, "Cancelar", func(): show_chars(cid))
+	_status(box)
 
 ## Espera o "hello" do servidor (versão e modo de login) antes de seguir.
 func _when_hello(cb: Callable) -> void:
@@ -789,6 +830,10 @@ func show_chars(select_id := -1) -> void:
 		_button(box, "Criar novo personagem", show_create)
 	_button(box, "Baixar meus dados", func(): show_export_data())
 	_button(box, "Excluir conta", func(): show_delete_account())
+	if _selected_char >= 0:
+		var sel := _selected_char
+		_button(box, "Excluir personagem", func(): show_delete_char(sel))
+	_button(box, "Excluir conta", show_delete_account)
 	_button(box, "Voltar", func():
 		Net.close()
 		show_login())
@@ -1355,11 +1400,14 @@ func _on_message(m: Dictionary) -> void:
 			for cb in waiting:
 				(cb as Callable).call()
 		"notice":
-			# aviso do servidor (ex.: reinício programado)
-			if hud and in_world:
+			# aviso do servidor (ex.: reinício programado); kind "staff": denúncia nova ou /bug, só para a equipe
+			if hud and in_world and str(m.get("kind", "")) == "staff":
+				hud.chat_line("%s[color=#8fd0ff]%s[/color]" % [HudScript.STAFF_MARK, hud.esc(m.get("text", ""))])
+				hud._flash(str(m.get("text", "")), Color("#8fd0ff"))
+			elif hud and in_world:
 				hud.system(str(m.get("text", "")))
 				hud._flash(str(m.get("text", "")), Color("#ffcf7a"))
-			else:
+			elif str(m.get("kind", "")) != "staff":
 				set_status(str(m.get("text", "")))
 		"defs":
 			defs = m
@@ -1420,6 +1468,9 @@ func _on_message(m: Dictionary) -> void:
 			if hud:
 				var ch_name: String = m.get("channel", "zone")
 				var from_t: String = hud.esc(m["from"])
+				# marca da equipe: só o servidor manda staff (pelo papel da conta); nenhum nome ou texto a imita
+				if m.get("staff", false):
+					from_t = HudScript.STAFF_MARK + from_t
 				var text_t: String = hud.esc(m["text"])
 				if ch_name == "party":
 					hud.chat_line("[color=#9fd3d1][lb]Grupo] [b]%s:[/b] %s[/color]" % [from_t, text_t])

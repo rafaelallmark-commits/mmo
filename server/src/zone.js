@@ -1057,7 +1057,7 @@ export class Zone {
     const ents = [];
     for (const p of this.players.values()) {
       const c = p.char;
-      ents.push({ id: p.eid, k: 'p', n: c.name, cls: c.classId, lvl: c.level, x: r2(c.x), z: r2(c.z), vx: r2(c.vx || 0), vz: r2(c.vz || 0), hp: Math.ceil(c.hp), mhp: p.stats.maxHp, dead: c.dead, tgt: p.targetId, w: p.weaponDefId ?? null, oh: p.offhandDefId ?? null, party: this.hooks.partyIdOf?.(c.id) ?? null, sh: p.shield ? Math.round(p.shield.amount) : 0, ttl: c.title ?? null, cl: c.clanTag ?? null });
+      ents.push({ id: p.eid, k: 'p', n: c.name, cls: c.classId, lvl: c.level, x: r2(c.x), z: r2(c.z), vx: r2(c.vx || 0), vz: r2(c.vz || 0), hp: Math.ceil(c.hp), mhp: p.stats.maxHp, dead: c.dead, tgt: p.targetId, w: p.weaponDefId ?? null, oh: p.offhandDefId ?? null, party: this.hooks.partyIdOf?.(c.id) ?? null, sh: p.shield ? Math.round(p.shield.amount) : 0, ttl: c.title ?? null, cl: c.clanTag ?? null, staff: !!c.staff });
     }
     for (const m of this.monsters.values()) {
       if (m.state === 'dead') continue;
@@ -1070,7 +1070,9 @@ export class Zone {
 
   // Registros para snapshots por diferença (server.js sendSnapshots): os mesmos campos do
   // snapshot completo, em quatro grupos já serializados — A (identidade), P (posição),
-  // V (velocidade) e C (combate) — mais posição e velocidade arredondadas para a previsão.
+  // V (velocidade) e C (combate) — mais posição e velocidade arredondadas para a previsão. A marca da
+  // equipe (staff) vai sempre na identidade, verdadeira ou falsa: o cliente junta os campos recebidos com os
+  // que já tinha, e um mestre rebaixado precisa perder a marca.
   snapRecords() {
     const recs = [];
     for (const p of this.players.values()) {
@@ -1078,7 +1080,7 @@ export class Zone {
       const px = r2(c.x), pz = r2(c.z), vx = r2(c.vx || 0), vz = r2(c.vz || 0);
       recs.push({
         id: p.eid, x: c.x, z: c.z, px, pz, vx, vz,
-        A: `"k":"p","n":${JSON.stringify(c.name)},"cls":"${c.classId}","lvl":${c.level},"mhp":${p.stats.maxHp},"w":${p.weaponDefId ? `"${p.weaponDefId}"` : 'null'},"oh":${p.offhandDefId ? `"${p.offhandDefId}"` : 'null'},"party":${JSON.stringify(this.hooks.partyIdOf?.(c.id) ?? null)},"ttl":${JSON.stringify(c.title ?? null)},"cl":${JSON.stringify(c.clanTag ?? null)}`,
+        A: `"k":"p","n":${JSON.stringify(c.name)},"cls":"${c.classId}","lvl":${c.level},"mhp":${p.stats.maxHp},"w":${p.weaponDefId ? `"${p.weaponDefId}"` : 'null'},"oh":${p.offhandDefId ? `"${p.offhandDefId}"` : 'null'},"party":${JSON.stringify(this.hooks.partyIdOf?.(c.id) ?? null)},"ttl":${JSON.stringify(c.title ?? null)},"cl":${JSON.stringify(c.clanTag ?? null)},"staff":${!!c.staff}`,
         P: `"x":${px},"z":${pz}`,
         V: `"vx":${vx},"vz":${vz}`,
         C: `"hp":${Math.ceil(c.hp)},"dead":${!!c.dead},"tgt":${p.targetId ? `"${p.targetId}"` : 'null'},"sh":${p.shield ? Math.round(p.shield.amount) : 0}`,
