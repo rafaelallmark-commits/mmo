@@ -111,6 +111,9 @@ aceitar, na mesma tela dá para baixar seus dados ou excluir a conta.
 A tela de título também tem **Créditos e licenças**: quem fez o quê, os modelos de personagem e as licenças do
 motor Godot e dos componentes que vêm com ele.
 
+Apareceu **"Servidor cheio"** ao entrar? O teste chegou ao limite de jogadores ao mesmo tempo: tente de novo em alguns
+minutos.
+
 ## 3.1 Os primeiros 5 minutos: «Três do Outro Lado»
 
 Todo personagem começa no **Posto da Ponte**, na ponta oeste da Estrada Velha. Clique em **Mara Quintela** e aceite

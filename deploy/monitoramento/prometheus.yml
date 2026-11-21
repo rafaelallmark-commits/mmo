@@ -1,5 +1,7 @@
-# Prometheus do teste público (perfil "monitoramento" do docker-compose.yml). Coleta as métricas do servidor
-# de zona (porta 9100, rede interna do compose) a cada 15 s e avalia os alertas de alertas.yml.
+# Prometheus do teste público (perfil "monitoramento" do docker-compose.yml). Coleta a cada 15 s, pela rede
+# interna do compose, as métricas do servidor de zona (porta 9100), do serviço de contas (9101) e da máquina
+# (node-exporter: disco, memória e, pelo coletor textfile, a idade do último backup), avalia os alertas de
+# alertas.yml e manda os que disparam para o Alertmanager, que avisa a equipe (alertmanager.yml).
 global:
   scrape_interval: 15s
   evaluation_interval: 30s
@@ -7,9 +9,24 @@ global:
 rule_files:
   - /etc/prometheus/alertas.yml
 
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
 scrape_configs:
   - job_name: cinzas-zona
     static_configs:
       - targets: ["servidor:9100"]
         labels:
           servico: zona
+  - job_name: cinzas-contas
+    static_configs:
+      - targets: ["contas:9101"]
+        labels:
+          servico: contas
+  - job_name: maquina
+    static_configs:
+      - targets: ["node-exporter:9100"]
+        labels:
+          servico: maquina

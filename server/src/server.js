@@ -60,6 +60,9 @@ export class GameServer {
       world: null, worldSecret: null, zoneId: null, maps: null, publicUrl: null, worldWaitMs: 10000,
       // convite de grupo: no máximo 1 a cada 10 s por quem convida (D145; os testes que montam grupos usam 0)
       partyInviteGapMs: 10_000,
+      // operação: teto de personagens no mundo (0 = sem limite; gm e admin entram sempre) e quanto tempo sem
+      // tick até /health responder 503 (o laço do jogo parou: o Docker marca o contêiner como unhealthy)
+      maxPlayers: 0, tickStallMs: 5000,
       ...Object.fromEntries(Object.entries(opts).filter(([, v]) => v !== undefined)),
     };
     // versão desta implantação (hello, log de início e /bug): a tag da release (CINZAS_VERSION na imagem,
@@ -191,7 +194,7 @@ export class GameServer {
     return new Promise((resolve) => {
       const onListening = (addr) => {
         this.port = addr.port;
-        this.log(`CINZAS DO MERIDIANO ${this.serverVersion} — servidor ouvindo em ${this.tls ? 'wss' : 'ws'}://${this.opts.host}:${this.port} (${this.zones.size} zonas, tick ${this.opts.tickHz} Hz, escala ${this.opts.timeScale}x, XP ${this.opts.xpRate}x, protocolo ${PROTOCOL_VERSION}, dados ${this.dataVersion}${this.opts.dev ? ', modo dev' : ''}, login: ${this.opts.auth}, banco: ${this.store.describe()})`);
+        this.log(`CINZAS DO MERIDIANO ${this.serverVersion} — servidor ouvindo em ${this.tls ? 'wss' : 'ws'}://${this.opts.host}:${this.port} (${this.zones.size} zonas, tick ${this.opts.tickHz} Hz, escala ${this.opts.timeScale}x, XP ${this.opts.xpRate}x, protocolo ${PROTOCOL_VERSION}, dados ${this.dataVersion}${this.opts.dev ? ', modo dev' : ''}${this.opts.maxPlayers > 0 ? `, teto de ${this.opts.maxPlayers} jogadores` : ''}, login: ${this.opts.auth}, banco: ${this.store.describe()})`);
         resolve(this.port);
       };
       if (this.opts.tlsCert && this.opts.tlsKey) {
@@ -206,6 +209,7 @@ export class GameServer {
       this.wss.on('connection', (ws, req) => this.onConnection(ws, req));
       const tickMs = 1000 / this.opts.tickHz;
       let last = performance.now();
+      this.metrics.lastTickAt = last; // a saúde conta o laço parado a partir daqui, não da carga do banco e dos dados
       this.timer = setInterval(() => {
         const t = performance.now();
         const dt = Math.min(250, t - last) * this.opts.timeScale;
@@ -223,6 +227,7 @@ export class GameServer {
         this.metricsSrv = await startMetricsServer({
           port: Number(this.opts.metricsPort), host: this.opts.metricsHost,
           collect: () => this.collectMetrics(), onReset: () => { this.metrics.reset(); this.store.resetDbStats?.(); },
+          health: () => this.health(),
         });
         this.metricsPort = this.metricsSrv.address().port;
         this.log(`métricas em http://${this.opts.metricsHost}:${this.metricsPort}/metrics`);
@@ -248,7 +253,16 @@ export class GameServer {
     let players = 0;
     for (const z of this.zones.values()) players += z.players.size;
     const db = this.store.dbStats?.(); // só no PostgreSQL: tempo parado na ponte síncrona
-    return this.metrics.snapshot({ players, sessions: this.sessions.size, zones: this.zones.size, tickHz: this.opts.tickHz, ...(db ? { db } : {}) });
+    return this.metrics.snapshot({ players, sessions: this.sessions.size, zones: this.zones.size, tickHz: this.opts.tickHz,
+      maxPlayers: this.opts.maxPlayers, fullRefusals: this.fullRefusals ?? 0, ...(db ? { db } : {}) });
+  }
+
+  // Saúde (GET /health): 503 se o laço do jogo parou (último tick há mais de tickStallMs). Com o laço inteiro
+  // travado nem o /health responde, e o healthcheck do Docker falha por tempo esgotado do mesmo jeito.
+  health() {
+    const ageMs = this.metrics.tickAgeMs();
+    const ok = ageMs <= this.opts.tickStallMs;
+    return { ok, lastTickAgoMs: Math.round(ageMs), ...(ok ? {} : { erro: `laço do jogo parado: último tick há ${(ageMs / 1000).toFixed(1)} s` }) };
   }
 
   step(dt) {
@@ -924,10 +938,32 @@ export class GameServer {
     return { ok: true, char: { id, name, classId, level: 1 } };
   }
 
+  // Teto de jogadores (--max-players ou CINZAS_MAX_PLAYERS; 0 = sem limite). Conta os personagens de jogadores
+  // no mundo: os desta zona e, com várias zonas, os das outras que o mundo anuncia (lá o papel não vem junto:
+  // contam todos). Mestres (gm, admin) entram com o servidor cheio e não ocupam vaga — um moderador entrando não
+  // impede a reconexão de ninguém. Quem já está no mundo não conta duas vezes (reconexão: a sessão antiga cai e
+  // o personagem volta). Transferência entre zonas não passa por aqui: o personagem já estava no mundo.
+  serverFull(s, charId) {
+    const max = this.opts.maxPlayers;
+    if (!(max > 0) || s.role === 'gm' || s.role === 'admin' || this.isOnline(charId)) return null;
+    let online = this.remote?.size ?? 0;
+    for (const other of this.byChar.values()) if (other.role !== 'gm' && other.role !== 'admin') online++;
+    if (online < max) return null;
+    this.fullRefusals = (this.fullRefusals ?? 0) + 1;
+    const now = Date.now();
+    if (!(now - (this.fullLoggedAt ?? 0) < 60_000)) { // no máximo uma linha por minuto no registro
+      this.fullLoggedAt = now;
+      this.log(`teto de jogadores atingido (${online}/${max}): entradas recusadas com server_full (${this.fullRefusals} desde a subida)`);
+    }
+    return { ok: false, code: 'server_full', reason: `Servidor cheio (${max} jogadores). Tente de novo em alguns minutos.` };
+  }
+
   hEnter(s, { charId }) {
     if (s.charId != null) return { ok: false, code: 'already', reason: 'Você já está no mundo.' };
     const row = this.store.listCharacters(s.accountId).find((c) => c.id === charId);
     if (!row) return { ok: false, code: 'bad_char', reason: 'Personagem não encontrado nesta conta.' };
+    const full = this.serverFull(s, charId);
+    if (full) return full;
     if (this.world) return this.enterViaWorld(s, row);
     const prev = this.byChar.get(charId);
     if (prev) this.dropSession(prev);

@@ -32,6 +32,13 @@ function structureRects(structs) {
   });
 }
 
+// Grade de navegação de um mapa: áreas bloqueadas + construções + peças de cenário com colisão, em
+// células de 0,5 m com o raio do personagem (a mesma para a zona e para tools/medir-caminhos.mjs).
+export const NAV_OPTS = { cell: 0.5, radius: 0.4 };
+export function navSpec(map) {
+  return { size: map.size, blocked: [...(map.blocked ?? []), ...structureRects(map.structures ?? [])], props: map.props ?? [] };
+}
+
 // dia (UTC) para recompensas diárias
 export const dayKey = (ms) => new Date(ms).toISOString().slice(0, 10);
 
@@ -59,8 +66,9 @@ export class Zone {
     this.objects = this.map.objects ?? [];
     this.portals = this.map.portals ?? [];
     // navegação: áreas bloqueadas + construções + peças de cenário com colisão
-    this.rects = [...(this.map.blocked ?? []), ...structureRects(this.map.structures ?? [])];
-    this.nav = new NavGrid({ size: this.map.size, blocked: this.rects, props: this.map.props ?? [] }, { cell: 0.5, radius: 0.4 });
+    const navMap = navSpec(this.map);
+    this.rects = navMap.blocked;
+    this.nav = new NavGrid(navMap, NAV_OPTS);
     this.isFreeFn = (x, z) => this.nav.isFree(x, z);
     this.mv = { accel: this.f.movement.accel ?? 18, decel: this.f.movement.decel ?? 24 };
     this.monsterSeq = 0;

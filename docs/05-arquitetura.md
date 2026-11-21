@@ -7,7 +7,7 @@
 │ Cliente Godot 4      │ ─────── pedidos { t, rid, ... } ──► │ Servidor de zona (Node.js 22+) │
 │ (client/)            │ ◄── respostas { t:"res", rid } ──── │ (server/)                      │
 │ - interpolação e     │ ◄── eventos e snapshots 10 Hz ───── │ - laço de simulação 10 Hz      │
-│   previsão           │                                     │ - navegação (A*, nav.js)       │
+│   previsão           │                                     │ - navegação (JPS, nav.js)      │
 │ - interface          │                                     │ - regras puras (rules.js)      │
 │ - nunca decide       │                                     │ - validação de equipamento     │
 └──────────────────────┘                                     │ - persistência SQLite/Postgres │
@@ -27,7 +27,7 @@
 
 ## O que o servidor controla
 
-Movimento válido (destino dentro do mapa e fora de áreas bloqueadas e de peças de cenário com colisão; caminho por A*, velocidade, aceleração e frenagem aplicadas pelo servidor; o cliente nunca envia posição), alcance (ataques e habilidades revalidados com tolerância de 0,75 m), dano (todas as rolagens no servidor), recargas, mana, inventário, ouro, XP, saque, equipamento, pontos de atributo e habilidade, morte e retorno. Missões (M2) seguem o mesmo princípio: o servidor conta abates, interações e entregas.
+Movimento válido (destino dentro do mapa e fora de áreas bloqueadas e de peças de cenário com colisão; caminho por A* com pontos de salto (JPS), velocidade, aceleração e frenagem aplicadas pelo servidor; o cliente nunca envia posição), alcance (ataques e habilidades revalidados com tolerância de 0,75 m), dano (todas as rolagens no servidor), recargas, mana, inventário, ouro, XP, saque, equipamento, pontos de atributo e habilidade, morte e retorno. Missões (M2) seguem o mesmo princípio: o servidor conta abates, interações e entregas.
 
 ## Estrutura de arquivos
 
@@ -42,16 +42,21 @@ mmo/
 ├── deploy/                        implantação do teste público (docs/08 §8.8)
 │   ├── Dockerfile                 imagem do servidor (node:22-bookworm-slim, usuário sem privilégios, CINZAS_VERSION)
 │   ├── teste-conteiner.sh         teste rápido de uma imagem (o mesmo no CI e na release)
-│   ├── docker-compose.yml         servidor + contas + proxy TLS (Caddy); "banco" e monitoramento opcionais
-│   ├── Caddyfile                  WebSocket -> servidor:7777, /contas -> contas, o resto -> página do jogo
+│   ├── docker-compose.yml         servidor + contas + proxy TLS (Caddy) + backup de hora em hora; perfis
+│   │                              postgres, monitoramento (Prometheus, Alertmanager, node-exporter, Grafana)
+│   │                              e copia-externa (rclone)
+│   ├── Caddyfile                  WebSocket -> servidor:7777, /contas -> contas, o resto -> página do jogo (métricas não passam)
 │   ├── site/                      página do jogo (https://domínio/): baixar, guia, termos, privacidade, avisos
+│   ├── backup-postgres.sh         backup do PostgreSQL de hora em hora (serviço backup-banco)
+│   ├── copia-externa.sh           cópia dos backups para fora da máquina (rclone sync, cifrada)
+│   ├── monitoramento/             prometheus.yml, alertas.yml, modelo do Alertmanager, painel do Grafana
 │   ├── cinzas.service             systemd sem Docker (endurecido)
 │   └── backup.service/.timer      backup a quente de hora em hora
 ├── .dockerignore                  contexto da imagem: só server/ e data/
 ├── data/                          dados do jogo (fonte de verdade, editáveis)
 │   ├── classes.json               atributos, classes, origens, kits iniciais
 │   ├── skills.json                48 habilidades (níveis 1, 5, 10, 15, 20 e 25) + regras de graus
-│   ├── items.json                 252 definições de item (faixas 1–25, raridades, espaços, famílias)
+│   ├── items.json                 262 definições de item (faixas 1–25, raridades, espaços, famílias)
 │   ├── monsters.json              36 monstros (6 áreas, provas, chefe) e a mecânica de cada espécie
 │   ├── loot_tables.json           tabelas de saque (normal, elite, chefe, por classe)
 │   ├── maps.json                  mapas (+ estradas, peças com colisão e casas geradas por gen-scenery)
@@ -65,7 +70,7 @@ mmo/
 │   │   ├── server.js              WebSocket, sessões, autenticação, roteamento, idempotência por rid
 │   │   ├── zone.js                simulação da zona: jogadores, monstros (IA), combate, XP, saque
 │   │   ├── mechanics.js           mecânicas dos monstros: golpes avisados, explosão, eco, reforços, efeitos negativos
-│   │   ├── nav.js                 grade de ocupação, A* + suavização, seguidor com aceleração/frenagem
+│   │   ├── nav.js                 grade de ocupação, A* com pontos de salto + suavização, seguidor com aceleração/frenagem
 │   │   ├── skills.js              execução das 40 habilidades (formas e efeitos)
 │   │   ├── quests.js              motor de missões (falar, matar, coletar, interagir, entrar no mapa, defender...), diárias, títulos, quadro
 │   │   ├── smith.js               ferreiro: custo, chance, risco (+4..+6), selo e rolagem do refino
@@ -82,7 +87,7 @@ mmo/
 │   │   │                          aceite dos termos (versão na conta), limites de e-mail e de código, exportação
 │   │   ├── world.js · world-main.js   serviço de mundo (várias zonas): registro, posse, transferência, grupos
 │   │   ├── worldlink.js           ligação da zona com o mundo: hello com HMAC, sinal de vida, pedidos, cerca
-│   │   ├── token.js · mailer.js · metrics.js   token HMAC de uso único · SMTP mínimo · métricas/saúde
+│   │   ├── token.js · mailer.js · metrics.js   token HMAC de uso único · SMTP mínimo · métricas (contadores), saúde e métricas das contas
 │   │   ├── dungeon.js             A Última Eclusa: o Custódio em três fases, avisos, comportas
 │   │   ├── rules.js               regras puras: atributos, estatísticas, dano, acerto, crítico, XP
 │   │   ├── equipment.js           validação de nível/classe/atributos/espaço/empunhadura
@@ -187,8 +192,8 @@ Todo pedido do cliente leva `rid` (texto único por pedido). A resposta é `{ t:
 | `list_chars`, `create_char` | name, classId | personagem com kit inicial (M1: Quebraferro e Tecelão); nomes com palavras da equipe são recusados (D145) |
 | `delete_char` | charId, password | só fora do mundo: exclui o personagem (clã, grupo, itens, missões, ignorados; nome liberado; depósito da conta mantido) e devolve a lista nova (D144) |
 | `delete_account` | password | só fora do mundo: exclui a conta e encerra a sessão. Nos dois, a senha é conferida fora da thread do jogo, com no máximo 5 erradas por conta a cada 10 min (`too_many`) |
-| `enter` | charId | ficha, snapshot, saques não reivindicados do personagem |
-| `move` | x, z | calcula o caminho (A*); devolve `dest` (ponto livre mais próximo) e `path` ([[x,z],…]) para o cliente prever o movimento; recusa destino bloqueado ou inalcançável |
+| `enter` | charId | ficha, snapshot, saques não reivindicados do personagem; recusa com `server_full` quando o teto de jogadores (`--max-players`) está cheio (contas `gm` e `admin` entram) |
+| `move` | x, z | calcula o caminho (A* com pontos de salto); devolve `dest` (ponto livre mais próximo) e `path` ([[x,z],…]) para o cliente prever o movimento; recusa destino bloqueado ou inalcançável |
 | `attack` | target | define alvo; servidor aproxima e ataca |
 | `stop` | — | para |
 | `cast` | skill, target ou x/z | valida grau, recarga, mana, alcance; aplica efeito |
@@ -330,16 +335,18 @@ Feito: métricas do servidor e HTTP de métricas, snapshots por diferença e int
 | Persistência | SQLite local por processo | PostgreSQL central com backups e migrações versionadas; SQLite só em desenvolvimento — **feito**: `CINZAS_DB=postgres://...`, `pg_dump`, migrações nos dois bancos, `npm run test:pg` ([08-operacao.md §8.11](08-operacao.md#811-postgresql)) |
 | Anti-trapaça | servidor já autoritativo | + limite de comandos por segundo, detecção de velocidade/posição anômalas nos registros, auditoria de saque e ouro |
 | Comandos de mestre | `--dev` liga para todos | papéis de conta; registro de cada comando |
-| Operação | um processo no terminal | serviço gerenciado (reinício automático, logs estruturados, métricas, alertas), desligamento gracioso com aviso aos jogadores |
+| Operação | um processo no terminal | serviço gerenciado (reinício automático, logs estruturados, métricas, alertas), desligamento gracioso com aviso aos jogadores — **feito**: métricas como contadores, alertas por e-mail, Telegram ou Discord (Alertmanager), saúde que acusa o laço parado, teto de jogadores ([08-operacao.md §8.3](08-operacao.md#83-métricas-saúde-e-alertas)) |
 | Cliente | rodado pelo editor | executáveis exportados e assinados (macOS notarizado), verificação de versão do protocolo no `hello` — **feito**, com a versão inteira da release no título e no `/bug`, o aviso de versão incompatível dizendo onde baixar a nova, o ícone próprio e os créditos e licenças de terceiros na tela e em cada pacote |
 | Dados | lidos do disco no início | versionados; mudanças de balanceamento publicadas com o servidor; validador roda no CI |
 | Privacidade | — | política de privacidade, exclusão de conta, retenção de logs — **feito**: aceite dos termos gravado na conta (com novo aceite quando a versão sobe), conta não confirmada apagada em 7 dias, limites de e-mail e de código no banco e *Baixar meus dados* no cliente (D141–D143) |
 
 Já preparado ([08-operacao.md §8.8](08-operacao.md)): `wss://` atrás de um proxy Caddy com certificado automático,
 serviço gerenciado (Docker com verificação de saúde e reinício, ou systemd endurecido) com desligamento gracioso,
-backup de hora em hora, CI com o validador de dados, os testes no SQLite e no PostgreSQL, o autotest do cliente contra
-um servidor e o teste do contêiner (a release só publica com ele verde), executáveis exportados para Linux, Windows e
-macOS, assinados e notarizados quando houver certificados, e a página do jogo no mesmo domínio do `wss://`. Também prontos: serviço de contas, limites por conexão, papéis de
+backup de hora em hora dentro do compose (rotação de 14 dias, ensaio de restauração e cópia fora da máquina opcional),
+monitoramento com alertas que chegam à equipe, CI com o validador de dados, os testes no SQLite e no PostgreSQL, o
+autotest do cliente contra um servidor e o teste do contêiner (a release só publica com ele verde), executáveis
+exportados para Linux, Windows e macOS, assinados e notarizados quando houver certificados, e a página do jogo no
+mesmo domínio do `wss://`. Também prontos: serviço de contas, limites por conexão, papéis de
 mestre e privacidade ([§8.9](08-operacao.md#89-contas-segurança-e-privacidade-teste-público)) e o PostgreSQL central
 no compose (perfil `postgres`, [§8.11](08-operacao.md#811-postgresql)).
 

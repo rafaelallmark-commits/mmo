@@ -1,0 +1,82 @@
+# Alertmanager do teste público (perfil "monitoramento" do docker-compose.yml): recebe os alertas que o
+# Prometheus dispara (monitoramento/alertas.yml) e avisa a equipe por e-mail, Telegram e/ou Discord.
+#
+# Este arquivo é um MODELO e não guarda segredo nenhum. Ao subir, monitoramento/alertmanager-entrada.sh troca
+# cada ${NOME} pelo valor da variável NOME, que o compose traz do deploy/.env (fora do git), e só mantém o
+# bloco de um canal ("#@se NOME" ... "#@fim") quando a variável NOME está preenchida. Para ligar um canal,
+# preencha as variáveis dele no deploy/.env e recrie o serviço (docker compose --profile monitoramento up -d);
+# passo a passo em docs/08-operacao.md §8.3.
+#
+#   E-mail (SMTP)  ALERTA_EMAIL_PARA (um ou mais endereços separados por vírgula), ALERTA_SMTP_SERVIDOR
+#                  (host:porta — 587 = STARTTLS, 465 = TLS direto), ALERTA_SMTP_DE (remetente) e, se o
+#                  servidor pedir login, ALERTA_SMTP_USUARIO e ALERTA_SMTP_SENHA
+#   Telegram       ALERTA_TELEGRAM_TOKEN (do @BotFather) e ALERTA_TELEGRAM_CHAT (id numérico do chat ou do
+#                  grupo; o de grupo começa com -)
+#   Discord        ALERTA_DISCORD_WEBHOOK (canal → Editar canal → Integrações → Webhooks → Copiar URL)
+#
+# Sem nenhuma dessas variáveis o Alertmanager sobe igual: os alertas aparecem em http://127.0.0.1:9093 e na
+# página "Alerts" do Prometheus, mas não chegam a ninguém.
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: equipe
+  group_by: [alertname, servico]
+  group_wait: 30s        # alertas que disparam juntos vão numa mensagem só
+  group_interval: 5m
+  repeat_interval: 4h    # alerta que continua ativo é lembrado a cada 4 h
+  routes:
+    - matchers: ['gravidade="critica"']
+      receiver: equipe
+      repeat_interval: 1h
+
+# com a zona fora do ar, os alertas que dependem dela (tick, laço parado, CPU) não repetem o aviso
+inhibit_rules:
+  - source_matchers: ['alertname="ServidorForaDoAr"']
+    target_matchers: ['servico="zona"']
+    equal: [servico]
+
+receivers:
+  - name: equipe
+#@se ALERTA_EMAIL_PARA
+    email_configs:
+      - to: ${ALERTA_EMAIL_PARA}
+        from: ${ALERTA_SMTP_DE}
+        smarthost: ${ALERTA_SMTP_SERVIDOR}
+#@se ALERTA_SMTP_USUARIO
+        auth_username: ${ALERTA_SMTP_USUARIO}
+        auth_password: ${ALERTA_SMTP_SENHA}
+#@fim
+        require_tls: true
+        send_resolved: true
+        headers:
+          Subject: '[Cinzas] {{ if eq .Status "firing" }}ALERTA{{ else }}RESOLVIDO{{ end }}: {{ .CommonLabels.alertname }}'
+        html: ''
+        text: |-
+          {{ range .Alerts }}{{ if eq .Status "firing" }}ALERTA{{ else }}RESOLVIDO{{ end }} ({{ .Labels.gravidade }}): {{ .Labels.alertname }}
+          {{ .Annotations.resumo }}
+          Desde {{ .StartsAt.Format "02/01/2006 15:04 MST" }}{{ if eq .Status "resolved" }}, resolvido {{ .EndsAt.Format "02/01/2006 15:04 MST" }}{{ end }}
+
+          {{ end }}Painel: http://127.0.0.1:3000 · alertas: http://127.0.0.1:9093 (pelo túnel SSH)
+#@fim
+#@se ALERTA_TELEGRAM_TOKEN
+    telegram_configs:
+      - bot_token: ${ALERTA_TELEGRAM_TOKEN}
+        chat_id: ${ALERTA_TELEGRAM_CHAT:int}
+        parse_mode: ''   # texto puro: o resumo do alerta pode ter < e & sem quebrar a mensagem
+        send_resolved: true
+        message: |-
+          {{ range .Alerts }}{{ if eq .Status "firing" }}ALERTA{{ else }}RESOLVIDO{{ end }} ({{ .Labels.gravidade }}): {{ .Labels.alertname }}
+          {{ .Annotations.resumo }}
+          {{ end }}
+#@fim
+#@se ALERTA_DISCORD_WEBHOOK
+    discord_configs:
+      - webhook_url: ${ALERTA_DISCORD_WEBHOOK}
+        send_resolved: true
+        title: '[Cinzas] {{ if eq .Status "firing" }}ALERTA{{ else }}RESOLVIDO{{ end }}: {{ .CommonLabels.alertname }}'
+        message: |-
+          {{ range .Alerts }}**{{ .Labels.alertname }}** ({{ .Labels.gravidade }}){{ if eq .Status "resolved" }} — resolvido{{ end }}
+          {{ .Annotations.resumo }}
+          {{ end }}
+#@fim

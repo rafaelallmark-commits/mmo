@@ -23,6 +23,7 @@ import http from 'node:http';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { AccountsMetrics, startMetricsServer } from './metrics.js';
 import { createStore } from './db.js';
 import { signToken } from './token.js';
 import { banMessage } from './moderation.js';
@@ -54,7 +55,9 @@ export class AccountsService {
       termsVersion: TERMS_VERSION, docsDir: join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'docs'), ...opts };
     if (!this.opts.tokenSecret) throw new Error('serviço de contas precisa de --token-secret (ou CINZAS_TOKEN_SECRET)');
     this.store = opts.store ?? createStore(this.opts.dbPath); // arquivo SQLite ou postgres://...
-    this.mailer = opts.mailer ?? createMailer(opts.mail ?? { kind: 'console' });
+    // pedidos, cadastros e e-mails (enviados e com falha), expostos em GET /metrics numa porta à parte (start)
+    this.metrics = new AccountsMetrics();
+    this.mailer = this.metrics.wrapMailer(opts.mailer ?? createMailer(opts.mail ?? { kind: 'console' })); // conta envios e falhas
     this.hits = new Map(); // ip -> [instantes]
   }
 
@@ -92,17 +95,27 @@ export class AccountsService {
 
   log(...a) { if (this.opts.log) console.log(new Date().toISOString().slice(11, 19), '[contas]', ...a); }
 
-  start() {
+  // Métricas (opts.metricsPort, padrão desligada; opts.metricsHost, padrão 127.0.0.1) numa porta à parte, que o
+  // proxy nunca repassa: o Caddy só conhece a porta principal, e /contas/metrics lá cai em "Rota inexistente".
+  async start() {
     this.srv = http.createServer((req, res) => this.onRequest(req, res));
-    return new Promise((resolve) => this.srv.listen(this.opts.port, this.opts.host, () => {
+    await new Promise((resolve) => this.srv.listen(this.opts.port, this.opts.host, () => {
       this.port = this.srv.address().port;
       this.log(`serviço de contas em http://${this.opts.host}:${this.port}`);
-      resolve(this.port);
+      resolve();
     }));
+    if (this.opts.metricsPort != null && this.opts.metricsPort !== false) {
+      const host = this.opts.metricsHost ?? '127.0.0.1';
+      this.metricsSrv = await startMetricsServer({ port: Number(this.opts.metricsPort), host, collect: () => this.metrics.summary(), text: () => this.metrics.text() });
+      this.metricsPort = this.metricsSrv.address().port;
+      this.log(`métricas do serviço de contas em http://${host}:${this.metricsPort}/metrics`);
+    }
+    return this.port;
   }
 
   async stop() {
     await new Promise((r) => this.srv.close(() => r()));
+    if (this.metricsSrv) await new Promise((r) => this.metricsSrv.close(() => r()));
     if (!this.opts.store) this.store.close();
   }
 
@@ -123,8 +136,9 @@ export class AccountsService {
   }
 
   async onRequest(req, res) {
-    const send = (code, body) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(body)); };
     const url = (req.url || '/').split('?')[0];
+    res.on('finish', () => this.metrics.request(url, res.statusCode));
+    const send = (code, body) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(body)); };
     if (req.method === 'GET' && url === '/saude') return send(200, { ok: true });
     if (req.method === 'GET' && (url === '/termos' || url === '/privacidade')) {
       // texto puro (Markdown) dos documentos; o cliente abre esta página no navegador
