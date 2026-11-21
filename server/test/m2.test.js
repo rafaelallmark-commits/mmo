@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { GameServer } from '../src/server.js';
 import { SimClient, sleep } from './helpers/client.js';
+import { playTutorial } from './helpers/tutorial.js';
 
 const log = (...a) => console.log('   ·', ...a);
 const d2 = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -262,21 +263,16 @@ test('M2 — missões do capítulo 1: tutorial, Contar as Pessoas e Ratos no Sul
   await withServer(async (server, url) => {
     const A = await newChar(url, 'missao', 'emberweaver', 'Aprendiz');
     assert.ok(A.journal.available.some((q) => q.id === 'tutorial'));
-    await goTo(A, 26, 48);
-    const t = await A.request('talk', { npc: 'mara' });
-    assert.ok(t.quests.offer.some((q) => q.id === 'tutorial'));
-    assert.equal((await A.request('quest_accept', { quest: 'tutorial', npc: 'mara' })).ok, true);
-    const early = await A.request('quest_turnin', { quest: 'tutorial', npc: 'mara' });
-    assert.equal(early.reason, 'Ainda falta: Resgate Bento, Ligia e Caio (0/3).');
-    for (const [id, x, z] of [['rescue_bento', 34, 44], ['rescue_ligia', 40, 58], ['rescue_caio', 50, 40]]) {
-      await goTo(A, x, z + 1);
-      assert.equal((await A.request('interact', { object: id })).ok, true);
-    }
-    await goTo(A, 26, 48);
+    // tutorial «Três do Outro Lado»: os sete passos guiados com Bento, Ligia e Caio escoltados até o posto
+    // (roteiro em helpers/tutorial.js; detalhes em tutorial.test.js)
+    await playTutorial(A, { skill: 'glass_spark', log: () => {} });
+    A.char = (await A.request('char')).char;
+    const xpBefore = A.char.xp;
     const done = await A.request('quest_turnin', { quest: 'tutorial', npc: 'mara' });
     assert.equal(done.ok, true, done.reason);
-    assert.equal(done.char.xp, 60);
-    log('tutorial: três resgates por interação, entrega a Mara: +60 XP e 3 tônicos');
+    assert.equal(done.char.xp - xpBefore, 60);
+    assert.ok(done.char.items.some((i) => i.defId === 'map_estrada_velha' && i.loc === 'bag'));
+    log('tutorial: Bento, Ligia e Caio escoltados até o círculo do posto, entrega a Mara: +60 XP, 3 tônicos e o Mapa da Estrada Velha');
     await goTo(A, 16, 48);
     assert.equal((await A.request('quest_accept', { quest: 'c1_count', npc: 'teodoro' })).ok, true);
     await goTo(A, 23, 54);

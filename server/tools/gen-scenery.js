@@ -20,7 +20,8 @@ const ROADS = {
     { w: 6, pts: [[0, 50], [160, 50]] },
     { w: 4, pts: [[136, 50], [143, 66], [150, 90]] },
     { w: 3, pts: [[30, 52], [37, 62], [43, 69]] },
-    { w: 3, pts: [[84, 52], [87, 61]] },
+    // trilha da Curva dos Cães: a matilha fica longe da estrada (D164)
+    { w: 3, pts: [[84, 52], [88, 64], [91, 75]] },
   ],
   pedrambar: [{ w: 8, pts: [[0, 30], [60, 30]] }, { w: 6, pts: [[30, 4], [30, 56]] }],
   vau_de_nacar: [{ w: 8, pts: [[0, 30], [60, 30]] }, { w: 6, pts: [[30, 4], [30, 56]] }],
@@ -118,6 +119,8 @@ for (const [id, map] of Object.entries(doc.maps)) {
   for (const pt of map.portals ?? []) avoid.push([pt.x, pt.z, 7]);
   for (const n of map.npcs ?? []) avoid.push([n.x, n.z, 3.5]);
   for (const o of map.objects ?? []) avoid.push([o.x, o.z, 3.2]);
+  // quem espera resgate no tutorial (e os bichos que cercam Caio) fica em chão livre
+  for (const pd of Object.values(map.rescue?.people ?? {})) avoid.push([pd.x, pd.z, pd.free === 'guards' ? 5 : 3.5]);
   if (map.guardPost && map.guardPost.safeRadius < 30) avoid.push([map.guardPost.x, map.guardPost.z, Math.min(map.guardPost.safeRadius, 14) + 2]);
   const mon = MONUMENTS[id];
   if (mon) avoid.push([mon.x, mon.z, mon.r + 2]);

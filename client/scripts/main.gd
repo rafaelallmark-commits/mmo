@@ -1526,6 +1526,12 @@ func _on_message(m: Dictionary) -> void:
 		"escort":
 			if hud:
 				hud.on_escort(m)
+		"say":
+			# fala de quem você resgata no tutorial (Bento, Ligia, Caio)
+			if hud:
+				hud.say(m)
+			if world:
+				world.on_say(m)
 		"hit":
 			if world:
 				world.on_hit(m)

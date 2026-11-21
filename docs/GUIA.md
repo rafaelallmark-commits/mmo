@@ -111,6 +111,28 @@ aceitar, na mesma tela dá para baixar seus dados ou excluir a conta.
 A tela de título também tem **Créditos e licenças**: quem fez o quê, os modelos de personagem e as licenças do
 motor Godot e dos componentes que vêm com ele.
 
+## 3.1 Os primeiros 5 minutos: «Três do Outro Lado»
+
+Todo personagem começa no **Posto da Ponte**, na ponta oeste da Estrada Velha. Clique em **Mara Quintela** e aceite
+**Três do Outro Lado**: Bento, Ligia e o menino Caio ficaram do outro lado e você vai buscá-los. Uma **dica na tela**,
+acima da barra de atalhos, mostra o passo atual (de 1 a 7) e muda sozinha quando você o cumpre:
+
+1. andar até Bento (clique no chão perto dele);
+2. atacar um Rato de Sulco (clique nele);
+3. usar a habilidade da **tecla 1**;
+4. Ligia está ferida: beba um Tônico de Vida (**tecla 7**) perto dela;
+5. coletar o saque que o rato derrubou (clique nele no chão);
+6. libertar Caio: dois bichos aparecem e batem no menino — derrote os dois (à distância, mantenha distância; corpo a
+   corpo, fique entre eles e o Caio);
+7. no **segundo toque do sino**, uma faixa vermelha acende embaixo de você: saia dela **para o lado** antes que estoure
+   (é o mesmo aviso que o piso do calabouço dá).
+
+Quem você soltou anda atrás de você; se ficar para trás, espera onde está — volte para buscar. Entre no círculo do
+posto com os três e fale com Mara: 60 XP, 3 tônicos e o **Mapa da Estrada Velha** (tecla **M**).
+
+Quem é de **Vau de Nácar** atravessa a Estrada Velha para falar com o mestre da classe (missão 1.3): pela estrada,
+nenhum bicho agressivo alcança você.
+
 ## 4. As oito classes
 
 | Origem | Classe | Papel | Armas |
@@ -141,7 +163,8 @@ O **escudo** (Bastião e Escudeiro) tem chance de **bloqueio** contra golpes de 
 | Habilidades | **1–6** (a barra mostra a recarga; depois de cada habilidade há 1 s de recarga global) |
 | Tônicos | **7** vida, **8** mana (o mais forte que você pode usar) |
 | Câmera | **Q/E** ou botão direito arrastando giram; a roda aproxima |
-| Painéis | **I** bolsa, **C** ficha (atributos e habilidades), **J** missões, **L** clã, **Enter** chat, **Esc** fecha |
+| Mapa | **M** — o mapa de onde você está (estradas, portais com o destino, NPCs, posto de guarda, você e o grupo); precisa do Mapa da Estrada Velha, recompensa do tutorial, e vale em todos os mapas |
+| Painéis | **I** bolsa, **C** ficha (atributos e habilidades), **J** missões, **L** clã, **M** mapa, **Enter** chat, **Esc** fecha |
 
 Habilidades com **tempo de conjuração** mostram a barra "Conjurando…": fique parado até o fim — andar, atacar
 ou usar um item interrompe (sem gastar mana).

@@ -61,7 +61,8 @@
   "amulet": "Amuleto",
   "potion": "Tônico",
   "material": "Material",
-  "quest": "Item de missão"
+  "quest": "Item de missão",
+  "map": "Mapa"
  },
  "items": {
   "axe_1h_t1": {
@@ -6230,6 +6231,20 @@
    "value": 0,
    "questItem": true,
    "description": "Núcleo de Escória Pressurizada que ainda pulsa. Joca calibra a Bacia de Vapor com eles. Só cai com a missão \"Escória Viva\" ativa."
+  },
+  "map_estrada_velha": {
+   "id": "map_estrada_velha",
+   "name": "Mapa da Estrada Velha",
+   "family": "map",
+   "kind": "map",
+   "slot": null,
+   "level": 1,
+   "rarity": "uncommon",
+   "classes": null,
+   "req": {},
+   "questItem": true,
+   "value": 1,
+   "description": "O mapa dobrado de Mara Quintela, cheio de anotações nas margens. Com ele, a tecla M mostra o mapa de onde você estiver."
   }
  }
 }

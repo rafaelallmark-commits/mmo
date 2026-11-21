@@ -549,6 +549,7 @@ export class Zone {
     p.lastCombatAt = this.now;
     if (target && target.state !== 'dead' && needsEnemy) p.targetId = target.eid;
     this.broadcast({ t: 'cast', eid: p.eid, skill: skillId, target: target?.eid ?? ally?.eid ?? null, x: typeof x === 'number' ? r2(x) : undefined, z: typeof z === 'number' ? r2(z) : undefined });
+    this.hooks.onCast?.(p, skillId);
     return { ok: true, mp: Math.floor(c.mp), cooldownMs: s.cooldownMs, hits: res.hits };
   }
 
@@ -572,6 +573,7 @@ export class Zone {
       if (it.qty <= 0) { c.items.delete(it.id); this.store.deleteItem(c.id, it.id); } else this.store.saveItems(c.id, [it]);
       this.store.saveCharacter(c);
     });
+    this.hooks.onUseItem?.(p, def);
     return { ok: true, hp: Math.floor(c.hp), mp: Math.floor(c.mp), remaining: Math.max(0, it.qty) };
   }
 
@@ -758,6 +760,7 @@ export class Zone {
     }
     if (this.mapHazards.length) this.tickMapHazards();
     this.tickGround();
+    this.hooks.onTick?.(dt); // tutorial da Estrada Velha (server/src/tutorial.js)
   }
 
   // Persegue um ponto: direto se houver linha de visão; senão por caminho A* recalculado
@@ -957,6 +960,7 @@ export class Zone {
     m.respawnAt = m.def.respawnSec > 0 && !m.noRespawn ? this.now + m.def.respawnSec * 1000 : Infinity;
     this.broadcast({ t: 'death', eid: m.eid });
     onMonsterDeath(this, m); // o golpe que preparava não sai; explosão avisada (Sapo-Bomba, Escória)
+    this.hooks.onMonsterDeath?.(m);
     const radius = this.f.xp.shareRadius;
     // chefe: quem caiu na reta final também leva XP, saque e o crédito da missão (a participação já está
     // registrada); nos demais monstros, só quem está de pé
@@ -994,6 +998,7 @@ export class Zone {
         // materiais de coleta que só caem com a missão ativa: para todo participante creditado (como os
         // abates das missões), um por abate
         if (!m.noLoot) for (const q of this.hooks.questDrops?.(c, m.defId) ?? []) if (this.rng() < q.chance) drops.push({ defId: q.defId, qty: 1, gold: 0 });
+        if (s.lootEligible && !m.noLoot) this.hooks.extraDrops?.(p, m, drops); // ex.: o saque garantido do tutorial
         if (daily) this.send(c.id, { t: 'system', text: `Elite diária: ${m.def.name} — XP em dobro e saque extra hoje.` });
         for (const d of drops) {
           const lp = this.nav.nearestFree(m.x + (this.rng() - 0.5) * 2, m.z + (this.rng() - 0.5) * 2, 3) ?? { x: m.x, z: m.z };
@@ -1234,7 +1239,8 @@ export class Zone {
   }
 
   // ---------- visões enviadas ao cliente ----------
-  snapshot() {
+  // forCharId: quem recebe (entidades só do dono, como os resgatados do tutorial, vão só para ele)
+  snapshot(forCharId = null) {
     const ents = [];
     for (const p of this.players.values()) {
       const c = p.char;
@@ -1245,8 +1251,14 @@ export class Zone {
       const fx = m.fx.filter((f) => f.until > this.now).map((f) => f.kind);
       ents.push({ id: m.eid, k: 'm', def: m.defId, lvl: m.def.level, x: r2(m.x), z: r2(m.z), vx: r2(m.vx || 0), vz: r2(m.vz || 0), hp: Math.ceil(m.hp), mhp: m.def.hp, st: m.state, tgt: m.targetId, fx: fx.length ? fx : undefined });
     }
-    for (const e of this.escorts.values()) ents.push(e.view());
+    for (const e of this.escorts.values()) if (!e.ownerOnly || e.ownerCharId === forCharId) ents.push(e.view());
     return { t: 'snap', now: Math.round(this.now), map: this.mapId, ents };
+  }
+
+  // Há entidades que só o dono vê? (o snapshot completo deixa de ser o mesmo para todos)
+  hasPrivate() {
+    for (const e of this.escorts.values()) if (e.ownerOnly) return true;
+    return false;
   }
 
   // Registros para snapshots por diferença (server.js sendSnapshots): os mesmos campos do
@@ -1282,7 +1294,7 @@ export class Zone {
     for (const e of this.escorts.values()) {
       const px = r2(e.x), pz = r2(e.z), vx = r2(e.vx || 0), vz = r2(e.vz || 0);
       recs.push({
-        id: e.eid, x: e.x, z: e.z, px, pz, vx, vz,
+        id: e.eid, x: e.x, z: e.z, px, pz, vx, vz, owner: e.ownerOnly ? e.ownerCharId : null,
         A: `"k":"e","def":"${e.def.model ?? 'cart'}","n":${JSON.stringify(e.def.name)},"mhp":${e.mhp},"npc":${JSON.stringify(e.def.npc ?? null)}`,
         P: `"x":${px},"z":${pz}`,
         V: `"vx":${vx},"vz":${vz}`,

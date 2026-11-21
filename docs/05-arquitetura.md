@@ -71,6 +71,7 @@ mmo/
 │   │   ├── smith.js               ferreiro: custo, chance, risco (+4..+6), selo e rolagem do refino
 │   │   ├── escort.js              escolta da carroça (capítulo 4): rota, marcos, emboscadas, quebra
 │   │   ├── defense.js             defesa parada sobre a escolta (Joca na válvula, 2.2): ondas, cronômetro, recomeço
+│   │   ├── tutorial.js            «Três do Outro Lado»: Bento, Ligia e Caio por personagem (só o dono vê), segundo toque, chegada ao posto
 │   │   ├── trade.js               comércio entre jogadores: ofertas, travas, confirmação, troca numa transação
 │   │   ├── clans.js               clãs: fundar, convidar, cargos, liderança, mensagem do dia, chat do clã
 │   │   ├── duel.js                duelos sem morte: pedido, contagem, dano até 1 de vida, fuga e empate
@@ -104,6 +105,8 @@ mmo/
 │   │   ├── m3.test.js             aceitação do Marco 3 (refino, depósito, elite diária, Custódio com bots)
 │   │   ├── ch4.test.js            capítulo 4: canalização, escolta, escolha de diálogo
 │   │   ├── secundarias.test.js    secundárias: coleta só com a missão, diárias, armadura, títulos, defesa, quadro, fontes
+│   │   ├── tutorial.test.js       tutorial: sete passos, resgatados escoltados até o posto, só para o dono, mapa
+│   │   ├── estrada.test.js        estrada segura: do posto ao Vau no nível 2 sem ataque (pior caso e caminhada)
 │   │   ├── snapshots.test.js · store.test.js   snapshots por diferença · migrações
 │   │   ├── publico.test.js        contas, token, limites, papéis, desligamento, TLS, SMTP
 │   │   ├── contas.test.js         confirmar depois, conta não confirmada vence, limites de e-mail e de código, termos novos
@@ -115,6 +118,7 @@ mmo/
 │   │   ├── multizona.test.js      mundo + 2 zonas: transferência, tokens, posse única, grupo/clã, quedas
 │   │   ├── versao.test.js         versão da release (CINZAS_VERSION) no hello, no registro e no /bug
 │   │   ├── site.test.js           página do jogo sem rastreadores e as rotas do Caddyfile
+│   │   ├── helpers/tutorial.js    roteiro do tutorial para clientes simulados
 │   │   └── helpers/client.js      cliente simulado (mesmo protocolo do Godot)
 │   └── tools/
 │       ├── validate-data.js       validador (também usado nos testes)
@@ -212,7 +216,7 @@ Todo pedido do cliente leva `rid` (texto único por pedido). A resposta é `{ t:
 
 Com várias zonas, o `enter` de um personagem cujo mapa é de outra zona responde `{ ok, transfer: { url, token, mapId } }`, e um portal para um mapa de outra zona manda o evento `transfer` com os mesmos campos (seção [Múltiplas zonas](#múltiplas-zonas)).
 
-Eventos do servidor: `hello`, `defs`, `snap` (10 Hz: `now` = relógio da zona em ms; por entidade id, tipo, posição, velocidade `vx`/`vz`, vida, alvo; nos personagens, `staff` — verdadeiro para contas `gm`/`admin`, que o cliente mostra como **[Equipe]**), `hit` (origem, destino, dano, crítico, errou, habilidade), `death`, `spawn`, `loot` (só para o dono), `xp`, `level_up`, `char`, `buff`, `ground`, `cast`, `player_dead`, `respawn`, `joined`, `left`, `chat` (com `staff: true` quando quem fala é da equipe), `kicked`, `cast` (habilidade usada, para os efeitos), `shield`, `quest_update`, `party`, `trial`, `boss` (fase, vida, proteção, válvula, comportas), `warn` (aviso de perigo: círculo, cone ou linha, duração; nos golpes de monstro também `src`, `id`, `kind` e `name` da mecânica; `hazard` quando é um perigo do mapa, como a esteira da Oficina), `warn_cancel` (o golpe avisado não sai: monstro atordoado, morto ou fora da luta), `mech` (mecânicas dos monstros: `burst`, `pull`, `drain`, `echo`, `dash`, `summon`, `vanish`, `pressure`), `debuff` (efeito negativo num jogador: id, nome, duração, texto), `cleanse` (a Alvorada tirou um efeito), `speed` (só para o próprio jogador: a velocidade de caminhada mudou por reforço ou efeito negativo; a previsão do movimento acompanha), `notice` (`kind`: `shutdown`, `announce` ou `staff` — denúncia nova ou `/bug`, só para a equipe) e `escort` (mensagens da escolta e da defesa: marcos, ondas, queda, recomeço, vitória e o tempo que falta).
+Eventos do servidor: `hello`, `defs`, `snap` (10 Hz: `now` = relógio da zona em ms; por entidade id, tipo, posição, velocidade `vx`/`vz`, vida, alvo; nos personagens, `staff` — verdadeiro para contas `gm`/`admin`, que o cliente mostra como **[Equipe]**), `hit` (origem, destino, dano, crítico, errou, habilidade), `death`, `spawn`, `loot` (só para o dono), `xp`, `level_up`, `char`, `buff`, `ground`, `cast`, `player_dead`, `respawn`, `joined`, `left`, `chat` (com `staff: true` quando quem fala é da equipe), `kicked`, `cast` (habilidade usada, para os efeitos), `shield`, `quest_update`, `party`, `trial`, `boss` (fase, vida, proteção, válvula, comportas), `warn` (aviso de perigo: círculo, cone ou linha, duração; nos golpes de monstro também `src`, `id`, `kind` e `name` da mecânica; `hazard` quando é um perigo do mapa, como a esteira da Oficina; `kind: 'bell2'` é a faixa do segundo toque do tutorial, só para o dono), `warn_cancel` (o golpe avisado não sai: monstro atordoado, morto ou fora da luta), `mech` (mecânicas dos monstros: `burst`, `pull`, `drain`, `echo`, `dash`, `summon`, `vanish`, `pressure`), `debuff` (efeito negativo num jogador: id, nome, duração, texto), `cleanse` (a Alvorada tirou um efeito), `speed` (só para o próprio jogador: a velocidade de caminhada mudou por reforço ou efeito negativo; a previsão do movimento acompanha), `notice` (`kind`: `shutdown`, `announce` ou `staff` — denúncia nova ou `/bug`, só para a equipe), `say` (fala de quem o jogador resgata no tutorial: `eid`, `name`, `text`, só para o dono) e `escort` (mensagens da escolta e da defesa: marcos, ondas, queda, recomeço, vitória e o tempo que falta). Entidades do tutorial (Bento, Ligia, Caio) vão no `snap` como tipo `e` com `def` `man`/`woman`/`boy` e só para o dono (`zone.snapshot(charId)` e o filtro `owner` dos snapshots por diferença).
 
 ## Movimento no cliente
 

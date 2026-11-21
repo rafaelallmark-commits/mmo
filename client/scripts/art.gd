@@ -215,13 +215,14 @@ static func face_decal(head: Node3D, r: float, iris: Color, fem: bool, fierce :=
 const TWO_HANDED := ["axe_2h", "spear_2h", "staff_2h", "sword_2h"]
 const OFFHAND_ACC := {"shield": "shield", "light_shield": "small_shield", "quiver": "quiver"}
 
-static func character(class_id: String, weapon_family := "", is_npc := false, npc_color := Color("#c9b07a"), seed := 0, offhand := "?") -> Node3D:
+## gender: força o corpo do morador ("man"/"boy" ou "woman"/"girl"; vazio = sorteado pela semente).
+static func character(class_id: String, weapon_family := "", is_npc := false, npc_color := Color("#c9b07a"), seed := 0, offhand := "?", gender := "") -> Node3D:
 	if VrmChar.available():
-		return vrm_character(class_id, weapon_family, is_npc, npc_color, seed, offhand)
-	return proc_character(class_id, weapon_family, is_npc, npc_color, seed)
+		return vrm_character(class_id, weapon_family, is_npc, npc_color, seed, offhand, gender)
+	return proc_character(class_id, weapon_family, is_npc, npc_color, seed, gender)
 
 ## Personagem de anime (modelo VRM) com cores e acessórios da classe.
-static func vrm_character(class_id: String, weapon_family := "", is_npc := false, npc_color := Color("#c9b07a"), seed := 0, offhand := "?") -> Node3D:
+static func vrm_character(class_id: String, weapon_family := "", is_npc := false, npc_color := Color("#c9b07a"), seed := 0, offhand := "?", gender := "") -> Node3D:
 	var look: Dictionary
 	var model_id := "girl"
 	var acc: Array = []
@@ -229,6 +230,10 @@ static func vrm_character(class_id: String, weapon_family := "", is_npc := false
 		var rng := RandomNumberGenerator.new()
 		rng.seed = seed
 		model_id = "girl" if rng.randf() < 0.5 else "boy"
+		if gender in ["man", "boy"]:
+			model_id = "boy"
+		elif gender in ["woman", "girl"]:
+			model_id = "girl"
 		var hair: Color = NPC_HAIR[rng.randi() % NPC_HAIR.size()]
 		look = {"outfit": npc_color, "pants": npc_color.darkened(0.55), "boots": Color("#4a3428"), "hair": hair,
 			"eyes": Color.from_hsv(rng.randf(), 0.5, 0.55), "trim": npc_color.darkened(0.3), "cape": npc_color.darkened(0.2), "scarf": npc_color.lightened(0.2)}
@@ -272,7 +277,7 @@ static func vrm_character(class_id: String, weapon_family := "", is_npc := false
 	return c
 
 ## Personagem procedural (reserva, se os modelos VRM não estiverem disponíveis).
-static func proc_character(class_id: String, weapon_family := "", is_npc := false, npc_color := Color("#c9b07a"), seed := 0) -> Node3D:
+static func proc_character(class_id: String, weapon_family := "", is_npc := false, npc_color := Color("#c9b07a"), seed := 0, gender := "") -> Node3D:
 	var look: Dictionary = CLASS_LOOK.get(class_id, {})
 	if look.is_empty() or is_npc:
 		var rng = RandomNumberGenerator.new()
@@ -280,6 +285,8 @@ static func proc_character(class_id: String, weapon_family := "", is_npc := fals
 		look = {"outfit": npc_color, "trim": npc_color.darkened(0.35), "hair": NPC_HAIR[rng.randi() % NPC_HAIR.size()],
 			"eyes": Color.from_hsv(rng.randf(), 0.5, 0.6), "hairstyle": NPC_STYLES[rng.randi() % NPC_STYLES.size()],
 			"garb": ["coat", "tunic", "skirt"][rng.randi() % 3], "headgear": "", "fem": rng.randf() < 0.5}
+		if gender != "":
+			look["fem"] = gender in ["woman", "girl"]
 	var outfit: Color = look["outfit"]
 	var trim: Color = look["trim"]
 	var hair: Color = look["hair"]

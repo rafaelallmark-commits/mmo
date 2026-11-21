@@ -529,6 +529,26 @@ func chain(a: Vector3, b: Vector3, c: Color) -> void:
 	tw.tween_callback(mi.queue_free)
 	_sparks(a, c, 18, 2.5, 0.3, 0.5)
 
+## Faixa de perigo sobre o relevo (o segundo toque do tutorial): pedaços de 2 m, cada um na altura do chão,
+## que acendem juntos e estouram no fim do aviso (a linha inteira de uma vez sumiria nas subidas).
+func warn_strip(x: float, z: float, yaw: float, length: float, width: float, ms: float, c := COLORS["danger"]) -> void:
+	var dir := Vector2(sin(yaw), cos(yaw))
+	var n := maxi(1, int(ceil(length / 2.0)))
+	var seg := length / float(n)
+	for k in n:
+		var p: Vector3 = world._gpos(x + dir.x * seg * (k + 0.5), z + dir.y * seg * (k + 0.5)) + Vector3(0, 0.12, 0)
+		var mi := _mesh(Gear.box(Vector3(width, 0.04, seg + 0.06)), glow(c, 0.3), p)
+		mi.rotation.y = yaw
+		var first: bool = k == 0
+		var tw := create_tween()
+		tw.tween_property(mi.material_override, "albedo_color:a", 0.75, ms / 1000.0)
+		tw.tween_callback(func():
+			impact(p, c, false)
+			if first:
+				Sfx.play("spell_fire", world._gpos(x + dir.x * length / 2.0, z + dir.y * length / 2.0), 0.0, 1.15))
+		tw.tween_property(mi.material_override, "albedo_color:a", 0.0, 0.3)
+		tw.tween_callback(mi.queue_free)
+
 # ---------------- eventos do servidor ----------------
 func on_cast(m: Dictionary) -> void:
 	var s: Dictionary = world.main.defs.get("skills", {}).get(m.get("skill", ""), {})
@@ -708,6 +728,10 @@ func on_warn(m: Dictionary) -> void:
 		Sfx.warn(kind)
 		if kind == "valve":
 			Sfx.play("steam_vent", at)
+	if kind == "bell2":
+		# segundo toque do tutorial: a faixa fica no terreno aberto da Estrada Velha
+		warn_strip(float(m["x"]), float(m["z"]), float(m.get("yaw", 0.0)), float(m.get("length", 10.0)), float(m.get("width", 2.0)), ms, c)
+		return
 	var root: Node3D
 	if shape == "line":
 		root = warn_line(at, float(m.get("yaw", 0.0)), float(m.get("length", 10.0)), float(m.get("width", 2.0)), ms, c)

@@ -42,6 +42,11 @@ function classesDoc() {
       out.push(`- **Atributos iniciais:** ${ATTRS.map((a) => `${A(a)} ${c.start[a]}`).join(' · ')}`);
       const st = derivedStats({ classId: cid, level: 1, alloc: {} }, c.startingKit.equip.map((id) => ({ def: data.items[id] })), data);
       out.push(`- **Nível 1 com o kit inicial:** vida ${st.maxHp}, mana ${st.maxMp}, defesa ${st.defense}, precisão ${st.accuracy}, crítico ${n1(st.crit)}%`);
+      // dica do tutorial por classe (data/quests.json, objetivos com tipMelee/tipRanged; D165)
+      const tut = data.quests.tutorial;
+      const ranged = !!c.startingKit.equip.map((i) => data.items[i]).find((d) => d.slot === 'weapon')?.ranged;
+      const tips = (tut?.objectives ?? []).map((o) => o[ranged ? 'tipRanged' : 'tipMelee']).filter(Boolean);
+      if (tips.length) out.push(`- **No tutorial (${tut.title}):** classe ${ranged ? 'à distância' : 'corpo a corpo'}; a tecla 1 é ${data.skills[c.skills[0]].name}. Dicas: ${tips.map((t) => `«${t}»`).join(' ')}`);
       out.push(`- **Kit inicial (tutorial adapta à classe):** equipado ${c.startingKit.equip.map((i) => data.items[i].name).join(', ')}; na bolsa ${c.startingKit.bag.map(([i, q]) => `${data.items[i].name}${q > 1 ? ` ×${q}` : ''}`).join(', ')}\n`);
       const rows = c.skills.map((sid) => {
         const s = data.skills[sid];

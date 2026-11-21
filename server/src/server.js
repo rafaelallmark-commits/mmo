@@ -19,6 +19,7 @@ import { createStore } from './db.js';
 import { Zone, lootView } from './zone.js';
 import { makeRng } from './rng.js';
 import { QuestEngine } from './quests.js';
+import { TutorialManager } from './tutorial.js';
 import { Dungeon } from './dungeon.js';
 import { checkEquip, applyEquip, checkUnequip, revalidateEquipment, bagCount, BAG_CAPACITY, EQUIP_SLOTS } from './equipment.js';
 import { totalAttributePoints, derivedStats } from './rules.js';
@@ -69,6 +70,7 @@ export class GameServer {
     this.store = createStore(this.opts.dbPath);
     this.rng = makeRng(this.opts.seed);
     this.quests = new QuestEngine({ data: this.data, store: this.store });
+    this.tutorial = new TutorialManager(this);
     this.sessions = new Set();
     this.metrics = new Metrics();
     this.ipConns = new Map(); // ip -> conexões abertas
@@ -153,6 +155,13 @@ export class GameServer {
           this.notifyQuests(p, changed);
         },
         titlesOf: (char) => this.quests.titles(char),
+        // tutorial «Três do Outro Lado» (server/src/tutorial.js): habilidade da tecla 1, tônico perto de
+        // Ligia, bichos de Caio, saque garantido e o passo da zona (pessoas resgatadas, segundo toque, chegada)
+        onCast: (p, skillId) => this.notifyQuests(p, this.quests.onSkill(p.char, skillId)),
+        onUseItem: (p, def) => this.tutorial.onUseItem(p, def),
+        onMonsterDeath: (m) => this.tutorial.onMonsterDeath(zone, m),
+        extraDrops: (p, m, drops) => this.tutorial.extraDrops(p, m, drops),
+        onTick: (this.data.maps[mapId]?.rescue && !instanceId) ? () => this.tutorial.tick(zone) : undefined,
       },
     });
     this.zones.set(key, zone);
@@ -278,11 +287,14 @@ export class GameServer {
   sendSnapshots(key, z) {
     let full = null;
     let recs = null;
+    let priv = null; // entidades só do dono (resgatados do tutorial): o snapshot completo muda por jogador
     const R2 = INTEREST_R * INTEREST_R;
     for (const [charId, p] of z.players) {
       const s = this.byChar.get(charId);
       if (!s || s.ws.readyState !== 1) continue;
       if (!s.delta) {
+        if (priv == null) priv = z.hasPrivate();
+        if (priv) { this.rawSend(s, JSON.stringify(z.snapshot(charId)), true); continue; }
         if (full == null) full = JSON.stringify(z.snapshot());
         this.rawSend(s, full, true);
         continue;
@@ -296,6 +308,7 @@ export class GameServer {
       let visible = 0;
       const seen = new Set();
       for (const r of recs) {
+        if (r.owner != null && r.owner !== charId) continue;
         const dx = r.x - vx, dz = r.z - vz;
         if (dx * dx + dz * dz > R2 && r.id !== p.targetId && r.id !== p.eid) continue;
         seen.add(r.id);
@@ -961,7 +974,7 @@ export class GameServer {
       s.leaseEpoch = leaseEpoch;
       this.world.notify('online', { charId, name: char.name, mapId: zone.mapId, state: this.memberSummary(p) });
     }
-    return { ok: true, char: zone.charView(p), snapshot: zone.snapshot(), loot: this.lootFor(charId, zone.mapId), journal: this.quests.journal(char), restoredFromDeath: wasDead && !back, rejoinedDungeon: !!back, cache: false };
+    return { ok: true, char: zone.charView(p), snapshot: zone.snapshot(charId), loot: this.lootFor(charId, zone.mapId), journal: this.quests.journal(char), restoredFromDeath: wasDead && !back, rejoinedDungeon: !!back, cache: false };
   }
 
   // ---------- várias zonas: entrada, chegada e saída por transferência ----------
@@ -1161,7 +1174,7 @@ export class GameServer {
     if (!dest.instanceId) { delete p.char.saveMapId; delete p.char.saveX; delete p.char.saveZ; }
     this.store.saveCharacter(p.char);
     this.broadcastZone(destKey, { t: 'joined', eid: np.eid, name: p.char.name });
-    this.sendTo(this.byChar.get(charId), { t: 'zone', mapId: dest.mapId, instance: dest.instanceId, char: dest.charView(np), snapshot: dest.snapshot(), loot: this.lootFor(charId, dest.mapId) });
+    this.sendTo(this.byChar.get(charId), { t: 'zone', mapId: dest.mapId, instance: dest.instanceId, char: dest.charView(np), snapshot: dest.snapshot(charId), loot: this.lootFor(charId, dest.mapId) });
     this.notifyQuests(np, this.quests.onEnterMap(p.char, dest.mapId));
     this.world?.notify('moved', { charId, mapId: dest.mapId });
     return np;
@@ -1319,6 +1332,7 @@ export class GameServer {
     const c = p.char;
     const it = c.items.get(instance);
     if (!it || it.loc !== 'bag') return { ok: false, code: 'not_in_bag', reason: 'Só itens da bolsa podem ir para o depósito.' };
+    // item de missão (o Mapa da Estrada Velha) é do personagem: no depósito, outro personagem da conta o pegaria
     if (this.data.items[it.defId]?.questItem) return { ok: false, code: 'bound', reason: 'Itens de missão não vão para o depósito.' };
     const view = this.storageView(p);
     if (view.items.length >= view.capacity) return { ok: false, code: 'storage_full', reason: `Depósito cheio (${view.capacity} espaços).` };
@@ -2012,6 +2026,7 @@ export class GameServer {
       result.char = p.zone.charView(p); // objetivos "collect" são contados ao vivo na bolsa
       // o diário acompanha a coleta (antes só mudava no próximo abate)
       if (!result.alreadyClaimed && !result.discarded && result.defId) this.notifyQuests(p, this.quests.collectingQuests(c, result.defId));
+      if (!result.alreadyClaimed) this.notifyQuests(p, this.quests.onPickup(c)); // "colete o saque" (tutorial)
     }
     return result;
   }
