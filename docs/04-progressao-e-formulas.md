@@ -104,19 +104,19 @@ Cada espécie com mecânica tem um campo `mechanic` em `data/monsters.json` (o s
 | Sapo-Bomba (5) | **Estouro de Vapor** | Ao morrer, explosão de 3,5 m onde caiu, avisada 1,5 s antes: 200% do dano como dano mágico em quem ficou. |
 | Sanguessuga Fervente (9) | **Sanguessuga** | Cada mordida que acerta gruda: **Sanguessuga** por 3 s (−3% da mana máxima por segundo), renovado a cada mordida. |
 | Bomba-Mestra Desregulada (8, elite) | **Pressão Alternada** | Pressão alta por 8 s (+30% de dano); na virada solta **Vapor** (círculo de 4,5 m em volta do monstro, avisado 1,75 s antes; em quem ficou: 150% do dano como dano mágico) e passa 6 s em pressão baixa (−50% de defesa e resistência mágica). |
-| Rato-Engrenagem (10) | **Enxame** | +25% de dano por Rato-Engrenagem lutando a até 6 m (até +75%). |
+| Rato-Engrenagem (10) | **Enxame** | +20% de dano por Rato-Engrenagem lutando a até 6 m (até +40%). |
 | Soldador Cego (11) | **Cone de Faíscas** | Cone de 6 m e 70° à frente, avisado 1,5 s antes; em quem ficou: 160% do dano como dano mágico. A cada 9 s, a primeira 3,5 s depois de entrar em combate. |
 | Lâmina de Esteira (12) | **Corrida no Trilho** | Linha de 10 × 1,6 m à frente, só nos eixos do mapa, avisado 1,5 s antes; em quem ficou: 180% do dano físico; o monstro corre a linha inteira. A cada 9 s, a primeira 3 s depois de entrar em combate. |
-| Supervisor de Turno (11, elite) | **Chamado de Turno** | A cada limiar de vida (70%, 40%, 10%) chama 2 Ratos-Engrenagem, até 6 vivos; os reforços não deixam saque e somem quando o invocador cai ou desiste. |
+| Supervisor de Turno (11, elite) | **Chamado de Turno** | A cada limiar de vida (70%, 40%, 10%) chama 2 Ratos-Engrenagem, até 6 vivos; os reforços dão XP, não deixam saque e somem quando o invocador cai ou desiste. |
 | Morcego de Eco (12) | **Grito Desorientador** | Círculo de 4 m em volta do monstro, avisado 1,5 s antes; em quem ficou: **Desorientado** por 4 s (−25% de acerto, −25% de velocidade). A cada 10 s, a primeira 4 s depois de entrar em combate. |
-| Ecoante (14) | **Eco** | A cada 5,4 s (a primeira 3,6 s depois de entrar em combate), no lugar do golpe comum, devolve 60% do último golpe que levou nos últimos 6 s (até 200% do seu dano máximo) a quem o deu, se estiver a até 15 m. |
+| Ecoante (14) | **Eco** | A cada 5,4 s (a primeira 3,6 s depois de entrar em combate), no lugar do golpe comum, devolve 60% do último golpe que levou nos últimos 6 s (até 200% do seu dano máximo) a quem o deu, se estiver a até 15 m (senão, em quem ele enfrenta). |
 | Aranha de Conduto (16) | **Fio Condutor** | Círculo de 2,5 m onde o alvo está, avisado 1,75 s antes; em quem ficou: 120% do dano como dano mágico; atordoa 1 s (menos com Vitalidade). A cada 10 s, a primeira 3 s depois de entrar em combate. |
 | Mãe do Eco (15, elite) | **Grito da Mãe** | Círculo de 6 m em volta do monstro, avisado 2 s antes; em quem ficou: 120% do dano como dano mágico; gera um Ecoante, até 3 de uma vez. A cada 12 s, a primeira 5 s depois de entrar em combate. |
-| Draga Viva (17) | **Arrasto** | Círculo de 5 m em volta do monstro, avisado 1,75 s antes; em quem ficou: 100% do dano físico; puxa até 1,8 m dele; **Atolado** por 3 s (−40% de velocidade). A cada 15 s, a primeira 6 s depois de entrar em combate. |
-| Escória Pressurizada (18) | **Explosão de Escória** | Ao morrer, explosão de 4 m onde caiu, avisada 1,5 s antes: 220% do dano como dano mágico em quem ficou. |
+| Draga Viva (17) | **Arrasto** | Círculo de 5 m em volta do monstro, avisado 2 s antes; em quem ficou: 100% do dano físico; puxa até 1,8 m dele; **Atolado** por 3 s (−40% de velocidade). A cada 15 s, a primeira 6 s depois de entrar em combate. |
+| Escória Pressurizada (18) | **Explosão de Escória** | Ao morrer, explosão de 4 m onde caiu, avisada 1,75 s antes: 220% do dano como dano mágico em quem ficou. |
 | Fragmento do Custódio (19, elite) | **Descarga do Fragmento** | Linha de 14 × 2,2 m à frente, avisado 1,5 s antes; em quem ficou: 150% do dano como dano mágico; atordoa 1 s (menos com Vitalidade). A cada 10 s, a primeira 4 s depois de entrar em combate. Patrulha até 10 m de casa. |
 | Salamandra de Cisterna (21) | **Margem** | Passivo, mas ataca quem chega a 2,5 m. |
-| Toupeira de Basalto (24) | **Garras de Pedra** | Os golpes ignoram 30% da defesa. |
+| Toupeira de Basalto (24) | **Garras de Pedra** | Os golpes ignoram 25% da defesa. |
 | Selador da Porta Funda (24, elite) | **Selo** | Círculo de 6 m em volta do monstro, avisado 2 s antes; em quem ficou: 100% do dano como dano mágico; **Selado** por 3 s (sem habilidades). A cada 12 s, a primeira 5 s depois de entrar em combate. |
 
 O Custódio da Eclusa tem o encontro próprio do calabouço (válvulas, linhas do piso e comportas; docs/02 §5.3). Os demais monstros só perseguem e golpeiam; a assistência vale para todos os agressivos (atingido, chama os iguais parados a até 8 m).

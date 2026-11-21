@@ -873,6 +873,7 @@ func _on_zone(m: Dictionary) -> void:
 	# pé, sem evento 'respawn'; o painel do Custódio fica para trás ao sair da Eclusa)
 	if hud:
 		hud.clear_boss()
+		hud.clear_debuffs()  # os efeitos negativos ficam na zona de onde se saiu (o servidor também os tira)
 		if not m["char"].get("dead", false):
 			hud.hide_death()
 	show_loading(map_def().get("name", map_id))
@@ -1275,8 +1276,18 @@ func _on_message(m: Dictionary) -> void:
 			# se for o meu, na interface
 			if world and world.vfx:
 				world.vfx.on_debuff(m)
-			if hud and m.get("eid", "") == ch.get("eid", ""):
-				hud.on_debuff(m)
+			if m.get("eid", "") == ch.get("eid", ""):
+				if hud:
+					hud.on_debuff(m)
+				# atordoado: o servidor para o personagem; a previsão do movimento não segue andando
+				if world and m.get("id", "") == "stun":
+					world.halt_prediction()
+		"speed":
+			# a velocidade do meu personagem mudou (reforço, Desorientado, Atolado): a previsão acompanha
+			if ch.has("stats"):
+				ch["stats"]["moveSpeed"] = float(m.get("moveSpeed", 5.0))
+			if world:
+				world.set_move_speed(float(m.get("moveSpeed", 5.0)))
 		"cleanse":
 			if world and world.vfx:
 				world.vfx.on_cleanse(m)

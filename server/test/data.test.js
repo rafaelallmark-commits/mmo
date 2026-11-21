@@ -34,10 +34,13 @@ test('mecânica de monstro malformada é recusada: tipo, aviso curto demais, efe
   d.monsters.gear_rat.mechanic.kind = 'teleporte';
   d.monsters.belt_blade.mechanic.shape = 'cone'; // trilho só em linha (e o cone sem alcance)
   d.monsters.pump_toad.mechanic.radius = 0;
+  d.monsters.pressure_slag.mechanic.id = d.monsters.pump_toad.mechanic.id; // id repetido: o cliente confundiria os golpes
+  d.monsters.silt_eel.description = 'Espera na água rasa perto das bombas, '.repeat(3); // não cabe numa linha do quadro do alvo
   const { errors } = validate(d, loadBuilds());
   for (const what of ['blind_welder: mecânica: warnMs', 'echo_bat: mecânica: efeito negativo: durationMs', 'echo_bat: mecânica: efeito negativo: mod armorPct', 'conduit_spider: mecânica: stunMs',
     'shift_supervisor: mecânica: monstro rato_inexistente', 'shift_supervisor: mecânica: thresholdsPct', 'echo_mother: mecânica: reforços: shift_supervisor', 'rust_hound: mecânica: território',
-    'gear_rat: mecânica: tipo teleporte', 'belt_blade: mecânica: dash e rails', 'belt_blade: mecânica: falta range', 'pump_toad: mecânica: radius']) {
+    'gear_rat: mecânica: tipo teleporte', 'belt_blade: mecânica: dash e rails', 'belt_blade: mecânica: falta range', 'pump_toad: mecânica: radius',
+    'pressure_slag: mecânica steam_burst repete', 'silt_eel: descrição com']) {
     assert.ok(errors.some((e) => e.startsWith(`monstro ${what}`)), `${what} recusado: ${JSON.stringify(errors)}`);
   }
 });

@@ -341,18 +341,43 @@ func _warn_root(at: Vector3) -> Node3D:
 	root.position = at
 	return root
 
-## Marcação de perigo no chão (chefe ou monstro avisa antes de atacar): círculo vermelho que enche.
+## Material das marcações de perigo no chão: mistura comum (não soma luz como os efeitos), para o
+## vermelho ler igual na grama clara, na terra e na pedra escura do calabouço.
+func warn_mat(c: Color, alpha: float) -> StandardMaterial3D:
+	var key := "warn|%s|%s" % [c.to_html(), alpha]
+	if _mats.has(key):
+		return _mats[key]
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	m.render_priority = 1
+	m.albedo_color = Color(c.r, c.g, c.b, alpha)
+	_mats[key] = m
+	return m
+
+## Traço fino no chão de a até b (bordas de linha e de cone).
+func _warn_stroke(a: Vector3, b: Vector3, c: Color, alpha: float, parent: Node3D, w := 0.09) -> MeshInstance3D:
+	var d := a.distance_to(b)
+	var mi := _mesh(Gear.box(Vector3(w, 0.03, maxf(d, 0.01))), warn_mat(c, alpha), a.lerp(b, 0.5), parent)
+	mi.rotation.y = atan2(b.x - a.x, b.z - a.z)
+	return mi
+
+## Marcação de perigo no chão (chefe ou monstro avisa antes de atacar): a área inteira fica marcada de
+## leve, com a borda forte, e o vermelho enche do centro para fora até o golpe.
 ## end_sound: o som quando o círculo se completa; end_fx: o efeito do golpe (ver _warn_end).
 func warn_circle(at: Vector3, radius: float, ms: float, c := COLORS["danger"], end_sound := "spell_impact", end_fx := "") -> Node3D:
 	var root := _warn_root(at)
 	var edge := TorusMesh.new()
-	edge.inner_radius = 0.94
+	edge.inner_radius = 0.95
 	edge.outer_radius = 1.0
-	edge.rings = 48
+	edge.rings = 56
 	edge.ring_segments = 4
-	var e := _mesh(edge, glow(c, 0.9), Vector3(0, 0.1, 0), root)
-	e.scale = Vector3(radius, 0.05 * radius, radius)
-	var fill := _mesh(Gear.cyl(1.0, 1.0, 0.02, 40), glow(c, 0.3), Vector3(0, 0.08, 0), root)
+	var e := _mesh(edge, warn_mat(c, 0.9), Vector3(0, 0.13, 0), root)
+	e.scale = Vector3(radius, 0.04 * radius, radius)
+	var base := _mesh(Gear.cyl(1.0, 1.0, 0.02, 48), warn_mat(c, 0.12), Vector3(0, 0.1, 0), root)
+	base.scale = Vector3(radius, 1, radius)
+	var fill := _mesh(Gear.cyl(1.0, 1.0, 0.02, 48), warn_mat(c, 0.32), Vector3(0, 0.11, 0), root)
 	fill.scale = Vector3(0.05, 1, 0.05)
 	var tw := root.create_tween()
 	tw.tween_property(fill, "scale", Vector3(radius, 1, radius), ms / 1000.0)
@@ -361,52 +386,58 @@ func warn_circle(at: Vector3, radius: float, ms: float, c := COLORS["danger"], e
 		if end_sound != "":
 			Sfx.play(end_sound, at, 1.0, 0.85))
 	tw.tween_property(fill.material_override, "albedo_color:a", 0.0, 0.2)
+	tw.parallel().tween_property(base.material_override, "albedo_color:a", 0.0, 0.2)
 	tw.parallel().tween_property(e.material_override, "albedo_color:a", 0.0, 0.2)
 	tw.tween_callback(root.queue_free)
 	return root
 
-## Marcação de perigo em linha (investida, corrida no trilho, descarga).
+## Marcação de perigo em linha (investida, corrida no trilho, descarga): faixa com as bordas acesas,
+## cada vez mais vermelha até o golpe.
 func warn_line(at: Vector3, yaw: float, length: float, width: float, ms: float, c := COLORS["danger"]) -> Node3D:
 	var root := _warn_root(at)
-	var mi := _mesh(Gear.box(Vector3(width, 0.03, length)), glow(c, 0.35), Vector3(sin(yaw), 0, cos(yaw)) * (length / 2.0) + Vector3(0, 0.1, 0), root)
+	var fwd := Vector3(sin(yaw), 0, cos(yaw))
+	var side := Vector3(cos(yaw), 0, -sin(yaw)) * (width / 2.0)
+	var mi := _mesh(Gear.box(Vector3(width, 0.03, length)), warn_mat(c, 0.16), fwd * (length / 2.0) + Vector3(0, 0.1, 0), root)
 	mi.rotation.y = yaw
+	var y := Vector3(0, 0.13, 0)
+	for s in [side, -side]:
+		_warn_stroke(s + y, s + fwd * length + y, c, 0.9, root)
+	_warn_stroke(side + fwd * length + y, -side + fwd * length + y, c, 0.9, root)
 	var tw := root.create_tween()
-	tw.tween_property(mi.material_override, "albedo_color:a", 0.65, ms / 1000.0)
+	tw.tween_property(mi.material_override, "albedo_color:a", 0.5, ms / 1000.0)
 	tw.tween_callback(func():
 		line(at, yaw, length, width, c)
-		Sfx.play("spell_fire", at + Vector3(sin(yaw), 0, cos(yaw)) * (length / 2.0), -1.0, 1.25))
+		Sfx.play("spell_fire", at + fwd * (length / 2.0), -1.0, 1.25))
 	tw.tween_property(mi.material_override, "albedo_color:a", 0.0, 0.15)
 	tw.tween_callback(root.queue_free)
 	return root
 
-## Marcação de perigo em cone à frente (Cone de Faíscas do Soldador): o leque acende até o golpe.
+## Marcação de perigo em cone à frente (Cone de Faíscas do Soldador): as duas bordas e o arco acesos e o
+## leque cada vez mais vermelho até o golpe.
 func warn_cone(at: Vector3, yaw: float, reach: float, angle_deg: float, ms: float, c := COLORS["danger"], end_fx := "") -> Node3D:
 	var root := _warn_root(at)
 	var half := deg_to_rad(angle_deg) / 2.0
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var n := 20
+	var n := 24
 	for i in n:
 		var a0 := -half + (2.0 * half) * i / n
 		var a1 := -half + (2.0 * half) * (i + 1) / n
 		st.add_vertex(Vector3.ZERO)
 		st.add_vertex(Vector3(sin(a0), 0, cos(a0)) * reach)
 		st.add_vertex(Vector3(sin(a1), 0, cos(a1)) * reach)
-	var fan := _mesh(st.commit(), glow(c, 0.18), Vector3(0, 0.09, 0), root)
+	var fan := _mesh(st.commit(), warn_mat(c, 0.14), Vector3(0, 0.1, 0), root)
 	fan.rotation.y = yaw
-	# bordas do leque: as duas retas e o arco
+	# bordas do leque: as duas retas e o arco (só o arco do cone, não o círculo inteiro)
+	var y := Vector3(0, 0.13, 0)
 	for a in [-half, half]:
-		var edge := _mesh(Gear.box(Vector3(0.08, 0.03, reach)), glow(c, 0.9), Vector3(sin(yaw + a), 0, cos(yaw + a)) * (reach / 2.0) + Vector3(0, 0.1, 0), root)
-		edge.rotation.y = yaw + a
-	var arc := TorusMesh.new()
-	arc.inner_radius = 0.96
-	arc.outer_radius = 1.0
-	arc.rings = 48
-	arc.ring_segments = 3
-	var am := _mesh(arc, glow(c, 0.5), Vector3(0, 0.1, 0), root)
-	am.scale = Vector3(reach, 0.04 * reach, reach)
+		_warn_stroke(y, Vector3(sin(yaw + a), 0, cos(yaw + a)) * reach + y, c, 0.9, root)
+	for i in n:
+		var b0 := yaw - half + (2.0 * half) * i / n
+		var b1 := yaw - half + (2.0 * half) * (i + 1) / n
+		_warn_stroke(Vector3(sin(b0), 0, cos(b0)) * reach + y, Vector3(sin(b1), 0, cos(b1)) * reach + y, c, 0.9, root)
 	var tw := root.create_tween()
-	tw.tween_property(fan.material_override, "albedo_color:a", 0.55, ms / 1000.0)
+	tw.tween_property(fan.material_override, "albedo_color:a", 0.5, ms / 1000.0)
 	tw.tween_callback(func():
 		cone(at, yaw, reach, angle_deg, c)
 		_warn_end(end_fx, at + Vector3(sin(yaw), 0, cos(yaw)) * (reach * 0.5), reach * 0.5, c)
@@ -672,7 +703,7 @@ func on_warn(m: Dictionary) -> void:
 		if world.my_pos().distance_to(at) > WARN_SEE:
 			return
 		Sfx.play("bell_warn_1", at, -6.0, 1.15)
-		world.monster_windup(m.get("src"), ms)
+		world.monster_windup(m.get("src"), ms, float(m["yaw"]) if shape in ["cone", "line"] and m.has("yaw") else null)
 	else:
 		Sfx.warn(kind)
 		if kind == "valve":
@@ -713,6 +744,9 @@ func on_mech(m: Dictionary) -> void:
 				var vp = _pos(v)
 				if src != null and vp != null:
 					chain(vp, src, Color(0.6, 0.45, 0.28))
+				# fui puxado: o servidor parou meu caminho; o personagem desliza até onde a Draga o deixou
+				if v == world.main.ch.get("eid", ""):
+					world.halt_prediction()
 			if src != null:
 				Sfx.play("javelin_throw", src, 0.0, 0.6)
 		"drain":

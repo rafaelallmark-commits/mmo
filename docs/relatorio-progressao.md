@@ -4,7 +4,7 @@
 
 Simulação acelerada, em processo, de caça solo do nível 1 ao 25 para 8 classes, contra as metas de teste de `data/xp_table.json` (`targetMinutesToNext`, ver [docs/04](04-progressao-e-formulas.md)). Cada classe foi jogada por um bot que só caça (sem missões), com 8 sementes (1, 2, 3, 4, 5, 6, 7, 8). Os números abaixo são **médias das sementes**; a meta é considerada atingida quando o tempo fica a até ±25% dela.
 
-Gerado em 2026-11-20 22:42 UTC · tempo real 10,8 min (3 linhas de execução) · 464 h de jogo simuladas.
+Gerado em 2026-11-21 03:55 UTC · tempo real 11,9 min (3 linhas de execução) · 459 h de jogo simuladas.
 
 ```
 cd server && npm run simular-progressao
@@ -12,21 +12,21 @@ cd server && npm run simular-progressao
 
 ## Resumo
 
-- Meta só caça do 1 ao 25: **7,7 h**. Média das classes: **7,26 h** (-6%).
-- Mais rápida: Tecelão da Brasa (6,46 h); mais lenta: Quebraferro (7,71 h) — razão 1,2×.
+- Meta só caça do 1 ao 25: **7,7 h**. Média das classes: **7,17 h** (-7%).
+- Mais rápida: Tecelão da Brasa (6,51 h); mais lenta: Quebraferro (7,75 h) — razão 1,2×.
 - Níveis em que a média das classes sai da faixa de ±25%: nenhum.
-- Viagens (troca de mapa a 60 s cada: ir às novas áreas, à loja, ao armeiro e à prova) são 22% do tempo. Recuperação fora de combate (tônico ou descanso) fica em 2–13% para todas as classes, porque os bots compram e bebem tônicos em vez de esperar a regeneração (1,5% da vida por segundo).
+- Viagens (troca de mapa a 60 s cada: ir às novas áreas, à loja, ao armeiro e à prova) são 21% do tempo. Recuperação fora de combate (tônico ou descanso) fica em 2–14% para todas as classes, porque os bots compram e bebem tônicos em vez de esperar a regeneração (1,5% da vida por segundo).
 
 | Classe | Horas 1→25 (média) | Mín–máx | Desvio da meta | Abates | Mortes | Fugas | Tônicos V/M | Ouro ganho/h | Gasto/h (tônicos + equip.) | Prova |
 |---|---|---|---|---|---|---|---|---|---|---|
-| Tecelão da Brasa | 6,46 | 6,03–6,67 | -16% | 2.044 | 4,5 | 0,0 | 950 / 1.002 | 14.146 | 9.253 (4.235 + 5.017) | 8/8 |
-| Andarilha do Vento | 6,80 | 6,60–6,94 | -12% | 2.064 | 5,1 | 3,9 | 1.705 / 256 | 13.867 | 9.784 (4.137 + 5.646) | 8/8 |
-| Vigia do Espinhal | 7,05 | 6,70–7,58 | -8% | 2.076 | 6,8 | 2,5 | 1.671 / 275 | 13.637 | 9.058 (3.850 + 5.208) | 8/8 |
-| Cantora do Véu | 7,29 | 7,09–7,59 | -5% | 2.059 | 3,9 | 0,3 | 623 / 763 | 12.177 | 7.849 (2.763 + 5.086) | 8/8 |
-| Escudeiro do Alvorecer | 7,48 | 7,20–7,73 | -3% | 2.047 | 2,5 | 6,8 | 1.712 / 249 | 12.572 | 9.487 (4.031 + 5.456) | 8/8 |
-| Lanceiro do Fosso | 7,58 | 7,22–8,19 | -2% | 2.112 | 6,5 | 10,0 | 1.962 / 258 | 12.741 | 9.026 (4.782 + 4.244) | 8/8 |
-| Bastião de Bronze | 7,68 | 7,23–8,32 | -0% | 2.059 | 3,4 | 8,1 | 1.652 / 255 | 11.613 | 7.908 (3.114 + 4.794) | 8/8 |
-| Quebraferro | 7,71 | 7,21–8,46 | +0% | 2.101 | 7,0 | 10,4 | 2.090 / 252 | 12.639 | 8.988 (4.845 + 4.143) | 8/8 |
+| Tecelão da Brasa | 6,51 | 6,19–6,96 | -15% | 2.039 | 4,0 | 0,0 | 911 / 1.004 | 13.964 | 8.229 (3.739 + 4.490) | 8/8 |
+| Andarilha do Vento | 6,68 | 6,40–7,05 | -13% | 2.056 | 4,6 | 2,6 | 1.680 / 258 | 14.147 | 9.714 (4.053 + 5.661) | 8/8 |
+| Vigia do Espinhal | 6,79 | 6,52–7,03 | -12% | 2.036 | 3,8 | 1,5 | 1.621 / 283 | 13.708 | 8.674 (3.480 + 5.195) | 8/8 |
+| Cantora do Véu | 7,29 | 7,06–7,62 | -5% | 2.044 | 3,9 | 0,3 | 635 / 792 | 11.832 | 8.157 (2.631 + 5.525) | 8/8 |
+| Escudeiro do Alvorecer | 7,34 | 6,81–7,79 | -5% | 2.056 | 3,0 | 7,1 | 1.659 / 258 | 12.564 | 9.183 (3.797 + 5.386) | 8/8 |
+| Lanceiro do Fosso | 7,37 | 7,03–7,74 | -4% | 2.101 | 6,4 | 10,3 | 1.875 / 265 | 13.243 | 9.462 (4.520 + 4.943) | 8/8 |
+| Bastião de Bronze | 7,59 | 7,44–7,78 | -2% | 2.065 | 3,3 | 7,6 | 1.595 / 255 | 11.791 | 7.978 (2.916 + 5.062) | 8/8 |
+| Quebraferro | 7,75 | 7,13–8,45 | +1% | 2.119 | 7,1 | 10,3 | 2.061 / 263 | 12.655 | 9.174 (4.817 + 4.357) | 8/8 |
 
 ### Para onde vai o tempo
 
@@ -34,14 +34,14 @@ Fatia do tempo total de cada classe. Viagens: trocas de mapa a 60 s cada, com a 
 
 | Classe | Combate | Deslocamento e saque | Recuperação | Viagens | Trocas de mapa: caça / tônicos e venda / equipamento / prova | Cidade e prova | Caído e fugindo |
 |---|---|---|---|---|---|---|---|
-| Tecelão da Brasa | 57% | 6% | 13% | 24% | 50 / 28 / 12 / 2 | 0% | 0% |
-| Andarilha do Vento | 69% | 6% | 2% | 22% | 49 / 22 / 17 / 3 | 0% | 0% |
-| Vigia do Espinhal | 70% | 6% | 3% | 21% | 47 / 21 / 17 / 3 | 0% | 0% |
-| Cantora do Véu | 72% | 5% | 4% | 19% | 44 / 21 / 15 / 3 | 0% | 0% |
-| Escudeiro do Alvorecer | 71% | 4% | 2% | 22% | 52 / 26 / 18 / 3 | 0% | 0% |
-| Lanceiro do Fosso | 66% | 6% | 4% | 24% | 58 / 34 / 14 / 2 | 0% | 0% |
-| Bastião de Bronze | 73% | 5% | 3% | 19% | 48 / 23 / 16 / 2 | 0% | 0% |
-| Quebraferro | 68% | 5% | 4% | 23% | 56 / 34 / 13 / 2 | 0% | 0% |
+| Tecelão da Brasa | 57% | 6% | 14% | 24% | 50 / 27 / 13 / 2 | 0% | 0% |
+| Andarilha do Vento | 70% | 6% | 2% | 22% | 47 / 22 / 17 / 3 | 0% | 0% |
+| Vigia do Espinhal | 71% | 6% | 2% | 20% | 43 / 19 / 16 / 3 | 0% | 0% |
+| Cantora do Véu | 72% | 5% | 4% | 19% | 44 / 18 / 18 / 3 | 0% | 0% |
+| Escudeiro do Alvorecer | 72% | 5% | 2% | 20% | 48 / 25 / 14 / 3 | 0% | 0% |
+| Lanceiro do Fosso | 67% | 5% | 5% | 22% | 52 / 28 / 15 / 2 | 0% | 0% |
+| Bastião de Bronze | 74% | 5% | 3% | 18% | 45 / 18 / 18 / 2 | 0% | 0% |
+| Quebraferro | 68% | 5% | 4% | 22% | 56 / 32 / 14 / 2 | 0% | 0% |
 
 ## Tempo por nível: média das classes × meta
 
@@ -55,24 +55,24 @@ Minutos simulados para sair de cada nível. "Fora" marca a média fora de ±25% 
 | 4 | 6,5 | 5,9 | -10% | ok | 3/8 | Andarilha do Vento 3,9 | Bastião de Bronze 8,7 | 5,3 | 0,00 |
 | 5 | 8,0 | 7,5 | -6% | ok | 1/8 | Vigia do Espinhal 5,9 | Lanceiro do Fosso 9,3 | 3,7 | 0,00 |
 | 6 | 9,5 | 10,1 | +6% | ok | 0/8 | Bastião de Bronze 9,2 | Tecelão da Brasa 11,6 | 2,9 | 0,03 |
-| 7 | 11,0 | 11,2 | +2% | ok | 1/8 | Vigia do Espinhal 8,7 | Lanceiro do Fosso 15,2 | 3,2 | 0,02 |
-| 8 | 12,5 | 11,4 | -9% | ok | 1/8 | Vigia do Espinhal 8,1 | Quebraferro 14,1 | 4,0 | 0,02 |
-| 9 | 14,0 | 15,8 | +13% | ok | 1/8 | Cantora do Véu 11,8 | Lanceiro do Fosso 18,5 | 3,2 | 0,56 |
-| 10 | 15,5 | 18,7 | +21% | ok | 3/8 | Vigia do Espinhal 16,8 | Escudeiro do Alvorecer 21,1 | 3,2 | 1,03 |
-| 11 | 17,0 | 14,5 | -15% | ok | 2/8 | Cantora do Véu 11,8 | Bastião de Bronze 19,4 | 4,2 | 0,45 |
-| 12 | 18,5 | 14,8 | -20% | ok | 1/8 | Andarilha do Vento 13,8 | Bastião de Bronze 17,3 | 5,3 | 0,00 |
-| 13 | 20,0 | 20,3 | +1% | ok | 0/8 | Andarilha do Vento 19,1 | Bastião de Bronze 22,7 | 4,2 | 0,00 |
-| 14 | 21,5 | 18,3 | -15% | ok | 2/8 | Andarilha do Vento 14,7 | Cantora do Véu 23,4 | 5,6 | 0,36 |
-| 15 | 23,0 | 21,7 | -6% | ok | 1/8 | Tecelão da Brasa 12,5 | Quebraferro 25,4 | 5,4 | 0,42 |
-| 16 | 24,5 | 24,1 | -2% | ok | 1/8 | Tecelão da Brasa 11,7 | Bastião de Bronze 29,6 | 5,2 | 0,33 |
-| 17 | 26,0 | 27,5 | +6% | ok | 0/8 | Tecelão da Brasa 22,1 | Quebraferro 31,1 | 4,3 | 0,06 |
-| 18 | 27,5 | 21,9 | -20% | ok | 3/8 | Tecelão da Brasa 14,8 | Lanceiro do Fosso 28,4 | 5,7 | 0,05 |
-| 19 | 29,0 | 25,7 | -12% | ok | 0/8 | Lanceiro do Fosso 23,7 | Quebraferro 30,9 | 5,6 | 0,08 |
-| 20 | 30,5 | 27,7 | -9% | ok | 0/8 | Andarilha do Vento 25,2 | Cantora do Véu 32,2 | 4,5 | 0,00 |
-| 21 | 32,0 | 29,9 | -7% | ok | 1/8 | Tecelão da Brasa 21,6 | Escudeiro do Alvorecer 34,3 | 5,2 | 0,00 |
-| 22 | 33,5 | 29,7 | -11% | ok | 1/8 | Andarilha do Vento 24,3 | Tecelão da Brasa 35,2 | 5,8 | 0,33 |
-| 23 | 35,0 | 32,7 | -7% | ok | 1/8 | Tecelão da Brasa 18,7 | Bastião de Bronze 37,6 | 5,4 | 0,28 |
-| 24 | 36,5 | 35,6 | -2% | ok | 1/8 | Bastião de Bronze 26,3 | Cantora do Véu 40,9 | 5,2 | 0,94 |
+| 7 | 11,0 | 11,3 | +3% | ok | 1/8 | Vigia do Espinhal 8,7 | Lanceiro do Fosso 16,2 | 3,2 | 0,03 |
+| 8 | 12,5 | 11,3 | -10% | ok | 1/8 | Vigia do Espinhal 8,1 | Tecelão da Brasa 13,5 | 4,0 | 0,02 |
+| 9 | 14,0 | 15,8 | +13% | ok | 1/8 | Cantora do Véu 11,8 | Lanceiro do Fosso 18,6 | 3,2 | 0,58 |
+| 10 | 15,5 | 18,6 | +20% | ok | 3/8 | Vigia do Espinhal 16,5 | Escudeiro do Alvorecer 20,5 | 3,2 | 0,94 |
+| 11 | 17,0 | 14,0 | -18% | ok | 1/8 | Vigia do Espinhal 12,2 | Bastião de Bronze 17,7 | 4,3 | 0,20 |
+| 12 | 18,5 | 15,0 | -19% | ok | 2/8 | Cantora do Véu 12,8 | Bastião de Bronze 18,5 | 5,3 | 0,00 |
+| 13 | 20,0 | 20,4 | +2% | ok | 0/8 | Andarilha do Vento 19,0 | Bastião de Bronze 22,7 | 4,2 | 0,00 |
+| 14 | 21,5 | 18,1 | -16% | ok | 2/8 | Andarilha do Vento 14,7 | Cantora do Véu 24,6 | 5,7 | 0,33 |
+| 15 | 23,0 | 21,1 | -8% | ok | 1/8 | Tecelão da Brasa 12,9 | Bastião de Bronze 25,2 | 5,7 | 0,44 |
+| 16 | 24,5 | 23,5 | -4% | ok | 1/8 | Tecelão da Brasa 12,9 | Quebraferro 30,5 | 5,2 | 0,41 |
+| 17 | 26,0 | 26,9 | +4% | ok | 1/8 | Tecelão da Brasa 22,4 | Quebraferro 33,5 | 4,4 | 0,06 |
+| 18 | 27,5 | 21,2 | -23% | ok | 4/8 | Tecelão da Brasa 15,1 | Quebraferro 26,2 | 5,8 | 0,10 |
+| 19 | 29,0 | 24,5 | -16% | ok | 0/8 | Andarilha do Vento 22,5 | Escudeiro do Alvorecer 28,2 | 5,8 | 0,00 |
+| 20 | 30,5 | 27,5 | -10% | ok | 0/8 | Lanceiro do Fosso 24,5 | Bastião de Bronze 29,8 | 4,5 | 0,00 |
+| 21 | 32,0 | 30,2 | -6% | ok | 1/8 | Tecelão da Brasa 21,6 | Cantora do Véu 34,6 | 5,1 | 0,00 |
+| 22 | 33,5 | 29,3 | -13% | ok | 0/8 | Andarilha do Vento 26,4 | Tecelão da Brasa 37,2 | 5,9 | 0,36 |
+| 23 | 35,0 | 33,3 | -5% | ok | 1/8 | Tecelão da Brasa 21,0 | Cantora do Véu 39,0 | 5,2 | 0,24 |
+| 24 | 36,5 | 34,1 | -7% | ok | 0/8 | Tecelão da Brasa 28,9 | Quebraferro 38,5 | 5,3 | 0,78 |
 
 ### Minutos por nível e classe
 
@@ -84,24 +84,24 @@ Minutos simulados para sair de cada nível. "Fora" marca a média fora de ±25% 
 | 4 | 6,5 | 5,9 | **3,9** | **4,0** | 6,5 | 5,2 | 7,2 | **8,7** | 5,7 |
 | 5 | 8,0 | 9,2 | 6,2 | **5,9** | 6,9 | 6,3 | 9,3 | 8,6 | 7,7 |
 | 6 | 9,5 | 11,6 | 9,9 | 10,2 | 9,7 | 9,3 | 9,9 | 9,2 | 10,6 |
-| 7 | 11,0 | 11,4 | 9,8 | 8,7 | 9,8 | 12,0 | **15,2** | 10,8 | 11,8 |
-| 8 | 12,5 | 13,5 | 9,5 | **8,1** | 9,5 | 10,7 | 13,4 | 12,3 | 14,1 |
-| 9 | 14,0 | 16,3 | 15,9 | 17,0 | 11,8 | 15,6 | **18,5** | 16,1 | 14,9 |
-| 10 | 15,5 | 17,0 | 19,1 | 16,8 | **19,9** | **21,1** | 17,6 | **19,6** | 18,5 |
-| 11 | 17,0 | 14,9 | 14,5 | 13,5 | **11,8** | **12,5** | 14,6 | 19,4 | 15,1 |
-| 12 | 18,5 | 14,6 | **13,8** | 14,2 | 14,5 | 15,3 | 14,2 | 17,3 | 14,8 |
-| 13 | 20,0 | 20,5 | 19,1 | 19,6 | 20,8 | 20,5 | 19,4 | 22,7 | 19,7 |
-| 14 | 21,5 | 19,5 | **14,7** | **15,6** | 23,4 | 18,7 | 17,1 | 20,6 | 16,6 |
-| 15 | 23,0 | **12,5** | 24,5 | 24,2 | 17,4 | 23,0 | 22,7 | 23,9 | 25,4 |
-| 16 | 24,5 | **11,7** | 23,0 | 26,8 | 20,9 | 25,0 | 26,9 | 29,6 | 29,1 |
-| 17 | 26,0 | 22,1 | 25,5 | 26,4 | 26,7 | 30,8 | 29,3 | 28,1 | 31,1 |
-| 18 | 27,5 | **14,8** | **18,6** | 21,1 | **19,7** | 22,0 | 28,4 | 25,3 | 25,6 |
-| 19 | 29,0 | 26,2 | 24,1 | 25,5 | 24,3 | 24,9 | 23,7 | 25,7 | 30,9 |
-| 20 | 30,5 | 25,4 | 25,2 | 25,8 | 32,2 | 28,8 | 28,5 | 28,4 | 27,0 |
-| 21 | 32,0 | **21,6** | 30,5 | 31,5 | 29,9 | 34,3 | 30,3 | 31,9 | 29,4 |
-| 22 | 33,5 | 35,2 | **24,3** | 28,9 | 32,9 | 29,0 | 26,0 | 28,4 | 32,8 |
-| 23 | 35,0 | **18,7** | 32,7 | 30,5 | 34,3 | 37,4 | 34,5 | 37,6 | 35,8 |
-| 24 | 36,5 | 32,6 | 34,3 | 39,4 | 40,9 | 37,5 | 37,4 | **26,3** | 36,7 |
+| 7 | 11,0 | 11,4 | 9,8 | 8,7 | 9,8 | 12,0 | **16,2** | 10,8 | 11,9 |
+| 8 | 12,5 | 13,5 | 9,5 | **8,1** | 9,5 | 10,7 | 13,1 | 12,3 | 13,4 |
+| 9 | 14,0 | 16,3 | 15,9 | 17,0 | 11,8 | 15,6 | **18,6** | 16,1 | 15,5 |
+| 10 | 15,5 | 17,0 | 18,3 | 16,5 | 18,5 | **20,5** | 18,6 | **19,9** | **19,4** |
+| 11 | 17,0 | 13,3 | 13,6 | **12,2** | 13,8 | 13,8 | 13,0 | 17,7 | 14,6 |
+| 12 | 18,5 | 16,4 | **13,0** | 15,4 | **12,8** | 14,8 | 14,8 | 18,5 | 14,6 |
+| 13 | 20,0 | 21,5 | 19,0 | 20,3 | 20,5 | 20,5 | 19,2 | 22,7 | 19,3 |
+| 14 | 21,5 | 18,7 | **14,7** | **15,3** | 24,6 | 16,6 | 17,9 | 18,7 | 18,4 |
+| 15 | 23,0 | **12,9** | 22,9 | 22,8 | 18,0 | 24,4 | 19,9 | 25,2 | 22,6 |
+| 16 | 24,5 | **12,9** | 22,4 | 24,4 | 19,7 | 24,1 | 28,5 | 25,4 | 30,5 |
+| 17 | 26,0 | 22,4 | 25,8 | 26,1 | 27,0 | 28,1 | 23,3 | 29,2 | **33,5** |
+| 18 | 27,5 | **15,1** | **19,0** | **20,1** | 21,1 | **20,4** | 25,3 | 22,0 | 26,2 |
+| 19 | 29,0 | 23,8 | 22,5 | 23,1 | 24,6 | 28,2 | 23,8 | 23,1 | 26,9 |
+| 20 | 30,5 | 27,9 | 25,8 | 25,6 | 29,7 | 27,8 | 24,5 | 29,8 | 29,3 |
+| 21 | 32,0 | **21,6** | 29,3 | 31,0 | 34,6 | 30,4 | 31,3 | 33,4 | 30,4 |
+| 22 | 33,5 | 37,2 | 26,4 | 28,2 | 27,9 | 28,3 | 29,7 | 26,7 | 30,3 |
+| 23 | 35,0 | **21,0** | 30,5 | 32,4 | 39,0 | 37,6 | 31,9 | 37,5 | 36,5 |
+| 24 | 36,5 | 28,9 | 33,8 | 31,0 | 38,3 | 37,0 | 35,5 | 29,4 | 38,5 |
 
 Negrito: fora de ±25% da meta.
 
@@ -111,32 +111,32 @@ Golpes avisados no chão (o bot percebe o aviso 0,6 s depois, como um jogador, c
 
 | Classe | Avisos vistos | Estava dentro | Esquivas | Esperas fora | Golpes de mecânica levados | Dano de mecânica (fatia do recebido) | Efeitos negativos recebidos |
 |---|---|---|---|---|---|---|---|
-| Tecelão da Brasa | 654 | 608 | 637 | 7 | 143 | 2.142 (1,3%) | Sanguessuga 9 |
-| Andarilha do Vento | 814 | 743 | 704 | 6 | 235 | 4.068 (1,8%) | Sanguessuga 8 |
-| Vigia do Espinhal | 803 | 752 | 756 | 19 | 232 | 4.797 (2,1%) | Atordoado 0 |
-| Cantora do Véu | 892 | 855 | 802 | 11 | 187 | 2.575 (0,8%) | Sanguessuga 22 |
-| Escudeiro do Alvorecer | 908 | 893 | 866 | 504 | 226 | 3.402 (1,4%) | Sanguessuga 13, Atolado 7, Atordoado 1 |
-| Lanceiro do Fosso | 741 | 725 | 715 | 233 | 162 | 3.102 (1,1%) | Sanguessuga 8, Atolado 6 |
-| Bastião de Bronze | 965 | 953 | 923 | 512 | 186 | 2.874 (1,2%) | Sanguessuga 28, Atolado 4, Atordoado 1 |
-| Quebraferro | 848 | 823 | 792 | 468 | 168 | 2.652 (0,9%) | Sanguessuga 11, Atolado 6 |
+| Tecelão da Brasa | 655 | 609 | 653 | 16 | 129 | 1.471 (0,9%) | Sanguessuga 3 |
+| Andarilha do Vento | 766 | 709 | 696 | 13 | 202 | 3.250 (1,5%) | Sanguessuga 5 |
+| Vigia do Espinhal | 799 | 744 | 761 | 25 | 173 | 2.784 (1,3%) | Atordoado 1 |
+| Cantora do Véu | 879 | 839 | 795 | 15 | 220 | 2.349 (0,7%) | Sanguessuga 32 |
+| Escudeiro do Alvorecer | 807 | 792 | 800 | 598 | 255 | 3.140 (1,3%) | Sanguessuga 6, Atolado 2 |
+| Lanceiro do Fosso | 708 | 691 | 719 | 319 | 149 | 2.680 (1,0%) | Sanguessuga 20, Atolado 1 |
+| Bastião de Bronze | 908 | 897 | 905 | 646 | 204 | 2.651 (1,2%) | Sanguessuga 17, Atolado 1 |
+| Quebraferro | 777 | 752 | 756 | 533 | 181 | 2.559 (0,9%) | Sanguessuga 12, Atolado 1 |
 
 Golpes de mecânica levados por execução, média das classes:
 
 | Mecânica | Monstro (nível) | Golpes levados | Dano |
 |---|---|---|---|
-| Eco | Ecoante (14) | 173,7 | 2.362 |
-| Explosão de Escória | Escória Pressurizada (18) | 15,4 | 782 |
-| Arrasto | Draga Viva (17) | 2,8 | 47 |
-| Fio Condutor | Aranha de Conduto (16) | 0,2 | 6 |
+| Eco | Ecoante (14) | 186,0 | 2.482 |
+| Explosão de Escória | Escória Pressurizada (18) | 2,0 | 105 |
+| Arrasto | Draga Viva (17) | 0,7 | 12 |
+| Fio Condutor | Aranha de Conduto (16) | 0,3 | 7 |
 | Estouro de Vapor | Sapo-Bomba (5) | 0,2 | 3 |
-| Corrida no Trilho | Lâmina de Esteira (12) | 0,0 | 1 |
+| Corrida no Trilho | Lâmina de Esteira (12) | 0,1 | 2 |
 | Cone de Faíscas | Soldador Cego (11) | 0,0 | 0 |
 
 ## Detalhe por classe
 
 ### Tecelão da Brasa (`emberweaver`)
 
-6,46 h do 1 ao 25 (-16% da meta; 8/8 execuções concluídas). Plano de atributos: example_builds.json (emberweaver_magic). Tempo: combate 57%, deslocamento e saque 6%, recuperação 13%, viagens 24%, cidade e prova 0%, caído/fugindo 0%. Dano por fonte: ataque básico 40%, Faísca de Vidro 28%, Chão em Brasa 14%, Círculo de Fuligem 10%, Coração da Fornalha 6%; acerto 100%; 1.849 de dano causado e 421 recebido por minuto.
+6,51 h do 1 ao 25 (-15% da meta; 8/8 execuções concluídas). Plano de atributos: example_builds.json (emberweaver_magic). Tempo: combate 57%, deslocamento e saque 6%, recuperação 14%, viagens 24%, cidade e prova 0%, caído/fugindo 0%. Dano por fonte: ataque básico 39%, Faísca de Vidro 28%, Chão em Brasa 14%, Círculo de Fuligem 10%, Coração da Fornalha 6%; acerto 100%; 1.835 de dano causado e 406 recebido por minuto.
 
 | Nível | Min | Meta | Desvio | Abates | Abates/min | Mortes | Fugas | Tônicos V/M | Ouro ganho (moedas + vendas) | Gasto: tônicos / equip. | XP de abates | Monstro principal |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -149,25 +149,25 @@ Golpes de mecânica levados por execução, média das classes:
 | 7 | 11,4 | 11,0 | +4% | 33 | 2,9 | 0,0 | 0,0 | 32 / 20 | 542 | 392 / 168 | 3.605 | Válvula Errante (7) |
 | 8 | 13,5 | 12,5 | +8% | 42 | 3,1 | 0,0 | 0,0 | 17 / 23 | 815 | 321 / 5 | 4.868 | Garça de Ferrugem (8) |
 | 9 | 16,3 | 14,0 | +16% | 51 | 3,1 | 0,9 | 0,0 | 35 / 26 | 830 | 526 / 310 | 6.443 | Garça de Ferrugem (8) |
-| 10 | 17,0 | 15,5 | +10% | 57 | 3,3 | 0,9 | 0,0 | 37 / 39 | 1.278 | 552 / 550 | 8.234 | Rato-Engrenagem (10) |
-| 11 | 14,9 | 17,0 | -13% | 58 | 3,9 | 0,0 | 0,0 | 30 / 44 | 1.846 | 809 / 385 | 10.320 | Soldador Cego (11) |
-| 12 | 14,6 | 18,5 | -21% | 79 | 5,4 | 0,0 | 0,0 | 19 / 45 | 2.235 | 0 / 0 | 12.641 | Lâmina de Esteira (12) |
-| 13 | 20,5 | 20,0 | +2% | 86 | 4,2 | 0,0 | 0,0 | 35 / 65 | 3.147 | 772 / 3.037 | 15.301 | Larva Térmica (13) |
-| 14 | 19,5 | 21,5 | -9% | 99 | 5,1 | 0,0 | 0,0 | 45 / 64 | 3.912 | 3.645 / 459 | 18.282 | Ecoante (14) |
-| 15 | **12,5** | 23,0 | -46% | 105 | 8,4 | 0,0 | 0,0 | 38 / 45 | 3.383 | 681 / 0 | 21.524 | Guardião de Galeria (15) |
-| 16 | **11,7** | 24,5 | -52% | 108 | 9,3 | 0,0 | 0,0 | 66 / 46 | 2.948 | 0 / 0 | 25.196 | Aranha de Conduto (16) |
-| 17 | 22,1 | 26,0 | -15% | 118 | 5,3 | 0,1 | 0,0 | 39 / 48 | 5.846 | 3.548 / 6.591 | 29.089 | Draga Viva (17) |
-| 18 | **14,8** | 27,5 | -46% | 120 | 8,1 | 0,0 | 0,0 | 43 / 53 | 4.299 | 0 / 0 | 33.348 | Escória Pressurizada (18) |
-| 19 | 26,2 | 29,0 | -10% | 142 | 5,4 | 0,0 | 0,0 | 45 / 55 | 7.206 | 2.408 / 6.532 | 38.064 | Escória Pressurizada (18) |
-| 20 | 25,4 | 30,5 | -17% | 124 | 4,9 | 0,0 | 0,0 | 49 / 73 | 7.855 | 1.436 / 3.458 | 43.026 | Salamandra de Cisterna (21) |
-| 21 | **21,6** | 32,0 | -32% | 153 | 7,1 | 0,0 | 0,0 | 46 / 77 | 8.136 | 0 / 0 | 48.422 | Salamandra de Cisterna (21) |
-| 22 | 35,2 | 33,5 | +5% | 172 | 4,9 | 0,9 | 0,0 | 85 / 82 | 13.646 | 5.625 / 3.453 | 54.010 | Sineiro de Bronze (22) |
-| 23 | **18,7** | 35,0 | -47% | 165 | 8,8 | 0,0 | 0,0 | 119 / 86 | 8.899 | 0 / 0 | 60.326 | Voz Soterrada (23) |
-| 24 | 32,6 | 36,5 | -11% | 190 | 5,8 | 1,6 | 0,0 | 140 / 87 | 13.583 | 6.237 / 7.162 | 66.790 | Toupeira de Basalto (24) |
+| 10 | 17,0 | 15,5 | +10% | 54 | 3,2 | 0,8 | 0,0 | 34 / 41 | 1.156 | 573 / 493 | 8.249 | Rato-Engrenagem (10) |
+| 11 | 13,3 | 17,0 | -22% | 58 | 4,4 | 0,0 | 0,0 | 29 / 47 | 1.756 | 630 / 304 | 10.278 | Soldador Cego (11) |
+| 12 | 16,4 | 18,5 | -12% | 79 | 4,8 | 0,0 | 0,0 | 21 / 47 | 2.252 | 280 / 109 | 12.664 | Lâmina de Esteira (12) |
+| 13 | 21,5 | 20,0 | +7% | 86 | 4,0 | 0,0 | 0,0 | 36 / 58 | 3.172 | 782 / 3.063 | 15.301 | Larva Térmica (13) |
+| 14 | 18,7 | 21,5 | -13% | 99 | 5,3 | 0,0 | 0,0 | 44 / 63 | 3.754 | 2.981 / 564 | 18.283 | Ecoante (14) |
+| 15 | **12,9** | 23,0 | -44% | 105 | 8,1 | 0,0 | 0,0 | 38 / 50 | 3.323 | 671 / 0 | 21.510 | Guardião de Galeria (15) |
+| 16 | **12,9** | 24,5 | -47% | 109 | 8,4 | 0,0 | 0,0 | 61 / 47 | 3.302 | 694 / 496 | 25.165 | Aranha de Conduto (16) |
+| 17 | 22,4 | 26,0 | -14% | 114 | 5,1 | 0,0 | 0,0 | 28 / 48 | 6.165 | 2.954 / 6.017 | 29.074 | Draga Viva (17) |
+| 18 | **15,1** | 27,5 | -45% | 119 | 7,8 | 0,0 | 0,0 | 37 / 53 | 4.226 | 0 / 0 | 33.395 | Escória Pressurizada (18) |
+| 19 | 23,8 | 29,0 | -18% | 142 | 5,9 | 0,0 | 0,0 | 42 / 58 | 6.573 | 1.965 / 4.570 | 38.097 | Escória Pressurizada (18) |
+| 20 | 27,9 | 30,5 | -9% | 123 | 4,4 | 0,0 | 0,0 | 46 / 71 | 8.570 | 2.243 / 5.209 | 42.947 | Salamandra de Cisterna (21) |
+| 21 | **21,6** | 32,0 | -33% | 153 | 7,1 | 0,0 | 0,0 | 47 / 76 | 8.229 | 0 / 0 | 48.461 | Salamandra de Cisterna (21) |
+| 22 | 37,2 | 33,5 | +11% | 170 | 4,6 | 0,6 | 0,0 | 85 / 73 | 13.901 | 4.881 / 3.169 | 54.038 | Sineiro de Bronze (22) |
+| 23 | **21,0** | 35,0 | -40% | 168 | 8,0 | 0,3 | 0,0 | 118 / 86 | 9.581 | 1.157 / 1.781 | 60.304 | Voz Soterrada (23) |
+| 24 | 28,9 | 36,5 | -21% | 194 | 6,7 | 1,4 | 0,0 | 131 / 94 | 11.849 | 2.907 / 2.694 | 66.781 | Toupeira de Basalto (24) |
 
 ### Andarilha do Vento (`windwalker`)
 
-6,80 h do 1 ao 25 (-12% da meta; 8/8 execuções concluídas). Plano de atributos: gerado (requisitos das faixas + Agilidade/Vitalidade 2:3). Tempo: combate 69%, deslocamento e saque 6%, recuperação 2%, viagens 22%, cidade e prova 0%, caído/fugindo 0%. Dano por fonte: ataque básico 89%, Arremesso de Retorno 7%, Rajada Cortante 3%, Olho do Furacão 2%; acerto 96%; 1.755 de dano causado e 552 recebido por minuto.
+6,68 h do 1 ao 25 (-13% da meta; 8/8 execuções concluídas). Plano de atributos: gerado (requisitos das faixas + Agilidade/Vitalidade 2:3). Tempo: combate 70%, deslocamento e saque 6%, recuperação 2%, viagens 22%, cidade e prova 0%, caído/fugindo 0%. Dano por fonte: ataque básico 89%, Arremesso de Retorno 7%, Rajada Cortante 2%, Olho do Furacão 2%; acerto 96%; 1.777 de dano causado e 553 recebido por minuto.
 
 | Nível | Min | Meta | Desvio | Abates | Abates/min | Mortes | Fugas | Tônicos V/M | Ouro ganho (moedas + vendas) | Gasto: tônicos / equip. | XP de abates | Monstro principal |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -180,25 +180,25 @@ Golpes de mecânica levados por execução, média das classes:
 | 7 | 9,8 | 11,0 | -11% | 35 | 3,5 | 0,0 | 0,0 | 40 / 4 | 581 | 221 / 190 | 3.611 | Válvula Errante (7) |
 | 8 | 9,5 | 12,5 | -24% | 43 | 4,6 | 0,0 | 0,1 | 36 / 4 | 658 | 219 / 0 | 4.881 | Garça de Ferrugem (8) |
 | 9 | 15,9 | 14,0 | +14% | 50 | 3,1 | 0,5 | 0,4 | 56 / 7 | 828 | 692 / 367 | 6.415 | Autômato Escavador (9) |
-| 10 | 19,1 | 15,5 | +24% | 63 | 3,3 | 1,3 | 0,3 | 64 / 9 | 1.180 | 252 / 688 | 8.242 | Autômato Escavador (9) |
-| 11 | 14,5 | 17,0 | -15% | 60 | 4,2 | 0,6 | 0,3 | 59 / 7 | 1.506 | 272 / 179 | 10.331 | Lâmina de Esteira (12) |
-| 12 | **13,8** | 18,5 | -25% | 79 | 5,7 | 0,0 | 0,1 | 19 / 9 | 2.205 | 165 / 0 | 12.659 | Lâmina de Esteira (12) |
-| 13 | 19,1 | 20,0 | -4% | 86 | 4,5 | 0,0 | 0,0 | 19 / 16 | 3.198 | 556 / 3.605 | 15.305 | Larva Térmica (13) |
-| 14 | **14,7** | 21,5 | -32% | 100 | 6,8 | 0,1 | 0,0 | 86 / 11 | 2.852 | 0 / 0 | 18.239 | Ecoante (14) |
-| 15 | 24,5 | 23,0 | +6% | 116 | 4,7 | 0,9 | 0,3 | 108 / 10 | 4.675 | 3.828 / 2.539 | 21.526 | Guardião de Galeria (15) |
-| 16 | 23,0 | 24,5 | -6% | 121 | 5,3 | 0,4 | 0,1 | 151 / 11 | 3.941 | 1.754 / 1.410 | 25.178 | Aranha de Conduto (16) |
-| 17 | 25,5 | 26,0 | -2% | 114 | 4,5 | 0,0 | 0,0 | 65 / 14 | 5.068 | 3.048 / 1.824 | 29.065 | Draga Viva (17) |
-| 18 | **18,6** | 27,5 | -33% | 119 | 6,4 | 0,0 | 0,0 | 107 / 15 | 4.305 | 0 / 0 | 33.445 | Escória Pressurizada (18) |
-| 19 | 24,1 | 29,0 | -17% | 141 | 5,9 | 0,0 | 0,4 | 111 / 17 | 5.779 | 1.697 / 2.526 | 38.030 | Escória Pressurizada (18) |
-| 20 | 25,2 | 30,5 | -17% | 124 | 4,9 | 0,0 | 0,0 | 71 / 13 | 6.680 | 0 / 0 | 43.012 | Salamandra de Cisterna (21) |
-| 21 | 30,5 | 32,0 | -5% | 153 | 5,0 | 0,0 | 0,0 | 57 / 24 | 12.082 | 3.094 / 10.386 | 48.382 | Salamandra de Cisterna (21) |
-| 22 | **24,3** | 33,5 | -28% | 168 | 6,9 | 0,1 | 0,1 | 189 / 20 | 9.772 | 926 / 0 | 54.084 | Sineiro de Bronze (22) |
-| 23 | 32,7 | 35,0 | -7% | 170 | 5,2 | 0,3 | 0,8 | 180 / 25 | 13.796 | 5.517 / 11.034 | 60.241 | Voz Soterrada (23) |
-| 24 | 34,3 | 36,5 | -6% | 182 | 5,3 | 1,0 | 0,4 | 214 / 26 | 14.274 | 5.513 / 3.345 | 66.889 | Voz Soterrada (23) |
+| 10 | 18,3 | 15,5 | +18% | 58 | 3,2 | 0,9 | 0,0 | 70 / 9 | 1.169 | 257 / 688 | 8.260 | Rato-Engrenagem (10) |
+| 11 | 13,6 | 17,0 | -20% | 59 | 4,4 | 0,3 | 0,1 | 54 / 7 | 1.725 | 439 / 235 | 10.336 | Soldador Cego (11) |
+| 12 | **13,0** | 18,5 | -30% | 79 | 6,1 | 0,0 | 0,0 | 21 / 9 | 2.263 | 0 / 0 | 12.643 | Lâmina de Esteira (12) |
+| 13 | 19,0 | 20,0 | -5% | 85 | 4,5 | 0,0 | 0,0 | 20 / 14 | 3.233 | 627 / 3.721 | 15.260 | Larva Térmica (13) |
+| 14 | **14,7** | 21,5 | -32% | 100 | 6,8 | 0,1 | 0,0 | 80 / 12 | 2.890 | 0 / 0 | 18.283 | Ecoante (14) |
+| 15 | 22,9 | 23,0 | -0% | 117 | 5,1 | 0,8 | 0,1 | 99 / 14 | 4.551 | 2.913 / 2.167 | 21.539 | Guardião de Galeria (15) |
+| 16 | 22,4 | 24,5 | -9% | 120 | 5,4 | 0,4 | 0,1 | 149 / 13 | 3.902 | 1.757 / 1.612 | 25.159 | Aranha de Conduto (16) |
+| 17 | 25,8 | 26,0 | -1% | 115 | 4,5 | 0,0 | 0,0 | 67 / 14 | 5.519 | 3.937 / 2.405 | 29.122 | Draga Viva (17) |
+| 18 | **19,0** | 27,5 | -31% | 119 | 6,2 | 0,0 | 0,0 | 108 / 13 | 4.185 | 0 / 0 | 33.410 | Escória Pressurizada (18) |
+| 19 | 22,5 | 29,0 | -22% | 141 | 6,3 | 0,0 | 0,0 | 106 / 17 | 5.607 | 515 / 1.191 | 37.996 | Escória Pressurizada (18) |
+| 20 | 25,8 | 30,5 | -15% | 124 | 4,8 | 0,0 | 0,0 | 68 / 14 | 7.107 | 692 / 529 | 43.097 | Salamandra de Cisterna (21) |
+| 21 | 29,3 | 32,0 | -8% | 152 | 5,2 | 0,0 | 0,0 | 59 / 22 | 11.787 | 2.472 / 9.194 | 48.303 | Salamandra de Cisterna (21) |
+| 22 | 26,4 | 33,5 | -21% | 171 | 6,5 | 0,6 | 0,0 | 171 / 19 | 10.761 | 1.822 / 0 | 54.155 | Sineiro de Bronze (22) |
+| 23 | 30,5 | 35,0 | -13% | 172 | 5,6 | 0,3 | 0,5 | 179 / 27 | 13.470 | 4.625 / 9.088 | 60.251 | Voz Soterrada (23) |
+| 24 | 33,8 | 36,5 | -7% | 175 | 5,2 | 0,9 | 0,5 | 225 / 23 | 13.445 | 5.537 / 6.164 | 66.768 | Toupeira de Basalto (24) |
 
 ### Vigia do Espinhal (`warden`)
 
-7,05 h do 1 ao 25 (-8% da meta; 8/8 execuções concluídas). Plano de atributos: gerado (requisitos das faixas + Agilidade/Vitalidade 2:3). Tempo: combate 70%, deslocamento e saque 6%, recuperação 3%, viagens 21%, cidade e prova 0%, caído/fugindo 0%. Dano por fonte: ataque básico 84%, Flecha de Passagem 6%, Tiro do Espinhal 5%, Chuva de Espinhos 5%; acerto 98%; 1.740 de dano causado e 529 recebido por minuto.
+6,79 h do 1 ao 25 (-12% da meta; 8/8 execuções concluídas). Plano de atributos: gerado (requisitos das faixas + Agilidade/Vitalidade 2:3). Tempo: combate 71%, deslocamento e saque 6%, recuperação 2%, viagens 20%, cidade e prova 0%, caído/fugindo 0%. Dano por fonte: ataque básico 84%, Flecha de Passagem 6%, Tiro do Espinhal 5%, Chuva de Espinhos 5%; acerto 98%; 1.772 de dano causado e 536 recebido por minuto.
 
 | Nível | Min | Meta | Desvio | Abates | Abates/min | Mortes | Fugas | Tônicos V/M | Ouro ganho (moedas + vendas) | Gasto: tônicos / equip. | XP de abates | Monstro principal |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -211,25 +211,25 @@ Golpes de mecânica levados por execução, média das classes:
 | 7 | 8,7 | 11,0 | -21% | 33 | 3,8 | 0,0 | 0,0 | 41 / 4 | 533 | 178 / 142 | 3.614 | Válvula Errante (7) |
 | 8 | **8,1** | 12,5 | -35% | 41 | 5,0 | 0,0 | 0,0 | 31 / 5 | 737 | 0 / 0 | 4.869 | Garça de Ferrugem (8) |
 | 9 | 17,0 | 14,0 | +21% | 47 | 2,8 | 0,4 | 0,0 | 42 / 8 | 822 | 528 / 536 | 6.426 | Autômato Escavador (9) |
-| 10 | 16,8 | 15,5 | +8% | 54 | 3,2 | 0,9 | 0,0 | 55 / 11 | 1.068 | 344 / 733 | 8.234 | Autômato Escavador (9) |
-| 11 | 13,5 | 17,0 | -21% | 62 | 4,6 | 1,1 | 0,1 | 69 / 7 | 1.584 | 708 / 0 | 10.323 | Soldador Cego (11) |
-| 12 | 14,2 | 18,5 | -24% | 78 | 5,5 | 0,0 | 0,0 | 25 / 10 | 2.234 | 0 / 0 | 12.637 | Lâmina de Esteira (12) |
-| 13 | 19,6 | 20,0 | -2% | 86 | 4,4 | 0,0 | 0,0 | 26 / 14 | 3.137 | 1.133 / 3.116 | 15.305 | Larva Térmica (13) |
-| 14 | **15,6** | 21,5 | -28% | 100 | 6,4 | 0,0 | 0,0 | 90 / 12 | 2.808 | 0 / 0 | 18.308 | Ecoante (14) |
-| 15 | 24,2 | 23,0 | +5% | 108 | 4,4 | 0,3 | 0,5 | 99 / 12 | 4.622 | 3.594 / 2.869 | 21.486 | Guardião de Galeria (15) |
-| 16 | 26,8 | 24,5 | +9% | 113 | 4,2 | 0,8 | 0,8 | 176 / 12 | 3.872 | 2.891 / 1.536 | 25.152 | Aranha de Conduto (16) |
-| 17 | 26,4 | 26,0 | +1% | 117 | 4,5 | 0,1 | 0,1 | 83 / 13 | 4.854 | 2.138 / 1.018 | 29.156 | Draga Viva (17) |
-| 18 | 21,1 | 27,5 | -23% | 119 | 5,6 | 0,0 | 0,0 | 99 / 16 | 4.638 | 911 / 250 | 33.341 | Escória Pressurizada (18) |
-| 19 | 25,5 | 29,0 | -12% | 142 | 5,6 | 0,3 | 0,0 | 115 / 18 | 5.474 | 704 / 1.415 | 38.078 | Escória Pressurizada (18) |
-| 20 | 25,8 | 30,5 | -16% | 124 | 4,8 | 0,0 | 0,0 | 66 / 15 | 6.560 | 0 / 0 | 42.974 | Salamandra de Cisterna (21) |
-| 21 | 31,5 | 32,0 | -2% | 153 | 4,9 | 0,0 | 0,0 | 66 / 24 | 12.656 | 2.630 / 10.677 | 48.461 | Salamandra de Cisterna (21) |
-| 22 | 28,9 | 33,5 | -14% | 172 | 6,0 | 0,6 | 0,1 | 144 / 24 | 11.552 | 2.748 / 447 | 54.008 | Sineiro de Bronze (22) |
-| 23 | 30,5 | 35,0 | -13% | 181 | 5,9 | 1,1 | 0,4 | 184 / 26 | 12.181 | 2.779 / 4.864 | 60.300 | Voz Soterrada (23) |
-| 24 | 39,4 | 36,5 | +8% | 207 | 5,3 | 1,3 | 0,1 | 195 / 30 | 15.858 | 5.477 / 8.800 | 66.825 | Voz Soterrada (23) |
+| 10 | 16,5 | 15,5 | +6% | 53 | 3,2 | 0,5 | 0,0 | 55 / 11 | 1.213 | 340 / 733 | 8.257 | Rato-Engrenagem (10) |
+| 11 | **12,2** | 17,0 | -28% | 59 | 4,9 | 0,5 | 0,0 | 63 / 9 | 1.644 | 630 / 0 | 10.311 | Soldador Cego (11) |
+| 12 | 15,4 | 18,5 | -17% | 79 | 5,1 | 0,0 | 0,0 | 23 / 10 | 2.309 | 708 / 0 | 12.641 | Lâmina de Esteira (12) |
+| 13 | 20,3 | 20,0 | +2% | 86 | 4,2 | 0,0 | 0,0 | 26 / 15 | 2.894 | 753 / 3.131 | 15.305 | Larva Térmica (13) |
+| 14 | **15,3** | 21,5 | -29% | 99 | 6,5 | 0,0 | 0,0 | 83 / 14 | 2.915 | 0 / 0 | 18.282 | Ecoante (14) |
+| 15 | 22,8 | 23,0 | -1% | 106 | 4,7 | 0,1 | 0,3 | 96 / 15 | 4.451 | 2.793 / 2.677 | 21.507 | Guardião de Galeria (15) |
+| 16 | 24,4 | 24,5 | -0% | 112 | 4,6 | 0,4 | 0,4 | 165 / 12 | 4.268 | 2.264 / 2.383 | 25.142 | Aranha de Conduto (16) |
+| 17 | 26,1 | 26,0 | +1% | 116 | 4,4 | 0,0 | 0,0 | 65 / 14 | 5.159 | 2.733 / 887 | 29.134 | Draga Viva (17) |
+| 18 | **20,1** | 27,5 | -27% | 118 | 5,9 | 0,0 | 0,0 | 95 / 15 | 4.222 | 0 / 0 | 33.414 | Escória Pressurizada (18) |
+| 19 | 23,1 | 29,0 | -20% | 141 | 6,1 | 0,0 | 0,0 | 100 / 18 | 5.102 | 0 / 0 | 37.996 | Escória Pressurizada (18) |
+| 20 | 25,6 | 30,5 | -16% | 123 | 4,8 | 0,0 | 0,0 | 62 / 17 | 7.097 | 437 / 978 | 43.004 | Salamandra de Cisterna (21) |
+| 21 | 31,0 | 32,0 | -3% | 153 | 4,9 | 0,0 | 0,0 | 62 / 26 | 12.260 | 2.827 / 10.371 | 48.382 | Salamandra de Cisterna (21) |
+| 22 | 28,2 | 33,5 | -16% | 172 | 6,1 | 0,5 | 0,0 | 155 / 19 | 10.417 | 1.811 / 0 | 54.110 | Sineiro de Bronze (22) |
+| 23 | 32,4 | 35,0 | -8% | 168 | 5,2 | 0,3 | 0,3 | 187 / 28 | 13.941 | 5.411 / 11.488 | 60.208 | Voz Soterrada (23) |
+| 24 | 31,0 | 36,5 | -15% | 190 | 6,1 | 1,1 | 0,3 | 206 / 27 | 12.205 | 1.853 / 1.656 | 66.932 | Voz Soterrada (23) |
 
 ### Cantora do Véu (`veilsinger`)
 
-7,29 h do 1 ao 25 (-5% da meta; 8/8 execuções concluídas). Plano de atributos: gerado (requisitos das faixas + Espírito/Vitalidade 2:3). Tempo: combate 72%, deslocamento e saque 5%, recuperação 4%, viagens 19%, cidade e prova 0%, caído/fugindo 0%. Dano por fonte: ataque básico 54%, Nota Clara 46%; acerto 100%; 1.675 de dano causado e 758 recebido por minuto; 232 de cura por minuto.
+7,29 h do 1 ao 25 (-5% da meta; 8/8 execuções concluídas). Plano de atributos: gerado (requisitos das faixas + Espírito/Vitalidade 2:3). Tempo: combate 72%, deslocamento e saque 5%, recuperação 4%, viagens 19%, cidade e prova 0%, caído/fugindo 0%. Dano por fonte: ataque básico 54%, Nota Clara 46%; acerto 100%; 1.653 de dano causado e 755 recebido por minuto; 231 de cura por minuto.
 
 | Nível | Min | Meta | Desvio | Abates | Abates/min | Mortes | Fugas | Tônicos V/M | Ouro ganho (moedas + vendas) | Gasto: tônicos / equip. | XP de abates | Monstro principal |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -242,25 +242,25 @@ Golpes de mecânica levados por execução, média das classes:
 | 7 | 9,8 | 11,0 | -11% | 34 | 3,5 | 0,0 | 0,0 | 10 / 17 | 512 | 329 / 191 | 3.616 | Válvula Errante (7) |
 | 8 | 9,5 | 12,5 | -24% | 43 | 4,5 | 0,0 | 0,0 | 6 / 15 | 751 | 140 / 9 | 4.868 | Garça de Ferrugem (8) |
 | 9 | 11,8 | 14,0 | -16% | 44 | 3,7 | 0,3 | 0,0 | 15 / 23 | 589 | 299 / 185 | 6.425 | Autômato Escavador (9) |
-| 10 | **19,9** | 15,5 | +28% | 63 | 3,2 | 1,0 | 0,0 | 25 / 35 | 1.323 | 605 / 865 | 8.269 | Garça de Ferrugem (8) |
-| 11 | **11,8** | 17,0 | -31% | 59 | 5,0 | 0,3 | 0,0 | 13 / 33 | 1.554 | 129 / 247 | 10.301 | Soldador Cego (11) |
-| 12 | 14,5 | 18,5 | -22% | 79 | 5,4 | 0,0 | 0,0 | 3 / 21 | 2.342 | 426 / 0 | 12.659 | Lâmina de Esteira (12) |
-| 13 | 20,8 | 20,0 | +4% | 85 | 4,1 | 0,0 | 0,0 | 0 / 47 | 3.222 | 311 / 3.564 | 15.282 | Larva Térmica (13) |
-| 14 | 23,4 | 21,5 | +9% | 100 | 4,3 | 0,1 | 0,0 | 32 / 43 | 3.634 | 2.837 / 538 | 18.231 | Ecoante (14) |
-| 15 | 17,4 | 23,0 | -24% | 106 | 6,1 | 0,0 | 0,0 | 35 / 39 | 3.108 | 319 / 496 | 21.592 | Guardião de Galeria (15) |
-| 16 | 20,9 | 24,5 | -15% | 110 | 5,3 | 0,0 | 0,0 | 101 / 49 | 3.140 | 323 / 688 | 25.130 | Aranha de Conduto (16) |
-| 17 | 26,7 | 26,0 | +3% | 116 | 4,3 | 0,0 | 0,0 | 20 / 36 | 6.112 | 3.821 / 5.626 | 29.140 | Draga Viva (17) |
-| 18 | **19,7** | 27,5 | -28% | 119 | 6,0 | 0,0 | 0,0 | 23 / 44 | 4.178 | 0 / 0 | 33.404 | Escória Pressurizada (18) |
-| 19 | 24,3 | 29,0 | -16% | 141 | 5,8 | 0,0 | 0,0 | 32 / 53 | 5.460 | 353 / 1.431 | 37.963 | Escória Pressurizada (18) |
-| 20 | 32,2 | 30,5 | +6% | 125 | 3,9 | 0,0 | 0,0 | 1 / 34 | 7.963 | 1.373 / 3.465 | 43.068 | Salamandra de Cisterna (21) |
-| 21 | 29,9 | 32,0 | -7% | 153 | 5,1 | 0,0 | 0,0 | 0 / 44 | 9.678 | 971 / 6.140 | 48.382 | Salamandra de Cisterna (21) |
-| 22 | 32,9 | 33,5 | -2% | 168 | 5,1 | 0,3 | 0,0 | 61 / 63 | 11.214 | 1.526 / 650 | 54.043 | Sineiro de Bronze (22) |
-| 23 | 34,3 | 35,0 | -2% | 174 | 5,1 | 0,5 | 0,0 | 80 / 69 | 10.603 | 2.064 / 6.124 | 60.289 | Voz Soterrada (23) |
-| 24 | 40,9 | 36,5 | +12% | 199 | 4,9 | 1,5 | 0,0 | 136 / 81 | 12.439 | 3.926 / 6.565 | 66.803 | Toupeira de Basalto (24) |
+| 10 | 18,5 | 15,5 | +19% | 61 | 3,3 | 1,3 | 0,0 | 25 / 36 | 1.162 | 550 / 686 | 8.218 | Rato-Engrenagem (10) |
+| 11 | 13,8 | 17,0 | -19% | 61 | 4,4 | 0,3 | 0,0 | 10 / 29 | 1.687 | 448 / 398 | 10.344 | Soldador Cego (11) |
+| 12 | **12,8** | 18,5 | -31% | 79 | 6,2 | 0,0 | 0,0 | 1 / 28 | 2.214 | 0 / 0 | 12.633 | Lâmina de Esteira (12) |
+| 13 | 20,5 | 20,0 | +3% | 86 | 4,2 | 0,0 | 0,0 | 0 / 45 | 3.262 | 435 / 3.459 | 15.349 | Larva Térmica (13) |
+| 14 | 24,6 | 21,5 | +15% | 99 | 4,0 | 0,3 | 0,0 | 46 / 57 | 3.708 | 3.221 / 735 | 18.257 | Ecoante (14) |
+| 15 | 18,0 | 23,0 | -22% | 108 | 6,0 | 0,0 | 0,0 | 33 / 40 | 3.198 | 589 / 549 | 21.509 | Guardião de Galeria (15) |
+| 16 | 19,7 | 24,5 | -20% | 109 | 5,5 | 0,0 | 0,0 | 83 / 49 | 3.087 | 0 / 0 | 25.105 | Aranha de Conduto (16) |
+| 17 | 27,0 | 26,0 | +4% | 116 | 4,3 | 0,0 | 0,0 | 20 / 37 | 5.651 | 2.585 / 6.496 | 29.174 | Draga Viva (17) |
+| 18 | 21,1 | 27,5 | -23% | 119 | 5,6 | 0,0 | 0,0 | 26 / 61 | 4.601 | 769 / 400 | 33.397 | Escória Pressurizada (18) |
+| 19 | 24,6 | 29,0 | -15% | 141 | 5,7 | 0,0 | 0,0 | 25 / 53 | 5.543 | 881 / 609 | 38.030 | Escória Pressurizada (18) |
+| 20 | 29,7 | 30,5 | -3% | 124 | 4,2 | 0,0 | 0,0 | 0 / 33 | 7.005 | 600 / 1.181 | 43.040 | Salamandra de Cisterna (21) |
+| 21 | 34,6 | 32,0 | +8% | 153 | 4,4 | 0,0 | 0,0 | 0 / 44 | 11.088 | 1.118 / 10.912 | 48.422 | Salamandra de Cisterna (21) |
+| 22 | 27,9 | 33,5 | -17% | 170 | 6,1 | 0,4 | 0,0 | 65 / 58 | 8.804 | 0 / 0 | 54.010 | Sineiro de Bronze (22) |
+| 23 | 39,0 | 35,0 | +12% | 174 | 4,5 | 0,5 | 0,0 | 102 / 71 | 11.853 | 3.845 / 11.310 | 60.248 | Voz Soterrada (23) |
+| 24 | 38,3 | 36,5 | +5% | 182 | 4,8 | 1,0 | 0,0 | 139 / 79 | 10.660 | 2.999 / 2.892 | 66.820 | Voz Soterrada (23) |
 
 ### Escudeiro do Alvorecer (`dawnshield`)
 
-7,48 h do 1 ao 25 (-3% da meta; 8/8 execuções concluídas). Plano de atributos: gerado (requisitos das faixas + Força/Vitalidade 2:3). Tempo: combate 71%, deslocamento e saque 4%, recuperação 2%, viagens 22%, cidade e prova 0%, caído/fugindo 0%. Dano por fonte: ataque básico 75%, Corte Solar 17%, Lâmina do Meio-Dia 5%, dano sagrado extra 4%; acerto 80%; 1.569 de dano causado e 557 recebido por minuto; 5 de cura por minuto.
+7,34 h do 1 ao 25 (-5% da meta; 8/8 execuções concluídas). Plano de atributos: gerado (requisitos das faixas + Força/Vitalidade 2:3). Tempo: combate 72%, deslocamento e saque 5%, recuperação 2%, viagens 20%, cidade e prova 0%, caído/fugindo 0%. Dano por fonte: ataque básico 75%, Corte Solar 17%, Lâmina do Meio-Dia 5%, dano sagrado extra 4%; acerto 80%; 1.603 de dano causado e 555 recebido por minuto; 6 de cura por minuto.
 
 | Nível | Min | Meta | Desvio | Abates | Abates/min | Mortes | Fugas | Tônicos V/M | Ouro ganho (moedas + vendas) | Gasto: tônicos / equip. | XP de abates | Monstro principal |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -273,25 +273,25 @@ Golpes de mecânica levados por execução, média das classes:
 | 7 | 12,0 | 11,0 | +9% | 37 | 3,1 | 0,0 | 1,4 | 41 / 3 | 500 | 292 / 219 | 3.624 | Válvula Errante (7) |
 | 8 | 10,7 | 12,5 | -15% | 46 | 4,3 | 0,1 | 0,5 | 21 / 6 | 719 | 56 / 10 | 4.859 | Garça de Ferrugem (8) |
 | 9 | 15,6 | 14,0 | +11% | 46 | 3,0 | 0,4 | 0,9 | 62 / 5 | 712 | 617 / 225 | 6.436 | Autômato Escavador (9) |
-| 10 | **21,1** | 15,5 | +36% | 59 | 2,8 | 0,8 | 0,0 | 54 / 6 | 1.235 | 550 / 899 | 8.295 | Rato-Engrenagem (10) |
-| 11 | **12,5** | 17,0 | -26% | 59 | 4,7 | 0,1 | 0,0 | 54 / 7 | 1.574 | 56 / 246 | 10.288 | Soldador Cego (11) |
-| 12 | 15,3 | 18,5 | -17% | 79 | 5,1 | 0,0 | 0,1 | 27 / 10 | 2.279 | 204 / 0 | 12.640 | Lâmina de Esteira (12) |
-| 13 | 20,5 | 20,0 | +3% | 86 | 4,2 | 0,0 | 0,0 | 21 / 14 | 3.242 | 632 / 3.629 | 15.305 | Larva Térmica (13) |
-| 14 | 18,7 | 21,5 | -13% | 100 | 5,4 | 0,5 | 0,4 | 106 / 10 | 2.612 | 1.086 / 0 | 18.236 | Ecoante (14) |
-| 15 | 23,0 | 23,0 | +0% | 111 | 4,8 | 0,3 | 0,9 | 107 / 12 | 3.921 | 3.030 / 716 | 21.553 | Guardião de Galeria (15) |
-| 16 | 25,0 | 24,5 | +2% | 117 | 4,7 | 0,1 | 0,4 | 140 / 12 | 3.935 | 2.265 / 1.649 | 25.150 | Aranha de Conduto (16) |
-| 17 | 30,8 | 26,0 | +18% | 115 | 3,7 | 0,0 | 0,1 | 95 / 12 | 4.895 | 2.400 / 3.546 | 29.125 | Draga Viva (17) |
-| 18 | 22,0 | 27,5 | -20% | 120 | 5,5 | 0,0 | 0,0 | 103 / 12 | 4.593 | 726 / 125 | 33.409 | Escória Pressurizada (18) |
-| 19 | 24,9 | 29,0 | -14% | 141 | 5,7 | 0,0 | 0,0 | 101 / 18 | 5.847 | 1.266 / 1.628 | 38.030 | Escória Pressurizada (18) |
-| 20 | 28,8 | 30,5 | -6% | 126 | 4,4 | 0,0 | 0,0 | 79 / 17 | 7.169 | 800 / 1.621 | 43.083 | Salamandra de Cisterna (21) |
-| 21 | 34,3 | 32,0 | +7% | 152 | 4,4 | 0,0 | 0,0 | 62 / 24 | 12.399 | 3.079 / 9.795 | 48.303 | Salamandra de Cisterna (21) |
-| 22 | 29,0 | 33,5 | -13% | 168 | 5,8 | 0,0 | 0,0 | 171 / 18 | 9.529 | 902 / 0 | 54.089 | Sineiro de Bronze (22) |
-| 23 | 37,4 | 35,0 | +7% | 168 | 4,5 | 0,1 | 0,5 | 169 / 28 | 15.159 | 6.420 / 14.311 | 60.266 | Voz Soterrada (23) |
-| 24 | 37,5 | 36,5 | +3% | 167 | 4,4 | 0,1 | 0,4 | 229 / 23 | 12.974 | 5.463 / 1.971 | 66.809 | Toupeira de Basalto (24) |
+| 10 | **20,5** | 15,5 | +32% | 60 | 2,9 | 0,8 | 0,0 | 61 / 7 | 1.216 | 436 / 859 | 8.305 | Rato-Engrenagem (10) |
+| 11 | 13,8 | 17,0 | -19% | 59 | 4,3 | 0,3 | 0,3 | 60 / 6 | 1.651 | 259 / 286 | 10.282 | Soldador Cego (11) |
+| 12 | 14,8 | 18,5 | -20% | 79 | 5,3 | 0,0 | 0,0 | 25 / 9 | 2.200 | 0 / 0 | 12.625 | Lâmina de Esteira (12) |
+| 13 | 20,5 | 20,0 | +3% | 86 | 4,2 | 0,0 | 0,0 | 19 / 15 | 3.298 | 1.224 / 3.023 | 15.305 | Larva Térmica (13) |
+| 14 | 16,6 | 21,5 | -23% | 100 | 6,0 | 0,4 | 0,0 | 100 / 8 | 1.911 | 0 / 0 | 18.285 | Ecoante (14) |
+| 15 | 24,4 | 23,0 | +6% | 121 | 5,0 | 0,8 | 0,8 | 93 / 11 | 3.861 | 2.826 / 1.476 | 21.487 | Guardião de Galeria (15) |
+| 16 | 24,1 | 24,5 | -2% | 120 | 5,0 | 0,4 | 0,5 | 111 / 18 | 4.509 | 1.478 / 2.572 | 25.170 | Aranha de Conduto (16) |
+| 17 | 28,1 | 26,0 | +8% | 116 | 4,1 | 0,0 | 0,0 | 74 / 15 | 5.124 | 1.992 / 2.259 | 29.126 | Draga Viva (17) |
+| 18 | **20,4** | 27,5 | -26% | 119 | 5,8 | 0,0 | 0,0 | 97 / 13 | 4.141 | 0 / 0 | 33.427 | Escória Pressurizada (18) |
+| 19 | 28,2 | 29,0 | -3% | 141 | 5,0 | 0,0 | 0,0 | 104 / 16 | 6.610 | 2.699 / 4.560 | 38.030 | Escória Pressurizada (18) |
+| 20 | 27,8 | 30,5 | -9% | 124 | 4,5 | 0,0 | 0,0 | 78 / 18 | 7.390 | 863 / 1.410 | 42.996 | Salamandra de Cisterna (21) |
+| 21 | 30,4 | 32,0 | -5% | 153 | 5,0 | 0,0 | 0,0 | 66 / 21 | 11.075 | 1.916 / 6.030 | 48.382 | Salamandra de Cisterna (21) |
+| 22 | 28,3 | 33,5 | -16% | 167 | 5,9 | 0,0 | 0,1 | 157 / 22 | 9.556 | 926 / 406 | 54.059 | Sineiro de Bronze (22) |
+| 23 | 37,6 | 35,0 | +7% | 165 | 4,4 | 0,0 | 0,6 | 178 / 28 | 14.096 | 6.459 / 14.001 | 60.331 | Voz Soterrada (23) |
+| 24 | 37,0 | 36,5 | +1% | 165 | 4,5 | 0,0 | 0,9 | 242 / 26 | 12.895 | 5.512 / 1.971 | 66.794 | Toupeira de Basalto (24) |
 
 ### Lanceiro do Fosso (`pikeman`)
 
-7,58 h do 1 ao 25 (-2% da meta; 8/8 execuções concluídas). Plano de atributos: gerado (requisitos das faixas + Força/Vitalidade 2:3). Tempo: combate 66%, deslocamento e saque 6%, recuperação 4%, viagens 24%, cidade e prova 0%, caído/fugindo 0%. Dano por fonte: ataque básico 77%, Estocada Longa 14%, Avanço do Fosso 4%, Muralha de Piques 3%, Linha Partida 3%; acerto 86%; 1.624 de dano causado e 600 recebido por minuto.
+7,37 h do 1 ao 25 (-4% da meta; 8/8 execuções concluídas). Plano de atributos: gerado (requisitos das faixas + Força/Vitalidade 2:3). Tempo: combate 67%, deslocamento e saque 5%, recuperação 5%, viagens 22%, cidade e prova 0%, caído/fugindo 0%. Dano por fonte: ataque básico 77%, Estocada Longa 14%, Avanço do Fosso 4%, Muralha de Piques 3%, Linha Partida 3%; acerto 85%; 1.662 de dano causado e 592 recebido por minuto.
 
 | Nível | Min | Meta | Desvio | Abates | Abates/min | Mortes | Fugas | Tônicos V/M | Ouro ganho (moedas + vendas) | Gasto: tônicos / equip. | XP de abates | Monstro principal |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -301,28 +301,28 @@ Golpes de mecânica levados por execução, média das classes:
 | 4 | 7,2 | 6,5 | +10% | 34 | 4,7 | 0,0 | 0,9 | 9 / 2 | 143 | 0 / 0 | 1.039 | Cão de Ferrugem (3) |
 | 5 | 9,3 | 8,0 | +16% | 30 | 3,3 | 0,0 | 0,3 | 12 / 4 | 118 | 58 / 42 | 1.699 | Sapo-Bomba (5) |
 | 6 | 9,9 | 9,5 | +4% | 31 | 3,2 | 0,1 | 1,4 | 39 / 2 | 266 | 160 / 121 | 2.542 | Enguia de Lodo (6) |
-| 7 | **15,2** | 11,0 | +39% | 38 | 2,5 | 0,1 | 2,3 | 45 / 3 | 429 | 320 / 188 | 3.592 | Válvula Errante (7) |
-| 8 | 13,4 | 12,5 | +7% | 49 | 3,7 | 0,0 | 1,0 | 37 / 6 | 760 | 276 / 19 | 4.908 | Garça de Ferrugem (8) |
-| 9 | **18,5** | 14,0 | +32% | 58 | 3,1 | 1,0 | 0,1 | 45 / 6 | 951 | 260 / 194 | 6.417 | Garça de Ferrugem (8) |
-| 10 | 17,6 | 15,5 | +14% | 64 | 3,6 | 1,1 | 0,0 | 65 / 10 | 1.198 | 576 / 785 | 8.241 | Garça de Ferrugem (8) |
-| 11 | 14,6 | 17,0 | -14% | 59 | 4,1 | 0,5 | 0,4 | 63 / 7 | 1.740 | 638 / 65 | 10.317 | Soldador Cego (11) |
-| 12 | 14,2 | 18,5 | -23% | 80 | 5,6 | 0,0 | 0,0 | 33 / 11 | 2.202 | 0 / 0 | 12.672 | Lâmina de Esteira (12) |
-| 13 | 19,4 | 20,0 | -3% | 86 | 4,4 | 0,0 | 0,0 | 29 / 16 | 3.207 | 1.006 / 3.402 | 15.305 | Larva Térmica (13) |
-| 14 | 17,1 | 21,5 | -21% | 102 | 5,9 | 0,6 | 0,0 | 99 / 9 | 2.795 | 687 / 0 | 18.254 | Ecoante (14) |
-| 15 | 22,7 | 23,0 | -1% | 121 | 5,3 | 0,8 | 0,3 | 110 / 12 | 3.803 | 2.778 / 677 | 21.498 | Larva Térmica (13) |
-| 16 | 26,9 | 24,5 | +10% | 125 | 4,7 | 0,4 | 0,5 | 151 / 13 | 4.027 | 2.807 / 1.973 | 25.125 | Aranha de Conduto (16) |
-| 17 | 29,3 | 26,0 | +13% | 118 | 4,0 | 0,3 | 0,1 | 114 / 16 | 4.702 | 1.988 / 1.966 | 29.202 | Draga Viva (17) |
-| 18 | 28,4 | 27,5 | +3% | 125 | 4,4 | 0,4 | 0,4 | 127 / 14 | 5.109 | 2.926 / 824 | 33.395 | Escória Pressurizada (18) |
-| 19 | 23,7 | 29,0 | -18% | 142 | 6,0 | 0,0 | 0,0 | 127 / 16 | 5.322 | 786 / 0 | 37.968 | Escória Pressurizada (18) |
-| 20 | 28,5 | 30,5 | -7% | 124 | 4,4 | 0,0 | 0,1 | 101 / 16 | 7.995 | 2.624 / 3.011 | 43.070 | Salamandra de Cisterna (21) |
-| 21 | 30,3 | 32,0 | -5% | 153 | 5,0 | 0,0 | 0,0 | 90 / 21 | 11.479 | 3.589 / 5.536 | 48.382 | Salamandra de Cisterna (21) |
-| 22 | 26,0 | 33,5 | -22% | 169 | 6,5 | 0,4 | 0,0 | 194 / 21 | 9.520 | 902 / 406 | 54.056 | Sineiro de Bronze (22) |
-| 23 | 34,5 | 35,0 | -2% | 166 | 4,8 | 0,0 | 0,8 | 222 / 24 | 14.578 | 6.437 / 11.339 | 60.296 | Voz Soterrada (23) |
-| 24 | 37,4 | 36,5 | +3% | 177 | 4,7 | 0,9 | 0,6 | 229 / 27 | 16.001 | 7.373 / 1.578 | 66.883 | Voz Soterrada (23) |
+| 7 | **16,2** | 11,0 | +47% | 35 | 2,2 | 0,3 | 2,4 | 44 / 2 | 441 | 345 / 207 | 3.593 | Válvula Errante (7) |
+| 8 | 13,1 | 12,5 | +5% | 49 | 3,7 | 0,0 | 1,0 | 36 / 5 | 690 | 246 / 0 | 4.905 | Garça de Ferrugem (8) |
+| 9 | **18,6** | 14,0 | +33% | 58 | 3,1 | 1,0 | 0,1 | 45 / 7 | 957 | 260 / 194 | 6.430 | Garça de Ferrugem (8) |
+| 10 | 18,6 | 15,5 | +20% | 64 | 3,4 | 1,1 | 0,0 | 58 / 10 | 1.245 | 615 / 785 | 8.239 | Garça de Ferrugem (8) |
+| 11 | 13,0 | 17,0 | -24% | 59 | 4,6 | 0,3 | 0,0 | 65 / 6 | 1.587 | 81 / 81 | 10.346 | Soldador Cego (11) |
+| 12 | 14,8 | 18,5 | -20% | 80 | 5,4 | 0,0 | 0,0 | 34 / 12 | 2.233 | 0 / 0 | 12.629 | Lâmina de Esteira (12) |
+| 13 | 19,2 | 20,0 | -4% | 86 | 4,5 | 0,0 | 0,0 | 28 / 15 | 3.297 | 1.462 / 3.472 | 15.305 | Larva Térmica (13) |
+| 14 | 17,9 | 21,5 | -17% | 101 | 5,7 | 0,9 | 0,1 | 103 / 10 | 2.864 | 1.197 / 0 | 18.226 | Ecoante (14) |
+| 15 | 19,9 | 23,0 | -13% | 128 | 6,4 | 0,8 | 0,0 | 85 / 15 | 3.508 | 0 / 0 | 21.516 | Larva Térmica (13) |
+| 16 | 28,5 | 24,5 | +16% | 122 | 4,3 | 0,8 | 1,1 | 137 / 14 | 4.905 | 3.749 / 3.956 | 25.191 | Guardião de Galeria (15) |
+| 17 | 23,3 | 26,0 | -10% | 116 | 5,0 | 0,0 | 0,1 | 94 / 17 | 4.731 | 1.115 / 1.134 | 29.120 | Draga Viva (17) |
+| 18 | 25,3 | 27,5 | -8% | 122 | 4,8 | 0,4 | 0,1 | 111 / 20 | 6.629 | 3.476 / 1.425 | 33.385 | Escória Pressurizada (18) |
+| 19 | 23,8 | 29,0 | -18% | 143 | 6,0 | 0,0 | 0,1 | 123 / 18 | 5.899 | 1.626 / 882 | 38.086 | Escória Pressurizada (18) |
+| 20 | 24,5 | 30,5 | -20% | 124 | 5,1 | 0,0 | 0,0 | 104 / 16 | 7.514 | 872 / 1.292 | 43.036 | Salamandra de Cisterna (21) |
+| 21 | 31,3 | 32,0 | -2% | 153 | 4,9 | 0,0 | 0,0 | 86 / 23 | 12.160 | 4.360 / 9.436 | 48.382 | Salamandra de Cisterna (21) |
+| 22 | 29,7 | 33,5 | -11% | 170 | 5,7 | 0,4 | 0,0 | 190 / 19 | 11.966 | 2.686 / 650 | 54.045 | Sineiro de Bronze (22) |
+| 23 | 31,9 | 35,0 | -9% | 165 | 5,2 | 0,0 | 0,6 | 209 / 22 | 12.778 | 4.472 / 8.156 | 60.276 | Voz Soterrada (23) |
+| 24 | 35,5 | 36,5 | -3% | 170 | 4,8 | 0,5 | 1,0 | 244 / 25 | 13.426 | 6.464 / 4.549 | 66.839 | Toupeira de Basalto (24) |
 
 ### Bastião de Bronze (`bastion`)
 
-7,68 h do 1 ao 25 (-0% da meta; 8/8 execuções concluídas). Plano de atributos: gerado (requisitos das faixas + Força/Vitalidade 2:3). Tempo: combate 73%, deslocamento e saque 5%, recuperação 3%, viagens 19%, cidade e prova 0%, caído/fugindo 0%. Dano por fonte: ataque básico 82%, Pulso de Atração 10%, Engrenagem Travada 8%; acerto 85%; 1.552 de dano causado e 513 recebido por minuto.
+7,59 h do 1 ao 25 (-2% da meta; 8/8 execuções concluídas). Plano de atributos: gerado (requisitos das faixas + Força/Vitalidade 2:3). Tempo: combate 74%, deslocamento e saque 5%, recuperação 3%, viagens 18%, cidade e prova 0%, caído/fugindo 0%. Dano por fonte: ataque básico 82%, Pulso de Atração 11%, Engrenagem Travada 8%; acerto 85%; 1.575 de dano causado e 498 recebido por minuto.
 
 | Nível | Min | Meta | Desvio | Abates | Abates/min | Mortes | Fugas | Tônicos V/M | Ouro ganho (moedas + vendas) | Gasto: tônicos / equip. | XP de abates | Monstro principal |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -335,25 +335,25 @@ Golpes de mecânica levados por execução, média das classes:
 | 7 | 10,8 | 11,0 | -1% | 36 | 3,3 | 0,0 | 1,9 | 41 / 3 | 352 | 205 / 138 | 3.588 | Válvula Errante (7) |
 | 8 | 12,3 | 12,5 | -2% | 45 | 3,7 | 0,0 | 0,3 | 32 / 6 | 718 | 158 / 76 | 4.907 | Garça de Ferrugem (8) |
 | 9 | 16,1 | 14,0 | +15% | 48 | 3,0 | 0,6 | 0,9 | 65 / 7 | 671 | 539 / 125 | 6.403 | Autômato Escavador (9) |
-| 10 | **19,6** | 15,5 | +26% | 62 | 3,2 | 1,3 | 0,0 | 74 / 8 | 1.138 | 452 / 670 | 8.266 | Autômato Escavador (9) |
-| 11 | 19,4 | 17,0 | +14% | 60 | 3,1 | 0,3 | 0,3 | 68 / 8 | 1.646 | 620 / 550 | 10.321 | Soldador Cego (11) |
-| 12 | 17,3 | 18,5 | -6% | 79 | 4,6 | 0,0 | 0,0 | 29 / 11 | 2.336 | 0 / 0 | 12.651 | Lâmina de Esteira (12) |
-| 13 | 22,7 | 20,0 | +14% | 85 | 3,8 | 0,0 | 0,0 | 22 / 13 | 3.122 | 828 / 3.037 | 15.282 | Larva Térmica (13) |
-| 14 | 20,6 | 21,5 | -4% | 101 | 4,9 | 0,6 | 0,1 | 102 / 6 | 2.065 | 720 / 0 | 18.243 | Ecoante (14) |
-| 15 | 23,9 | 23,0 | +4% | 113 | 4,8 | 0,3 | 0,5 | 92 / 14 | 4.086 | 2.556 / 807 | 21.547 | Guardião de Galeria (15) |
-| 16 | 29,6 | 24,5 | +21% | 114 | 3,8 | 0,4 | 0,8 | 158 / 9 | 3.335 | 2.663 / 1.702 | 25.135 | Aranha de Conduto (16) |
-| 17 | 28,1 | 26,0 | +8% | 116 | 4,1 | 0,0 | 0,0 | 74 / 18 | 5.533 | 1.623 / 3.013 | 29.148 | Draga Viva (17) |
-| 18 | 25,3 | 27,5 | -8% | 119 | 4,7 | 0,0 | 0,1 | 94 / 15 | 4.789 | 1.148 / 656 | 33.365 | Escória Pressurizada (18) |
-| 19 | 25,7 | 29,0 | -11% | 142 | 5,5 | 0,0 | 0,3 | 97 / 17 | 5.975 | 1.421 / 2.392 | 38.097 | Escória Pressurizada (18) |
-| 20 | 28,4 | 30,5 | -7% | 124 | 4,4 | 0,0 | 0,0 | 81 / 16 | 7.176 | 653 / 1.535 | 42.972 | Salamandra de Cisterna (21) |
-| 21 | 31,9 | 32,0 | -0% | 153 | 4,8 | 0,0 | 0,0 | 54 / 23 | 12.310 | 2.695 / 7.535 | 48.343 | Salamandra de Cisterna (21) |
-| 22 | 28,4 | 33,5 | -15% | 168 | 5,9 | 0,0 | 0,0 | 140 / 21 | 9.776 | 882 / 650 | 54.172 | Sineiro de Bronze (22) |
-| 23 | 37,6 | 35,0 | +7% | 165 | 4,4 | 0,0 | 0,6 | 158 / 21 | 14.679 | 6.435 / 13.674 | 60.287 | Voz Soterrada (23) |
-| 24 | **26,3** | 36,5 | -28% | 164 | 6,2 | 0,0 | 0,0 | 201 / 24 | 8.671 | 0 / 0 | 66.866 | Toupeira de Basalto (24) |
+| 10 | **19,9** | 15,5 | +29% | 58 | 2,9 | 0,9 | 0,1 | 69 / 9 | 1.146 | 537 / 614 | 8.279 | Rato-Engrenagem (10) |
+| 11 | 17,7 | 17,0 | +4% | 58 | 3,3 | 0,0 | 0,3 | 66 / 9 | 1.778 | 373 / 619 | 10.291 | Soldador Cego (11) |
+| 12 | 18,5 | 18,5 | 0% | 79 | 4,3 | 0,0 | 0,1 | 30 / 10 | 2.194 | 219 / 0 | 12.649 | Lâmina de Esteira (12) |
+| 13 | 22,7 | 20,0 | +14% | 86 | 3,8 | 0,0 | 0,0 | 23 / 16 | 3.300 | 606 / 3.393 | 15.327 | Larva Térmica (13) |
+| 14 | 18,7 | 21,5 | -13% | 101 | 5,4 | 0,5 | 0,1 | 93 / 9 | 2.543 | 435 / 0 | 18.240 | Ecoante (14) |
+| 15 | 25,2 | 23,0 | +10% | 115 | 4,6 | 0,5 | 0,5 | 107 / 11 | 3.441 | 2.958 / 953 | 21.515 | Guardião de Galeria (15) |
+| 16 | 25,4 | 24,5 | +4% | 116 | 4,6 | 0,5 | 0,4 | 120 / 15 | 4.693 | 2.040 / 1.452 | 25.124 | Aranha de Conduto (16) |
+| 17 | 29,2 | 26,0 | +12% | 115 | 3,9 | 0,0 | 0,0 | 68 / 15 | 5.522 | 2.295 / 4.237 | 29.129 | Draga Viva (17) |
+| 18 | 22,0 | 27,5 | -20% | 119 | 5,4 | 0,0 | 0,0 | 94 / 11 | 4.228 | 0 / 0 | 33.500 | Escória Pressurizada (18) |
+| 19 | 23,1 | 29,0 | -21% | 141 | 6,1 | 0,0 | 0,0 | 92 / 17 | 4.972 | 0 / 0 | 37.929 | Escória Pressurizada (18) |
+| 20 | 29,8 | 30,5 | -2% | 124 | 4,2 | 0,0 | 0,0 | 77 / 15 | 7.150 | 680 / 975 | 43.036 | Salamandra de Cisterna (21) |
+| 21 | 33,4 | 32,0 | +4% | 153 | 4,6 | 0,0 | 0,0 | 52 / 22 | 12.110 | 3.514 / 10.492 | 48.422 | Salamandra de Cisterna (21) |
+| 22 | 26,7 | 33,5 | -20% | 167 | 6,3 | 0,0 | 0,0 | 142 / 21 | 8.683 | 0 / 0 | 54.037 | Sineiro de Bronze (22) |
+| 23 | 37,5 | 35,0 | +7% | 167 | 4,5 | 0,3 | 0,6 | 143 / 24 | 15.055 | 6.350 / 13.550 | 60.318 | Voz Soterrada (23) |
+| 24 | 29,4 | 36,5 | -19% | 171 | 5,8 | 0,0 | 0,0 | 209 / 22 | 10.063 | 892 / 1.511 | 66.902 | Toupeira de Basalto (24) |
 
 ### Quebraferro (`breaker`)
 
-7,71 h do 1 ao 25 (+0% da meta; 8/8 execuções concluídas). Plano de atributos: example_builds.json (breaker_physical). Tempo: combate 68%, deslocamento e saque 5%, recuperação 4%, viagens 23%, cidade e prova 0%, caído/fugindo 0%. Dano por fonte: ataque básico 78%, Talho Profundo 13%, Ruptura 4%, dano contínuo 3%, Fenda Sísmica 3%; acerto 88%; 1.567 de dano causado e 646 recebido por minuto.
+7,75 h do 1 ao 25 (+1% da meta; 8/8 execuções concluídas). Plano de atributos: example_builds.json (breaker_physical). Tempo: combate 68%, deslocamento e saque 5%, recuperação 4%, viagens 22%, cidade e prova 0%, caído/fugindo 0%. Dano por fonte: ataque básico 79%, Talho Profundo 12%, Ruptura 3%, dano contínuo 3%, Fenda Sísmica 2%; acerto 88%; 1.569 de dano causado e 636 recebido por minuto.
 
 | Nível | Min | Meta | Desvio | Abates | Abates/min | Mortes | Fugas | Tônicos V/M | Ouro ganho (moedas + vendas) | Gasto: tônicos / equip. | XP de abates | Monstro principal |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -363,24 +363,24 @@ Golpes de mecânica levados por execução, média das classes:
 | 4 | 5,7 | 6,5 | -12% | 30 | 5,2 | 0,0 | 0,4 | 8 / 4 | 158 | 0 / 0 | 1.049 | Lagarto de Lastro (4) |
 | 5 | 7,7 | 8,0 | -3% | 26 | 3,3 | 0,0 | 0,0 | 7 / 3 | 102 | 0 / 0 | 1.700 | Sapo-Bomba (5) |
 | 6 | 10,6 | 9,5 | +11% | 29 | 2,7 | 0,0 | 1,5 | 43 / 2 | 323 | 273 / 198 | 2.530 | Enguia de Lodo (6) |
-| 7 | 11,8 | 11,0 | +8% | 39 | 3,3 | 0,0 | 2,0 | 40 / 3 | 380 | 256 / 168 | 3.619 | Enguia de Lodo (6) |
-| 8 | 14,1 | 12,5 | +13% | 49 | 3,5 | 0,0 | 1,9 | 28 / 7 | 902 | 278 / 0 | 4.898 | Garça de Ferrugem (8) |
-| 9 | 14,9 | 14,0 | +7% | 56 | 3,8 | 0,5 | 0,6 | 68 / 5 | 756 | 391 / 315 | 6.411 | Garça de Ferrugem (8) |
-| 10 | 18,5 | 15,5 | +19% | 59 | 3,2 | 1,1 | 0,0 | 70 / 6 | 1.045 | 560 / 631 | 8.241 | Rato-Engrenagem (10) |
-| 11 | 15,1 | 17,0 | -11% | 59 | 3,9 | 0,8 | 0,4 | 62 / 6 | 1.678 | 663 / 41 | 10.317 | Lâmina de Esteira (12) |
-| 12 | 14,8 | 18,5 | -20% | 79 | 5,4 | 0,0 | 0,0 | 41 / 9 | 2.164 | 0 / 0 | 12.643 | Lâmina de Esteira (12) |
-| 13 | 19,7 | 20,0 | -1% | 86 | 4,3 | 0,0 | 0,0 | 32 / 13 | 3.283 | 1.255 / 2.804 | 15.305 | Larva Térmica (13) |
-| 14 | 16,6 | 21,5 | -23% | 102 | 6,1 | 0,9 | 0,0 | 108 / 7 | 2.228 | 0 / 0 | 18.255 | Ecoante (14) |
-| 15 | 25,4 | 23,0 | +10% | 127 | 5,0 | 1,0 | 0,5 | 88 / 14 | 4.348 | 2.397 / 694 | 21.542 | Larva Térmica (13) |
-| 16 | 29,1 | 24,5 | +19% | 117 | 4,0 | 0,6 | 0,5 | 177 / 16 | 4.659 | 3.984 / 2.764 | 25.174 | Aranha de Conduto (16) |
-| 17 | 31,1 | 26,0 | +20% | 121 | 3,9 | 0,0 | 0,4 | 129 / 12 | 4.790 | 3.326 / 1.338 | 29.103 | Draga Viva (17) |
-| 18 | 25,6 | 27,5 | -7% | 119 | 4,7 | 0,0 | 0,4 | 136 / 13 | 4.892 | 1.700 / 824 | 33.398 | Escória Pressurizada (18) |
-| 19 | 30,9 | 29,0 | +7% | 150 | 4,9 | 0,4 | 0,5 | 144 / 20 | 8.067 | 4.598 / 3.458 | 38.011 | Escória Pressurizada (18) |
-| 20 | 27,0 | 30,5 | -12% | 124 | 4,6 | 0,0 | 0,0 | 113 / 17 | 7.321 | 914 / 863 | 43.080 | Salamandra de Cisterna (21) |
-| 21 | 29,4 | 32,0 | -8% | 153 | 5,2 | 0,0 | 0,0 | 97 / 19 | 10.049 | 2.276 / 4.113 | 48.343 | Salamandra de Cisterna (21) |
-| 22 | 32,8 | 33,5 | -2% | 169 | 5,2 | 0,4 | 0,3 | 196 / 22 | 11.866 | 3.374 / 2.113 | 54.089 | Sineiro de Bronze (22) |
-| 23 | 35,8 | 35,0 | +2% | 169 | 4,7 | 0,3 | 0,6 | 241 / 23 | 14.904 | 5.537 / 9.077 | 60.298 | Voz Soterrada (23) |
-| 24 | 36,7 | 36,5 | +1% | 178 | 4,9 | 1,1 | 0,5 | 244 / 28 | 13.303 | 5.517 / 2.499 | 66.803 | Voz Soterrada (23) |
+| 7 | 11,9 | 11,0 | +8% | 39 | 3,3 | 0,0 | 2,0 | 40 / 3 | 381 | 256 / 168 | 3.619 | Enguia de Lodo (6) |
+| 8 | 13,4 | 12,5 | +7% | 48 | 3,6 | 0,0 | 1,3 | 31 / 8 | 922 | 291 / 0 | 4.892 | Garça de Ferrugem (8) |
+| 9 | 15,5 | 14,0 | +11% | 56 | 3,6 | 0,6 | 0,6 | 69 / 5 | 757 | 391 / 315 | 6.423 | Autômato Escavador (9) |
+| 10 | **19,4** | 15,5 | +25% | 61 | 3,1 | 1,4 | 0,4 | 73 / 7 | 1.083 | 575 / 631 | 8.243 | Rato-Engrenagem (10) |
+| 11 | 14,6 | 17,0 | -14% | 59 | 4,1 | 0,1 | 0,1 | 57 / 8 | 1.876 | 664 / 41 | 10.340 | Soldador Cego (11) |
+| 12 | 14,6 | 18,5 | -21% | 79 | 5,4 | 0,0 | 0,0 | 37 / 9 | 2.168 | 0 / 0 | 12.625 | Lâmina de Esteira (12) |
+| 13 | 19,3 | 20,0 | -3% | 85 | 4,4 | 0,0 | 0,0 | 30 / 15 | 3.270 | 1.099 / 3.299 | 15.282 | Larva Térmica (13) |
+| 14 | 18,4 | 21,5 | -14% | 101 | 5,5 | 0,5 | 0,3 | 110 / 10 | 2.546 | 1.221 / 0 | 18.271 | Ecoante (14) |
+| 15 | 22,6 | 23,0 | -2% | 121 | 5,3 | 0,6 | 0,5 | 110 / 12 | 3.403 | 1.986 / 66 | 21.559 | Guardião de Galeria (15) |
+| 16 | 30,5 | 24,5 | +24% | 128 | 4,2 | 0,9 | 0,8 | 170 / 13 | 4.353 | 3.398 / 1.283 | 25.128 | Aranha de Conduto (16) |
+| 17 | **33,5** | 26,0 | +29% | 132 | 3,9 | 0,5 | 0,3 | 121 / 18 | 5.876 | 2.594 / 3.592 | 29.135 | Draga Viva (17) |
+| 18 | 26,2 | 27,5 | -5% | 124 | 4,7 | 0,4 | 0,5 | 135 / 16 | 5.117 | 2.918 / 800 | 33.367 | Escória Pressurizada (18) |
+| 19 | 26,9 | 29,0 | -7% | 142 | 5,3 | 0,0 | 0,0 | 135 / 18 | 6.478 | 2.400 / 2.380 | 38.072 | Escória Pressurizada (18) |
+| 20 | 29,3 | 30,5 | -4% | 125 | 4,3 | 0,0 | 0,3 | 109 / 16 | 7.744 | 926 / 846 | 43.065 | Salamandra de Cisterna (21) |
+| 21 | 30,4 | 32,0 | -5% | 152 | 5,0 | 0,0 | 0,0 | 90 / 23 | 11.667 | 3.545 / 7.447 | 48.263 | Salamandra de Cisterna (21) |
+| 22 | 30,3 | 33,5 | -10% | 170 | 5,6 | 0,4 | 0,1 | 193 / 18 | 10.361 | 1.847 / 447 | 54.156 | Sineiro de Bronze (22) |
+| 23 | 36,5 | 35,0 | +4% | 171 | 4,7 | 0,4 | 0,6 | 231 / 27 | 14.943 | 6.460 / 10.642 | 60.301 | Voz Soterrada (23) |
+| 24 | 38,5 | 36,5 | +6% | 181 | 4,7 | 1,4 | 0,8 | 242 / 26 | 14.336 | 6.437 / 1.578 | 66.727 | Voz Soterrada (23) |
 
 ## Economia: ouro ganho × gasto (tônicos e equipamento)
 
@@ -388,61 +388,61 @@ Ganho = moedas saqueadas + vendas ao comerciante (sucata, peças substituídas e
 
 | Classe | Moedas | Vendas | Gasto em tônicos | Gasto em equipamento | Fatia tônicos / equip. | Saldo no nível 25 | Ganho/h | Tônicos usados (V+M) | Itens vendidos | Idas à loja |
 |---|---|---|---|---|---|---|---|---|---|---|
-| Tecelão da Brasa | 75.049 | 16.268 | 27.342 | 32.390 | 30% / 35% | 31.586 | 14.146 | 1.952 | 799 | 13,3 |
-| Andarilha do Vento | 74.464 | 19.793 | 28.122 | 38.380 | 30% / 41% | 27.756 | 13.867 | 1.961 | 837 | 12,3 |
-| Vigia do Espinhal | 76.296 | 19.839 | 27.142 | 36.715 | 28% / 38% | 32.277 | 13.637 | 1.946 | 858 | 11,5 |
-| Cantora do Véu | 73.444 | 15.303 | 20.138 | 37.069 | 23% / 42% | 31.540 | 12.177 | 1.386 | 702 | 11,4 |
-| Escudeiro do Alvorecer | 72.208 | 21.848 | 30.160 | 40.817 | 32% / 43% | 23.080 | 12.572 | 1.961 | 854 | 13,1 |
-| Lanceiro do Fosso | 72.744 | 23.805 | 36.241 | 32.159 | 38% / 33% | 28.149 | 12.741 | 2.220 | 925 | 14,1 |
-| Bastião de Bronze | 71.889 | 17.344 | 23.925 | 36.834 | 27% / 41% | 28.473 | 11.613 | 1.907 | 765 | 12,4 |
-| Quebraferro | 72.629 | 24.801 | 37.348 | 31.933 | 38% / 33% | 28.149 | 12.639 | 2.342 | 909 | 14,0 |
+| Tecelão da Brasa | 75.417 | 15.493 | 24.345 | 29.232 | 27% / 32% | 37.333 | 13.964 | 1.915 | 725 | 13,3 |
+| Andarilha do Vento | 74.714 | 19.842 | 27.092 | 37.838 | 29% / 40% | 29.627 | 14.147 | 1.938 | 819 | 11,9 |
+| Vigia do Espinhal | 75.549 | 17.586 | 23.644 | 35.294 | 25% / 38% | 34.197 | 13.708 | 1.904 | 771 | 10,8 |
+| Cantora do Véu | 72.572 | 13.729 | 19.193 | 40.298 | 22% / 47% | 26.810 | 11.832 | 1.427 | 636 | 11,0 |
+| Escudeiro do Alvorecer | 73.073 | 19.153 | 27.870 | 39.534 | 30% / 43% | 24.823 | 12.564 | 1.917 | 842 | 12,3 |
+| Lanceiro do Fosso | 73.550 | 24.010 | 33.297 | 36.414 | 34% / 37% | 27.849 | 13.243 | 2.140 | 939 | 12,9 |
+| Bastião de Bronze | 73.079 | 16.396 | 22.128 | 38.410 | 25% / 43% | 28.937 | 11.791 | 1.850 | 741 | 11,6 |
+| Quebraferro | 74.212 | 23.859 | 37.329 | 33.766 | 38% / 34% | 26.977 | 12.655 | 2.324 | 921 | 13,8 |
 
 Por faixa de nível (média das classes): ouro ganho e gasto por hora, a fatia do ganho que vai para tônicos e para equipamento, e tônicos bebidos por hora.
 
 | Níveis | Ganho/h | Tônicos/h (ouro) | Equipamento/h (ouro) | Fatia tônicos / equip. | Tônicos bebidos/h | Classe que mais gasta em tônicos (fatia) |
 |---|---|---|---|---|---|---|
 | 1–4 | 1.326 | 191 | 124 | 15% / 9% | 114 | Bastião de Bronze (17%) |
-| 5–8 | 2.648 | 1.119 | 641 | 43% / 24% | 191 | Tecelão da Brasa (55%) |
-| 9–12 | 5.511 | 1.465 | 1.154 | 27% / 21% | 222 | Tecelão da Brasa (30%) |
-| 13–16 | 9.929 | 4.563 | 4.232 | 47% / 43% | 299 | Bastião de Bronze (54%) |
-| 17–20 | 13.694 | 3.658 | 4.562 | 27% / 33% | 251 | Quebraferro (42%) |
-| 21–24 | 22.811 | 6.462 | 9.578 | 28% / 42% | 339 | Lanceiro do Fosso (35%) |
+| 5–8 | 2.644 | 1.121 | 641 | 43% / 24% | 191 | Tecelão da Brasa (55%) |
+| 9–12 | 5.589 | 1.479 | 1.165 | 26% / 21% | 224 | Vigia do Espinhal (37%) |
+| 13–16 | 10.169 | 4.171 | 4.480 | 41% / 44% | 293 | Quebraferro (57%) |
+| 17–20 | 14.125 | 3.355 | 4.270 | 24% / 30% | 247 | Quebraferro (35%) |
+| 21–24 | 22.533 | 6.208 | 10.057 | 28% / 45% | 341 | Lanceiro do Fosso (36%) |
 
-- O ouro ganho por hora cresce de ~1.326/h (níveis 1–4) para ~22.811/h (21–24); o gasto com tônicos acompanha o dano recebido, não o nível: classes de distância que matam antes do contato compram pouco.
+- O ouro ganho por hora cresce de ~1.326/h (níveis 1–4) para ~22.533/h (21–24); o gasto com tônicos acompanha o dano recebido, não o nível: classes de distância que matam antes do contato compram pouco.
 - Preço dos tônicos = 2 × valor (Pequeno de Vida 8, Médio de Vida 24, Pequeno de Mana 10, Médio de Mana 30); peças do armeiro = 2,5 × valor; venda ao comerciante = 0,50 × valor.
 
 ## Efeito da prova de classe (habilidade do nível 10)
 
-A rodada principal faz a prova de classe no nível 10 (premissas). Para medir também a caça pura, sem nenhuma missão, as mesmas sementes foram simuladas **sem a prova**: sem a habilidade marcante do nível 10 e sem o tempo da viagem e da luta na arena. Média das classes: **7,26 h com prova** (-6% da meta) e **7,18 h sem prova** (-7%).
+A rodada principal faz a prova de classe no nível 10 (premissas). Para medir também a caça pura, sem nenhuma missão, as mesmas sementes foram simuladas **sem a prova**: sem a habilidade marcante do nível 10 e sem o tempo da viagem e da luta na arena. Média das classes: **7,17 h com prova** (-7% da meta) e **7,08 h sem prova** (-8%).
 
 | Classe | Habilidade do nível 10 | Horas com prova | Horas sem prova | Diferença | Min nos níveis 10–24 (com / sem) | Mortes (com / sem) |
 |---|---|---|---|---|---|---|
-| Tecelão da Brasa | Círculo de Fuligem | 6,46 | 7,25 | +12% | 307 / 355 | 4,5 / 8,1 |
-| Quebraferro | Ruptura | 7,71 | 7,89 | +2% | 388 / 399 | 7,0 / 6,6 |
-| Lanceiro do Fosso | Avanço do Fosso | 7,58 | 7,63 | +1% | 371 / 374 | 6,5 / 7,1 |
-| Cantora do Véu | Selo do Véu | 7,29 | 7,12 | -2% | 370 / 360 | 3,9 / 4,1 |
-| Vigia do Espinhal | Chuva de Espinhos | 7,05 | 6,82 | -3% | 360 / 346 | 6,8 / 4,5 |
-| Andarilha do Vento | Vento a Favor | 6,80 | 6,49 | -5% | 344 / 325 | 5,1 / 5,0 |
-| Escudeiro do Alvorecer | Juramento | 7,48 | 7,09 | -5% | 381 / 357 | 2,5 / 3,4 |
-| Bastião de Bronze | Reforço de Campo | 7,68 | 7,12 | -7% | 385 / 351 | 3,4 / 3,5 |
+| Tecelão da Brasa | Círculo de Fuligem | 6,51 | 7,17 | +10% | 311 / 350 | 4,0 / 7,0 |
+| Lanceiro do Fosso | Avanço do Fosso | 7,37 | 7,42 | +1% | 357 / 360 | 6,4 / 7,0 |
+| Vigia do Espinhal | Chuva de Espinhos | 6,79 | 6,75 | -1% | 344 / 341 | 3,8 / 4,4 |
+| Andarilha do Vento | Vento a Favor | 6,68 | 6,59 | -1% | 337 / 332 | 4,6 / 5,0 |
+| Quebraferro | Ruptura | 7,75 | 7,59 | -2% | 391 / 382 | 7,1 / 7,0 |
+| Cantora do Véu | Selo do Véu | 7,29 | 6,96 | -5% | 370 / 350 | 3,9 / 2,8 |
+| Escudeiro do Alvorecer | Juramento | 7,34 | 6,99 | -5% | 372 / 352 | 3,0 / 3,8 |
+| Bastião de Bronze | Reforço de Campo | 7,59 | 7,19 | -5% | 379 / 355 | 3,3 / 3,0 |
 
 | Nível | Meta (min) | Média com prova | Média sem prova |
 |---|---|---|---|
-| 10 | 15,5 | 18,7 | 17,0 |
-| 11 | 17,0 | 14,5 | 14,5 |
-| 12 | 18,5 | 14,8 | 15,2 |
-| 13 | 20,0 | 20,3 | 20,3 |
-| 14 | 21,5 | 18,3 | 18,1 |
-| 15 | 23,0 | 21,7 | 21,9 |
-| 16 | 24,5 | 24,1 | 24,1 |
-| 17 | 26,0 | 27,5 | 26,2 |
-| 18 | 27,5 | 21,9 | 21,9 |
-| 19 | 29,0 | 25,7 | 24,1 |
-| 20 | 30,5 | 27,7 | 28,0 |
-| 21 | 32,0 | 29,9 | 30,0 |
-| 22 | 33,5 | 29,7 | 29,3 |
-| 23 | 35,0 | 32,7 | 33,3 |
-| 24 | 36,5 | 35,6 | 34,7 |
+| 10 | 15,5 | 18,6 | 17,1 |
+| 11 | 17,0 | 14,0 | 13,8 |
+| 12 | 18,5 | 15,0 | 14,6 |
+| 13 | 20,0 | 20,4 | 20,0 |
+| 14 | 21,5 | 18,1 | 17,8 |
+| 15 | 23,0 | 21,1 | 21,0 |
+| 16 | 24,5 | 23,5 | 23,7 |
+| 17 | 26,0 | 26,9 | 25,8 |
+| 18 | 27,5 | 21,2 | 20,1 |
+| 19 | 29,0 | 24,5 | 24,2 |
+| 20 | 30,5 | 27,5 | 28,0 |
+| 21 | 32,0 | 30,2 | 29,4 |
+| 22 | 33,5 | 29,3 | 28,7 |
+| 23 | 35,0 | 33,3 | 33,4 |
+| 24 | 36,5 | 34,1 | 35,1 |
 
 Prova: 64 de 64 execuções venceram (1,0 tentativa(s) por execução em média; 32 s de luta na arena). A diferença de tempo inclui a ida à cidade da classe e a volta (2 × as trocas de mapa até lá). Com a habilidade extra o bot gasta mana em mais uma habilidade; ele só usa reforços de defesa caros, escudos e áreas em volta de si quando a luta pede (vários atacantes ou vida baixa), e nunca usa área que acorde monstro parado.
 
@@ -452,14 +452,14 @@ Peças comuns do kit da faixa (arma + mão secundária + 4 de armadura) comprada
 
 | Classe | Peças compradas | Já tinha ao chegar | Melhorias do chão | Kit 5: atraso (min) | Kit 9: atraso (min) | Kit 13: atraso (min) | Kit 17: atraso (min) | Kit 21: atraso (min) | Exemplos do chão |
 |---|---|---|---|---|---|---|---|---|---|
-| Tecelão da Brasa | 38,9 | 6,8 | 5,6 | 26 | 35 | 5 | 6 | 0 | `ring_t1`, `amulet_t21`, `robe_circlet_t1`, `robe_t5`, `focus_t17`, `ring_t21`, `robe_t9`, `ring_t9` |
-| Andarilha do Vento | 41,1 | 5,6 | 4,9 | 20 | 29 | 3 | 5 | 5 | `amulet_t17`, `amulet_t1`, `light_boots_t9`, `ring_t9`, `ring_t17`, `light_armor_t25`, `light_hood_t13`, `amulet_t13` |
-| Vigia do Espinhal | 40,4 | 6,4 | 5,6 | 18 | 21 | 3 | 4 | 5 | `quiver_t9`, `ring_t5`, `quiver_t17`, `amulet_t13`, `ring_t13`, `amulet_t17`, `amulet_second_toll`, `ring_t9` |
-| Cantora do Véu | 42,6 | 5,0 | 6,1 | 22 | 28 | 4 | 5 | 3 | `focus_t9`, `amulet_t9`, `ring_t17`, `amulet_t21`, `ring_t21`, `amulet_t25`, `robe_sandals_t5`, `amulet_t13` |
-| Escudeiro do Alvorecer | 41,6 | 4,6 | 3,9 | 23 | 33 | 4 | 10 | 5 | `heavy_boots_t5`, `amulet_t5`, `heavy_helm_t13`, `ring_t13`, `amulet_t17`, `sword_1h_t21`, `amulet_t21`, `heavy_boots_t25` |
-| Lanceiro do Fosso | 36,0 | 5,3 | 5,1 | 30 | 27 | 3 | 19 | 5 | `ring_t5`, `heavy_helm_t9`, `amulet_t17`, `heavy_armor_t21`, `heavy_armor_t25`, `ring_t1`, `ring_t9`, `heavy_boots_t13` |
-| Bastião de Bronze | 39,8 | 5,6 | 6,1 | 25 | 41 | 4 | 12 | 5 | `amulet_t9`, `heavy_helm_t21`, `amulet_t21`, `ring_t21`, `shield_t21`, `amulet_t13`, `shield_t25`, `ring_t25` |
-| Quebraferro | 35,6 | 6,4 | 5,5 | 23 | 24 | 3 | 16 | 3 | `ring_t5`, `amulet_t17`, `ring_t17`, `amulet_t21`, `ring_t1`, `heavy_boots_t5`, `heavy_armor_t9`, `amulet_t13` |
+| Tecelão da Brasa | 37,5 | 7,3 | 6,6 | 26 | 35 | 6 | 5 | 0 | `ring_t1`, `ring_t13`, `amulet_t17`, `robe_circlet_t1`, `robe_t5`, `focus_t17`, `ring_t17`, `amulet_t13` |
+| Andarilha do Vento | 41,1 | 6,0 | 5,4 | 20 | 29 | 3 | 5 | 5 | `ring_t9`, `ring_t21`, `light_shield_t21`, `amulet_t1`, `light_boots_t9`, `light_hood_t17`, `amulet_t17`, `light_boots_t21` |
+| Vigia do Espinhal | 39,5 | 7,3 | 5,8 | 18 | 21 | 4 | 2 | 5 | `quiver_t9`, `ring_t5`, `quiver_t17`, `light_gloves_t21`, `quiver_t21`, `ring_t25`, `amulet_second_toll`, `ring_t13` |
+| Cantora do Véu | 44,0 | 2,1 | 3,9 | 22 | 29 | 4 | 7 | 5 | `ring_t13`, `scepter_t9`, `robe_t25`, `robe_sandals_t5`, `amulet_t5`, `ring_t5`, `amulet_t9`, `ring_t21` |
+| Escudeiro do Alvorecer | 41,0 | 8,0 | 5,5 | 23 | 33 | 4 | 6 | 3 | `heavy_boots_t5`, `amulet_t5`, `amulet_t9`, `heavy_armor_t13`, `heavy_helm_t17`, `shield_t13`, `amulet_t21`, `ring_t5` |
+| Lanceiro do Fosso | 38,9 | 5,1 | 4,0 | 30 | 29 | 3 | 4 | 5 | `ring_t5`, `heavy_armor_t21`, `ring_t1`, `ring_t9`, `ring_t17`, `amulet_t1`, `ring_t13`, `heavy_helm_t17` |
+| Bastião de Bronze | 40,5 | 4,1 | 5,9 | 25 | 41 | 5 | 5 | 5 | `amulet_t9`, `ring_t9`, `amulet_t13`, `amulet_t17`, `ring_t13`, `ring_t17`, `hammer_1h_t21`, `heavy_boots_t21` |
+| Quebraferro | 36,9 | 4,1 | 4,6 | 23 | 26 | 3 | 15 | 4 | `ring_t5`, `ring_t9`, `heavy_armor_t17`, `amulet_t17`, `ring_t17`, `amulet_t25`, `ring_t1`, `heavy_boots_t5` |
 
 ## Premissas do modelo
 
@@ -476,20 +476,20 @@ Peças comuns do kit da faixa (arma + mão secundária + 4 de armadura) comprada
 
 ## Problemas e observações encontrados no jogo
 
-1. **Equilíbrio entre classes na caça solo:** Tecelão da Brasa chega ao nível 25 em 6,46 h e Quebraferro em 7,71 h (1,2×). Todas as classes ficam a até ±25% da meta total (de -16% a +0%).
-2. **Dano por classe:** Tecelão da Brasa 1.849/min (básico 40%, Faísca de Vidro 28%; recebe 421/min); Andarilha do Vento 1.755/min (básico 89%, Arremesso de Retorno 7%; recebe 552/min); Vigia do Espinhal 1.740/min (básico 84%, Flecha de Passagem 6%; recebe 529/min); Cantora do Véu 1.675/min (básico 54%, Nota Clara 46%; recebe 758/min); Lanceiro do Fosso 1.624/min (básico 77%, Estocada Longa 14%; recebe 600/min); Escudeiro do Alvorecer 1.569/min (básico 75%, Corte Solar 17%; recebe 557/min); Quebraferro 1.567/min (básico 78%, Talho Profundo 13%; recebe 646/min); Bastião de Bronze 1.552/min (básico 82%, Pulso de Atração 10%; recebe 513/min). Média: 1.666 de dano causado por minuto.
+1. **Equilíbrio entre classes na caça solo:** Tecelão da Brasa chega ao nível 25 em 6,51 h e Quebraferro em 7,75 h (1,2×). Todas as classes ficam a até ±25% da meta total (de -15% a +1%).
+2. **Dano por classe:** Tecelão da Brasa 1.835/min (básico 39%, Faísca de Vidro 28%; recebe 406/min); Andarilha do Vento 1.777/min (básico 89%, Arremesso de Retorno 7%; recebe 553/min); Vigia do Espinhal 1.772/min (básico 84%, Flecha de Passagem 6%; recebe 536/min); Lanceiro do Fosso 1.662/min (básico 77%, Estocada Longa 14%; recebe 592/min); Cantora do Véu 1.653/min (básico 54%, Nota Clara 46%; recebe 755/min); Escudeiro do Alvorecer 1.603/min (básico 75%, Corte Solar 17%; recebe 555/min); Bastião de Bronze 1.575/min (básico 82%, Pulso de Atração 11%; recebe 498/min); Quebraferro 1.569/min (básico 79%, Talho Profundo 12%; recebe 636/min). Média: 1.681 de dano causado por minuto.
 3. **Ataque básico ainda é quase todo o dano de:** Bastião de Bronze (82%), Vigia do Espinhal (84%), Andarilha do Vento (89%).
-4. **Cantora do Véu antes do nível 15:** -4% da meta somando os níveis 1–14; é a classe mais lenta nos níveis 2, 3, 14. Nota Clara (nível 5) faz 46% do dano da rodada inteira; as curas somam 232 de vida por minuto.
-5. **Curva de XP:** todos os níveis ficam a até ±25% da meta na média das classes (maior desvio: nível 10, +21%). O total 1→25 fica em -6% da meta. Ritmo médio: 10,1 abates/min no nível 1, 4,9 na média dos níveis.
-6. **Onde se morre:** níveis com mais mortes: 10 (1,03 por classe), 24 (0,94 por classe), 9 (0,56 por classe), 11 (0,45 por classe). Monstros que mais derrubam (mortes por execução, somando as classes; um monstro conta em toda morte em que estava batendo): Rato-Engrenagem (nv 10, agressivo) 7,5, Toupeira de Basalto (nv 24, agressivo) 5,7, Autômato Escavador (nv 9, agressivo) 5,4, Sineiro de Bronze (nv 22, agressivo) 4,2, Ecoante (nv 14, agressivo) 3,7. Mortes por classe (média por execução): Tecelão da Brasa 4,5, Andarilha do Vento 5,1, Vigia do Espinhal 6,8, Cantora do Véu 3,9, Escudeiro do Alvorecer 2,5, Lanceiro do Fosso 6,5, Bastião de Bronze 3,4, Quebraferro 7,0 — 5,0 em média. Quase toda queda é numa briga com vários monstros ao mesmo tempo (de 4,1 a 5,0 atacantes, em média, nos 10 s antes de cair; 94% a 100% das mortes com 3 ou mais). Todas as classes entram em brigas com 4 ou mais monstros num ritmo parecido (4,3 a 7,0 por hora: assistência dos iguais a até 8 m, agressão por proximidade e monstros que reaparecem perto); o que muda é quanto cada uma aguenta: mortes por briga dessas de 0,05 (Escudeiro do Alvorecer) a 0,22 (Vigia do Espinhal). Do nível 9 em diante, 42% a 100% das mortes acontecem já sem tônico médio na bolsa (o bot só compra o médio quando o ouro paga 40 e segue caçando com os pequenos quando os médios acabam).
-7. **Mecânicas dos monstros:** cada execução vê em média 828 golpes avisados; o bot estava dentro de 794, saiu 774 vezes e esperou fora (sem entrar para atacar) 220 vezes. O que ainda acerta — áreas em que a reação de 0,6 s não bastou e as mecânicas sem aviso — soma de 0,8% a 2,1% do dano recebido; mais dano: Eco (Ecoante, 2.362 por execução), Explosão de Escória (Escória Pressurizada, 782 por execução), Arrasto (Draga Viva, 47 por execução).
-8. **Economia:** do ouro ganho (moedas + vendas), os tônicos levam de 23% a 38% (mais: Quebraferro) e o equipamento do armeiro de 33% a 43%; juntos, 64% a 75%. As vendas ao comerciante são 21% do ganho. Saldo ao chegar ao nível 25: 23.080 a 32.277 de ouro (inclui o que sobra para o kit da faixa 25, que o bot só compra adiantado com ouro de sobra).
-9. **Equipamento comprado no armeiro:** 39,5 peças por classe em média; o kit comum fica completo, em média, 23 min depois do nível 5, 30 min depois do nível 9, 4 min depois do nível 13, 9 min depois do nível 17, 4 min depois do nível 21 (o atraso é o tempo de juntar o ouro e ir à cidade). Pelo saque chegam 5,4 melhorias por classe.
-10. **Conjuração e recarga global:** Vigia do Espinhal conjurou 103 vezes (103 concluídas, 0 interrompidas); Tecelão da Brasa conjurou 170 vezes (168 concluídas, 2 interrompidas). O bot só começa a conjurar parado e não age durante a conjuração; com a recarga global de 1,0 s ele não tenta outra habilidade antes do fim dela.
+4. **Cantora do Véu antes do nível 15:** -4% da meta somando os níveis 1–14; é a classe mais lenta nos níveis 2, 3, 14. Nota Clara (nível 5) faz 46% do dano da rodada inteira; as curas somam 231 de vida por minuto.
+5. **Curva de XP:** todos os níveis ficam a até ±25% da meta na média das classes (maior desvio: nível 18, -23%). O total 1→25 fica em -7% da meta. Ritmo médio: 10,1 abates/min no nível 1, 4,9 na média dos níveis.
+6. **Onde se morre:** níveis com mais mortes: 10 (0,94 por classe), 24 (0,78 por classe), 9 (0,58 por classe), 15 (0,44 por classe). Monstros que mais derrubam (mortes por execução, somando as classes; um monstro conta em toda morte em que estava batendo): Autômato Escavador (nv 9, agressivo) 5,9, Rato-Engrenagem (nv 10, agressivo) 5,7, Toupeira de Basalto (nv 24, agressivo) 5,4, Sineiro de Bronze (nv 22, agressivo) 3,9, Guardião de Galeria (nv 15, agressivo) 3,6. Mortes por classe (média por execução): Tecelão da Brasa 4,0, Andarilha do Vento 4,6, Vigia do Espinhal 3,8, Cantora do Véu 3,9, Escudeiro do Alvorecer 3,0, Lanceiro do Fosso 6,4, Bastião de Bronze 3,3, Quebraferro 7,1 — 4,5 em média. Quase toda queda é numa briga com vários monstros ao mesmo tempo (de 4,0 a 4,8 atacantes, em média, nos 10 s antes de cair; 92% a 100% das mortes com 3 ou mais). Todas as classes entram em brigas com 4 ou mais monstros num ritmo parecido (4,2 a 7,6 por hora: assistência dos iguais a até 8 m, agressão por proximidade e monstros que reaparecem perto); o que muda é quanto cada uma aguenta: mortes por briga dessas de 0,06 (Bastião de Bronze) a 0,14 (Lanceiro do Fosso). Do nível 9 em diante, 50% a 100% das mortes acontecem já sem tônico médio na bolsa (o bot só compra o médio quando o ouro paga 40 e segue caçando com os pequenos quando os médios acabam).
+7. **Mecânicas dos monstros:** cada execução vê em média 787 golpes avisados; o bot estava dentro de 754, saiu 760 vezes e esperou fora (sem entrar para atacar) 271 vezes. O que ainda acerta — áreas em que a reação de 0,6 s não bastou e as mecânicas sem aviso — soma de 0,7% a 1,5% do dano recebido; mais dano: Eco (Ecoante, 2.482 por execução), Explosão de Escória (Escória Pressurizada, 105 por execução), Arrasto (Draga Viva, 12 por execução).
+8. **Economia:** do ouro ganho (moedas + vendas), os tônicos levam de 22% a 38% (mais: Quebraferro) e o equipamento do armeiro de 32% a 47%; juntos, 59% a 73%. As vendas ao comerciante são 20% do ganho. Saldo ao chegar ao nível 25: 24.823 a 37.333 de ouro (inclui o que sobra para o kit da faixa 25, que o bot só compra adiantado com ouro de sobra).
+9. **Equipamento comprado no armeiro:** 39,9 peças por classe em média; o kit comum fica completo, em média, 23 min depois do nível 5, 30 min depois do nível 9, 4 min depois do nível 13, 6 min depois do nível 17, 4 min depois do nível 21 (o atraso é o tempo de juntar o ouro e ir à cidade). Pelo saque chegam 5,2 melhorias por classe.
+10. **Conjuração e recarga global:** Vigia do Espinhal conjurou 97 vezes (97 concluídas, 1 interrompidas); Tecelão da Brasa conjurou 174 vezes (173 concluídas, 1 interrompidas). O bot só começa a conjurar parado e não age durante a conjuração; com a recarga global de 1,0 s ele não tenta outra habilidade antes do fim dela.
 
 ## Modo acelerado e desempenho da ferramenta
 
-- Laço de `server.step(100)` (100 ms de jogo por chamada) num GameServer sem `start()`: banco SQLite em memória (`--banco-arquivo` usa um arquivo temporário), modo dev, sessões falsas e pedidos síncronos por `server.onMessage`. 464 h de jogo simuladas em 15,5 min de CPU (1.797× o tempo real por linha de execução); 3 linhas de execução (`worker_threads`) em paralelo, 10,8 min de relógio no total.
+- Laço de `server.step(100)` (100 ms de jogo por chamada) num GameServer sem `start()`: banco SQLite em memória (`--banco-arquivo` usa um arquivo temporário), modo dev, sessões falsas e pedidos síncronos por `server.onMessage`. 459 h de jogo simuladas em 16,4 min de CPU (1.681× o tempo real por linha de execução); 3 linhas de execução (`worker_threads`) em paralelo, 11,9 min de relógio no total.
 - Temporizadores do jogo usam `zone.now` (soma dos dt): recargas, conjurações, efeitos, regeneração, tônicos, ataques e reaparecimento funcionam acelerados sem ajuste. `Date.now()` aparece em prazos de relógio de parede (validade do saque de 30 min, dia da elite diária, carimbos do banco, convites e calabouço); dentro da simulação ele segue o tempo simulado, para esses prazos correrem no ritmo do jogo.
 - Zonas abertas sem jogador param 30 s depois que o último jogador sai e, quando alguém entra, o relógio da zona é adiantado até o tempo global (o valor que teria sem parar), então monstros mortos reaparecem e recargas levadas entre zonas continuam valendo; instâncias não são tocadas. 87% dos ticks de zona foram pulados. Um passo com só a zona ativa custa ~20–40 µs.
 - Snapshots: o bot pede `{ delta: true }` no login. Se o servidor manda diferenças, elas são mescladas como em `mergeSnap` (test/helpers/client.js); se manda o snapshot completo, só o último é decodificado, quando o bot olha o mundo. Nesta rodada o servidor mandou diferenças. A sessão falsa nasce por `server.onConnection` (com um ws falso) e a simulação desliga o limite de comandos por conexão (`rateLimit`), que é medido em tempo real. Mensagens `hit`/`heal` alimentam a contabilidade de dano e `cast_end` encerra a conjuração do bot; as de efeito visual são descartadas sem decodificar.

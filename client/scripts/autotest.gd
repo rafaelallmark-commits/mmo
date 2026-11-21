@@ -20,6 +20,7 @@ var wait_until := 0
 var log_lines := []
 var desc_checked := false
 var mech_until := 0
+var speed_before := 0.0
 # --transfer (várias zonas)
 var tr_url := ""
 var tr_from := ""
@@ -214,6 +215,7 @@ func _process(_d: float) -> void:
 				Net.request("move", {"x": lp.x, "z": lp.z})
 		"mech_fx":
 			# mecânicas dos monstros: os mesmos eventos que o servidor manda, desenhados no lugar do personagem
+			speed_before = float(main.ch.get("stats", {}).get("moveSpeed", 5.0))
 			_mech_fx()
 			mech_until = Time.get_ticks_msec() + 700
 			step = "mech_check"
@@ -227,11 +229,19 @@ func _process(_d: float) -> void:
 			if main.world.vfx._warns.has("auto-cancelado"):
 				fail("o aviso cancelado continuou desenhado")
 				return
+			# Atolado: o servidor manda a velocidade nova e a previsão do movimento passa a usá-la
+			if absf(main.world.pred.max_speed - speed_before * 0.6) > 0.01 or absf(float(main.ch["stats"]["moveSpeed"]) - speed_before * 0.6) > 0.01:
+				fail("a velocidade do Atolado não chegou à previsão (%.2f)" % main.world.pred.max_speed)
+				return
 			main._on_message({"t": "cleanse", "eid": main.ch["eid"], "id": "disoriented"})
+			main._on_message({"t": "speed", "moveSpeed": speed_before})
 			if main.hud._debuffs.has("disoriented"):
 				fail("a Alvorada não tirou o efeito negativo da interface")
 				return
-			say("mecânicas dos monstros: avisos em círculo, cone e linha (e um cancelado), explosão, puxão, drenagem de mana, eco, investida, reforços e pressão desenhados; Desorientado na interface e tirado pela Alvorada")
+			if absf(main.world.pred.max_speed - speed_before) > 0.01:
+				fail("a velocidade não voltou ao normal na previsão")
+				return
+			say("mecânicas dos monstros: avisos em círculo, cone e linha (e um cancelado), explosão, puxão, drenagem de mana, eco, investida, reforços e pressão desenhados; Desorientado na interface e tirado pela Alvorada; a velocidade do Atolado chegou à previsão do movimento e voltou")
 			step = "done"
 		"done":
 			step = "wait_gm"
@@ -380,6 +390,7 @@ func _mech_fx() -> void:
 		{"t": "mech", "kind": "pressure", "eid": src, "phase": "high", "ms": 8000},
 		{"t": "debuff", "eid": my_eid, "id": "disoriented", "name": "Desorientado", "ms": 4000, "text": "−25% de acerto, −25% de velocidade"},
 		{"t": "debuff", "eid": my_eid, "id": "mired", "name": "Atolado", "ms": 3000, "text": "−40% de velocidade"},
+		{"t": "speed", "moveSpeed": snappedf(float(main.ch.get("stats", {}).get("moveSpeed", 5.0)) * 0.6, 0.01)},
 	]
 	for m in msgs:
 		main._on_message(m)

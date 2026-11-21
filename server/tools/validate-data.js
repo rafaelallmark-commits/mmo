@@ -7,6 +7,7 @@ import { totalAttributePoints } from '../src/rules.js';
 import { MECHANIC_KINDS, TELEGRAPH_SHAPES, DEBUFF_MODS, MIN_WARN_MS, MAX_DEBUFF_MS, MAX_STUN_MS } from '../src/mechanics.js';
 
 export const TIERS = [1, 5, 9, 13, 17, 20, 21, 25];
+export const MAX_DESCRIPTION = 80; // caracteres da descrição do monstro (uma linha no quadro do alvo)
 export const WEAPON_FAMILIES = ['axe_1h', 'axe_2h', 'claw', 'hammer_1h', 'spear_2h', 'bow', 'sword_1h', 'sword_2h', 'javelin', 'wand', 'scepter', 'staff_2h'];
 const ARMOR_BY_WEIGHT = {
   heavy: ['heavy_armor', 'heavy_helm', 'heavy_gloves', 'heavy_boots'],
@@ -235,6 +236,19 @@ export function validate(data, builds) {
   for (const n of smith.materials ?? []) int('ferreiro: materials', n);
   for (const [mid, m] of Object.entries(data.monsters)) if (!data.lootTables[m.lootTable]) errors.push(`monstro ${mid}: tabela ${m.lootTable}`);
   for (const [mid, m] of Object.entries(data.monsters)) errors.push(...mechanicErrors(mid, m, data));
+  // a descrição aparece numa linha no quadro do alvo (client/scripts/hud.gd): curta, sem quebra
+  for (const [mid, m] of Object.entries(data.monsters)) {
+    if (typeof m.description !== 'string' || !m.description.trim()) errors.push(`monstro ${mid}: falta a descrição`);
+    else if (m.description.length > MAX_DESCRIPTION || /\n/.test(m.description)) errors.push(`monstro ${mid}: descrição com ${m.description.length} caracteres (até ${MAX_DESCRIPTION}, numa linha só: o quadro do alvo mostra uma linha)`);
+  }
+  // o id da mecânica nomeia o golpe nos avisos, nos golpes ("skill") e no efeito do cliente: um por mecânica
+  const mechIds = new Map();
+  for (const [mid, m] of Object.entries(data.monsters)) {
+    for (const id of [m.mechanic?.id, m.mechanic?.vent?.id].filter(Boolean)) {
+      if (mechIds.has(id)) errors.push(`monstro ${mid}: mecânica ${id} repete o id de ${mechIds.get(id)}`);
+      else mechIds.set(id, mid);
+    }
+  }
   for (const [tid, t] of Object.entries(data.lootTables)) {
     for (const e of t.entries) {
       const ids = e.type === 'item' ? [e.defId] : e.type === 'pool' ? e.pool : e.type === 'classDrop' ? Object.values(e.byClass) : [];

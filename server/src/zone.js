@@ -128,11 +128,21 @@ export class Zone {
     for (const b of p.buffs) for (const [k, v] of Object.entries(b.mods)) buffs[k] = (buffs[k] || 0) + v;
     for (const d of p.debuffs ?? []) for (const [k, v] of Object.entries(d.mods ?? {})) buffs[k] = (buffs[k] || 0) + v;
     const eq = equippedList(p.char, this.data);
+    const speedBefore = p.stats?.moveSpeedPct;
     p.stats = derivedStats(p.char, eq.map((e) => ({ def: e.def, enh: e.enh })), this.data, buffs);
     p.weaponDefId = eq.find((e) => e.def.slot === 'weapon')?.def.id ?? null;
     p.offhandDefId = eq.find((e) => e.def.slot === 'offhand')?.def.id ?? null;
     p.char.hp = Math.min(p.char.hp, p.stats.maxHp);
     p.char.mp = Math.min(p.char.mp, p.stats.maxMp);
+    // a velocidade mudou (reforço, Desorientado, Atolado): o cliente acerta a previsão do próprio movimento
+    if (speedBefore !== undefined && speedBefore !== p.stats.moveSpeedPct && this.players.get(p.char.id) === p) {
+      this.send(p.char.id, { t: 'speed', moveSpeed: this.moveSpeedOf(p) });
+    }
+  }
+
+  // Velocidade de caminhada do jogador (m/s) com reforços e efeitos negativos.
+  moveSpeedOf(p) {
+    return r2(this.f.movement.playerSpeed * (1 + (p.stats.moveSpeedPct || 0) / 100));
   }
 
   grantUnlockedSkills(char) {
@@ -1213,7 +1223,7 @@ export class Zone {
       permanent: s.permanent, attrs: s.attrs, hp: Math.ceil(c.hp), mp: Math.floor(c.mp), gold: c.gold, dead: c.dead,
       x: r2(c.x), z: r2(c.z), mapId: this.mapId, instance: this.instanceId,
       stats: { maxHp: s.maxHp, maxMp: s.maxMp, defense: s.defense, mres: s.mres, evasion: s.evasion, accuracy: s.accuracy, crit: s.crit, magicCrit: s.magicCrit, magicPower: s.magicPower, attackIntervalMs: s.attackIntervalMs, range: s.range, weapon: s.weapon.id, ccResistPct: s.ccResistPct,
-        moveSpeed: r2(this.f.movement.playerSpeed * (1 + (s.moveSpeedPct || 0) / 100)), accel: this.mv.accel, decel: this.mv.decel },
+        moveSpeed: this.moveSpeedOf(p), accel: this.mv.accel, decel: this.mv.decel },
       items: [...c.items.values()].map((it) => ({ id: it.id, defId: it.defId, qty: it.qty, enh: it.enh || 0, loc: it.loc, slot: it.slot })),
       bagCapacity: BAG_CAPACITY, bagUsed: bagCount(c),
       cooldowns: Object.fromEntries(Object.entries(p.cooldowns).map(([k, v]) => [k, Math.max(0, Math.round(v - this.now))])),

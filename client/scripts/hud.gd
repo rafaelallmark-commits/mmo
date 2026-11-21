@@ -146,15 +146,15 @@ func _build_target(root: Control) -> void:
 	target_box = PanelContainer.new()
 	target_box.add_theme_stylebox_override("panel", Theme_.panel_style(0.85))
 	target_box.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	target_box.position = Vector2(-200, 12)
-	target_box.custom_minimum_size = Vector2(400, 0)
+	target_box.position = Vector2(-230, 12)
+	target_box.custom_minimum_size = Vector2(460, 0)
 	root.add_child(target_box)
 	var v := VBoxContainer.new()
 	target_box.add_child(v)
 	target_label = Label.new()
 	target_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(target_label)
-	target_bar = _bar(v, Theme_.HP, 376)
+	target_bar = _bar(v, Theme_.HP, 436)
 	# a descrição do monstro (data/monsters.json) numa linha; o texto inteiro fica na dica
 	target_desc = Label.new()
 	target_desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -162,7 +162,7 @@ func _build_target(root: Control) -> void:
 	target_desc.add_theme_color_override("font_color", Theme_.MUTED)
 	target_desc.clip_text = true
 	target_desc.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	target_desc.custom_minimum_size = Vector2(376, 0)
+	target_desc.custom_minimum_size = Vector2(436, 0)
 	target_desc.mouse_filter = Control.MOUSE_FILTER_PASS
 	v.add_child(target_desc)
 	target_box.visible = false
@@ -191,7 +191,7 @@ func _build_hotbar(root: Control) -> void:
 func _build_messages(root: Control) -> void:
 	msg_box = VBoxContainer.new()
 	msg_box.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	msg_box.position = Vector2(-300, 90)
+	msg_box.position = Vector2(-300, 108)  # abaixo do quadro do alvo (com a linha da descrição)
 	msg_box.custom_minimum_size = Vector2(600, 0)
 	msg_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(msg_box)
@@ -1483,7 +1483,7 @@ func show_boss(m: Dictionary) -> void:
 		boss_label.add_theme_constant_override("outline_size", 6)
 		boss_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		boss_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
-		boss_label.position = Vector2(-320, 86)
+		boss_label.position = Vector2(-320, 104)
 		boss_label.size = Vector2(640, 60)
 		add_child(boss_label)
 	boss_label.visible = true

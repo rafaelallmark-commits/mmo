@@ -106,8 +106,8 @@ function mechanicDesc(m) {
     case 'leech': return `Cada mordida que acerta gruda: ${debuffDesc(k.debuff)}, renovado a cada mordida.`;
     case 'swarm': return `+${k.damagePctPerAlly}% de dano por ${m.name} lutando a até ${n1(k.radius)} m (até +${k.damagePctPerAlly * k.maxAllies}%).`;
     case 'pierce': return `Os golpes ignoram ${k.defensePiercePct}% da defesa.`;
-    case 'echo': return `A cada ${s1(k.everyMs)} (a primeira ${s1(k.firstMs ?? k.everyMs)} depois de entrar em combate), no lugar do golpe comum, devolve ${k.pct}% do último golpe que levou nos últimos ${s1(k.memoryMs)} (até ${k.capPct}% do seu dano máximo) a quem o deu, se estiver a até ${k.range} m.`;
-    case 'summon': return `A cada limiar de vida (${k.thresholdsPct.join('%, ')}%) chama ${k.count === 1 ? `um ${data.monsters[k.monster].name}` : `${k.count} ${plural(data.monsters[k.monster].name)}`}, até ${k.maxAlive} vivos; os reforços não deixam saque e somem quando o invocador cai ou desiste.`;
+    case 'echo': return `A cada ${s1(k.everyMs)} (a primeira ${s1(k.firstMs ?? k.everyMs)} depois de entrar em combate), no lugar do golpe comum, devolve ${k.pct}% do último golpe que levou nos últimos ${s1(k.memoryMs)} (até ${k.capPct}% do seu dano máximo) a quem o deu, se estiver a até ${k.range} m (senão, em quem ele enfrenta).`;
+    case 'summon': return `A cada limiar de vida (${k.thresholdsPct.join('%, ')}%) chama ${k.count === 1 ? `um ${data.monsters[k.monster].name}` : `${k.count} ${plural(data.monsters[k.monster].name)}`}, até ${k.maxAlive} vivos; os reforços dão XP, não deixam saque e somem quando o invocador cai ou desiste.`;
     case 'pressure': return `Pressão alta por ${s1(k.highMs)} (+${k.highDamagePct}% de dano); na virada solta **${k.vent.name}** (${areaDesc(k.vent)}) e passa ${s1(k.lowMs)} em pressão baixa (−${k.lowDefensePct}% de defesa e resistência mágica).`;
     case 'territorial': return `Passivo, mas ataca quem chega a ${n1(k.radius)} m.`;
     default: return '—';

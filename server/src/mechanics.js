@@ -289,9 +289,15 @@ export function railGoal(zone, m, goal) {
   return zone.nav.isFree(g.x, g.z) ? g : goal;
 }
 
-// Áreas avisadas que venceram neste passo.
+// Áreas avisadas que venceram neste passo. Golpe de monstro que saiu da luta sem passar por killMonster (a
+// emboscada desfeita da escolta, a câmara do chefe que recomeça) não sai: a marcação some ({ t: 'warn_cancel' }).
 export function tickHazards(zone) {
   if (!zone.hazards.length) return;
+  for (const h of [...zone.hazards]) {
+    if (h.posthumous || (h.owner.state !== 'dead' && zone.monsters.get(h.owner.eid) === h.owner)) continue;
+    if (h.owner.windup === h) cancelWindup(zone, h.owner);
+    else { zone.hazards = zone.hazards.filter((x) => x !== h); zone.broadcast({ t: 'warn_cancel', id: h.id, src: h.src }); }
+  }
   const due = zone.hazards.filter((h) => h.at <= zone.now);
   if (!due.length) return;
   zone.hazards = zone.hazards.filter((h) => h.at > zone.now);

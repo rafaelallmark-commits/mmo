@@ -581,6 +581,55 @@ test('Bomba-Mestra Desregulada: pressão alta (+30% de dano) termina num vapor a
   assert.ok(bomba.fx.some((f) => f.kind === 'pressure_high'), 'e volta para a alta');
 });
 
+test('monstro que sai da luta sem morrer pela regra (emboscada desfeita, câmara que recomeça) apaga o aviso e não solta o golpe', () => {
+  const { zone, mk, spawn, engage, ready, run, warnOf, hitsOf, sent } = setup('oficina_soterrada');
+  const s = spec('blind_welder');
+  const p = mk('breaker', 142, 48, 11);
+  // morto direto (sem killMonster), como a emboscada da escolta quando a carroça some
+  const a = spawn('blind_welder', 140, 48);
+  engage(a, p);
+  ready(a);
+  const wa = warnOf(a);
+  assert.ok(wa, 'avisado');
+  a.state = 'dead'; a.hp = 0; a.removeAt = zone.now;
+  zone.tick(100);
+  assert.ok(sent.some((m) => m.t === 'warn_cancel' && m.id === wa.id), 'o cliente apaga a marcação');
+  assert.equal(a.windup, null);
+  // tirado da zona no meio do aviso, como os monstros da câmara do chefe quando o encontro recomeça
+  const b = spawn('blind_welder', 140, 48);
+  engage(b, p);
+  ready(b);
+  const wb = warnOf(b);
+  zone.monsters.delete(b.eid);
+  run(s.warnMs + 100);
+  assert.ok(sent.some((m) => m.t === 'warn_cancel' && m.id === wb.id));
+  assert.equal(hitsOf(a, s.id).length + hitsOf(b, s.id).length, 0, 'nenhum cone saiu');
+  assert.equal(zone.hazards.length, 0);
+});
+
+test('velocidade que muda por efeito negativo chega ao próprio cliente (a previsão do movimento acompanha)', () => {
+  const party = new Map();
+  const { zone, mk, run, sent } = setup('galerias_eco', (id) => party.get(id) ?? null);
+  const p = mk('breaker', 62, 40, 13);
+  const base = zone.moveSpeedOf(p);
+  const speeds = () => sent.filter((m) => m.t === 'speed' && m._to === p.char.id).map((m) => m.moveSpeed);
+  zone.addDebuff(p, spec('living_dredge').debuff);
+  assert.deepEqual(speeds(), [Math.round(base * 0.6 * 100) / 100], 'atolado: −40%');
+  assert.equal(zone.charView(p).stats.moveSpeed, speeds()[0], 'a ficha diz o mesmo');
+  run(spec('living_dredge').debuff.durationMs + 100);
+  assert.equal(speeds().at(-1), base, 'o atoleiro passou: volta ao normal');
+  // a Alvorada tira o efeito: o cliente fica sabendo na hora
+  zone.addDebuff(p, spec('echo_bat').debuff);
+  const aurora = mk('dawnshield', 63, 41, 20);
+  party.set(p.char.id, 'g'); party.set(aurora.char.id, 'g');
+  assert.equal(zone.castNow(aurora, 'daybreak', null, aurora.char.x, aurora.char.z, null).ok, true);
+  assert.equal(speeds().at(-1), base);
+  // efeito sem mudança de velocidade (sanguessuga) não manda nada
+  const n = speeds().length;
+  zone.addDebuff(p, spec('boiling_leech').debuff);
+  assert.equal(speeds().length, n);
+});
+
 test('mecânica não age em quem já caiu, e monstro que morre no meio do aviso não solta o golpe', () => {
   const { zone, mk, spawn, engage, ready, run, warnOf, hitsOf, sent } = setup('oficina_soterrada');
   const s = spec('blind_welder');
