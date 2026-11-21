@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadGameData, ATTRS, DEFAULT_DATA_DIR } from '../src/data.js';
 import { totalAttributePoints } from '../src/rules.js';
+import { MECHANIC_KINDS, TELEGRAPH_SHAPES, DEBUFF_MODS, MIN_WARN_MS, MAX_DEBUFF_MS, MAX_STUN_MS } from '../src/mechanics.js';
 
 export const TIERS = [1, 5, 9, 13, 17, 20, 21, 25];
 export const WEAPON_FAMILIES = ['axe_1h', 'axe_2h', 'claw', 'hammer_1h', 'spear_2h', 'bow', 'sword_1h', 'sword_2h', 'javelin', 'wand', 'scepter', 'staff_2h'];
@@ -81,6 +82,111 @@ export function runBuild(build, data) {
   return { steps, errors };
 }
 
+// Mecânica do monstro (campo "mechanic", server/src/mechanics.js): tipo conhecido, id e nome, números nas
+// faixas que o servidor espera, golpe de área sempre avisado com tempo de reação justo (MIN_WARN_MS) e efeitos
+// negativos curtos (MAX_DEBUFF_MS, MAX_STUN_MS). Devolve a lista de erros.
+export function mechanicErrors(mid, m, data) {
+  const e = [];
+  const mech = m.mechanic;
+  if (mech == null) return e;
+  const where = `monstro ${mid}: mecânica`;
+  const num = (obj, w, k, { min = 0, max = Infinity, int = false, opt = false } = {}) => {
+    const v = obj[k];
+    if (v == null) { if (!opt) e.push(`${w}: falta ${k}`); return; }
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < min || v > max || (int && !Number.isInteger(v))) e.push(`${w}: ${k} = ${v} (esperado ${int ? 'inteiro ' : ''}de ${min} a ${max})`);
+  };
+  const str = (obj, w, k) => { if (typeof obj[k] !== 'string' || !obj[k].trim()) e.push(`${w}: falta ${k}`); };
+  if (typeof mech !== 'object' || !MECHANIC_KINDS.includes(mech.kind)) { e.push(`${where}: tipo ${mech?.kind} desconhecido (${MECHANIC_KINDS.join(', ')})`); return e; }
+  str(mech, where, 'id'); str(mech, where, 'name');
+  const debuff = (d, w) => {
+    if (d == null) return;
+    str(d, w, 'id'); str(d, w, 'name');
+    num(d, w, 'durationMs', { min: 500, max: MAX_DEBUFF_MS, int: true });
+    for (const [k, v] of Object.entries(d.mods ?? {})) if (!DEBUFF_MODS.includes(k) || typeof v !== 'number' || v >= 0 || v < -60) e.push(`${w}: mod ${k} = ${v} (só ${DEBUFF_MODS.join(', ')}, de −60 a −1)`);
+    num(d, w, 'mpPctPerSec', { min: 0.5, max: 10, opt: true });
+    if (d.silence != null && d.silence !== true) e.push(`${w}: silence = ${d.silence}`);
+    if (!Object.keys(d.mods ?? {}).length && !d.mpPctPerSec && !d.silence) e.push(`${w}: efeito negativo sem efeito`);
+  };
+  const adds = (sp, w) => {
+    const def = data.monsters[sp.monster];
+    if (!def) e.push(`${w}: monstro ${sp.monster} inexistente`);
+    else if (def.rank !== 'normal' || def.mechanic?.kind === 'summon' || def.mechanic?.spawn) e.push(`${w}: ${sp.monster} não serve de reforço (só monstro normal que não invoca)`);
+    num(sp, w, 'count', { min: 1, max: 4, int: true });
+    num(sp, w, 'maxAlive', { min: 1, max: 8, int: true });
+  };
+  const telegraph = (t, w) => {
+    if (!TELEGRAPH_SHAPES.includes(t.shape)) { e.push(`${w}: forma ${t.shape} (${TELEGRAPH_SHAPES.join(', ')})`); return; }
+    str(t, w, 'id'); str(t, w, 'name');
+    num(t, w, 'warnMs', { min: MIN_WARN_MS, max: 5000, int: true });
+    num(t, w, 'damagePct', { min: 0, max: 400 });
+    if (t.shape === 'circle' || t.shape === 'target_circle') num(t, w, 'radius', { min: 1, max: 10 });
+    if (t.shape === 'cone') { num(t, w, 'range', { min: 2, max: 12 }); num(t, w, 'angleDeg', { min: 20, max: 180 }); }
+    if (t.shape === 'line') { num(t, w, 'length', { min: 3, max: 20 }); num(t, w, 'width', { min: 0.8, max: 4 }); }
+    if ((t.dash || t.rails) && t.shape !== 'line') e.push(`${w}: dash e rails só valem para a linha`);
+    num(t, w, 'minRange', { min: 0, max: 20, opt: true });
+    num(t, w, 'maxRange', { min: 1, max: 20, opt: true });
+    if (t.minRange != null && t.maxRange != null && t.minRange >= t.maxRange) e.push(`${w}: minRange ≥ maxRange`);
+    num(t, w, 'stunMs', { min: 200, max: MAX_STUN_MS, int: true, opt: true });
+    num(t, w, 'pullTo', { min: 1, max: 4, opt: true });
+    debuff(t.debuff, `${w}: efeito negativo`);
+    if (t.spawn) adds(t.spawn, `${w}: reforços`);
+    if (!(t.damagePct > 0) && !t.debuff && !t.stunMs && !t.pullTo && !t.spawn) e.push(`${w}: golpe avisado sem nenhum efeito`);
+  };
+  switch (mech.kind) {
+    case 'telegraph':
+      telegraph(mech, where);
+      num(mech, where, 'everyMs', { min: (mech.warnMs || 0) + 2000, max: 60000, int: true });
+      num(mech, where, 'firstMs', { min: 0, max: 30000, int: true });
+      num(mech, where, 'patrolRadius', { min: 1, max: 15, opt: true });
+      break;
+    case 'death_burst':
+      num(mech, where, 'radius', { min: 1, max: 10 });
+      num(mech, where, 'warnMs', { min: MIN_WARN_MS, max: 5000, int: true });
+      num(mech, where, 'damagePct', { min: 1, max: 400 });
+      break;
+    case 'leech':
+      if (!mech.debuff) e.push(`${where}: falta debuff`);
+      debuff(mech.debuff, `${where}: efeito negativo`);
+      break;
+    case 'swarm':
+      num(mech, where, 'radius', { min: 1, max: 12 });
+      num(mech, where, 'damagePctPerAlly', { min: 1, max: 100 });
+      num(mech, where, 'maxAllies', { min: 1, max: 6, int: true });
+      break;
+    case 'pierce':
+      num(mech, where, 'defensePiercePct', { min: 1, max: 80 });
+      break;
+    case 'echo':
+      num(mech, where, 'everyMs', { min: 1000, max: 60000, int: true });
+      num(mech, where, 'firstMs', { min: 0, max: 30000, int: true, opt: true });
+      num(mech, where, 'pct', { min: 1, max: 200 });
+      num(mech, where, 'capPct', { min: 50, max: 400 });
+      num(mech, where, 'memoryMs', { min: 1000, max: 20000, int: true });
+      num(mech, where, 'range', { min: 2, max: 30 });
+      break;
+    case 'summon': {
+      const th = mech.thresholdsPct;
+      if (!Array.isArray(th) || !th.length || th.some((v, i) => typeof v !== 'number' || v <= 0 || v >= 100 || (i > 0 && v >= th[i - 1]))) e.push(`${where}: thresholdsPct deve ser uma lista decrescente entre 0 e 100`);
+      adds(mech, where);
+      break;
+    }
+    case 'pressure':
+      num(mech, where, 'highMs', { min: 2000, max: 60000, int: true });
+      num(mech, where, 'lowMs', { min: 2000, max: 60000, int: true });
+      num(mech, where, 'highDamagePct', { min: 1, max: 100 });
+      num(mech, where, 'lowDefensePct', { min: 1, max: 90 });
+      if (!mech.vent) e.push(`${where}: falta vent`);
+      else telegraph(mech.vent, `${where}: vent`);
+      break;
+    case 'territorial':
+      if (m.aggro !== 'passive') e.push(`${where}: território é só para monstro passivo`);
+      num(mech, where, 'radius', { min: 1, max: 6 });
+      break;
+    default: break;
+  }
+  return e;
+}
+
 export function validate(data, builds) {
   const errors = [];
   const warn = [];
@@ -128,6 +234,7 @@ export function validate(data, builds) {
   int('ferreiro: goldBase', smith.goldBase);
   for (const n of smith.materials ?? []) int('ferreiro: materials', n);
   for (const [mid, m] of Object.entries(data.monsters)) if (!data.lootTables[m.lootTable]) errors.push(`monstro ${mid}: tabela ${m.lootTable}`);
+  for (const [mid, m] of Object.entries(data.monsters)) errors.push(...mechanicErrors(mid, m, data));
   for (const [tid, t] of Object.entries(data.lootTables)) {
     for (const e of t.entries) {
       const ids = e.type === 'item' ? [e.defId] : e.type === 'pool' ? e.pool : e.type === 'classDrop' ? Object.values(e.byClass) : [];

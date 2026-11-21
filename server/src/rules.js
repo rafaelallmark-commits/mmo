@@ -86,6 +86,8 @@ export function derivedStats(char, equipped, data, buffs = {}) {
     crit: round1(crit), magicCrit: round1(magicCrit), magicPower: Math.floor(magicPower), healBonusPct, blockPct,
     weapon, weaponEnh, attackIntervalMs, range: weapon.range, physDamagePct: buffs.physDamagePct || 0,
     moveSpeedPct: buffs.moveSpeedPct || 0, regenPctMaxHpPerSec: buffs.regenPctMaxHpPerSec || 0,
+    // efeitos negativos de monstros (Desorientado): pontos a menos na chance de acerto, física ou mágica
+    hitChancePct: buffs.hitChancePct || 0,
     // Vitalidade: resistência a controle (reduz duração de atordoamento/enraizamento de monstros, M3)
     ccResistPct: Math.min(50, Math.floor(attrs.vit * 0.5)),
   };
@@ -137,6 +139,7 @@ export function playerAttack(stats, target, data, rng, skill) {
   // acerto
   if (magic) steps.hitChance = magicHitChance(stats.level, target.level, data);
   else steps.hitChance = physicalHitChance(stats.accuracy, target.evasion, stats.level, target.level, data);
+  if (stats.hitChancePct) steps.hitChance = round1(clamp(steps.hitChance + stats.hitChancePct, f.accuracy.minHit, 100));
   steps.hitRoll = round1(rng() * 100);
   steps.hit = steps.hitRoll < steps.hitChance;
   if (!steps.hit) return { ...steps, magic, damage: 0 };
@@ -180,8 +183,9 @@ export function playerAttack(stats, target, data, rng, skill) {
   return { ...steps, magic };
 }
 
-// Ataque de monstro contra jogador (sempre físico no M1).
-export function monsterAttack(mdef, targetStats, data, rng) {
+// Ataque de monstro contra jogador (golpe corpo a corpo, físico). mods (mecânicas, server/src/mechanics.js):
+// damagePct soma ao dano rolado (enxame, pressão alta); defensePiercePct ignora parte da defesa (garras de pedra).
+export function monsterAttack(mdef, targetStats, data, rng, mods = {}) {
   const f = data.formulas;
   const steps = {};
   steps.hitChance = physicalHitChance(mdef.accuracy, targetStats.evasion, mdef.level, targetStats.level, data);
@@ -195,11 +199,13 @@ export function monsterAttack(mdef, targetStats, data, rng) {
     if (steps.blockRoll < steps.blockChance) return { ...steps, blocked: true, damage: 0 };
   }
   steps.roll = rollInt(rng, mdef.damage[0], mdef.damage[1]);
+  if (mods.damagePct) { steps.bonusPct = mods.damagePct; steps.roll = Math.round(steps.roll * (1 + mods.damagePct / 100)); }
   steps.critChance = 5;
   steps.critRoll = round1(rng() * 100);
   steps.crit = steps.critRoll < steps.critChance;
   steps.afterCrit = steps.crit ? Math.floor(steps.roll * f.crit.physMult) : steps.roll;
-  steps.damage = mitigate(steps.afterCrit, targetStats.defense, mdef.level, data);
+  steps.targetDefense = mods.defensePiercePct ? Math.round(targetStats.defense * (1 - mods.defensePiercePct / 100)) : targetStats.defense;
+  steps.damage = mitigate(steps.afterCrit, steps.targetDefense, mdef.level, data);
   return steps;
 }
 

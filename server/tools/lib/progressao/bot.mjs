@@ -7,6 +7,7 @@
 // allocate, learn_skill, buy, sell, respawn, gm...). As DECISÕES usam o que um cliente sabe: a visão
 // montada pelos snapshots e a ficha do personagem que o servidor devolve (pedido 'char').
 import { IMPLEMENTED_KINDS } from '../../../src/skills.js';
+import { inShape, BODY } from '../../../src/mechanics.js';
 import { requirementFailures } from '../../../src/equipment.js';
 import { ClienteEmProcesso } from './cliente.mjs';
 import {
@@ -33,6 +34,7 @@ export const PADROES = {
   intervaloIdaEquipMs: 10 * 60_000, // no máximo uma ida à cidade só por equipamento a cada 10 min
   prova: true, // faz a prova de classe no nível 10 (libera a habilidade do nível 10)
   semAbateMaxMs: 15 * 60_000, // sem abate por 15 min simulados: vigia destrava (posto + outra área)
+  reacaoAvisoMs: 600, // um jogador percebe o aviso no chão e clica para fora em ~0,6 s (depois, o bot decide a cada 200 ms)
   detalhe: false,
 };
 
@@ -44,6 +46,9 @@ const POCOES_MANA = ['potion_mp_m', 'potion_mp_s'];
 const TEMPOS = ['combate', 'deslocamento', 'saque', 'espera', 'descanso', 'fuga', 'morto', 'viagem', 'cidade', 'prova'];
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+// avisos no chão: "dentro" com meio metro a mais que a borda (na dúvida, sai); o ponto de fuga fica bem fora
+const MARGEM_DENTRO = BODY + 0.5;
+const MARGEM_FORA = BODY + 0.8;
 const SAQUE_VALIDADE_MS = 30 * 60_000; // o saque no chão vence em 30 min (LOOT_TTL_MS de zone.js)
 
 function cadeiaDe(questId, quests, out = []) {
@@ -101,6 +106,9 @@ export class BotProgressao {
     this.mortesDetalhe = []; this.golpesRecentes = []; this.golesRecentes = [];
     this.lutas = {}; this.luta = null; // lutas por maior número de atacantes ao mesmo tempo (6 = 6 ou mais)
     this.conjuracoes = { iniciadas: 0, concluidas: 0, interrompidas: 0 };
+    // golpes avisados dos monstros (mensagens 'warn'): o bot sai da área e não entra nela para atacar
+    this.avisos = new Map(); this.esquiva = null;
+    this.mecanicas = { avisos: 0, dentro: 0, esquivas: 0, esperas: 0, golpes: {}, efeitos: {} };
     this.faixas = {}; // faixa -> { nivel, minutoNivel, minutoKitCompleto }
   }
 
@@ -206,6 +214,15 @@ export class BotProgressao {
         }
         break;
       case 'respawn': if (m.eid === this.eid) this.morto = false; break;
+      case 'warn':
+        // golpe de área avisado (forma, posição, duração): como o cliente desenha no chão
+        this.avisos.set(m.id ?? `w${this.now}`, { ...m, visto: this.now, ate: this.now + m.ms, contado: false });
+        this.mecanicas.avisos++;
+        break;
+      case 'warn_cancel': this.avisos.delete(m.id); break;
+      case 'debuff':
+        if (m.eid === this.eid) this.mecanicas.efeitos[m.id] = (this.mecanicas.efeitos[m.id] || 0) + 1;
+        break;
       case 'cast_end': {
         // fim da conjuração (só o conjurador recebe): concluída, a recarga começa agora; interrompida,
         // nada foi gasto e a habilidade pode ser tentada de novo logo
@@ -246,6 +263,11 @@ export class BotProgressao {
       if (m.crit) d.criticos++;
       this.met().danoCausado += m.dmg;
     } else if (m.dst === this.eid) {
+      // golpe de mecânica de monstro (área avisada, eco): contado à parte
+      if (m.skill && m.skill !== 'redirect' && !m.miss) {
+        const g = this.mecanicas.golpes[m.skill] ??= { golpes: 0, dano: 0 };
+        g.golpes++; g.dano += m.dmg;
+      }
       if (this.golpesRecentes.length > 60) this.golpesRecentes = this.golpesRecentes.filter((g) => this.now - g.em <= 10_000);
       this.golpesRecentes.push({ em: this.now, src: m.src, dmg: m.miss ? 0 : m.dmg, errou: !!m.miss });
       if (m.miss) { d.errosRecebidos++; if (m.block) d.bloqueiosRecebidos = (d.bloqueiosRecebidos || 0) + 1; return; }
@@ -286,6 +308,8 @@ export class BotProgressao {
     // parado no lugar? (para detectar caminhos que não chegam)
     if (!this.ultimaPos || dist(eu, this.ultimaPos) > 0.3) { this.ultimaPos = { x: eu.x, z: eu.z }; this.paradoDesde = this.now; }
     if (eu.dead || this.morto) return this.tratarMorte();
+    // aviso no chão: sai da área (até no meio de uma conjuração) ou espera fora dela
+    if (this.esquivar(eu, mundo)) return;
     // conjurando: fica parado (andar, atacar, outra habilidade ou tônico interrompem). Só um tônico
     // de emergência interrompe a conjuração.
     if (this.conjurando) {
@@ -341,6 +365,78 @@ export class BotProgressao {
       if (!r.ok) this.rejeitou('teleport', r);
     }
     return true;
+  }
+
+  // ---------- golpes avisados (mensagens 'warn' das mecânicas dos monstros) ----------
+  // Como um jogador: percebe o aviso depois de reacaoAvisoMs; se está dentro da área, clica no ponto seguro
+  // mais perto (sem entrar em outra área) e espera lá até o golpe sair; se está fora, não anda nem ataca
+  // para dentro dela (o ataque básico corpo a corpo perseguiria o monstro no meio do círculo).
+  esquivar(eu, mundo) {
+    for (const [id, a] of this.avisos) if (this.now > a.ate + 300) this.avisos.delete(id);
+    if (!this.avisos.size) { this.esquiva = null; return false; }
+    const ativos = [...this.avisos.values()].filter((a) => this.now >= a.visto + this.op.reacaoAvisoMs && this.now <= a.ate + 100);
+    if (!ativos.length) return false;
+    const atac = this.atacantes(mundo);
+    const dentro = ativos.filter((a) => inShape(a, eu.x, eu.z, MARGEM_DENTRO));
+    if (dentro.length) {
+      for (const a of dentro) if (!a.contado) { a.contado = true; this.mecanicas.dentro++; }
+      this.atividade = 'combate';
+      this.sobreviver(eu, atac);
+      // já indo para um ponto seguro: deixa andar
+      if (this.esquiva && this.andando?.motivo === 'esquiva' && !ativos.some((a) => inShape(a, this.esquiva.x, this.esquiva.z, MARGEM_DENTRO))) return true;
+      const p = this.pontoSeguro(eu, ativos, mundo);
+      if (!p) return false;
+      if (!this.moverPara(p.x, p.z, 'esquiva')) return false;
+      this.mecanicas.esquivas++;
+      this.esquiva = { x: p.x, z: p.z };
+      return true;
+    }
+    this.esquiva = null;
+    // fora: só não entra. Andando para dentro de uma área (saque, caça, perseguição)? Para e espera.
+    const alvo = (this.alvoId && mundo.get(this.alvoId)) || atac[0] || null;
+    const armaR = this.char?.stats?.range ?? 2.5;
+    const precisaAndar = alvo && dist(eu, alvo) > armaR - 0.2;
+    const destinos = [];
+    if (precisaAndar) {
+      const d = dist(eu, alvo) || 1;
+      const k = Math.max(0, d - (armaR - 0.4)) / d;
+      for (let t = 0.25; t <= 1.0001; t += 0.25) destinos.push({ x: eu.x + (alvo.x - eu.x) * k * t, z: eu.z + (alvo.z - eu.z) * k * t });
+    }
+    if (this.andando) destinos.push({ x: this.andando.x, z: this.andando.z });
+    if (!destinos.some((q) => ativos.some((a) => inShape(a, q.x, q.z, MARGEM_DENTRO)))) return false;
+    if (this.andando || eu.tgt) { this.cli.pedir('stop'); this.andando = null; }
+    this.mecanicas.esperas++;
+    this.atividade = 'combate';
+    this.sobreviver(eu, atac);
+    return true;
+  }
+
+  // Ponto mais perto fora de todas as áreas avisadas (com folga), preferindo ficar perto do alvo para
+  // voltar a bater logo e longe do raio de agressão de monstros agressivos parados (fugir de um golpe para
+  // dentro de outro bando é o erro que um jogador evita); dentro do mapa e fora das áreas bloqueadas.
+  pontoSeguro(eu, avisos, mundo) {
+    const mapa = this.data.maps[this.mapa];
+    const [w, h] = mapa?.size ?? [1e9, 1e9];
+    const bloq = mapa?.blocked ?? [];
+    const alvo = (this.alvoId && mundo.get(this.alvoId)) || null;
+    const parados = this.monstros(mundo).filter((m) => m.tgt == null && m.st !== 'return' && this.data.monsters[m.def]?.aggro === 'aggressive');
+    let best = null, nota = Infinity;
+    for (const d of [1, 1.5, 2, 2.5, 3, 3.5, 4.5, 5.5, 6.5, 8, 10, 12]) {
+      for (let i = 0; i < 24; i++) {
+        const ang = (i / 24) * Math.PI * 2;
+        const x = eu.x + Math.cos(ang) * d, z = eu.z + Math.sin(ang) * d;
+        if (x < 1 || z < 1 || x > w - 1 || z > h - 1) continue;
+        if (bloq.some((b) => x >= b.x0 - 0.5 && x <= b.x1 + 0.5 && z >= b.z0 - 0.5 && z <= b.z1 + 0.5)) continue;
+        if (avisos.some((a) => inShape(a, x, z, MARGEM_FORA))) continue;
+        const acorda = parados.filter((m) => Math.hypot(m.x - x, m.z - z) <= (this.data.monsters[m.def].aggroRadius || 8) + 1).length;
+        const n = d + 6 * acorda + (alvo ? 0.15 * Math.hypot(x - alvo.x, z - alvo.z) : 0);
+        if (n < nota) { nota = n; best = { x, z }; }
+      }
+      // na menor distância com algum ponto livre de área: fica com o melhor dela, a não ser que todos acordem
+      // alguém (aí vale olhar um pouco mais longe)
+      if (best && nota < d + 6) break;
+    }
+    return best;
   }
 
   // ---------- leitura da visão ----------
@@ -1263,7 +1359,7 @@ export class BotProgressao {
       rejeicoes: this.rejeicoes, saquesIgnorados: this.ignorados, trocasDeArea: this.viagens, destravamentos: this.destravamentos,
       vendas: this.vendas, ouroFinal: this.char?.gold ?? 0, anomalias: this.anomalias, dano: this.dano,
       trocasPorPerigo: this.trocasPorPerigo ?? 0, viagensPorMotivo: this.viagensPorMotivo, mortesPor: this.mortesPor, mortesDetalhe: this.mortesDetalhe, lutas: this.lutas,
-      habilidadesDeAreaEvitadas: this.areaEvitada ?? 0, conjuracoes: this.conjuracoes, faixas: this.faixas,
+      habilidadesDeAreaEvitadas: this.areaEvitada ?? 0, conjuracoes: this.conjuracoes, faixas: this.faixas, mecanicas: this.mecanicas,
       equipadoFinal: (this.char?.items ?? []).filter((i) => i.loc === 'equip').map((i) => i.defId),
       protocolo: { ...this.cli.contagem, snapshotsPorDiferenca: this.cli.delta },
       atributosFinais: this.char?.permanent ?? null, habilidadesFinais: this.char?.skills ?? null, provaVencida: !!this.char?.trialDone,

@@ -36,6 +36,40 @@ function resumoLutas(runs) {
   };
 }
 
+// Mecânicas dos monstros vistas pelo bot (por execução): avisos no chão, quantas vezes estava dentro, esquivas,
+// esperas fora da área, golpes de mecânica levados (áreas, eco) e efeitos negativos recebidos.
+function resumoMecanicas(runs) {
+  const g = {}, ef = {};
+  let avisos = 0, dentro = 0, esquivas = 0, esperas = 0;
+  for (const r of runs) {
+    const mc = r.mecanicas ?? {};
+    avisos += mc.avisos || 0; dentro += mc.dentro || 0; esquivas += mc.esquivas || 0; esperas += mc.esperas || 0;
+    for (const [k, v] of Object.entries(mc.golpes ?? {})) { g[k] ??= { golpes: 0, dano: 0 }; g[k].golpes += v.golpes; g[k].dano += v.dano; }
+    for (const [k, v] of Object.entries(mc.efeitos ?? {})) ef[k] = (ef[k] || 0) + v;
+  }
+  const n = runs.length || 1;
+  const danoTot = soma(Object.values(g).map((x) => x.dano));
+  return {
+    avisos: r1(avisos / n), dentro: r1(dentro / n), esquivas: r1(esquivas / n), esperas: r1(esperas / n),
+    golpes: r1(soma(Object.values(g).map((x) => x.golpes)) / n), dano: Math.round(danoTot / n),
+    danoPct: r1((danoTot / Math.max(1, soma(runs.map((r) => r.dano.recebido)))) * 100),
+    porMecanica: Object.fromEntries(Object.entries(g).map(([k, v]) => [k, { golpes: r1(v.golpes / n), dano: Math.round(v.dano / n) }])),
+    efeitos: Object.fromEntries(Object.entries(ef).map(([k, v]) => [k, r1(v / n)])),
+  };
+}
+
+// id da mecânica (o "skill" dos golpes) → nome e monstro, a partir de data/monsters.json
+export function nomesMecanicas(data) {
+  const out = {};
+  for (const m of Object.values(data.monsters)) {
+    const mc = m.mechanic;
+    if (!mc) continue;
+    out[mc.id] = { nome: mc.name, monstro: m.name, nivel: m.level };
+    if (mc.vent) out[mc.vent.id] = { nome: mc.vent.name, monstro: m.name, nivel: m.level };
+  }
+  return out;
+}
+
 export function agregar(execucoes, data, parametros) {
   const metas = data.xp.targetMinutesToNext;
   const ate = parametros.ateNivel;
@@ -142,6 +176,7 @@ export function agregar(execucoes, data, parametros) {
       naoConcluidas: todas.filter((r) => !r.concluiu).map((r) => ({ seed: r.seed, nivelFinal: r.nivelFinal })),
       mortesPor: runs.reduce((acc, r) => { for (const [k, v] of Object.entries(r.mortesPor ?? {})) acc[k] = r2((acc[k] || 0) + v / runs.length); return acc; }, {}),
       lutas: resumoLutas(runs),
+      mecanicas: resumoMecanicas(runs),
       destravamentos: soma(todas.map((r) => r.destravamentos)), trocasPorPerigo: r1(media(runs.map((r) => r.trocasPorPerigo))),
       saquesIgnorados: Math.round(media(runs.map((r) => r.saquesIgnorados))),
       conjuracoes: ['iniciadas', 'concluidas', 'interrompidas'].reduce((acc, k) => ((acc[k] = r1(media(runs.map((r) => r.conjuracoes?.[k] ?? 0)))), acc), {}),
@@ -247,6 +282,31 @@ export function relatorioMarkdown(rel, data, parametros, problemas, extras = {})
   L.push('');
   L.push(`Negrito: fora de ±${FAIXA_TOLERANCIA}% da meta.`);
   L.push('');
+  // mecânicas dos monstros
+  if (ids.some((c) => classes[c].mecanicas?.avisos)) {
+    const nomes = nomesMecanicas(data);
+    L.push('## Mecânicas dos monstros');
+    L.push('');
+    L.push(`Golpes avisados no chão (o bot percebe o aviso ${num((p.reacaoAvisoMs ?? 600) / 1000, 1)} s depois, como um jogador, clica no ponto seguro mais perto e espera fora até o golpe sair; fora da área, não anda nem ataca para dentro dela) e as mecânicas sem aviso (eco do Ecoante, sanguessuga, enxame, garras de pedra, território). Números por execução (média das sementes).`);
+    L.push('');
+    const efeitoNome = { stun: 'Atordoado', disoriented: 'Desorientado', mired: 'Atolado', leeched: 'Sanguessuga', sealed: 'Selado' };
+    L.push(tabela(['Classe', 'Avisos vistos', 'Estava dentro', 'Esquivas', 'Esperas fora', 'Golpes de mecânica levados', 'Dano de mecânica (fatia do recebido)', 'Efeitos negativos recebidos'],
+      ordem.map((c) => {
+        const mc = classes[c].mecanicas;
+        const ef = Object.entries(mc.efeitos).filter(([, v]) => v >= 0.5).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${efeitoNome[k] ?? k} ${num(v, 0)}`).join(', ') || '—';
+        return [classes[c].nome, num(mc.avisos, 0), num(mc.dentro, 0), num(mc.esquivas, 0), num(mc.esperas, 0), num(mc.golpes, 0), `${int(mc.dano)} (${num(mc.danoPct, 1)}%)`, ef];
+      })));
+    L.push('');
+    const porMec = {};
+    for (const c of ids) for (const [k, v] of Object.entries(classes[c].mecanicas.porMecanica)) { porMec[k] ??= { golpes: 0, dano: 0 }; porMec[k].golpes += v.golpes / ids.length; porMec[k].dano += v.dano / ids.length; }
+    const linhas = Object.entries(porMec).filter(([k]) => nomes[k]).sort((a, b) => b[1].dano - a[1].dano);
+    if (linhas.length) {
+      L.push('Golpes de mecânica levados por execução, média das classes:');
+      L.push('');
+      L.push(tabela(['Mecânica', 'Monstro (nível)', 'Golpes levados', 'Dano'], linhas.map(([k, v]) => [nomes[k].nome, `${nomes[k].monstro} (${nomes[k].nivel})`, num(v.golpes, 1), int(v.dano)])));
+      L.push('');
+    }
+  }
   // por classe
   L.push('## Detalhe por classe');
   L.push('');

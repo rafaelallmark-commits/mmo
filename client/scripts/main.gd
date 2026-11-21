@@ -1263,6 +1263,25 @@ func _on_message(m: Dictionary) -> void:
 		"warn":
 			if world and world.vfx:
 				world.vfx.on_warn(m)
+		"warn_cancel":
+			if world and world.vfx:
+				world.vfx.on_warn_cancel(m)
+		"mech":
+			# mecânicas dos monstros: explosão, puxão, drenagem de mana, eco, investida, reforços, pressão
+			if world and world.vfx:
+				world.vfx.on_mech(m)
+		"debuff":
+			# efeito negativo (atordoado, desorientado, atolado, sanguessuga, selado): marca no personagem e,
+			# se for o meu, na interface
+			if world and world.vfx:
+				world.vfx.on_debuff(m)
+			if hud and m.get("eid", "") == ch.get("eid", ""):
+				hud.on_debuff(m)
+		"cleanse":
+			if world and world.vfx:
+				world.vfx.on_cleanse(m)
+			if hud and m.get("eid", "") == ch.get("eid", ""):
+				hud.on_cleanse(m)
 		"boss":
 			if world:
 				world.on_boss(m)

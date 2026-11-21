@@ -862,6 +862,19 @@ func on_heal(m: Dictionary) -> void:
 	_float_text(dst["node"].position, "+%d" % int(m["amount"]), Color("#6fd06a"))
 	vfx.on_heal(m)
 
+## Monstro preparando um golpe avisado (warn com src): recua e treme até o golpe sair (vfx.gd desenha a área).
+func monster_windup(eid, ms: float) -> void:
+	if eid == null or not entities.has(eid):
+		return
+	var n: Node3D = entities[eid]["node"]
+	if n.has_method("play_windup"):
+		n.play_windup(ms / 1000.0)
+
+## O golpe avisado foi cancelado (warn_cancel): o monstro desiste da pose.
+func monster_windup_cancel(eid) -> void:
+	if eid != null and entities.has(eid) and entities[eid]["node"].has_method("cancel_windup"):
+		entities[eid]["node"].cancel_windup()
+
 func on_death(eid: String) -> void:
 	if entities.has(eid):
 		var e: Dictionary = entities[eid]

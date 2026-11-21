@@ -48,7 +48,7 @@ mmo/
 │   ├── classes.json               atributos, classes, origens, kits iniciais
 │   ├── skills.json                48 habilidades (níveis 1, 5, 10, 15, 20 e 25) + regras de graus
 │   ├── items.json                 252 definições de item (faixas 1–25, raridades, espaços, famílias)
-│   ├── monsters.json              36 monstros (6 áreas, provas, chefe)
+│   ├── monsters.json              36 monstros (6 áreas, provas, chefe) e a mecânica de cada espécie
 │   ├── loot_tables.json           tabelas de saque (normal, elite, chefe, por classe)
 │   ├── maps.json                  mapas (+ estradas, peças com colisão e casas geradas por gen-scenery)
 │   ├── xp_table.json              XP acumulada 1–25 e metas de tempo
@@ -60,6 +60,7 @@ mmo/
 │   │   ├── main.js                entrada (argumentos --port --db --dev ...)
 │   │   ├── server.js              WebSocket, sessões, autenticação, roteamento, idempotência por rid
 │   │   ├── zone.js                simulação da zona: jogadores, monstros (IA), combate, XP, saque
+│   │   ├── mechanics.js           mecânicas dos monstros: golpes avisados, explosão, eco, reforços, efeitos negativos
 │   │   ├── nav.js                 grade de ocupação, A* + suavização, seguidor com aceleração/frenagem
 │   │   ├── skills.js              execução das 40 habilidades (formas e efeitos)
 │   │   ├── quests.js              motor de missões (falar, matar, coletar, interagir, entrar no mapa...)

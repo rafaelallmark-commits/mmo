@@ -80,7 +80,9 @@ test('Pulso de Atração que mata o monstro não o devolve à perseguição (sem
   assert.equal(ms[1].state, 'chase', 'o outro foi puxado e persegue');
   assert.equal(ms[1].targetId, p.eid);
   for (let i = 0; i < 30; i++) zone.tick(100);
-  assert.ok(!sent.some((m) => m.t === 'hit' && m.src === ms[0].eid), 'o morto nunca ataca');
+  // o único efeito que sai de um Sapo-Bomba morto é o estouro de vapor, avisado (mecânica da espécie)
+  const burst = data.monsters.pump_toad.mechanic.id;
+  assert.ok(!sent.some((m) => m.t === 'hit' && m.src === ms[0].eid && m.skill !== burst), 'o morto nunca ataca');
 });
 
 test('golpe de monstro bloqueado pelo escudo na zona: "errou" com block, sem dano e sem contar como golpe recebido', () => {

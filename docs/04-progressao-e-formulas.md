@@ -56,9 +56,9 @@ Fora da tabela vale o extremo (−6 ou menos: ×0,1; +5 ou mais: ×1,4).
 | Monstro | Área | Nível | Tipo | Comportamento | Vida | Dano | Defesa | XP base | XP p/ jogador 2 níveis acima |
 |---|---|---|---|---|---|---|---|---|---|
 | Rato de Sulco | A Estrada Velha | 1 | normal | passivo | 45 | 2–4 | 2 | 5 | 4 |
-| Besouro-Brasa | A Estrada Velha | 2 | normal | passivo | 63 | 4–6 | 5 | 16 | 14 |
+| Besouro-Brasa | A Estrada Velha | 2 | normal | passivo (ataca a 2,5 m) | 63 | 4–6 | 5 | 16 | 14 |
 | Cão de Ferrugem | A Estrada Velha | 3 | normal | agressivo (8 m) | 81 | 5–7 | 8 | 19 | 16 |
-| Lagarto de Lastro | A Estrada Velha | 4 | normal | passivo | 99 | 7–9 | 11 | 45 | 38 |
+| Lagarto de Lastro | A Estrada Velha | 4 | normal | passivo | 99 | 10–13 a cada 2,6 s | 11 | 45 | 38 |
 | Javali de Cinza | A Estrada Velha | 5 | normal | agressivo (8 m) | 117 | 8–10 | 14 | 66 | 56 |
 | Capataz Rachado | A Estrada Velha | 4 | elite | agressivo (10 m) | 396 | 11–14 | 14 | 180 | 153 |
 | Sapo-Bomba | Brejo das Bombas | 5 | normal | passivo | 117 | 8–10 | 14 | 66 | 56 |
@@ -68,9 +68,9 @@ Fora da tabela vale o extremo (−6 ou menos: ×0,1; +5 ou mais: ×1,4).
 | Sanguessuga Fervente | Brejo das Bombas | 9 | normal | agressivo (8 m) | 189 | 15–17 | 26 | 153 | 130 |
 | Bomba-Mestra Desregulada | Brejo das Bombas | 8 | elite | agressivo (10 m) | 684 | 20–23 | 30 | 448 | 381 |
 | Autômato Escavador | Oficina Soterrada | 9 | normal | agressivo (8 m) | 189 | 15–17 | 26 | 153 | 130 |
-| Rato-Engrenagem | Oficina Soterrada | 10 | normal | agressivo (8 m) | 207 | 16–18 | 29 | 177 | 150 |
+| Rato-Engrenagem | Oficina Soterrada | 10 | normal | agressivo (8 m) | 207 | 12–14 | 29 | 177 | 150 |
 | Soldador Cego | Oficina Soterrada | 11 | normal | agressivo (8 m) | 225 | 18–20 | 32 | 178 | 151 |
-| Lâmina de Esteira | Oficina Soterrada | 12 | normal | passivo | 243 | 20–22 | 35 | 160 | 136 |
+| Lâmina de Esteira | Oficina Soterrada | 12 | normal | passivo | 243 | 22–25 | 30 | 160 | 136 |
 | Supervisor de Turno | Oficina Soterrada | 11 | elite | agressivo (10 m) | 900 | 27–30 | 42 | 712 | 605 |
 | Morcego de Eco | Galerias do Eco | 12 | normal | agressivo (8 m) | 243 | 20–22 | 35 | 178 | 151 |
 | Larva Térmica | Galerias do Eco | 13 | normal | passivo | 261 | 21–23 | 38 | 179 | 152 |
@@ -82,15 +82,45 @@ Fora da tabela vale o extremo (−6 ou menos: ×0,1; +5 ou mais: ×1,4).
 | Draga Viva | Canais da Eclusa | 17 | normal | agressivo (8 m) | 333 | 28–30 | 50 | 257 | 218 |
 | Escória Pressurizada | Canais da Eclusa | 18 | normal | agressivo (8 m) | 351 | 29–31 | 53 | 283 | 241 |
 | Fragmento do Custódio | Canais da Eclusa | 19 | elite | agressivo (10 m) | 1476 | 47–50 | 73 | 1204 | 1023 |
-| O Custódio da Eclusa | A Última Eclusa (calabouço) | 20 | chefe | agressivo (10 m) | 9675 | 64–68 | 89 | 6400 | 5440 |
-| Salamandra de Cisterna | A Cava Primeira | 21 | normal | passivo | 405 | 34–36 | 62 | 317 | 269 |
+| O Custódio da Eclusa | A Última Eclusa (calabouço) | 20 | chefe | agressivo (10 m) | 9675 | 64–68 a cada 2,2 s | 89 | 6400 | 5440 |
+| Salamandra de Cisterna | A Cava Primeira | 21 | normal | passivo (ataca a 2,5 m) | 405 | 34–36 | 62 | 317 | 269 |
 | Sineiro de Bronze | A Cava Primeira | 22 | normal | agressivo (8 m) | 423 | 36–38 | 65 | 323 | 275 |
 | Voz Soterrada | A Cava Primeira | 23 | normal | agressivo (8 m) | 441 | 37–39 | 68 | 367 | 312 |
 | Toupeira de Basalto | A Cava Primeira | 24 | normal | agressivo (8 m) | 459 | 39–41 | 71 | 409 | 348 |
 | Selador da Porta Funda | A Cava Primeira | 24 | elite | agressivo (10 m) | 1836 | 59–62 | 92 | 1636 | 1391 |
 | Construto de Prova | Arena da Prova | 10 | normal | agressivo (40 m) | 180 | 8–11 | 24 | 40 | 34 |
-| Sentinela de Prova | Arena da Prova | 10 | normal | agressivo (40 m) | 320 | 12–15 | 30 | 80 | 68 |
+| Sentinela de Prova | Arena da Prova | 10 | normal | agressivo (40 m) | 320 | 12–15 a cada 2 s | 30 | 80 | 68 |
 | Trava da Comporta | A Última Eclusa (calabouço) | 20 | normal | passivo | 900 | 0–0 | 60 | 0 | 0 |
+
+### Mecânicas dos monstros
+
+Cada espécie com mecânica tem um campo `mechanic` em `data/monsters.json` (o servidor aplica em `server/src/mechanics.js`; docs/06 explica como jogar contra elas). Golpes de área são sempre avisados no chão (círculo, cone ou linha) com tempo para sair clicando: quem sai a tempo não leva nada, e atordoar o monstro durante o aviso cancela o golpe. Efeitos negativos são curtos, aparecem na interface e a Alvorada tira um por vez; atordoamento passa pela resistência a controle da Vitalidade.
+
+| Monstro | Mecânica | O que faz |
+|---|---|---|
+| Besouro-Brasa (2) | **Ninho** | Passivo, mas ataca quem chega a 2,5 m. |
+| Javali de Cinza (5) | **Investida** | Linha de 12 × 1,6 m à frente, avisado 1,5 s antes; em quem ficou: 150% do dano físico; o monstro corre a linha inteira. A cada 10 s, a primeira logo ao entrar em combate, com o alvo a 4–12 m. |
+| Capataz Rachado (4, elite) | **Martelo de Turno** | Círculo de 3,5 m em volta do monstro, avisado 2 s antes; em quem ficou: 200% do dano físico. A cada 9 s, a primeira 4 s depois de entrar em combate. |
+| Sapo-Bomba (5) | **Estouro de Vapor** | Ao morrer, explosão de 3,5 m onde caiu, avisada 1,5 s antes: 200% do dano como dano mágico em quem ficou. |
+| Sanguessuga Fervente (9) | **Sanguessuga** | Cada mordida que acerta gruda: **Sanguessuga** por 3 s (−3% da mana máxima por segundo), renovado a cada mordida. |
+| Bomba-Mestra Desregulada (8, elite) | **Pressão Alternada** | Pressão alta por 8 s (+30% de dano); na virada solta **Vapor** (círculo de 4,5 m em volta do monstro, avisado 1,75 s antes; em quem ficou: 150% do dano como dano mágico) e passa 6 s em pressão baixa (−50% de defesa e resistência mágica). |
+| Rato-Engrenagem (10) | **Enxame** | +25% de dano por Rato-Engrenagem lutando a até 6 m (até +75%). |
+| Soldador Cego (11) | **Cone de Faíscas** | Cone de 6 m e 70° à frente, avisado 1,5 s antes; em quem ficou: 160% do dano como dano mágico. A cada 9 s, a primeira 3,5 s depois de entrar em combate. |
+| Lâmina de Esteira (12) | **Corrida no Trilho** | Linha de 10 × 1,6 m à frente, só nos eixos do mapa, avisado 1,5 s antes; em quem ficou: 180% do dano físico; o monstro corre a linha inteira. A cada 9 s, a primeira 3 s depois de entrar em combate. |
+| Supervisor de Turno (11, elite) | **Chamado de Turno** | A cada limiar de vida (70%, 40%, 10%) chama 2 Ratos-Engrenagem, até 6 vivos; os reforços não deixam saque e somem quando o invocador cai ou desiste. |
+| Morcego de Eco (12) | **Grito Desorientador** | Círculo de 4 m em volta do monstro, avisado 1,5 s antes; em quem ficou: **Desorientado** por 4 s (−25% de acerto, −25% de velocidade). A cada 10 s, a primeira 4 s depois de entrar em combate. |
+| Ecoante (14) | **Eco** | A cada 5,4 s (a primeira 3,6 s depois de entrar em combate), no lugar do golpe comum, devolve 60% do último golpe que levou nos últimos 6 s (até 200% do seu dano máximo) a quem o deu, se estiver a até 15 m. |
+| Aranha de Conduto (16) | **Fio Condutor** | Círculo de 2,5 m onde o alvo está, avisado 1,75 s antes; em quem ficou: 120% do dano como dano mágico; atordoa 1 s (menos com Vitalidade). A cada 10 s, a primeira 3 s depois de entrar em combate. |
+| Mãe do Eco (15, elite) | **Grito da Mãe** | Círculo de 6 m em volta do monstro, avisado 2 s antes; em quem ficou: 120% do dano como dano mágico; gera um Ecoante, até 3 de uma vez. A cada 12 s, a primeira 5 s depois de entrar em combate. |
+| Draga Viva (17) | **Arrasto** | Círculo de 5 m em volta do monstro, avisado 1,75 s antes; em quem ficou: 100% do dano físico; puxa até 1,8 m dele; **Atolado** por 3 s (−40% de velocidade). A cada 15 s, a primeira 6 s depois de entrar em combate. |
+| Escória Pressurizada (18) | **Explosão de Escória** | Ao morrer, explosão de 4 m onde caiu, avisada 1,5 s antes: 220% do dano como dano mágico em quem ficou. |
+| Fragmento do Custódio (19, elite) | **Descarga do Fragmento** | Linha de 14 × 2,2 m à frente, avisado 1,5 s antes; em quem ficou: 150% do dano como dano mágico; atordoa 1 s (menos com Vitalidade). A cada 10 s, a primeira 4 s depois de entrar em combate. Patrulha até 10 m de casa. |
+| Salamandra de Cisterna (21) | **Margem** | Passivo, mas ataca quem chega a 2,5 m. |
+| Toupeira de Basalto (24) | **Garras de Pedra** | Os golpes ignoram 30% da defesa. |
+| Selador da Porta Funda (24, elite) | **Selo** | Círculo de 6 m em volta do monstro, avisado 2 s antes; em quem ficou: 100% do dano como dano mágico; **Selado** por 3 s (sem habilidades). A cada 12 s, a primeira 5 s depois de entrar em combate. |
+
+O Custódio da Eclusa tem o encontro próprio do calabouço (válvulas, linhas do piso e comportas; docs/02 §5.3). Os demais monstros só perseguem e golpeiam; a assistência vale para todos os agressivos (atingido, chama os iguais parados a até 8 m).
+
 
 ### Exemplo solo
 

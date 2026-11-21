@@ -18,6 +18,8 @@ var zone_changed := ""
 var rescue_i := 0
 var wait_until := 0
 var log_lines := []
+var desc_checked := false
+var mech_until := 0
 # --transfer (várias zonas)
 var tr_url := ""
 var tr_from := ""
@@ -186,6 +188,14 @@ func _process(_d: float) -> void:
 				_shot("combate")
 			if not main.world.selected.is_empty() and main.world.selected == target:
 				main.hud.refresh_target()
+				# o quadro do alvo mostra a descrição do monstro numa linha
+				if not desc_checked:
+					desc_checked = true
+					var want := str(main.defs["monsters"].get("furrow_rat", {}).get("description", ""))
+					if want == "" or main.hud.target_desc.text != want or not main.hud.target_desc.visible:
+						fail("o quadro do alvo não mostra a descrição do Rato de Sulco (\"%s\")" % main.hud.target_desc.text)
+						return
+					say("quadro do alvo com a descrição: \"%s\"" % want)
 			if killed:
 				killed = false
 				settle_until = Time.get_ticks_msec() + 600
@@ -196,12 +206,33 @@ func _process(_d: float) -> void:
 				step = "loot"
 		"loot":
 			if main.world.loots.is_empty():
-				step = "done"
+				step = "mech_fx"
 			elif main.world.pending_pickup == "":
 				var lid: String = main.world.loots.keys()[0]
 				var lp: Vector3 = main.world.loots[lid]["node"].position
 				main.world.pending_pickup = lid
 				Net.request("move", {"x": lp.x, "z": lp.z})
+		"mech_fx":
+			# mecânicas dos monstros: os mesmos eventos que o servidor manda, desenhados no lugar do personagem
+			_mech_fx()
+			mech_until = Time.get_ticks_msec() + 700
+			step = "mech_check"
+		"mech_check":
+			if Time.get_ticks_msec() < mech_until:
+				return
+			_shot("mecanicas")
+			if not main.hud._debuffs.has("disoriented"):
+				fail("o efeito negativo (Desorientado) não apareceu na interface")
+				return
+			if main.world.vfx._warns.has("auto-cancelado"):
+				fail("o aviso cancelado continuou desenhado")
+				return
+			main._on_message({"t": "cleanse", "eid": main.ch["eid"], "id": "disoriented"})
+			if main.hud._debuffs.has("disoriented"):
+				fail("a Alvorada não tirou o efeito negativo da interface")
+				return
+			say("mecânicas dos monstros: avisos em círculo, cone e linha (e um cancelado), explosão, puxão, drenagem de mana, eco, investida, reforços e pressão desenhados; Desorientado na interface e tirado pela Alvorada")
+			step = "done"
 		"done":
 			step = "wait_gm"
 			# Em servidor --dev, mostra a descrição de um item de nível 5 (requisitos em vermelho).
@@ -318,6 +349,40 @@ func _process(_d: float) -> void:
 				say("OK")
 				get_tree().quit(0)
 				step = "quitting"
+
+## Alimenta o cliente com os eventos das mecânicas dos monstros (como o servidor manda), em volta do
+## personagem: avisos em círculo, cone e linha, um aviso cancelado, explosão, puxão, drenagem de mana, eco,
+## investida, reforços, pressão e um efeito negativo no próprio personagem.
+func _mech_fx() -> void:
+	var my_eid: String = main.ch["eid"]
+	var p: Vector3 = main.world.my_pos()
+	var mon := ""
+	for eid in main.world.entities.keys():
+		if main.world.entities[eid]["data"]["k"] == "m":
+			mon = eid
+			break
+	var src: String = mon if mon != "" else my_eid
+	var x := p.x
+	var z := p.z
+	var msgs := [
+		{"t": "warn", "shape": "circle", "x": x, "z": z, "radius": 3.5, "ms": 1500, "kind": "steam_burst", "name": "Estouro de Vapor", "src": src, "id": "auto-circulo"},
+		{"t": "warn", "shape": "cone", "x": x + 3.0, "z": z, "yaw": -PI / 2.0, "range": 6.0, "angleDeg": 70.0, "ms": 1500, "kind": "spark_cone", "name": "Cone de Faíscas", "src": src, "id": "auto-cone"},
+		{"t": "warn", "shape": "line", "x": x - 5.0, "z": z + 2.0, "yaw": PI / 2.0, "length": 10.0, "width": 1.6, "ms": 1500, "kind": "rail_rush", "name": "Corrida no Trilho", "src": src, "id": "auto-linha"},
+		{"t": "warn", "shape": "circle", "x": x, "z": z + 6.0, "radius": 2.5, "ms": 1750, "kind": "conduit_web", "name": "Fio Condutor", "src": src, "id": "auto-cancelado"},
+		{"t": "warn_cancel", "id": "auto-cancelado", "src": src},
+		{"t": "mech", "kind": "burst", "eid": src, "x": x + 2.0, "z": z - 3.0, "radius": 3.5, "hits": 1},
+		{"t": "mech", "kind": "pull", "eid": src, "dst": [my_eid], "x": x, "z": z},
+		{"t": "mech", "kind": "drain", "eid": src, "dst": my_eid, "amount": 7},
+		{"t": "mech", "kind": "echo", "eid": src, "dst": my_eid, "magic": false},
+		{"t": "mech", "kind": "dash", "eid": src, "x0": x - 4.0, "z0": z - 4.0, "x1": x + 4.0, "z1": z - 4.0},
+		{"t": "mech", "kind": "summon", "eid": src, "adds": [], "x": x + 4.0, "z": z + 4.0},
+		{"t": "mech", "kind": "vanish", "eid": src},
+		{"t": "mech", "kind": "pressure", "eid": src, "phase": "high", "ms": 8000},
+		{"t": "debuff", "eid": my_eid, "id": "disoriented", "name": "Desorientado", "ms": 4000, "text": "−25% de acerto, −25% de velocidade"},
+		{"t": "debuff", "eid": my_eid, "id": "mired", "name": "Atolado", "ms": 3000, "text": "−40% de velocidade"},
+	]
+	for m in msgs:
+		main._on_message(m)
 
 ## Com --shots=pasta, salva capturas de tela (precisa de janela/GL; não funciona em --headless).
 func _shot(name: String) -> void:

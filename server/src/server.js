@@ -693,7 +693,8 @@ export class GameServer {
 
   defsPayload() {
     const d = this.data;
-    const monsters = Object.fromEntries(Object.entries(d.monsters).map(([id, m]) => [id, { name: m.name, level: m.level, family: m.family, rank: m.rank, aggro: m.aggro }]));
+    // descrição (o quadro do alvo mostra numa linha) e a mecânica (nome e tipo) de cada espécie
+    const monsters = Object.fromEntries(Object.entries(d.monsters).map(([id, m]) => [id, { name: m.name, level: m.level, family: m.family, rank: m.rank, aggro: m.aggro, description: m.description, mechanic: m.mechanic ? { id: m.mechanic.id, name: m.mechanic.name, kind: m.mechanic.kind } : null }]));
     const maps = Object.fromEntries(Object.entries(d.maps).filter(([, m]) => m.size).map(([id, m]) => [id, { id, ...m }]));
     const quests = Object.fromEntries(Object.entries(d.quests).map(([id, q]) => [id, { title: q.title, chapter: q.chapter, level: q.level }]));
     return {

@@ -21,6 +21,27 @@ test('fração em valor que vai para coluna inteira do banco é recusada (o Post
   }
 });
 
+test('mecânica de monstro malformada é recusada: tipo, aviso curto demais, efeito negativo longo, reforço inexistente, território em agressivo', () => {
+  const d = structuredClone(data);
+  d.monsters.blind_welder.mechanic.warnMs = 600; // golpe de área sem tempo de reação
+  d.monsters.echo_bat.mechanic.debuff.durationMs = 9000; // efeito negativo longo
+  d.monsters.echo_bat.mechanic.debuff.mods.armorPct = -10; // mod que o servidor não conhece
+  d.monsters.conduit_spider.mechanic.stunMs = 4000; // atordoamento longo
+  d.monsters.shift_supervisor.mechanic.monster = 'rato_inexistente';
+  d.monsters.shift_supervisor.mechanic.thresholdsPct = [40, 70];
+  d.monsters.echo_mother.mechanic.spawn.monster = 'shift_supervisor'; // elite não é reforço
+  d.monsters.rust_hound.mechanic = { kind: 'territorial', id: 'x', name: 'X', radius: 3 };
+  d.monsters.gear_rat.mechanic.kind = 'teleporte';
+  d.monsters.belt_blade.mechanic.shape = 'cone'; // trilho só em linha (e o cone sem alcance)
+  d.monsters.pump_toad.mechanic.radius = 0;
+  const { errors } = validate(d, loadBuilds());
+  for (const what of ['blind_welder: mecânica: warnMs', 'echo_bat: mecânica: efeito negativo: durationMs', 'echo_bat: mecânica: efeito negativo: mod armorPct', 'conduit_spider: mecânica: stunMs',
+    'shift_supervisor: mecânica: monstro rato_inexistente', 'shift_supervisor: mecânica: thresholdsPct', 'echo_mother: mecânica: reforços: shift_supervisor', 'rust_hound: mecânica: território',
+    'gear_rat: mecânica: tipo teleporte', 'belt_blade: mecânica: dash e rails', 'belt_blade: mecânica: falta range', 'pump_toad: mecânica: radius']) {
+    assert.ok(errors.some((e) => e.startsWith(`monstro ${what}`)), `${what} recusado: ${JSON.stringify(errors)}`);
+  }
+});
+
 test('todo conjunto de classe/faixa cabe nos pontos disponíveis', () => {
   const rows = reachability(data);
   assert.ok(rows.length >= 8 * 6);
