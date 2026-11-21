@@ -1,16 +1,73 @@
 // Motor de missões. O estado vive em char.quests (Map questId -> { state, progress }) e é
 // gravado em quest_progress a cada mudança. Toda conclusão roda numa transação e é idempotente.
+//
+// Referências de NPC (npc, turnIn e o npc de um objetivo "talk"): um id, '@master' (o mestre da classe do
+// personagem) ou uma lista deles (vale qualquer um: "Gusmão ou Tiela", "um mestre de cada cidade").
+// Missões com repeat "daily" voltam no dia seguinte (dia UTC, como as elites diárias da D54): a entrega
+// grava o dia em progress._day.
 import { randomUUID } from 'node:crypto';
 import { bagCount, BAG_CAPACITY, equippedIn } from './equipment.js';
+
+// dia (UTC) das missões diárias: o mesmo relógio das elites diárias (zone.js, dayKey)
+export const questDay = (ms) => new Date(ms).toISOString().slice(0, 10);
+const DAY_MS = 86_400_000;
+
+// Faixas de nível das contas de XP de missão (uma por capítulo; docs/02 e docs/04). A missão entra na faixa
+// do nível em que fica disponível; a última faixa inclui o teto.
+export const QUEST_BANDS = [
+  { chapter: 1, from: 1, to: 5 }, { chapter: 2, from: 5, to: 9 }, { chapter: 3, from: 9, to: 12 },
+  { chapter: 4, from: 12, to: 16 }, { chapter: 5, from: 16, to: 20 }, { chapter: 6, from: 20, to: 25 },
+];
+export const MISSION_XP_CAP = 0.55; // teto do XP de uma faixa vindo de missões (principais + secundárias)
+
+export function bandOf(level) {
+  return QUEST_BANDS.find((b, i) => level >= b.from && (level < b.to || i === QUEST_BANDS.length - 1)) ?? null;
+}
+
+// XP de missões por faixa contra a tabela de XP: principais (capítulo 0–6) e secundárias (id s_*), as
+// diárias contadas uma vez. Usado pelo validador e pelo docs/04.
+export function missionXpByBand(data) {
+  const cum = data.xp.cumulative;
+  return QUEST_BANDS.map((b) => {
+    const span = cum[b.to - 1] - cum[b.from - 1];
+    let main = 0, side = 0;
+    const sideList = [], mainList = [];
+    for (const [id, q] of Object.entries(data.quests)) {
+      if (bandOf(q.level) !== b) continue;
+      const xp = q.rewards?.xp || 0;
+      if (isSideQuest(id, q)) { side += xp; sideList.push(id); } else { main += xp; mainList.push(id); }
+    }
+    return { ...b, span, main, side, total: main + side, mainPct: main / span, sidePct: side / span, totalPct: (main + side) / span, mainList, sideList };
+  });
+}
+
+export function isSideQuest(id, q) { return q.side === true || id.startsWith('s_'); }
+
+const refList = (ref) => (Array.isArray(ref) ? ref : ref == null ? [] : [ref]);
 
 export class QuestEngine {
   constructor({ data, store }) {
     this.data = data;
     this.store = store;
     this.quests = data.quests ?? {};
-    // nome de exibição de cada NPC (o diário mostrava o id interno: "fale com master_veilsinger")
+    this.now = () => Date.now(); // relógio das diárias (os testes avançam um dia trocando esta função)
+    // nome de exibição de cada NPC (o diário mostrava o id interno: "fale com master_veilsinger") e os mapas
+    // onde ele fica (o quadro de missões diz onde procurar)
     this.npcNames = new Map();
-    for (const m of Object.values(data.maps ?? {})) for (const n of m?.npcs ?? []) if (!this.npcNames.has(n.id)) this.npcNames.set(n.id, n.name);
+    this.npcMaps = new Map();
+    this.monsterMaps = new Map();
+    for (const [mapId, m] of Object.entries(data.maps ?? {})) {
+      for (const n of m?.npcs ?? []) {
+        if (!this.npcNames.has(n.id)) this.npcNames.set(n.id, n.name);
+        if (!this.npcMaps.has(n.id)) this.npcMaps.set(n.id, []);
+        this.npcMaps.get(n.id).push(mapId);
+      }
+      if (m?.instanced) continue;
+      for (const sp of m?.spawns ?? []) {
+        if (!this.monsterMaps.has(sp.monster)) this.monsterMaps.set(sp.monster, []);
+        if (!this.monsterMaps.get(sp.monster).includes(mapId)) this.monsterMaps.get(sp.monster).push(mapId);
+      }
+    }
   }
 
   load(char) {
@@ -23,28 +80,54 @@ export class QuestEngine {
     this.store.saveQuest(char.id, questId, q.state, q.progress);
   }
 
-  // '@master' = mestre da classe do personagem
+  // '@master' = mestre da classe do personagem; lista = qualquer um deles
   npcMatches(char, ref, npcId) {
-    if (ref === '@master') return npcId === `master_${char.classId}`;
-    return ref === npcId;
+    return refList(ref).some((r) => (r === '@master' ? npcId === `master_${char.classId}` : r === npcId));
   }
 
+  // id do NPC para o cliente (o primeiro da lista)
   npcLabel(char, ref) {
-    if (ref !== '@master') return ref;
-    return `master_${char.classId}`;
+    const r = refList(ref)[0] ?? null;
+    return r === '@master' ? `master_${char.classId}` : r;
   }
 
-  isDone(char, id) { return char.quests.get(id)?.state === 'done'; }
+  // nome para mostrar: o rótulo da missão (npcLabel/turnInLabel), senão os nomes ("Gusmão, ferreiro ou Tiela...")
+  npcDisplay(char, ref, label) {
+    if (label) return label;
+    const ids = refList(ref).map((r) => (r === '@master' ? `master_${char.classId}` : r));
+    return ids.map((id) => this.npcNames.get(id) ?? id).join(' ou ');
+  }
+
+  isDone(char, id) { return char.quests?.get(id)?.state === 'done'; }
+
+  isDaily(q) { return q?.repeat === 'daily'; }
+
+  today() { return questDay(this.now()); }
+
+  // segundos até a virada do dia UTC (quando a diária volta)
+  secondsToReset() {
+    const now = this.now();
+    return Math.max(1, Math.ceil((Math.floor(now / DAY_MS) * DAY_MS + DAY_MS - now) / 1000));
+  }
+
+  // diária entregue hoje (ainda não voltou)
+  doneToday(char, id) {
+    const st = char.quests.get(id);
+    return st?.state === 'done' && st.progress?._day === this.today();
+  }
+
+  // Pode aceitar agora? (estado, diária, nível e pré-requisitos; o NPC é conferido em accept)
+  canAccept(char, id) {
+    const q = this.quests[id];
+    const st = char.quests.get(id);
+    if (st?.state === 'active') return false;
+    if (st?.state === 'done' && !(this.isDaily(q) && !this.doneToday(char, id))) return false;
+    if (char.level < q.level) return false;
+    return q.prereq.every((pr) => this.isDone(char, pr));
+  }
 
   available(char) {
-    const out = [];
-    for (const [id, q] of Object.entries(this.quests)) {
-      if (char.quests.has(id)) continue;
-      if (char.level < q.level) continue;
-      if (!q.prereq.every((pr) => this.isDone(char, pr))) continue;
-      out.push(id);
-    }
-    return out;
+    return Object.keys(this.quests).filter((id) => this.canAccept(char, id));
   }
 
   objectiveStatus(char, q, st, i) {
@@ -54,20 +137,27 @@ export class QuestEngine {
       case 'talk': return { done: !!pr, cur: pr ? 1 : 0, need: 1 };
       case 'kill': case 'questDrop': return { done: (pr || 0) >= o.count, cur: Math.min(pr || 0, o.count), need: o.count };
       case 'collect': {
-        let n = 0;
-        for (const it of char.items.values()) if (it.loc === 'bag' && it.defId === o.item) n += it.qty;
+        const n = this.bagCountOf(char, o.item);
         return { done: n >= o.count, cur: Math.min(n, o.count), need: o.count };
       }
       case 'interact': { const got = (pr || []).length; return { done: got >= o.objects.length, cur: got, need: o.objects.length }; }
       case 'level': return { done: char.level >= o.level, cur: Math.min(char.level, o.level), need: o.level };
       case 'allocated': return { done: char.unspent === 0, cur: char.unspent === 0 ? 1 : 0, need: 1 };
+      // arma equipada de nível mínimo (só se equipa arma da própria classe: "uma arma de nível 5 da sua classe")
       case 'equipLevel': { const w = equippedIn(char, 'weapon'); const ok = !!w && this.data.items[w.defId].level >= o.minLevel; return { done: ok, cur: ok ? 1 : 0, need: 1 }; }
       case 'enterMap': return { done: !!pr, cur: pr ? 1 : 0, need: 1 };
       case 'trial': return { done: !!pr || !!char.trialDone, cur: pr || char.trialDone ? 1 : 0, need: 1 };
-      case 'escort': return { done: !!pr, cur: pr ? 1 : 0, need: 1 };
+      // escolta e defesa só valem com o "true" gravado na chegada (progresso antigo de outro tipo não conta)
+      case 'escort': case 'defend': return { done: pr === true, cur: pr === true ? 1 : 0, need: 1 };
       case 'choice': return { done: !!pr, cur: pr ? 1 : 0, need: 1 };
       default: return { done: false, cur: 0, need: 1 };
     }
+  }
+
+  bagCountOf(char, defId) {
+    let n = 0;
+    for (const it of char.items.values()) if (it.loc === 'bag' && it.defId === defId) n += it.qty;
+    return n;
   }
 
   // Falas que mudam conforme escolhas anteriores (dialogueByChoice: { chave: { opção: { offer?, progress?, complete? } } }).
@@ -80,16 +170,68 @@ export class QuestEngine {
     return d;
   }
 
-  view(char, id) {
+  // Título de uma recompensa: texto ou { default, byClass } (ex.: "Provado"/"Provada" conforme a classe).
+  resolveTitle(char, t) {
+    if (!t) return null;
+    if (typeof t === 'string') return t;
+    return t.byClass?.[char.classId] ?? t.default ?? null;
+  }
+
+  // Itens da recompensa para este personagem: os fixos + os do peso de armadura da classe (byArmor) e da
+  // classe (byClass).
+  rewardItems(char, q) {
+    const rw = q.rewards ?? {};
+    const cls = this.data.classes[char.classId];
+    return [...(rw.items ?? []), ...(rw.byArmor?.[cls?.armorWeight] ?? []), ...(rw.byClass?.[char.classId] ?? [])];
+  }
+
+  // Recompensa como o cliente mostra: itens já resolvidos para a classe e o título por extenso.
+  rewardsView(char, q) {
+    const { byArmor, byClass, title, ...rest } = q.rewards ?? {};
+    void byArmor; void byClass;
+    return { ...rest, items: this.rewardItems(char, q), title: this.resolveTitle(char, title) };
+  }
+
+  // Mapa onde procurar o NPC: o "where" da missão; senão, entre os mapas em que ele fica, o da faixa da
+  // missão (Joca está em quatro); cidades e NPCs de um mapa só aparecem como estão.
+  npcMapFor(char, q, ref) {
+    if (q.where) return refList(q.where);
+    const ids = refList(ref).map((r) => (r === '@master' ? `master_${char.classId}` : r));
+    const maps = [...new Set(ids.flatMap((id) => this.npcMaps.get(id) ?? []))];
+    if (maps.length <= 1) return maps;
+    const field = maps.filter((m) => this.data.maps[m]?.levelRange && !this.data.maps[m].city);
+    const lr = (m) => this.data.maps[m].levelRange;
+    const strict = field.filter((m) => q.level >= lr(m)[0] && q.level < lr(m)[1]);
+    const loose = field.filter((m) => q.level >= lr(m)[0] && q.level <= lr(m)[1]);
+    return strict.length ? [strict[0]] : loose.length ? [loose[0]] : maps;
+  }
+
+  // Onde se caça: o mapa do primeiro monstro dos objetivos (abate ou coleta).
+  huntMapFor(q) {
+    for (const o of q.objectives) {
+      const mon = o.monster ?? o.drop?.monster;
+      if (mon && this.monsterMaps.has(mon)) return this.monsterMaps.get(mon)[0];
+    }
+    return null;
+  }
+
+  view(char, id, npcId = null) {
     const q = this.quests[id];
-    const st = char.quests.get(id) ?? { state: 'available', progress: {} };
+    const saved = char.quests.get(id);
+    // diária entregue num dia anterior: aparece como disponível de novo, com o progresso zerado
+    const stale = saved?.state === 'done' && this.isDaily(q) && !this.doneToday(char, id);
+    const st = saved && !stale ? saved : { state: 'available', progress: {} };
     const objectives = q.objectives.map((o, i) => ({ text: o.text, ...this.objectiveStatus(char, q, st, i) }));
+    // conversando com um NPC da lista, ele é o "npc"/"turnIn" da missão (o cliente compara com o NPC aberto)
+    const here = (ref) => (npcId && this.npcMatches(char, ref, npcId) ? npcId : this.npcLabel(char, ref));
+    const daily = this.isDaily(q);
     return {
-      id, title: q.title, chapter: q.chapter, state: st.state, level: q.level,
-      npc: this.npcLabel(char, q.npc), turnIn: this.npcLabel(char, q.turnIn), objectives,
-      npcName: this.npcNames.get(this.npcLabel(char, q.npc)) ?? this.npcLabel(char, q.npc),
-      turnInName: this.npcNames.get(this.npcLabel(char, q.turnIn)) ?? this.npcLabel(char, q.turnIn),
-      ready: st.state === 'active' && objectives.every((o) => o.done), rewards: q.rewards, dialogue: this.dialogueFor(char, q),
+      id, title: q.title, chapter: q.chapter, state: st.state, level: q.level, side: isSideQuest(id, q),
+      npc: here(q.npc), turnIn: here(q.turnIn), objectives,
+      npcName: this.npcDisplay(char, q.npc, q.npcLabel),
+      turnInName: this.npcDisplay(char, q.turnIn, q.turnInLabel),
+      ready: st.state === 'active' && objectives.every((o) => o.done), rewards: this.rewardsView(char, q), dialogue: this.dialogueFor(char, q),
+      ...(daily ? { repeat: 'daily', ...(this.doneToday(char, id) ? { backInS: this.secondsToReset() } : {}) } : {}),
     };
   }
 
@@ -143,24 +285,69 @@ export class QuestEngine {
     return { ok: true, option: op, quest: questId };
   }
 
+  // Títulos que o personagem já ganhou: respostas escolhidas (4.4, 6.4) e missões entregues com título
+  // (3.3, 5.4). Saem do estado das missões, então nada novo é gravado; o título mostrado é char.title.
+  titles(char) {
+    const out = [];
+    const add = (t) => { if (t && !out.includes(t)) out.push(t); };
+    for (const [id, q] of Object.entries(this.quests)) {
+      if (this.isDone(char, id)) add(this.resolveTitle(char, q.rewards?.title));
+      for (const o of q.objectives) {
+        if (o.type !== 'choice') continue;
+        const picked = char.choices?.[o.key];
+        add(o.options.find((op) => op.id === picked)?.title);
+      }
+    }
+    add(char.title);
+    return out;
+  }
+
   journal(char) {
     const active = [], done = [];
-    for (const [id, st] of char.quests) (st.state === 'done' ? done : active).push(this.view(char, id));
-    return { active, done: done.map((d) => ({ id: d.id, title: d.title, chapter: d.chapter })), available: this.available(char).map((id) => this.view(char, id)) };
+    for (const [id, st] of char.quests) {
+      if (!this.quests[id]) continue;
+      (st.state === 'done' ? done : active).push(this.view(char, id));
+    }
+    return {
+      active,
+      done: done.map((d) => ({ id: d.id, title: d.title, chapter: d.chapter, ...(d.repeat ? { repeat: d.repeat } : {}), ...(d.backInS ? { backInS: d.backInS } : {}) })),
+      available: this.available(char).map((id) => this.view(char, id)),
+    };
+  }
+
+  // Quadro de missões das cidades: tudo o que o personagem pode aceitar agora no mundo inteiro, com nível,
+  // NPC e mapa, e as diárias que voltam amanhã.
+  board(char) {
+    const mapName = (m) => this.data.maps[m]?.name ?? m;
+    const row = (id) => {
+      const q = this.quests[id];
+      const hunt = this.huntMapFor(q);
+      return {
+        id, title: q.title, chapter: q.chapter, level: q.level, side: isSideQuest(id, q), repeat: q.repeat ?? null,
+        npcName: this.npcDisplay(char, q.npc, q.npcLabel), maps: this.npcMapFor(char, q, q.npc).map(mapName),
+        area: hunt ? mapName(hunt) : null,
+      };
+    };
+    const sort = (a, b) => (a.level - b.level) || (a.side - b.side) || a.title.localeCompare(b.title);
+    const daily = Object.entries(this.quests).filter(([id, q]) => this.isDaily(q) && this.doneToday(char, id)).map(([id]) => ({ ...row(id), backInS: this.secondsToReset() }));
+    return { available: this.available(char).map(row).sort(sort), dailyDone: daily.sort(sort), level: char.level };
   }
 
   // O que o NPC tem para o personagem: missões a oferecer e a entregar.
   npcQuests(char, npcId) {
-    const offer = this.available(char).filter((id) => this.npcMatches(char, this.quests[id].npc, npcId)).map((id) => this.view(char, id));
-    const active = [...char.quests].filter(([id, st]) => st.state === 'active' && (this.npcMatches(char, this.quests[id].turnIn, npcId) || this.npcMatches(char, this.quests[id].npc, npcId))).map(([id]) => this.view(char, id));
+    const offer = this.available(char).filter((id) => this.npcMatches(char, this.quests[id].npc, npcId)).map((id) => this.view(char, id, npcId));
+    const active = [...char.quests].filter(([id, st]) => st.state === 'active' && this.quests[id] && (this.npcMatches(char, this.quests[id].turnIn, npcId) || this.npcMatches(char, this.quests[id].npc, npcId))).map(([id]) => this.view(char, id, npcId));
     return { offer, active };
   }
 
   accept(char, id, npcId) {
     const q = this.quests[id];
     if (!q) return { ok: false, code: 'bad_quest', reason: 'Missão inexistente.' };
-    if (char.quests.get(id)?.state === 'active') return { ok: true, already: true, quest: this.view(char, id) };
-    if (this.isDone(char, id)) return { ok: false, code: 'done', reason: 'Você já concluiu esta missão.' };
+    if (char.quests.get(id)?.state === 'active') return { ok: true, already: true, quest: this.view(char, id, npcId) };
+    if (this.isDone(char, id)) {
+      if (!this.isDaily(q)) return { ok: false, code: 'done', reason: 'Você já concluiu esta missão.' };
+      if (this.doneToday(char, id)) return { ok: false, code: 'daily_done', reason: `Você já fez esta missão hoje. Ela volta à 00:00 UTC (${this.waitText()}).` };
+    }
     if (!this.npcMatches(char, q.npc, npcId)) return { ok: false, code: 'wrong_npc', reason: 'Esta missão não é oferecida aqui.' };
     if (char.level < q.level) return { ok: false, code: 'level', reason: `Nível ${q.level} exigido. Seu nível atual é ${char.level}.` };
     const missing = q.prereq.filter((pr) => !this.isDone(char, pr));
@@ -170,7 +357,14 @@ export class QuestEngine {
     q.objectives.forEach((o, i) => { if (o.type === 'enterMap' && o.map === char.mapId) progress[i] = true; });
     char.quests.set(id, { state: 'active', progress });
     this.save(char, id);
-    return { ok: true, quest: this.view(char, id) };
+    return { ok: true, quest: this.view(char, id, npcId) };
+  }
+
+  // "em 5 h 12 min" até a virada do dia UTC
+  waitText() {
+    const s = this.secondsToReset();
+    const h = Math.floor(s / 3600), m = Math.ceil((s % 3600) / 60);
+    return h > 0 ? `em ${h} h ${m} min` : `em ${m} min`;
   }
 
   // Eventos de progresso. Retornam os ids de missões alteradas.
@@ -194,12 +388,57 @@ export class QuestEngine {
     return this.bump(char, (o) => o.type === 'interact' && o.objects.includes(objectId), (o, pr) => ((pr || []).includes(objectId) ? null : [...(pr || []), objectId]));
   }
 
+  // escolta que chegou ou defesa vencida (as duas chegam pela mesma entidade de escolta da zona)
   onEscort(char, escortId) {
-    return this.bump(char, (o) => o.type === 'escort' && o.escort === escortId, (o, pr) => (pr ? null : true));
+    return this.bump(char, (o) => (o.type === 'escort' && o.escort === escortId) || (o.type === 'defend' && o.defense === escortId), (o, pr) => (pr === true ? null : true));
   }
 
   onTrial(char) {
     return this.bump(char, (o) => o.type === 'trial', (o, pr) => (pr ? null : true));
+  }
+
+  // Atingido por um perigo do mapa (a esteira da Oficina): abates seguidos "sem ser atingido" voltam a zero.
+  onHazard(char, hazardId) {
+    return this.bump(char, (o) => o.type === 'kill' && o.resetOnHazard === hazardId, (o, pr) => ((pr || 0) > 0 && (pr || 0) < o.count ? 0 : null));
+  }
+
+  // Alguém aqui quer o perigo ligado? (abates "sem ser atingido" ainda por fazer)
+  wantsHazard(char, hazardId) {
+    for (const [id, st] of char.quests) {
+      if (st.state !== 'active') continue;
+      const q = this.quests[id];
+      if (q?.objectives.some((o, i) => o.type === 'kill' && o.resetOnHazard === hazardId && (st.progress[i] || 0) < o.count)) return true;
+    }
+    return false;
+  }
+
+  // Materiais de coleta que só caem com a missão ativa (objetivo collect com drop): o que este monstro pode
+  // deixar para o personagem agora. Para de cair quando a bolsa já tem o bastante.
+  questDrops(char, monsterId) {
+    const out = [];
+    for (const [id, st] of char.quests) {
+      if (st.state !== 'active') continue;
+      const q = this.quests[id];
+      for (const o of q?.objectives ?? []) {
+        if (o.type !== 'collect' || o.drop?.monster !== monsterId) continue;
+        if (this.bagCountOf(char, o.item) >= o.count) continue;
+        out.push({ defId: o.item, chance: o.drop.chance ?? 1, quest: id });
+      }
+    }
+    return out;
+  }
+
+  // Alguma missão ativa ainda usa este item? (item de missão no chão depois da entrega não entra na bolsa)
+  needsItem(char, defId) {
+    for (const [id, st] of char.quests) {
+      if (st.state === 'active' && this.quests[id]?.objectives.some((o) => o.type === 'collect' && o.item === defId)) return true;
+    }
+    return false;
+  }
+
+  // missões ativas com coleta deste item (o diário atualiza ao coletar)
+  collectingQuests(char, defId) {
+    return [...char.quests].filter(([id, st]) => st.state === 'active' && this.quests[id]?.objectives.some((o) => o.type === 'collect' && o.item === defId)).map(([id]) => id);
   }
 
   bump(char, match, next) {
@@ -207,6 +446,7 @@ export class QuestEngine {
     for (const [id, st] of char.quests) {
       if (st.state !== 'active') continue;
       const q = this.quests[id];
+      if (!q) continue;
       let touched = false;
       q.objectives.forEach((o, i) => {
         if (!match(o)) return;
@@ -232,16 +472,18 @@ export class QuestEngine {
       const miss = v.objectives.filter((o) => !o.done).map((o) => `${o.text} (${o.cur}/${o.need})`);
       return { ok: false, code: 'incomplete', reason: `Ainda falta: ${miss.join('; ')}.` };
     }
-    const rewardItems = q.rewards.items ?? [];
+    const rewardItems = this.rewardItems(char, q);
     const newStacks = rewardItems.filter(([defId]) => !this.data.items[defId].stack || ![...char.items.values()].some((it) => it.loc === 'bag' && it.defId === defId)).length;
     const consumesSlots = q.objectives.filter((o) => o.type === 'collect').length;
     if (bagCount(char) + newStacks > BAG_CAPACITY + consumesSlots) return { ok: false, code: 'bag_full', reason: 'Inventário cheio: libere espaço para a recompensa.' };
+    const title = this.resolveTitle(char, q.rewards.title);
     const changedItems = [], deleted = [];
     let leveled = false;
     this.store.tx(() => {
-      // consome os itens de "collect"
+      // consome os itens de "collect"; item de missão sai todo da bolsa (o que sobrou não serve para mais nada)
       for (const o of q.objectives.filter((x) => x.type === 'collect')) {
-        let need = o.count;
+        const all = !!this.data.items[o.item]?.questItem;
+        let need = all ? Infinity : o.count;
         for (const it of [...char.items.values()]) {
           if (need <= 0) break;
           if (it.loc !== 'bag' || it.defId !== o.item) continue;
@@ -266,11 +508,17 @@ export class QuestEngine {
         const first = this.data.classes[char.classId].skills[0];
         if ((char.skills[first] || 0) === 1) char.skills[first] = 2;
       }
+      if (title) char.title = title;
       leveled = grantXp(q.rewards.xp || 0);
       st.state = 'done';
+      // diária: o dia da entrega (UTC) decide quando ela volta
+      st.progress = this.isDaily(q) ? { _day: this.today() } : st.progress;
       this.save(char, id);
       this.store.saveCharacter(char);
     });
-    return { ok: true, alreadyDone: false, quest: { id, title: q.title }, rewards: q.rewards, leveled, dialogue: this.dialogueFor(char, q).complete };
+    return {
+      ok: true, alreadyDone: false, quest: { id, title: q.title }, rewards: this.rewardsView(char, q), leveled, title,
+      dialogue: this.dialogueFor(char, q).complete, ...(this.isDaily(q) ? { repeat: 'daily', backInS: this.secondsToReset() } : {}),
+    };
   }
 }

@@ -171,7 +171,7 @@ func _build_map(map: Dictionary) -> void:
 		var nl := _label("%s\n‹%s›" % [n["name"], ROLE_NAMES.get(n.get("role", ""), "")], 36, Color("#ffe39a"))
 		nl.position = npc.position + Vector3(0, 2.9, 0)
 		add_child(nl)
-		npc_nodes[n["id"]] = {"pos": npc.position, "data": n, "node": npc, "home": home, "yaw": home}
+		npc_nodes[n["id"]] = {"pos": npc.position, "data": n, "node": npc, "home": home, "yaw": home, "label": nl, "color": npc_col}
 	for o in map.get("objects", []):
 		var op := _gpos(float(o["x"]), float(o["z"]))
 		if o.get("kind", "") == "dungeon":
@@ -299,8 +299,26 @@ func apply_snapshot(snap: Dictionary) -> void:
 			entities.erase(eid)
 			if selected == eid:
 				selected = ""
+	_sync_defense_npcs()
 	if main.hud:
 		main.hud.refresh_target()
+
+## Enquanto um NPC está numa defesa (Joca abrindo a válvula, com vida e ondas em cima dele), a entidade da
+## defesa aparece no lugar dele: o modelo parado e o nome do NPC somem até a defesa acabar. Clicar no lugar
+## continua abrindo a conversa (o clique usa a posição, não o modelo).
+func _sync_defense_npcs() -> void:
+	var busy := {}
+	for e in entities.values():
+		var d: Dictionary = e["data"]
+		if d.get("k", "") == "e" and d.get("npc") != null:
+			busy[str(d["npc"])] = true
+	for id in npc_nodes.keys():
+		var nd: Dictionary = npc_nodes[id]
+		var show := not busy.has(id)
+		if (nd["node"] as Node3D).visible != show:
+			(nd["node"] as Node3D).visible = show
+			if nd.has("label"):
+				(nd["label"] as Node3D).visible = show
 
 ## Confere a previsão do próprio personagem com a posição do servidor.
 func _reconcile(server_pos: Vector2, d: Dictionary) -> void:
@@ -335,13 +353,18 @@ func _spawn_entity(d: Dictionary) -> Dictionary:
 	var root: Node3D
 	if d["k"] == "p":
 		root = Art.character(d.get("cls", ""), _weapon_family(d.get("w")), false, Color("#c9b07a"), 0, _weapon_family(d.get("oh")) if d.has("oh") else "?")
+	elif d["k"] == "e" and str(d.get("def", "cart")) == "npc":
+		# defesa: o NPC defendido (Joca na válvula), com a mesma aparência do NPC parado do mapa
+		var nid := str(d.get("npc", ""))
+		var col: Color = npc_nodes[nid]["color"] if npc_nodes.has(nid) else Color.from_hsv(float(hash(nid) % 360) / 360.0, 0.35, 0.75)
+		root = Art.character("", "", true, col, hash(nid))
 	elif d["k"] == "e":
 		root = Art.cart()
 	else:
 		var md: Dictionary = main.defs["monsters"].get(d["def"], {}).duplicate()
 		md["id"] = d["def"]
 		root = Art.monster(md)
-	root.scale = Vector3.ONE * (1.3 if d["k"] == "p" else (1.0 if d["k"] == "e" else 1.15))
+	root.scale = Vector3.ONE * (1.3 if d["k"] == "p" or str(d.get("def", "")) == "npc" else (1.0 if d["k"] == "e" else 1.15))
 	add_child(root)
 	var label := _label("", 34, Color("#f2ead8") if d["k"] == "p" else (Color("#9fe3ff") if d["k"] == "e" else Color("#ffcf9a")))
 	label.position.y = 2.1 if d["k"] == "p" else (2.5 if d["k"] == "e" else 1.8)
@@ -361,7 +384,8 @@ func _spawn_entity(d: Dictionary) -> Dictionary:
 ## Como a entidade soa: passos (arquivo, tom, volume) e voz ao apanhar/cair (tom pelo tamanho e família).
 ## Espíritos flutuam (sem passos); máquinas pisam pesado e rangem metal; bichos pequenos têm patas leves.
 func _sound_profile(d: Dictionary) -> Dictionary:
-	if d["k"] == "p":
+	if d["k"] == "p" or str(d.get("def", "")) == "npc":
+		# jogadores e o NPC de uma defesa (Joca na válvula) apanham com voz de gente
 		return {"fam": "player", "step": _step_surface, "step_pitch": 1.0, "step_db": 0.0, "voice": 1.0}
 	if d["k"] != "m":
 		# outras entidades do servidor (objetos que andam ou apanham): sem passos nem voz
@@ -565,6 +589,8 @@ func _process(delta: float) -> void:
 						if r["ok"]:
 							if r.has("channel"):
 								main.hud.show_channel(str(r["channel"]["text"]), float(r["channel"]["ms"]))
+							elif r.has("board"):
+								main.hud.show_board(r["board"])
 							elif not r.has("escort"):
 								main.hud.system("Feito: %s" % object_nodes.get(pa["id"], {}).get("data", {}).get("name", "")))
 				"portal":
@@ -644,6 +670,10 @@ func _on_pickup(lid: String, r: Dictionary) -> void:
 		if loots.has(lid):
 			loots[lid]["node"].queue_free()
 			loots.erase(lid)
+		if r.get("discarded", false):
+			# item de missão caído depois da entrega: some do chão sem ocupar a bolsa
+			main.hud.system(str(r.get("message", "Você não precisa mais disto.")))
+			return
 		var what: String = "%d de ouro" % int(r["gold"]) if r.get("defId", null) == null else main.defs["items"][r["defId"]]["name"]
 		main.hud.system("Coletado: %s" % what)
 		Sfx.ui("loot_coins" if r.get("defId", null) == null else "loot_item")
@@ -847,7 +877,7 @@ func _hit_voice(m: Dictionary, dst: Dictionary) -> void:
 	var at: Vector3 = dst["node"].position
 	if m["dst"] == my_eid:
 		Sfx.play("player_hurt", null, 2.0 if crit else 0.0)
-	elif dst["data"]["k"] == "p":
+	elif dst["data"]["k"] == "p" or dst["snd"]["fam"] == "player":
 		Sfx.play("player_hurt", at, -4.0)
 	elif dst["snd"]["fam"] != "object" and (crit or randf() < 0.55):
 		var snd: Dictionary = dst["snd"]

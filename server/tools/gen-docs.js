@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { loadGameData, ATTRS } from '../src/data.js';
 import { derivedStats, playerAttack, monsterAttack, levelDiffMod, mitigationK, physicalHitChance, splitKillXp, totalAttributePoints } from '../src/rules.js';
 import { reachability, runBuild, loadBuilds, TIERS, WEAPON_FAMILIES } from './validate-data.js';
+import { missionXpByBand, MISSION_XP_CAP } from '../src/quests.js';
 
 const data = loadGameData();
 const DOCS = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'docs');
@@ -80,7 +81,7 @@ function progressionDoc() {
   out.push('Atributos permanentes = iniciais da classe + pontos distribuídos. São os únicos que contam para requisitos: bônus de itens, tônicos e efeitos temporários nunca liberam um item. A partir do nível 2 o personagem ganha 5 pontos por nível.\n');
   out.push(table(['Nível', ...Array.from({ length: cap }, (_, i) => String(i + 1))], [['Pontos totais', ...Array.from({ length: cap }, (_, i) => totalAttributePoints(i + 1, data))]]));
   out.push(`\n## 4.2 Tabela de XP acumulada (níveis 1–${cap})\n`);
-  out.push(`Calibração: a tabela foi montada com ${data.xp.killsPerMinuteSolo} abates por minuto de caça ativa solo contra monstros do mesmo nível (inclui deslocamento e pausas curtas): XP para o próximo nível = meta em minutos × ${data.xp.killsPerMinuteSolo} × XP da curva de referência do nível (4.3), arredondado para dezenas, com meta = 2 + 1,5 × (nível − 1). A mesma regra vale para os níveis 21–${cap} (pós-v1). A simulação do Marco 4 ([relatório](relatorio-progressao.md)) mostrou que, com habilidades, tônicos e o equipamento do armeiro, quem só caça mata bem mais do que ${data.xp.killsPerMinuteSolo} por minuto (de 3 a 10 conforme o nível; perto de 5 na média): em vez de refazer a tabela, o **XP de cada monstro** foi ajustado nível a nível para o tempo só caçando ficar perto da meta. A coluna \"Abates/min para a meta\" mostra o ritmo que cada nível pede com o XP atual. Os tempos são **metas de teste** para o Marco 4 medir e ajustar, não promessas. Missões principais somam cerca de 30% do XP de cada capítulo, então quem faz caça + missões chega ao teto de nível em cerca de 70% do tempo de quem só caça.\n`);
+  out.push(`Calibração: a tabela foi montada com ${data.xp.killsPerMinuteSolo} abates por minuto de caça ativa solo contra monstros do mesmo nível (inclui deslocamento e pausas curtas): XP para o próximo nível = meta em minutos × ${data.xp.killsPerMinuteSolo} × XP da curva de referência do nível (4.3), arredondado para dezenas, com meta = 2 + 1,5 × (nível − 1). A mesma regra vale para os níveis 21–${cap} (pós-v1). A simulação do Marco 4 ([relatório](relatorio-progressao.md)) mostrou que, com habilidades, tônicos e o equipamento do armeiro, quem só caça mata bem mais do que ${data.xp.killsPerMinuteSolo} por minuto (de 3 a 10 conforme o nível; perto de 5 na média): em vez de refazer a tabela, o **XP de cada monstro** foi ajustado nível a nível para o tempo só caçando ficar perto da meta. A coluna \"Abates/min para a meta\" mostra o ritmo que cada nível pede com o XP atual. Os tempos são **metas de teste** para o Marco 4 medir e ajustar, não promessas. Missões principais somam cerca de 30% do XP de cada capítulo, então quem faz caça + missões principais chega ao teto de nível em cerca de 70% do tempo de quem só caça (coluna "Meta caça + missões"); as secundárias somam mais, até o teto de ${Math.round(MISSION_XP_CAP * 100)}% por faixa (4.2.1).\n`);
   const rows = [];
   let total = 0;
   for (let L = 1; L <= cap; L++) {
@@ -91,6 +92,14 @@ function progressionDoc() {
     rows.push([L, cum[L - 1].toLocaleString('pt-BR'), need ? need.toLocaleString('pt-BR') : '—', m ? `${m[1].name} (${m[1].xp})` : '—', need && m ? Math.ceil(need / m[1].xp) : '—', need && m && mins ? n1(Math.ceil(need / m[1].xp) / mins) : '—', mins ? `${n1(mins)} min` : '—', mins ? `${n1(mins * 0.7)} min` : '—', mins ? `${n1(total / 60)} h` : '—']);
   }
   out.push(table(['Nível', 'XP acumulada', 'XP para o próximo', 'Monstro típico do nível (XP)', 'Abates solo', 'Abates/min para a meta', 'Meta só caça', 'Meta caça + missões', 'Acumulado só caça'], rows));
+  // a conta do XP de missões por faixa (principais + secundárias; diárias uma vez)
+  const pct = (v) => `${n1(v * 100)}%`;
+  const bands = missionXpByBand(data);
+  const dailies = Object.values(data.quests).filter((q) => q.repeat === 'daily').map((q) => q.title);
+  const andList = (l) => (l.length > 1 ? `${l.slice(0, -1).join(', ')} e ${l[l.length - 1]}` : l.join(''));
+  out.push(`\n### 4.2.1 XP de missões por faixa\n\nSoma do XP de todas as missões que ficam disponíveis em cada faixa (pelo nível mínimo de cada uma), contra o XP que a faixa pede na tabela acima. As **diárias** (${andList(dailies)}) entram **uma vez**. As principais ficam em ~30%; as secundárias completam até no máximo **${Math.round(MISSION_XP_CAP * 100)}%** — as do documento passavam disso nas faixas 1–16 (de 64% a 69%) e foram reduzidas na mesma proporção dentro de cada faixa (D158). O validador (\`npm run validate-data\`) recusa uma faixa acima do teto. A simulação de progressão do Marco 4 continua só de caça (sem missões).\n`);
+  out.push(table(['Faixa (níveis)', 'Capítulo', 'XP da faixa', 'Principais', '% da faixa', 'Secundárias', '% da faixa', 'Missões no total', '% da faixa'],
+    bands.map((b) => [`${b.from}–${b.to}`, b.chapter, b.span.toLocaleString('pt-BR'), b.main.toLocaleString('pt-BR'), pct(b.mainPct), b.side.toLocaleString('pt-BR'), pct(b.sidePct), b.total.toLocaleString('pt-BR'), pct(b.totalPct)])));
   out.push('\n## 4.3 XP por monstro\n');
   out.push('Curva de referência (a que montou a tabela de XP): round(8 + 6 × nível^1,45). O XP de cada monstro normal, na tabela abaixo, é o dessa curva ajustado pela simulação (4.2); elite vale ×4 e chefe ×20 o XP de um monstro normal do mesmo nível. O XP recebido é multiplicado pela diferença de nível (monstro − jogador): monstros acima do nível dão mais (e batem mais forte); muito abaixo, quase nada.\n');
   const mod = data.formulas.xp.levelDiffMod;

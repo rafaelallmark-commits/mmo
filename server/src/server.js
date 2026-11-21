@@ -142,6 +142,15 @@ export class GameServer {
         onChannelDone: (p, objectId) => this.notifyQuests(p, this.quests.onInteract(p.char, objectId)),
         // telemetria do teste (relatório: npm run telemetria): onde, de quê e cercado por quantos se morre
         onPlayerDeath: (p, info) => this.audit('death', { charId: p.char.id, map: p.zone.mapId, level: p.char.level, classId: p.char.classId, x: Math.round(p.char.x), z: Math.round(p.char.z), by: info.by, attackers: info.attackers }),
+        // materiais que só caem com a missão ativa, perigos do mapa ligados por missão e os títulos ganhos
+        questDrops: (char, monsterId) => this.quests.questDrops(char, monsterId),
+        hazardWanted: (p, hazardId) => this.quests.wantsHazard(p.char, hazardId),
+        onHazardHit: (p, hazardId) => {
+          const changed = this.quests.onHazard(p.char, hazardId);
+          if (changed.length) this.sendTo(this.byChar.get(p.char.id), { t: 'system', text: 'A esteira te pegou: a contagem de abates recomeça do zero.' });
+          this.notifyQuests(p, changed);
+        },
+        titlesOf: (char) => this.quests.titles(char),
       },
     });
     this.zones.set(key, zone);
@@ -652,6 +661,7 @@ export class GameServer {
       case 'quest_accept': return this.hQuestAccept(p, msg);
       case 'quest_turnin': return this.hQuestTurnIn(p, msg);
       case 'quest_choice': return this.hQuestChoice(p, msg);
+      case 'set_title': return this.hSetTitle(p, msg);
       case 'trial_start': return this.hTrialStart(s, p, msg);
       case 'party_invite': return this.hPartyInvite(p, msg);
       case 'party_accept': return this.hPartyAccept(p, msg);
@@ -1193,10 +1203,28 @@ export class GameServer {
     return { ok: true, reply: r.option.reply, title: p.char.title ?? null, journal: this.quests.journal(p.char), char: p.zone.charView(p), cache: false };
   }
 
+  // Título mostrado acima do nome: um dos já ganhos (respostas e missões) ou nenhum.
+  hSetTitle(p, { title }) {
+    const c = p.char;
+    if (title === null || title === '') c.title = null;
+    else if (typeof title !== 'string' || !this.quests.titles(c).includes(title)) return { ok: false, code: 'bad_title', reason: 'Você ainda não ganhou esse título.' };
+    else c.title = title;
+    this.store.saveCharacter(c);
+    return { ok: true, title: c.title ?? null, char: p.zone.charView(p), cache: false };
+  }
+
   hInteract(p, { object }) {
     const o = p.zone.objectNear(p, object);
     if (!o) return { ok: false, code: 'too_far', reason: 'Chegue mais perto.' };
     if (o.kind === 'dungeon') return this.hDungeonEnter(null, p, { object: o.id });
+    // quadro de missões das cidades: o que dá para aceitar agora no mundo inteiro, com nível, NPC e mapa
+    if (o.kind === 'board') return { ok: true, object: o.id, board: this.quests.board(p.char), cache: false };
+    if (o.kind === 'defense') {
+      if (!this.quests.hasPending(p.char, 'defend', (x) => x.defense === o.defense)) return { ok: false, code: 'nothing', reason: 'A válvula está fechada. Fale com Joca antes de mexer nela.' };
+      const r = p.zone.startDefense(o.defense, p);
+      if (!r.ok) return r;
+      return { ok: true, object: o.id, escort: r.escort.eid, defense: true, already: !!r.already, cache: false };
+    }
     if (o.kind === 'escort') {
       if (!this.quests.hasPending(p.char, 'escort', (x) => x.escort === o.escort)) return { ok: false, code: 'nothing', reason: 'A carroça está parada. Fale com quem cuida dela.' };
       const r = p.zone.startEscort(o.escort, p);
@@ -1288,6 +1316,7 @@ export class GameServer {
     const c = p.char;
     const it = c.items.get(instance);
     if (!it || it.loc !== 'bag') return { ok: false, code: 'not_in_bag', reason: 'Só itens da bolsa podem ir para o depósito.' };
+    if (this.data.items[it.defId]?.questItem) return { ok: false, code: 'bound', reason: 'Itens de missão não vão para o depósito.' };
     const view = this.storageView(p);
     if (view.items.length >= view.capacity) return { ok: false, code: 'storage_full', reason: `Depósito cheio (${view.capacity} espaços).` };
     it.loc = 'storage'; it.slot = null;
@@ -1950,6 +1979,13 @@ export class GameServer {
       const d = Math.hypot(row.x - c.x, row.z - c.z);
       if (d > this.data.formulas.movement.pickupRange) { result = { ok: false, code: 'too_far', reason: `Muito longe do saque (${d.toFixed(1)} m).` }; return; }
       let instanceId = null;
+      // item de missão caído antes da entrega: sem missão que o use, some do chão em vez de prender a bolsa
+      // (não se vende nem se descarta)
+      if (row.def_id && this.data.items[row.def_id]?.questItem && !this.quests.needsItem(c, row.def_id)) {
+        this.store.markLootClaimed(row.id, null);
+        result = { ok: true, alreadyClaimed: false, loot: lootId, instanceId: null, gold: 0, defId: row.def_id, discarded: true, message: `${this.data.items[row.def_id].name}: nenhuma missão sua precisa mais disto.` };
+        return;
+      }
       if (row.def_id) {
         const def = this.data.items[row.def_id];
         let stack = null;
@@ -1969,7 +2005,11 @@ export class GameServer {
       result = { ok: true, alreadyClaimed: false, loot: lootId, instanceId, gold: row.gold, defId: row.def_id };
       this.audit('loot', { charId: c.id, loot: lootId, gold: row.gold || 0, item: row.def_id ?? null, qty: row.qty, instance: instanceId ?? null });
     });
-    if (result.ok) result.char = p.zone.charView(p); // objetivos "collect" são contados ao vivo na bolsa
+    if (result.ok) {
+      result.char = p.zone.charView(p); // objetivos "collect" são contados ao vivo na bolsa
+      // o diário acompanha a coleta (antes só mudava no próximo abate)
+      if (!result.alreadyClaimed && !result.discarded && result.defId) this.notifyQuests(p, this.quests.collectingQuests(c, result.defId));
+    }
     return result;
   }
 

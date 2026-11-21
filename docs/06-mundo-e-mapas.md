@@ -22,31 +22,40 @@ Ambas têm os mesmos serviços para que nenhuma origem fique em desvantagem: **m
 
 Cidade de pedra cortada e vigas escuras, construída em terraços ao redor de uma antiga estação de superfície. Ruas largas para carroças.
 
-- **Praça das Balanças** (centro): depósito, quadro de missões.
+- **Praça das Balanças** (centro): depósito e **quadro de missões** (35, 24), ao lado da balança de bronze.
 - **Pátio dos Mestres**: Mestre Tarrasco (Quebraferro), Mestra Ione do Bronze (Bastião), Sargento Bel do Fosso (Lanceiro), Vigia-Mor Cássia (Vigia).
-- **Forja do Gusmão**: ferreiro; ao lado, **Amaro**, o armeiro.
-- **Botica da Dona Resina**: tônicos.
+- **Forja do Gusmão**: ferreiro (e as missões de materiais, as mesmas da Tiela); ao lado, **Amaro**, o armeiro.
+- **Botica da Dona Resina**: tônicos e a missão Ninho Morno.
 - **Portão Leste** → Estrada Velha (Posto da Ponte a 2 minutos de caminhada).
 
 ### Vau de Nácar (Nacre) — leste
 
 Cidade sobre pontes e plataformas acima de um rio, atravessada por condutores de nácar que brilham fracos à noite.
 
-- **Plataforma do Relógio** (centro): depósito, quadro de missões.
+- **Plataforma do Relógio** (centro): depósito e **quadro de missões** (25, 35), ao lado da torre do relógio.
 - **Claustro dos Mestres**: Dama Aurélia (Escudeiro), Sina (Andarilha), Mãe Nívea (Cantora), Mestre Otan Cinzeiro (Tecelão).
-- **Oficina de Tiela Martelo-Fino**: ferreira; ao lado, **Inês**, a armeira.
-- **Boticário Lume**: tônicos.
+- **Oficina de Tiela Martelo-Fino**: ferreira (e as missões de materiais, as mesmas do Gusmão); ao lado, **Inês**, a armeira.
+- **Boticário Lume**: tônicos e a missão Sapos de Vapor.
 - **Ponte Oeste** → Estrada Velha.
 
-### Ferreiro (M3)
+### Quadro de missões
 
-Refino de +0 a +3. Cada grau aumenta defesa/poder mágico em 10% (dano das armas: +1 no mínimo e no máximo por grau). A janela mostra **custo explícito** (ouro + materiais), **chance visível** e **prévia do efeito** antes de confirmar. Na falha, o grau se mantém e os materiais são consumidos.
+Clicar no quadro da praça abre a lista de tudo o que o personagem pode aceitar agora **no mundo inteiro**: título, nível, se é principal, secundária ou diária, com quem falar e em que mapa (para NPCs que aparecem em vários mapas, como Joca, Mara e Ilda, o da faixa da missão) e onde se caça quando é outro mapa. Embaixo, as diárias já feitas hoje e em quanto tempo voltam (00:00 UTC).
 
-| Grau | Chance | Custo (faixa N do item) | Material |
+### Ferreiro (M3, refino até +6 no pós-v1)
+
+Refino de +0 a +6 (números em `data/formulas.json`, `enhance`). Cada grau soma **+8% no dano da arma** e **+10% na defesa e no poder mágico** da peça. A janela mostra **custo explícito** (ouro + material), **chance visível** e **prévia do efeito** antes de confirmar. Ouro e material são gastos sempre. Até +3, a falha mantém o grau; a partir de +3 → +4 a falha **derruba um grau**, a menos que se use um **Selo de Proteção** (vendido pelo ferreiro e raro em elites e chefes), que só é gasto quando segura uma falha.
+
+| Grau | Chance | Ouro (N = nível do item) | Material |
 |---|---|---|---|
-| +1 | 90% | 20 × N ouro | Sucata de Condutor ×3 |
-| +2 | 70% | 45 × N ouro | Pó de Refino ×2 |
-| +3 | 45% | 90 × N ouro | Pó de Refino ×4 + Brasa Cristalizada ×1 |
+| +1 | 90% | 12 × 1 × N | Pó de Refino ×1 |
+| +2 | 70% | 12 × 2 × N | Pó de Refino ×2 |
+| +3 | 45% | 12 × 3 × N | Pó de Refino ×3 |
+| +4 | 30% | 12 × 4 × N | Pó de Refino Superior ×2 (falha cai para +3) |
+| +5 | 20% | 12 × 5 × N | Pó de Refino Superior ×3 (falha cai para +4) |
+| +6 | 12% | 12 × 6 × N | Pó de Refino Superior ×4 (falha cai para +5) |
+
+O ferreiro vende o Pó de Refino e o Selo de Proteção; o Pó de Refino Superior só vem de elites, do Custódio e da Cava Primeira (D108). A Sucata de Condutor e a Brasa Cristalizada não entram no refino: viram Pó de Refino nas missões dos ferreiros (Pêlo de Cinza, Seda Condutora e a diária Brasa para a Forja).
 
 ## As áreas de caça
 
@@ -60,6 +69,11 @@ Cinco áreas na versão 1 e, no pós-v1, a sexta (A Cava Primeira, níveis 20–
 | **Galerias do Eco** | 12–16 | espíritos sonoros, bestas térmicas, guardiões | Ninhos Térmicos | Salão dos Sinos (Ecoantes), Ponte dos Fios, Mãe do Eco | Estação Sonhada (posto) | Seda condutora para refino, Mãe do Eco, família Liga Rubra |
 | **Canais da Eclusa** | 16–20 | máquinas da Eclusa, escória de vapor | Comporta Norte | Bacia de Vapor, Canal Lamacento, Fragmentos do Custódio | Comporta Norte (posto) | Chave de Comporta, calabouço da Última Eclusa, itens únicos de nível 20 |
 | **A Cava Primeira** (pós-v1) | 20–25 | bestas do calor fundo, máquinas dos fundadores, vozes presas no metal | Margem da Cisterna (Salamandras, passivas) | Salão das Placas (Sineiros em bando), Poço Quente (Toupeiras), Selador da Porta Funda | Posto de Escuta (posto) | Faixa 21 em toda a Cava, chance de faixa 25, Selador (elite diária), capítulo 6 |
+
+### Lugares que as missões mudam
+
+- **Brejo das Bombas — Válvula principal** (109, 56), ao lado do Joca na frente da Casa das Bombas: com "O Teste de Pressão" (2.2) ativa, começa a defesa. O Joca da defesa (900 de vida, com o nome e a vida em cima) toma o lugar do NPC parado; por 3 minutos, uma onda a cada 30 s (Válvulas Errantes e Enguias de Lodo) sai do lado do canal, (96, 64) e (100, 70), e mira nele até alguém chamar a atenção. Se ele cair, ou o grupo inteiro cair, as ondas somem e ele tenta de novo 30 s depois; um cronômetro no alto da tela mostra o tempo que falta. Uma defesa por jogador ou grupo, como a escolta da carroça.
+- **Oficina Soterrada — Trilhos da Esteira** (x 108–140, z 126–154): com "Esteira Desgovernada" ativa, a esteira varre faixas do chão a cada 7 s, com aviso de 2 s (as mesmas faixas acesas do Custódio, em cinco padrões que se repetem); quem estiver numa faixa varrida perde 12% da vida e a contagem de abates seguidos da missão volta a zero. Sem ninguém com a missão na área, a esteira fica parada.
 
 ### A Estrada Velha (implementada no M1)
 
@@ -144,11 +158,12 @@ z=160└────────────────────────
 |---|---|---|
 | Login | servidor, conta, senha, criar conta | M1 |
 | Seleção e criação de personagem | lista; nome + classe (com origem e papel) | M1 (2 classes), M2 (8) |
-| Ficha (C) | atributos permanentes e com itens, pontos livres com "+", confirmar/desfazer, redistribuir; estatísticas derivadas; habilidades com graus | M1 |
+| Ficha (C) | atributos permanentes e com itens, pontos livres com "+", confirmar/desfazer, redistribuir; estatísticas derivadas; habilidades com graus; título mostrado acima do nome (entre os ganhos) | M1 |
 | Barra de habilidades | 2 habilidades + 2 tônicos, com custo e nível de desbloqueio | M1 |
 | Inventário e equipamentos (I) | espaços equipados, bolsa 30, caixa de recuperação; descrição com dano/defesa, raridade, nível, classe, atributos, empunhadura e espaço, requisitos pendentes em vermelho e comparação com o equipado | M1 |
 | Chat | canal local da zona | M1 |
 | Aviso de desconexão | motivo + "Reconectar" (refaz login e volta ao mesmo personagem) | M1 |
-| Diário de missões | missões ativas, objetivo, progresso | M2 |
+| Diário de missões | missões ativas, objetivo, progresso; disponíveis (diárias marcadas); diárias feitas hoje e quando voltam | M2 |
+| Quadro de missões | clique no quadro da praça: o que dá para aceitar no mundo inteiro, com nível, NPC e mapa | M3 |
 | Painel de grupo | membros, vida, mana, distância | M2 |
 | Ferreiro | custo, chance, prévia | M3 |

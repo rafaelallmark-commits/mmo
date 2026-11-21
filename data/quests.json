@@ -1,5 +1,5 @@
 {
- "_doc": "Missões. npc/turnIn '@master' = mestre da classe do personagem. Objetivos: talk (falar com NPC), kill (abates com participação), collect (itens reais na bolsa, consumidos na entrega), questDrop (contador que sobe ao derrotar o monstro, com chance; não ocupa a bolsa), interact (objetos do mapa), level, allocated (sem pontos livres), equipLevel (arma equipada de nível mínimo), enterMap (entrar num mapa), trial (prova de classe), escort (a escolta do mapa chega ao fim com o jogador por perto) e choice (resposta escolhida num diálogo; grava a escolha e pode dar título; dialogueByChoice troca falas de missões seguintes). O servidor conta e valida tudo. XP somado por capítulo ≈ 30% do XP da faixa (ver docs/04).",
+ "_doc": "Missões. npc/turnIn: id do NPC, '@master' (mestre da classe do personagem) ou lista (qualquer um deles; npcLabel/turnInLabel dão o nome mostrado). Objetivos: talk (falar com NPC), kill (abates com participação; resetOnHazard zera os abates seguidos quando o perigo do mapa atinge o personagem), collect (itens reais na bolsa, consumidos na entrega; com drop o item só cai daquele monstro enquanto a missão está ativa, e item de missão sai todo da bolsa na entrega), questDrop (contador que sobe ao derrotar o monstro, com chance; não ocupa a bolsa), interact (objetos do mapa), level, allocated (sem pontos livres), equipLevel (arma equipada de nível mínimo), enterMap (entrar num mapa), trial (prova de classe), escort (a escolta do mapa chega ao fim com o jogador por perto), defend (a defesa do mapa vence o cronômetro com o jogador por perto) e choice (resposta escolhida num diálogo; grava a escolha e pode dar título; dialogueByChoice troca falas de missões seguintes). Recompensas: xp, gold, items, byArmor (itens pelo peso de armadura da classe), byClass e title (texto ou { default, byClass }). repeat 'daily' = repetível 1×/dia (dia UTC). where = mapa onde o quadro de missões manda procurar o NPC. Secundárias têm id s_*. O servidor conta e valida tudo. XP: principais ≈ 30% do XP de cada faixa; com as secundárias (diárias contadas uma vez), no máximo 55% (docs/04, 4.2).",
  "quests": {
   "tutorial": {
    "chapter": 0,
@@ -162,12 +162,32 @@
    "rewards": {
     "xp": 150,
     "gold": 30,
-    "items": []
+    "items": [],
+    "byArmor": {
+     "heavy": [
+      [
+       "heavy_boots_t1",
+       1
+      ]
+     ],
+     "light": [
+      [
+       "light_boots_t1",
+       1
+      ]
+     ],
+     "robe": [
+      [
+       "robe_sandals_t1",
+       1
+      ]
+     ]
+    }
    },
    "dialogue": {
     "offer": "Se a gente marcar a estrada velha, as caravanas voltam a passar. Cuidado: os cães chamam os outros.",
     "progress": "Faltam cães ou marcos.",
-    "complete": "Rota marcada. Agora é ver quem tenta cobrar pedágio nela."
+    "complete": "Rota marcada. Leva estas botas: a estrada velha come sola. Agora é ver quem tenta cobrar pedágio nela."
    }
   },
   "c1_foreman": {
@@ -243,16 +263,9 @@
    ],
    "objectives": [
     {
-     "type": "kill",
-     "monster": "errant_valve",
-     "count": 6,
-     "text": "Detenha as Válvulas Errantes"
-    },
-    {
-     "type": "kill",
-     "monster": "silt_eel",
-     "count": 4,
-     "text": "Afaste as Enguias de Lodo do canal"
+     "type": "defend",
+     "defense": "joca_valve",
+     "text": "Defenda Joca por 3 minutos enquanto ele abre a válvula principal"
     }
    ],
    "rewards": {
@@ -266,8 +279,8 @@
     ]
    },
    "dialogue": {
-    "offer": "Se eu abrir devagar, ela não estoura. Se alguma coisa morder minha mão, estoura. Combinado?",
-    "progress": "Ainda tem coisa vindo do canal.",
+    "offer": "Se eu abrir devagar, ela não estoura. Se você deixar alguma coisa morder minha mão, estoura. Combinado? Mexa na válvula principal quando estiver pronto: são três minutos de onda vindo do canal.",
+    "progress": "A válvula principal fica do meu lado, na frente da Casa das Bombas. Três minutos sem deixar nada morder a minha mão. Se eu cair, levanto e tento de novo.",
     "complete": "Pressão estável. Por enquanto."
    }
   },
@@ -457,7 +470,15 @@
    "rewards": {
     "xp": 1800,
     "gold": 0,
-    "items": []
+    "items": [],
+    "title": {
+     "default": "Provado",
+     "byClass": {
+      "dawnshield": "Provada",
+      "windwalker": "Provada",
+      "veilsinger": "Provada"
+     }
+    }
    },
    "dialogue": {
     "offer": "Mostre que entendeu para que serve a sua arma.",
@@ -486,12 +507,32 @@
    "rewards": {
     "xp": 2700,
     "gold": 150,
-    "items": []
+    "items": [],
+    "byArmor": {
+     "heavy": [
+      [
+       "heavy_helm_t9",
+       1
+      ]
+     ],
+     "light": [
+      [
+       "light_hood_t9",
+       1
+      ]
+     ],
+     "robe": [
+      [
+       "robe_circlet_t9",
+       1
+      ]
+     ]
+    }
    },
    "dialogue": {
     "offer": "O cofre de ordens fica na sala do Supervisor. Se ele estiver lá, alguém segura a atenção dele.",
     "progress": "A Sala do Supervisor fica no fundo da oficina.",
-    "complete": "Duas assinaturas. Âmbar e Nacre. Na mesma noite, no mesmo papel. Eles desligaram juntos."
+    "complete": "Duas assinaturas. Âmbar e Nacre. Na mesma noite, no mesmo papel. Eles desligaram juntos. ... E isto estava no cofre também: equipamento de turno, do seu tamanho. Leve."
    }
   },
   "c4_bells": {
@@ -796,7 +837,16 @@
    "chapter": 5,
    "title": "Estamos Ouvindo",
    "npc": "ilda",
-   "turnIn": "@master",
+   "turnIn": [
+    "master_breaker",
+    "master_bastion",
+    "master_pikeman",
+    "master_warden",
+    "master_dawnshield",
+    "master_windwalker",
+    "master_veilsinger",
+    "master_emberweaver"
+   ],
    "level": 18,
    "prereq": [
     "c5_eclusa"
@@ -809,20 +859,37 @@
     },
     {
      "type": "talk",
-     "npc": "@master",
-     "text": "Leve o registro ao mestre da sua classe"
+     "npc": [
+      "master_breaker",
+      "master_bastion",
+      "master_pikeman",
+      "master_warden"
+     ],
+     "text": "Leve o registro a um mestre de classe de Pedrâmbar"
+    },
+    {
+     "type": "talk",
+     "npc": [
+      "master_dawnshield",
+      "master_windwalker",
+      "master_veilsinger",
+      "master_emberweaver"
+     ],
+     "text": "Leve o registro a um mestre de classe do Vau de Nácar"
     }
    ],
    "rewards": {
     "gold": 500,
     "items": [],
-    "xp": 5700
+    "xp": 5700,
+    "title": "Quem Ouviu o Segundo Toque"
    },
    "dialogue": {
     "offer": "As últimas mensagens não são da Companhia. São pedidos de socorro... datados de trezentos anos atrás. Antes das cidades. E esta aqui é de hoje: \"Estamos ouvindo. A passagem continua fechada.\"",
-    "progress": "Teodoro conhece as duas cidades. Comece por ele.",
-    "complete": "Quem ouviu o segundo toque não esquece. Guarde o registro: alguém mandou essas mensagens de novo."
-   }
+    "progress": "Teodoro conhece as duas cidades: comece por ele. Depois, um mestre de Pedrâmbar e um do Vau de Nácar. As duas cidades precisam ouvir a mesma coisa.",
+    "complete": "Quem ouviu o segundo toque não esquece. Agora Pedrâmbar e o Vau de Nácar sabem o mesmo que você: alguém mandou essas mensagens de novo."
+   },
+   "turnInLabel": "um mestre de classe (Pedrâmbar ou Vau de Nácar)"
   },
   "c6_silence": {
    "chapter": 6,
@@ -869,7 +936,8 @@
       "offer": "O hospital ganhou o calor que você escolheu. Agora vem a conta: li o registro do Custódio até o fim, e ele não nos prendia — segurava alguma coisa embaixo. Sem ele, a pressão desce por um poço de inspeção que não está em mapa nenhum. A Mara já desceu. Claro que desceu."
      }
     }
-   }
+   },
+   "where": "canais_eclusa"
   },
   "c6_calls": {
    "chapter": 6,
@@ -1081,22 +1149,535 @@
     }
    }
   },
-  "s_silk": {
-   "items": [],
-   "chapter": 4,
-   "title": "Seda Condutora",
+  "s_warm_nest": {
+   "chapter": 1,
+   "title": "Ninho Morno",
+   "npc": "potions_resina",
+   "turnIn": "potions_resina",
+   "level": 2,
+   "prereq": [
+    "tutorial"
+   ],
+   "objectives": [
+    {
+     "type": "collect",
+     "item": "qi_warm_shell",
+     "count": 10,
+     "text": "Recolha carapaças mornas dos Besouros-Brasa da Encosta Morna",
+     "drop": {
+      "monster": "ember_beetle",
+      "chance": 0.6
+     }
+    }
+   ],
+   "rewards": {
+    "xp": 75,
+    "gold": 0,
+    "items": [
+     [
+      "potion_hp_s",
+      5
+     ]
+    ]
+   },
+   "dialogue": {
+    "offer": "Os besouros da Encosta Morna guardam o calor do sulco na carapaça. Moída, ela é a base dos meus tônicos, e anda difícil de achar desde que o chão esquentou. Me traz dez e eu pago em tônico.",
+    "progress": "Dez carapaças mornas. Os besouros ficam na encosta ao norte do Posto da Ponte; não mordem se você não mexer com eles.",
+    "complete": "Ainda estão quentes! Toma, cinco tônicos. Quando faltar, já sabe onde me achar."
+   }
+  },
+  "s_lizard_bridge": {
+   "chapter": 1,
+   "title": "Ponte do Lagarto",
+   "npc": "ruy",
+   "turnIn": "ruy",
+   "level": 3,
+   "prereq": [
+    "c1_count"
+   ],
+   "objectives": [
+    {
+     "type": "kill",
+     "monster": "ballast_lizard",
+     "count": 8,
+     "text": "Afaste os Lagartos de Lastro do Leito Seco"
+    }
+   ],
+   "rewards": {
+    "xp": 115,
+    "gold": 0,
+    "items": [],
+    "byArmor": {
+     "heavy": [
+      [
+       "heavy_gloves_t1",
+       1
+      ]
+     ],
+     "light": [
+      [
+       "light_gloves_t1",
+       1
+      ]
+     ],
+     "robe": [
+      [
+       "robe_gloves_t1",
+       1
+      ]
+     ]
+    }
+   },
+   "dialogue": {
+    "offer": "Os lagartos de lastro deitaram em cima da pinguela do leito seco. São lentos, mas pesam feito pedra: carroça nenhuma passa. Afasta uns oito e eu te arrumo um par de luvas do depósito do posto.",
+    "progress": "O leito seco fica a nordeste, depois das ruínas. Se puder, bata de longe: eles demoram para chegar.",
+    "complete": "A pinguela está livre. As luvas são do teu tamanho, eu acho. Do depósito do posto ninguém reclama."
+   }
+  },
+  "s_ash_hide": {
+   "chapter": 1,
+   "title": "Pêlo de Cinza",
+   "npc": [
+    "smith_gusmao",
+    "smith_tiela"
+   ],
+   "turnIn": [
+    "smith_gusmao",
+    "smith_tiela"
+   ],
+   "npcLabel": "Gusmão ou Tiela (ferreiros)",
+   "turnInLabel": "Gusmão ou Tiela (ferreiros)",
+   "level": 4,
+   "prereq": [
+    "c1_count"
+   ],
+   "objectives": [
+    {
+     "type": "collect",
+     "item": "qi_scorched_hide",
+     "count": 6,
+     "text": "Traga couros chamuscados dos Javalis de Cinza",
+     "drop": {
+      "monster": "ash_boar",
+      "chance": 0.5
+     }
+    },
+    {
+     "type": "collect",
+     "item": "mat_scrap",
+     "count": 5,
+     "text": "Traga Sucata de Condutor"
+    }
+   ],
+   "rewards": {
+    "xp": 160,
+    "gold": 0,
+    "items": [
+     [
+      "mat_refine",
+      2
+     ]
+    ]
+   },
+   "dialogue": {
+    "offer": "Couro de javali do Campo de Cinza aguenta brasa: é com ele que eu forro as tenazes. Me traz seis couros chamuscados e um punhado da sucata de condutor que os ratos roem, e eu te mostro o que é Pó de Refino.",
+    "progress": "Seis couros e cinco sucatas. Os javalis ficam no fim da estrada, a leste, e vêm em cima de quem chega perto.",
+    "complete": "Couro bom, sucata melhor ainda. Leva este Pó de Refino: é o que eu peço por grau quando você trouxer uma peça para refinar."
+   }
+  },
+  "s_foreman_receipt": {
+   "chapter": 1,
+   "title": "Recibo do Capataz",
+   "npc": "teodoro",
+   "turnIn": "teodoro",
+   "level": 4,
+   "prereq": [
+    "c1_foreman"
+   ],
+   "repeat": "daily",
+   "objectives": [
+    {
+     "type": "kill",
+     "monster": "cracked_foreman",
+     "count": 1,
+     "text": "Derrote o Capataz Rachado (recomendado: grupo)"
+    }
+   ],
+   "rewards": {
+    "xp": 75,
+    "gold": 30,
+    "items": []
+   },
+   "dialogue": {
+    "offer": "O Capataz voltou a pedir recibo na curva: ele se conserta sozinho todo dia, feito relógio. Derruba de novo e me traz a ordem de serviço do peito dele. Eu guardo uma por dia, para mostrar à Companhia se ela aparecer.",
+    "progress": "Ele ronda a curva ao sul do posto. Junta alguém.",
+    "complete": "Mais uma ordem com a assinatura da Companhia. Amanhã ele volta; eu também."
+   }
+  },
+  "s_quarry_ready": {
+   "chapter": 1,
+   "title": "Pronto para a Pedreira",
+   "npc": "@master",
+   "turnIn": "@master",
+   "level": 5,
+   "prereq": [
+    "c1_master"
+   ],
+   "objectives": [
+    {
+     "type": "equipLevel",
+     "minLevel": 5,
+     "text": "Equipe uma arma de nível 5 da sua classe"
+    }
+   ],
+   "rewards": {
+    "xp": 125,
+    "gold": 0,
+    "items": []
+   },
+   "dialogue": {
+    "offer": "Achou uma arma que ainda não consegue usar? Ótimo. Olhe o que está vermelho, planeje os pontos e volte aqui com ela na mão. É assim que se cresce: achar, planejar, empunhar.",
+    "progress": "Ainda não. Uma arma de nível 5 da sua classe, equipada. Se faltar atributo, a ficha diz qual.",
+    "complete": "Agora sim. Sente o peso? Isso é o que você planejou. Daqui para frente é sempre assim."
+   }
+  },
+  "s_steam_toads": {
+   "chapter": 2,
+   "title": "Sapos de Vapor",
+   "npc": "potions_lume",
+   "turnIn": "potions_lume",
+   "level": 5,
+   "prereq": [
+    "c1_count"
+   ],
+   "objectives": [
+    {
+     "type": "collect",
+     "item": "qi_steam_gland",
+     "count": 12,
+     "text": "Colete glândulas de vapor dos Sapos-Bomba da Lagoa das Bombas",
+     "drop": {
+      "monster": "pump_toad",
+      "chance": 0.5
+     }
+    }
+   ],
+   "rewards": {
+    "xp": 570,
+    "gold": 0,
+    "items": [
+     [
+      "potion_hp_s",
+      8
+     ]
+    ]
+   },
+   "dialogue": {
+    "offer": "Os sapos do brejo andam inchados de vapor. A glândula que segura esse vapor, destilada, vira um tônico que não azeda no calor. Doze glândulas e eu encho a tua bolsa.",
+    "progress": "A Lagoa das Bombas fica no norte do Brejo das Bombas, logo depois do acampamento. Os sapos não atacam: é só não deixar a glândula estourar.",
+    "complete": "Doze, e nenhuma estourada. Toma oito tônicos, e volte quando o brejo esfriar. Se esfriar."
+   }
+  },
+  "s_eel_wires": {
+   "chapter": 2,
+   "title": "Fios de Enguia",
+   "npc": "joca",
+   "turnIn": "joca",
+   "level": 6,
+   "prereq": [
+    "c2_water"
+   ],
+   "objectives": [
+    {
+     "type": "collect",
+     "item": "qi_eel_wire",
+     "count": 10,
+     "text": "Tire fios condutores das Enguias de Lodo do Canal Raso",
+     "drop": {
+      "monster": "silt_eel",
+      "chance": 0.5
+     }
+    }
+   ],
+   "rewards": {
+    "xp": 700,
+    "gold": 0,
+    "items": [
+     [
+      "ring_t5",
+      1
+     ]
+    ]
+   },
+   "dialogue": {
+    "offer": "As enguias do canal raso engolem fio de condutor e ficam com ele por dentro, faiscando. Fio daquele não se fabrica mais. Me traz dez e eu te dou um anel de bronze: sobrou da última bomba que eu desmontei.",
+    "progress": "O canal raso fica no sul do brejo. As enguias são bravas: vá em dois, um batendo de perto e outro de longe.",
+    "complete": "Fio da Companhia, cobre trançado com nácar. Com isso eu religo metade da Casa das Bombas. O anel é teu: são duas mãos, cabem dois."
+   }
+  },
+  "s_iron_beak": {
+   "chapter": 2,
+   "title": "Bico de Ferro",
+   "npc": "olga",
+   "turnIn": "olga",
+   "level": 7,
+   "prereq": [
+    "c2_water"
+   ],
+   "objectives": [
+    {
+     "type": "collect",
+     "item": "qi_heron_beak",
+     "count": 8,
+     "text": "Traga bicos das Garças de Ferrugem da Margem Alta",
+     "drop": {
+      "monster": "rust_heron",
+      "chance": 0.5
+     }
+    }
+   ],
+   "rewards": {
+    "xp": 825,
+    "gold": 0,
+    "items": []
+   },
+   "dialogue": {
+    "offer": "As garças da margem alta furam lona de barraca com aquele bico de ferro. Eu faço ponta de lança com eles para quem vigia o acampamento. Oito bicos.",
+    "progress": "A margem alta fica no sudeste do brejo. Garça anda sozinha: dá para caçar uma por vez.",
+    "complete": "Oito pontas novas para a vigia. O acampamento dorme melhor hoje."
+   }
+  },
+  "s_master_pump": {
+   "chapter": 2,
+   "title": "Bomba-Mestra",
+   "npc": "joca",
+   "turnIn": "joca",
+   "level": 8,
+   "prereq": [
+    "c2_pressure"
+   ],
+   "repeat": "daily",
+   "objectives": [
+    {
+     "type": "kill",
+     "monster": "master_pump",
+     "count": 1,
+     "text": "Derrote a Bomba-Mestra Desregulada (recomendado: grupo)"
+    }
+   ],
+   "rewards": {
+    "xp": 955,
+    "gold": 0,
+    "items": []
+   },
+   "dialogue": {
+    "offer": "A Bomba-Mestra desregula sozinha toda noite e começa a ferver o brejo de novo. Desliga ela na marra, de preferência com mais gente, e eu aproveito para trocar uma junta.",
+    "progress": "Ela fica ao sul da Casa das Bombas. Não fique na frente dela quando o vapor subir.",
+    "complete": "Parou. Até amanhã, pelo menos. Se achar brasa cristalizada lá dentro, é sua: eu só quero a junta."
+   }
+  },
+  "s_old_fuses": {
+   "chapter": 3,
+   "title": "Fusíveis Velhos",
+   "npc": "pina",
+   "turnIn": "pina",
+   "level": 9,
+   "prereq": [
+    "c3_fuses"
+   ],
+   "objectives": [
+    {
+     "type": "collect",
+     "item": "qi_old_fuse",
+     "count": 6,
+     "text": "Tire fusíveis velhos dos Autômatos Escavadores",
+     "drop": {
+      "monster": "digger_automaton",
+      "chance": 0.5
+     }
+    }
+   ],
+   "rewards": {
+    "xp": 1575,
+    "gold": 0,
+    "items": []
+   },
+   "dialogue": {
+    "offer": "As caixas do Arquivo precisam de fusível sobrando, senão a luz cai de novo no meio da leitura. Os escavadores ainda carregam os velhos, de antes do apagão. Seis, por favor.",
+    "progress": "A Galeria dos Escavadores fica a noroeste da Boca da Oficina. Eles cavam em turma e brigam em turma.",
+    "complete": "Seis fusíveis com o carimbo de Âmbar e de Nacre no mesmo tubo. Engraçado: as duas cidades faziam as peças juntas."
+   }
+  },
+  "s_forge_ember": {
+   "chapter": 3,
+   "title": "Brasa para a Forja",
+   "npc": [
+    "smith_gusmao",
+    "smith_tiela"
+   ],
+   "turnIn": [
+    "smith_gusmao",
+    "smith_tiela"
+   ],
+   "npcLabel": "Gusmão ou Tiela (ferreiros)",
+   "turnInLabel": "Gusmão ou Tiela (ferreiros)",
+   "level": 9,
+   "prereq": [
+    "c1_count"
+   ],
+   "repeat": "daily",
+   "objectives": [
+    {
+     "type": "collect",
+     "item": "mat_ember",
+     "count": 6,
+     "text": "Traga Brasa Cristalizada"
+    },
+    {
+     "type": "collect",
+     "item": "mat_scrap",
+     "count": 10,
+     "text": "Traga Sucata de Condutor"
+    }
+   ],
+   "rewards": {
+    "xp": 0,
+    "gold": 0,
+    "items": [
+     [
+      "mat_refine",
+      4
+     ]
+    ]
+   },
+   "dialogue": {
+    "offer": "A forja come brasa cristalizada como você come pão. Me traz seis brasas e dez sucatas de condutor por dia e eu te pago em Pó de Refino: sai mais barato que comprar.",
+    "progress": "Seis brasas e dez sucatas. A brasa cai na Oficina, nas Galerias e da Bomba-Mestra; a sucata, na Estrada Velha e no Brejo.",
+    "complete": "A forja agradece. Quatro medidas de pó, como combinado. Amanhã tem mais."
+   }
+  },
+  "s_runaway_belt": {
+   "chapter": 3,
+   "title": "Esteira Desgovernada",
+   "npc": "pina",
+   "turnIn": "pina",
+   "level": 11,
+   "prereq": [
+    "c3_fuses"
+   ],
+   "objectives": [
+    {
+     "type": "kill",
+     "monster": "belt_blade",
+     "count": 10,
+     "resetOnHazard": "belt_sweep",
+     "text": "Derrube Lâminas de Esteira sem ser atingido pela esteira (10 seguidas)"
+    }
+   ],
+   "rewards": {
+    "xp": 2150,
+    "gold": 0,
+    "items": []
+   },
+   "dialogue": {
+    "offer": "Religuei a esteira principal para tirar as Lâminas dos trilhos, e ela desandou: varre os trilhos de tempos em tempos. Derrube dez Lâminas sem deixar a esteira te pegar. Se pegar, eu começo a contar de novo.",
+    "progress": "Os Trilhos da Esteira ficam no sul da oficina. Quando uma faixa do chão acender, saia dela: a esteira passa logo depois.",
+    "complete": "Dez, e nenhuma varrida! Você lê o chão melhor do que eu. Vou desligar a esteira antes que ela pegue alguém menos atento."
+   }
+  },
+  "s_shift_super": {
+   "chapter": 3,
+   "title": "Supervisor de Turno",
    "npc": "mara",
    "turnIn": "mara",
-   "level": 14,
+   "level": 11,
+   "prereq": [
+    "c3_fuses"
+   ],
+   "repeat": "daily",
+   "objectives": [
+    {
+     "type": "kill",
+     "monster": "shift_supervisor",
+     "count": 1,
+     "text": "Derrote o Supervisor de Turno (grupo recomendado)"
+    }
+   ],
+   "rewards": {
+    "xp": 2500,
+    "gold": 0,
+    "items": []
+   },
+   "dialogue": {
+    "offer": "O Supervisor de Turno religa toda manhã e volta a trancar a sala. Eu ainda não terminei de copiar os livros de lá. Derruba ele de novo, e leva gente: ele não trabalha sozinho.",
+    "progress": "A Sala do Supervisor fica no canto sudeste da oficina, depois dos trilhos.",
+    "complete": "Mais um dia de cópia garantido. Toda manhã ele religa e eu copio mais um livro. Um dia a gente termina."
+   }
+  },
+  "s_echoes": {
+   "chapter": 4,
+   "title": "Ecos Repetidos",
+   "npc": "mara",
+   "turnIn": "mara",
+   "level": 13,
    "prereq": [
     "c4_bells"
    ],
    "objectives": [
     {
-     "type": "kill",
-     "monster": "conduit_spider",
+     "type": "collect",
+     "item": "qi_trapped_echo",
+     "count": 12,
+     "text": "Recolha ecos presos dos Ecoantes do Salão dos Sinos",
+     "drop": {
+      "monster": "echoer",
+      "chance": 0.5
+     }
+    }
+   ],
+   "rewards": {
+    "xp": 4400,
+    "gold": 0,
+    "items": []
+   },
+   "dialogue": {
+    "offer": "Os Ecoantes repetem o último som que ouviram, e alguns carregam lascas de metal que repetem para sempre. Quero ouvir o que elas guardam. Doze lascas. E vá em grupo: eles andam juntos.",
+    "progress": "O Salão dos Sinos fica ao norte da Estação Sonhada, perto das ruínas. Os Ecoantes chamam uns aos outros.",
+    "complete": "Escuta esta: 'turma funda, turma funda'. Doze lascas, a mesma palavra. Alguém chamava a turma funda pelo nome."
+   }
+  },
+  "s_silk": {
+   "items": [],
+   "chapter": 4,
+   "title": "Seda Condutora",
+   "npc": [
+    "smith_tiela",
+    "smith_gusmao"
+   ],
+   "turnIn": [
+    "smith_tiela",
+    "smith_gusmao"
+   ],
+   "level": 15,
+   "prereq": [
+    "c4_bells"
+   ],
+   "objectives": [
+    {
+     "type": "collect",
+     "item": "qi_conduit_silk",
      "count": 10,
-     "text": "Derrote Aranhas de Conduíte"
+     "text": "Recolha fios de Seda Condutora das Aranhas de Conduto",
+     "drop": {
+      "monster": "conduit_spider",
+      "chance": 0.5
+     }
+    },
+    {
+     "type": "collect",
+     "item": "mat_ember",
+     "count": 4,
+     "text": "Traga Brasa Cristalizada para temperar a seda"
     }
    ],
    "rewards": {
@@ -1104,16 +1685,18 @@
     "items": [
      [
       "mat_refine",
-      3
+      5
      ]
     ],
-    "xp": 3500
+    "xp": 5900
    },
    "dialogue": {
-    "offer": "A seda das aranhas conduz calor. O ferreiro paga bem por ela.",
-    "progress": "As aranhas fazem ninho perto dos cabos do sudeste.",
-    "complete": "Isso aqui segura um refino. Leve ao ferreiro."
-   }
+    "offer": "A seda das aranhas da Ponte dos Fios conduz calor sem queimar. Temperada com brasa cristalizada, vira o melhor Pó de Refino que já passou por esta bigorna. Dez fios de seda e quatro brasas.",
+    "progress": "A Ponte dos Fios fica no sudeste das Galerias do Eco, depois da fenda. As aranhas fazem ninho nos cabos e não gostam de visita.",
+    "complete": "Seda temperada! Cinco medidas de Pó de Refino: o bastante para levar uma peça do +1 ao +3. Volte quando quiser refinar."
+   },
+   "npcLabel": "Tiela ou Gusmão (ferreiros)",
+   "turnInLabel": "Tiela ou Gusmão (ferreiros)"
   },
   "s_mother": {
    "items": [],
@@ -1136,13 +1719,14 @@
    "rewards": {
     "gold": 400,
     "items": [],
-    "xp": 5000
+    "xp": 6600
    },
    "dialogue": {
-    "offer": "Os ecos vêm de algum lugar. No Salão dos Sinos alguma coisa repete tudo o que a gente fala.",
-    "progress": "O Salão dos Sinos fica ao norte, depois das ruínas.",
-    "complete": "O silêncio lá dentro é pior que o eco. Mas os medidores param de tremer."
-   }
+    "offer": "Os ecos vêm de algum lugar. No Salão dos Sinos alguma coisa repete tudo o que a gente fala, e toda manhã ela volta a repetir. Cale a Mãe do Eco — com mais gente.",
+    "progress": "O Salão dos Sinos fica ao norte, depois das ruínas. Ela não está sozinha lá dentro.",
+    "complete": "O silêncio lá dentro é pior que o eco. Mas os medidores param de tremer. Até amanhã."
+   },
+   "repeat": "daily"
   },
   "s_slag": {
    "items": [],
@@ -1156,10 +1740,14 @@
    ],
    "objectives": [
     {
-     "type": "kill",
-     "monster": "pressure_slag",
-     "count": 12,
-     "text": "Derrote Escórias de Pressão"
+     "type": "collect",
+     "item": "qi_slag_core",
+     "count": 15,
+     "text": "Recolha núcleos das Escórias Pressurizadas",
+     "drop": {
+      "monster": "pressure_slag",
+      "chance": 0.5
+     }
     }
    ],
    "rewards": {
@@ -1170,12 +1758,40 @@
       5
      ]
     ],
-    "xp": 7000
+    "xp": 14000
    },
    "dialogue": {
-    "offer": "A escória entope os canais e explode quando esfria. Limpa o caminho até a bacia.",
-    "progress": "A bacia de vapor fica no meio dos canais.",
-    "complete": "Agora a água anda. Escuta: parece até respiração."
+    "offer": "A escória entope os canais e explode quando esfria. O núcleo dela ainda pulsa: com quinze núcleos eu calibro a bacia inteira. Vá em grupo e não fiquem colados — ela estoura em volta.",
+    "progress": "A Bacia de Vapor fica no meio dos canais, e tem mais escória no sudoeste. Espalhem-se quando ela inchar.",
+    "complete": "Quinze núcleos pulsando no mesmo ritmo. Agora a água anda. Escuta: parece até respiração."
+   }
+  },
+  "s_lost_dredge": {
+   "chapter": 5,
+   "title": "Draga Perdida",
+   "npc": "ilda",
+   "turnIn": "ilda",
+   "level": 17,
+   "prereq": [
+    "c5_pressure"
+   ],
+   "objectives": [
+    {
+     "type": "kill",
+     "monster": "living_dredge",
+     "count": 10,
+     "text": "Desligue Dragas Vivas no Canal Lamacento"
+    }
+   ],
+   "rewards": {
+    "xp": 15000,
+    "gold": 500,
+    "items": []
+   },
+   "dialogue": {
+    "offer": "As dragas da Companhia deviam limpar o canal lamacento. Sem ordem nenhuma, cavam o fundo e jogam a lama nas comportas. Desligue dez delas antes que entupam a Eclusa por dentro.",
+    "progress": "O Canal Lamacento fica no leste dos canais, depois do canal de água.",
+    "complete": "Dez dragas paradas. As placas delas dizem 'serviço contínuo'. Ninguém mandou parar em dezessete anos."
    }
   },
   "s_bells": {

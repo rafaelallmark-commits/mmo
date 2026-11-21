@@ -5,6 +5,10 @@ extends Node
 ##   godot --headless --path client -- --autotest --server=ws://127.0.0.1:7777 --account=bot --password=bot123 --class=breaker --name=Robo
 ## Com --transfer (servidor em várias zonas, --dev): em vez de lutar, atravessa o portal para um mapa de
 ## outra zona e confere que o cliente reconectou no endereço novo e está no mapa novo.
+## Com --board (servidor --dev): depois do fluxo normal, vai a Pedrâmbar e abre o quadro de missões da praça
+## pelo mesmo clique da interface, conferindo que ele lista missões. Com --defense (servidor --dev): aceita
+## "O Teste de Pressão" com Joca e abre a válvula, conferindo que o Joca da defesa (com vida e cronômetro)
+## toma o lugar do NPC parado e que a ficha mostra o seletor de título.
 
 var main
 var step := "connect"
@@ -233,10 +237,88 @@ func _process(_d: float) -> void:
 				main.hud.sheet_panel.visible = false
 				if main.args.has("m2"):
 					step = "m2_talk"
+				elif main.args.has("board"):
+					step = "board_go"
+				elif main.args.has("defense"):
+					step = "def_prep"
 				else:
 					say("OK")
 					get_tree().quit(0))
 			step = "quitting"
+		# ---------------- quadro de missões (--board, servidor --dev) ----------------
+		"board_go":
+			zone_changed = ""
+			step = "board_wait_zone"
+			Net.request("gm", {"cmd": "teleport", "mapId": "pedrambar", "x": 37.0, "z": 26.0}, func(r):
+				if not r["ok"]:
+					fail("teleporte para Pedrâmbar recusado: %s" % r.get("reason", "")))
+		"board_wait_zone":
+			if zone_changed == "pedrambar" and main.world and main.world.object_nodes.has("board_ambar") and not main.world.me().is_empty():
+				say("em Pedrâmbar; indo ao quadro de missões da praça")
+				_act("object", "board_ambar")
+				step = "board_wait_panel"
+		"board_wait_panel":
+			if main.hud.npc_panel.visible and str(main.hud.npc_open.get("role", "")) == "board":
+				var rows := 0
+				for ch in main.hud.npc_box.get_children():
+					if ch is Label and str(ch.text).contains("— nível"):
+						rows += 1
+				if rows == 0:
+					fail("o quadro de missões abriu sem nenhuma missão")
+					return
+				say("quadro de missões aberto pela interface: %d missões disponíveis" % rows)
+				_shot("quadro")
+				main.hud.npc_panel.visible = false
+				say("OK")
+				get_tree().quit(0)
+				step = "quitting"
+		# ---------------- defesa do Joca (--defense, servidor --dev) ----------------
+		"def_prep":
+			step = "def_wait"
+			var pre := ["tutorial", "c1_count", "c1_rats", "c1_master", "c1_route", "c1_foreman", "c2_water", "c3_trial"]
+			Net.request("gm", {"cmd": "xp", "level": 7}, func(_r):
+				Net.request("gm", {"cmd": "quest_done", "quests": pre}, func(_r2):
+					zone_changed = ""
+					Net.request("gm", {"cmd": "teleport", "mapId": "brejo_bombas", "x": 111.0, "z": 56.5}, func(r3):
+						if not r3["ok"]:
+							fail("teleporte para o Brejo recusado: %s" % r3.get("reason", ""))
+							return
+						step = "def_wait_zone")))
+		"def_wait_zone":
+			if zone_changed == "brejo_bombas" and main.world and main.world.npc_nodes.has("joca") and not main.world.me().is_empty():
+				step = "def_wait"
+				Net.request("quest_accept", {"quest": "c2_pressure", "npc": "joca"}, func(r):
+					if not r["ok"]:
+						fail("Joca recusou O Teste de Pressão: %s" % r.get("reason", ""))
+						return
+					say("O Teste de Pressão aceito; abrindo a válvula principal")
+					# a ficha mostra o seletor de título (o da prova de classe já conta)
+					main.hud.sheet_panel.visible = true
+					main.hud.refresh_char()
+					_act("object", "main_valve")
+					wait_until = Time.get_ticks_msec() + 15000
+					step = "def_wait_entity")
+		"def_wait_entity":
+			var joca_e := ""
+			for eid in main.world.entities.keys():
+				var d: Dictionary = main.world.entities[eid]["data"]
+				if d.get("k", "") == "e" and str(d.get("npc", "")) == "joca":
+					joca_e = eid
+			if joca_e != "" and not (main.world.npc_nodes["joca"]["node"] as Node3D).visible and main.hud.defense_label.visible:
+				var d2: Dictionary = main.world.entities[joca_e]["data"]
+				say("defesa em andamento: %s com %d/%d de vida no lugar do NPC; %s" % [str(d2.get("n", "")), int(d2.get("hp", 0)), int(d2.get("mhp", 0)), main.hud.defense_label.text])
+				var titles: Array = main.ch.get("titles", [])
+				if titles.is_empty():
+					fail("a ficha não recebeu os títulos ganhos")
+					return
+				say("títulos na ficha: %s" % ", ".join(titles))
+				_shot("defesa")
+				main.hud.sheet_panel.visible = false
+				say("OK")
+				get_tree().quit(0)
+				step = "quitting"
+			elif Time.get_ticks_msec() > wait_until:
+				fail("a defesa não apareceu (entidade %s, NPC visível %s)" % [joca_e, str((main.world.npc_nodes["joca"]["node"] as Node3D).visible)])
 		# ---------------- M2 ----------------
 		"m2_talk":
 			_act("npc", "mara")

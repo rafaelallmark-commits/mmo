@@ -3,11 +3,12 @@
 // simultâneas do mesmo personagem.
 import { randomUUID } from 'node:crypto';
 import { Escort } from './escort.js';
+import { Defense } from './defense.js';
 import { DuelManager } from './duel.js';
 import {
   derivedStats, playerAttack, monsterAttack, splitKillXp, levelForXp, rankCap, totalAttributePoints, rollInt, mitigate,
 } from './rules.js';
-import { equippedList, bagCount, BAG_CAPACITY } from './equipment.js';
+import { equippedList, equippedIn, bagCount, BAG_CAPACITY } from './equipment.js';
 import { executeSkill, IMPLEMENTED_KINDS } from './skills.js';
 import { makeRng } from './rng.js';
 import { NavGrid, followPath, brake } from './nav.js';
@@ -57,8 +58,10 @@ export class Zone {
     this.isFreeFn = (x, z) => this.nav.isFree(x, z);
     this.mv = { accel: this.f.movement.accel ?? 18, decel: this.f.movement.decel ?? 24 };
     this.monsterSeq = 0;
-    this.escorts = new Map(); // eid -> Escort
+    this.escorts = new Map(); // eid -> Escort (ou Defense, que é uma escolta parada)
     this.escortSeq = 0;
+    // perigos do mapa (a esteira da Oficina): estado de cada um; só ligam com alguém que precise deles
+    this.hazards = Object.entries(this.map.hazards ?? {}).map(([id, def]) => ({ id, def, state: 'idle', at: 0, pattern: 0, list: [] }));
     this.duels = new DuelManager(this);
     for (const sp of this.map.spawns ?? []) for (let i = 0; i < sp.count; i++) this.spawnMonster(sp);
   }
@@ -212,6 +215,60 @@ export class Zone {
     this.escorts.set(e.eid, e);
     e.notify(`${def.name} partiu. Fiquem perto dela até o fim da rota.`, { started: true });
     return { ok: true, escort: e };
+  }
+
+  // Defesa parada (Joca na válvula principal): uma por jogador ou grupo, como a escolta.
+  startDefense(defId, owner) {
+    const def = this.map.defenses?.[defId];
+    if (!def) return { ok: false, code: 'bad_defense', reason: 'Nada para defender aqui.' };
+    const partyId = this.hooks.partyIdOf?.(owner.char.id) ?? null;
+    for (const e of this.escorts.values()) {
+      if (e.defId === defId && (e.ownerCharId === owner.char.id || (partyId && e.partyId === partyId))) return { ok: true, escort: e, already: true };
+    }
+    const e = new Defense(this, defId, def, owner, partyId, ++this.escortSeq);
+    this.escorts.set(e.eid, e);
+    return { ok: true, escort: e };
+  }
+
+  // ---------- perigos do mapa ----------
+  // A esteira desgovernada da Oficina: só liga enquanto alguém na área precisa dela (missão "Esteira
+  // Desgovernada"); então avisa as faixas que vai varrer (o mesmo aviso de linha do Custódio) e, depois do
+  // aviso, atinge quem estiver nelas (dano em % da vida; o gancho zera os abates seguidos da missão).
+  hazardLines(h, k) {
+    const a = h.def.area;
+    const pats = h.def.patterns ?? [];
+    return (pats[k % pats.length] ?? []).map((l) => (l.axis === 'z'
+      ? { axis: 'z', at: l.at, x: a.x0, z: l.at, yaw: Math.PI / 2, length: a.x1 - a.x0 }
+      : { axis: 'x', at: l.at, x: l.at, z: a.z0, yaw: 0, length: a.z1 - a.z0 }));
+  }
+
+  inArea(a, c) { return c.x >= a.x0 && c.x <= a.x1 && c.z >= a.z0 && c.z <= a.z1; }
+
+  tickHazards() {
+    for (const h of this.hazards) {
+      const d = h.def;
+      const inside = [...this.players.values()].filter((p) => !p.char.dead && this.inArea(d.area, p.char));
+      if (h.state === 'idle') {
+        if (this.now < h.at) continue;
+        if (!inside.some((p) => this.hooks.hazardWanted?.(p, h.id))) { h.at = this.now + 1000; continue; }
+        h.list = this.hazardLines(h, h.pattern++);
+        h.state = 'warning';
+        h.at = this.now + d.warnMs;
+        for (const l of h.list) this.broadcast({ t: 'warn', shape: 'line', x: l.x, z: l.z, yaw: l.yaw, length: l.length, width: d.width, ms: d.warnMs, kind: 'line', hazard: h.id });
+      } else if (this.now >= h.at) {
+        for (const p of inside) {
+          const c = p.char;
+          if (!h.list.some((l) => Math.abs((l.axis === 'z' ? c.z : c.x) - l.at) <= d.width / 2 + 0.3)) continue;
+          const dmg = Math.max(1, Math.round(p.stats.maxHp * d.damagePctMaxHp / 100));
+          this.broadcast({ t: 'hit', src: `hz:${h.id}`, dst: p.eid, dmg, crit: false, miss: false, skill: 'hazard', magic: false });
+          this.applyRawDamage(p, dmg);
+          this.hooks.onHazardHit?.(p, h.id);
+        }
+        h.state = 'idle';
+        h.list = [];
+        h.at = this.now + Math.max(500, d.periodMs - d.warnMs);
+      }
+    }
   }
 
   // ---------- canalização (interação com tempo; mover, agir ou ser atingido interrompe) ----------
@@ -639,6 +696,7 @@ export class Zone {
         this.escorts.delete(eid);
       }
     }
+    if (this.hazards.length) this.tickHazards();
     this.tickGround();
   }
 
@@ -847,6 +905,9 @@ export class Zone {
         this.grantXp(p, daily ? s.xp * 2 : s.xp);
         this.store.saveCharacter(c);
         const drops = s.lootEligible ? [...this.rollLoot(m, c), ...(daily ? this.rollLoot(m, c) : [])] : [];
+        // materiais de coleta que só caem com a missão ativa: para todo participante creditado (como os
+        // abates das missões), um por abate
+        for (const q of this.hooks.questDrops?.(c, m.defId) ?? []) if (this.rng() < q.chance) drops.push({ defId: q.defId, qty: 1, gold: 0 });
         if (daily) this.send(c.id, { t: 'system', text: `Elite diária: ${m.def.name} — XP em dobro e saque extra hoje.` });
         for (const d of drops) {
           const lp = this.nav.nearestFree(m.x + (this.rng() - 0.5) * 2, m.z + (this.rng() - 0.5) * 2, 3) ?? { x: m.x, z: m.z };
@@ -881,9 +942,21 @@ export class Zone {
       if (e.type === 'gold') out.push({ defId: null, qty: 0, gold: rollInt(this.rng, e.min, e.max) });
       else if (e.type === 'item') out.push({ defId: e.defId, qty: rollInt(this.rng, e.min, e.max), gold: 0 });
       else if (e.type === 'pool') out.push({ defId: e.pool[Math.floor(this.rng() * e.pool.length)], qty: 1, gold: 0 });
-      else if (e.type === 'classDrop' && e.byClass[char.classId]) out.push({ defId: e.byClass[char.classId], qty: 1, gold: 0 });
+      else if (e.type === 'classDrop' && e.byClass[char.classId]) out.push({ defId: this.classDropPick(e.byClass[char.classId], char), qty: 1, gold: 0 });
+      // uma peça sorteada da lista da classe (ex.: armadura ou mão secundária única do Custódio)
+      else if (e.type === 'classPool' && e.byClass[char.classId]?.length) { const list = e.byClass[char.classId]; out.push({ defId: list[Math.floor(this.rng() * list.length)], qty: 1, gold: 0 }); }
     }
     return out;
+  }
+
+  // classDrop com várias armas para a classe: a da família que o personagem tem equipada (o Quebraferro de
+  // duas mãos leva o Grande Machado; o de uma mão, o Machado do Meridiano Partido); sem nenhuma da lista,
+  // sorteia.
+  classDropPick(choice, char) {
+    if (!Array.isArray(choice)) return choice;
+    const w = equippedIn(char, 'weapon');
+    const fam = w ? this.data.items[w.defId]?.family : null;
+    return choice.find((id) => this.data.items[id]?.family === fam) ?? choice[Math.floor(this.rng() * choice.length)];
   }
 
   tickMonster(m, dt) {
@@ -1102,7 +1175,7 @@ export class Zone {
       const px = r2(e.x), pz = r2(e.z), vx = r2(e.vx || 0), vz = r2(e.vz || 0);
       recs.push({
         id: e.eid, x: e.x, z: e.z, px, pz, vx, vz,
-        A: `"k":"e","def":"${e.def.model ?? 'cart'}","n":${JSON.stringify(e.def.name)},"mhp":${e.mhp}`,
+        A: `"k":"e","def":"${e.def.model ?? 'cart'}","n":${JSON.stringify(e.def.name)},"mhp":${e.mhp},"npc":${JSON.stringify(e.def.npc ?? null)}`,
         P: `"x":${px},"z":${pz}`,
         V: `"vx":${vx},"vz":${vz}`,
         C: `"hp":${Math.ceil(e.hp)},"st":"${e.state}"`,
@@ -1118,6 +1191,7 @@ export class Zone {
       id: c.id, eid: p.eid, name: c.name, classId: c.classId, level: c.level, xp: c.xp,
       xpLevelStart: cum[c.level - 1], xpNext: c.level >= this.data.levelCap ? null : cum[c.level],
       unspent: c.unspent, skillPoints: c.skillPoints, skills: c.skills, alloc: c.alloc, trialDone: !!c.trialDone, title: c.title ?? null,
+      titles: this.hooks.titlesOf?.(c) ?? (c.title ? [c.title] : []),
       permanent: s.permanent, attrs: s.attrs, hp: Math.ceil(c.hp), mp: Math.floor(c.mp), gold: c.gold, dead: c.dead,
       x: r2(c.x), z: r2(c.z), mapId: this.mapId, instance: this.instanceId,
       stats: { maxHp: s.maxHp, maxMp: s.maxMp, defense: s.defense, mres: s.mres, evasion: s.evasion, accuracy: s.accuracy, crit: s.crit, magicCrit: s.magicCrit, magicPower: s.magicPower, attackIntervalMs: s.attackIntervalMs, range: s.range, weapon: s.weapon.id, ccResistPct: s.ccResistPct,
