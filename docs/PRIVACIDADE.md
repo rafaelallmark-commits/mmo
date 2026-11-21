@@ -70,7 +70,8 @@ O jogo é destinado a maiores de 13 anos; menores de 18 devem ter autorização 
 
 ## Mudanças
 
-Avisaremos no jogo e no site antes de mudanças relevantes nesta política. Ela tem o mesmo número de
+Avisaremos no jogo e na seção *Avisos* da página do teste (`https://[domínio do teste]/`) antes de mudanças
+relevantes nesta política. Ela tem o mesmo número de
 versão dos [Termos de Uso](TERMOS.md): quando a versão muda, o jogo mostra os textos novos no login
 seguinte e pede o seu aceite antes de entrar; se você não quiser aceitar, na mesma tela dá para baixar
 seus dados ou excluir a conta.

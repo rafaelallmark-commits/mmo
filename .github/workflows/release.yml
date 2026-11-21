@@ -1,13 +1,21 @@
 # Release de CINZAS DO MERIDIANO (docs/08-operacao.md §8.8). A cada tag v* (ex.: v0.4.0, v0.4.0-teste.1):
-#   testes    - valida os dados e roda os testes do servidor (nada é publicado se falharem)
-#   exportar  - exporta o cliente com os presets de client/export_presets.cfg (Linux, Windows, macOS);
-#               assina o .exe com osslsigncode SE houver WINDOWS_CERT_PFX_BASE64/WINDOWS_CERT_PASSWORD
+#   versao    - a versão da tag inteira, sem o "v" (0.4.0-teste.2 continua 0.4.0-teste.2), conferida; vai para
+#               o cliente, para a imagem do servidor e para as notas (D150)
+#   ci        - o CI inteiro (ci.yml chamado como workflow reutilizável, com a versão): dados e testes no SQLite
+#               e no PostgreSQL, importação do cliente e autotest contra um servidor de verdade, imagem com o
+#               teste rápido do contêiner
+#   exportar  - exporta o cliente com os presets de client/export_presets.cfg (Linux, Windows, macOS), com a
+#               versão, o servidor padrão e a página de download gravados no projeto; põe em cada pacote o
+#               LICENCAS-TERCEIROS.txt (gravado pelo próprio executável exportado) e GUIA, TERMOS e PRIVACIDADE
+#               (D151); assina o .exe com osslsigncode SE houver WINDOWS_CERT_PFX_BASE64/WINDOWS_CERT_PASSWORD
 #   macos     - SE houver os 5 segredos da Apple: assina (codesign, Developer ID + runtime endurecido),
 #               notariza (xcrun notarytool) e grampeia o ticket (stapler) num runner macOS
-#   publicar  - cria a release da tag com os pacotes e SHA256SUMS.txt
-#   imagem    - publica a imagem do servidor em ghcr.io/<dono>/cinzas-servidor
+#   imagem    - constrói a imagem do servidor com a versão, roda nela o mesmo teste rápido do CI
+#               (deploy/teste-conteiner.sh) e só então a publica em ghcr.io/<dono>/cinzas-servidor
+#   publicar  - por último, cria a release da tag com os pacotes, SHA256SUMS.txt e as notas
+# Nada sai (nem imagem, nem release) sem o CI, a exportação e a assinatura verdes (D152).
 # Sem os segredos, as versões saem sem assinatura (com aviso no resumo da execução e nas notas).
-# Disparo manual (workflow_dispatch): exporta e guarda os pacotes como artefatos, sem publicar nada.
+# Disparo manual (workflow_dispatch): roda o CI, exporta e guarda os pacotes como artefatos, sem publicar nada.
 name: Release
 
 on:
@@ -24,7 +32,7 @@ concurrency:
 
 # "shell: bash" explícito = bash --noprofile --norc -eo pipefail (também no runner macOS). Sem ele o GitHub usa
 # "bash -e", sem pipefail, e o "godot ... | tee arquivo.log || status=$?" da importação e da exportação perderia o
-# código de saída do Godot. Um job com "defaults.run" próprio substitui este bloco inteiro: o job testes repete.
+# código de saída do Godot. Um job com "defaults.run" próprio substitui este bloco inteiro.
 defaults:
   run:
     shell: bash
@@ -40,37 +48,15 @@ env:
   RCEDIT_SHA256: 3e7801db1a5edbec91b49a24a094aad776cb4515488ea5a4ca2289c400eade2a
 
 jobs:
-  testes:
-    name: Testes do servidor
+  versao:
+    name: Versão
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    defaults:
-      run:
-        shell: bash
-        working-directory: server
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: server/package-lock.json
-      - run: npm ci --no-audit --no-fund
-      - run: npm run validate-data
-      - run: npm test
-
-  exportar:
-    name: Exportar o cliente (Linux, Windows, macOS)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 5
     outputs:
       versao: ${{ steps.versao.outputs.versao }}
-      macos_assinar: ${{ steps.segredos.outputs.macos }}
-      windows_assinado: ${{ steps.segredos.outputs.windows }}
+      numerica: ${{ steps.versao.outputs.numerica }}
     steps:
-      - uses: actions/checkout@v7
-
-      - name: Versão
+      - name: Versão da tag
         id: versao
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
@@ -78,11 +64,39 @@ jobs:
           else
             versao="0.0.0-dev.${GITHUB_SHA::7}"
           fi
+          # a mesma regra do servidor (deploymentVersion em server/src/server.js): começa com letra ou número e
+          # tem só letras, números e . + _ - (até 64); o servidor recusaria subir com outra coisa
+          if ! [[ "$versao" =~ ^[0-9A-Za-z][0-9A-Za-z.+_-]{0,63}$ ]]; then
+            echo "::error title=Versão::a tag \"$GITHUB_REF_NAME\" não serve de versão (v + letras, números e . + _ -, ex.: v0.4.0-teste.2)"
+            exit 1
+          fi
           # parte numérica (X.Y.Z) para o Info.plist do macOS e o recurso de versão do .exe
           numerica=$(printf '%s' "$versao" | grep -oE '^[0-9]+(\.[0-9]+){0,3}' || true)
           echo "versao=$versao" >> "$GITHUB_OUTPUT"
           echo "numerica=$numerica" >> "$GITHUB_OUTPUT"
           echo "Versão $versao (numérica: ${numerica:-nenhuma})"
+
+  # Os mesmos jobs do CI (ci.yml), com a versão da tag: a imagem do job docker é construída com ela e o hello
+  # tem que trazê-la. Publicar e imagem dependem deste job.
+  ci:
+    name: CI
+    needs: versao
+    uses: ./.github/workflows/ci.yml
+    with:
+      versao: ${{ needs.versao.outputs.versao }}
+    permissions:
+      contents: read
+
+  exportar:
+    name: Exportar o cliente (Linux, Windows, macOS)
+    needs: versao
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    outputs:
+      macos_assinar: ${{ steps.segredos.outputs.macos }}
+      windows_assinado: ${{ steps.segredos.outputs.windows }}
+    steps:
+      - uses: actions/checkout@v7
 
       - name: Assinaturas configuradas
         id: segredos
@@ -179,27 +193,55 @@ jobs:
             echo 'export/windows/wine = "/usr/lib/wine/wine64"'
           } > ~/.config/godot/editor_settings-4.3.tres
 
-      - name: Versão no projeto
-        if: steps.versao.outputs.numerica != ''
+      # Só nesta cópia de trabalho (nada é commitado; D150). O cliente lê a seção [cinzas] em
+      # client/scripts/build_info.gd: a versão inteira (título e /bug), o servidor padrão do campo "Servidor" e
+      # a página para baixar a versão nova (aviso de versão incompatível).
+      - name: Versão e endereços no projeto
         env:
-          NUMERICA: ${{ steps.versao.outputs.numerica }}
-        run: |
-          # Os presets deixam a versão vazia ("usar a do projeto"); sem config/version o Godot usa 1.0.0.
-          # Só nesta cópia de trabalho: nada é commitado.
-          sed -i '/^config\/version=/d' client/project.godot
-          sed -i "/^\[application\]\$/a config/version=\"${NUMERICA}\"" client/project.godot
-          grep -n '^config/version=' client/project.godot
-
-      - name: Servidor padrão do cliente
-        if: vars.SERVIDOR_PADRAO != ''
-        env:
+          VERSAO: ${{ needs.versao.outputs.versao }}
+          NUMERICA: ${{ needs.versao.outputs.numerica }}
           SERVIDOR: ${{ vars.SERVIDOR_PADRAO }}
+          PAGINA: ${{ vars.PAGINA_DOWNLOAD }}
+          RELEASES: ${{ github.server_url }}/${{ github.repository }}/releases
         run: |
-          # O campo "Servidor" da tela de entrada já vem com o endereço do teste público
-          # (variável do repositório SERVIDOR_PADRAO, ex.: wss://jogo.exemplo.com.br). Só nesta cópia de trabalho.
-          case "$SERVIDOR" in ws://*|wss://*) ;; *) echo "::error::SERVIDOR_PADRAO precisa começar com ws:// ou wss://"; exit 1 ;; esac
-          printf '\n[cinzas]\n\nservidor_padrao="%s"\n' "$SERVIDOR" >> client/project.godot
-          tail -n 3 client/project.godot
+          projeto=client/project.godot
+          # config/version: só a parte numérica (Info.plist do macOS e recurso de versão do .exe). Os presets
+          # deixam a versão vazia ("usar a do projeto"); sem config/version o Godot usaria 1.0.0.
+          sed -i '/^config\/version=/d' "$projeto"
+          if [ -n "$NUMERICA" ]; then
+            sed -i "/^\[application\]\$/a config/version=\"${NUMERICA}\"" "$projeto"
+          fi
+          # SERVIDOR_PADRAO (variável do repositório, ex.: wss://jogo.exemplo.com.br): o campo "Servidor" da tela
+          # de entrada já vem com ele
+          if [ -n "$SERVIDOR" ] && ! [[ "$SERVIDOR" =~ ^wss?://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~/-]*)?$ ]]; then
+            echo "::error::SERVIDOR_PADRAO precisa ser um endereço ws:// ou wss:// simples (ex.: wss://jogo.exemplo.com.br)"
+            exit 1
+          fi
+          # página para baixar a versão nova: PAGINA_DOWNLOAD (variável do repositório); sem ela, a página do jogo
+          # no domínio do SERVIDOR_PADRAO (https://DOMÍNIO/, deploy/site) ou, sem wss://, a página de Releases
+          if [ -z "$PAGINA" ]; then
+            if [[ "$SERVIDOR" == wss://* ]]; then
+              hospedeiro=${SERVIDOR#wss://}
+              PAGINA="https://${hospedeiro%%/*}/"
+            else
+              PAGINA="$RELEASES"
+            fi
+          fi
+          if ! [[ "$PAGINA" =~ ^https?://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~/%-]*)?$ ]]; then
+            echo "::error::PAGINA_DOWNLOAD precisa ser um endereço https:// simples (ex.: https://jogo.exemplo.com.br/)"
+            exit 1
+          fi
+          # tira uma seção [cinzas] que já exista (só até a próxima seção) e grava a nova no fim
+          awk '/^\[/ { pula = ($0 == "[cinzas]") } !pula' "$projeto" > "$RUNNER_TEMP/project.godot"
+          {
+            printf '\n[cinzas]\n\n'
+            printf 'versao="%s"\n' "$VERSAO"
+            if [ -n "$SERVIDOR" ]; then printf 'servidor_padrao="%s"\n' "$SERVIDOR"; fi
+            printf 'pagina_download="%s"\n' "$PAGINA"
+          } >> "$RUNNER_TEMP/project.godot"
+          mv "$RUNNER_TEMP/project.godot" "$projeto"
+          grep -n '^config/version=' "$projeto" || echo "(sem config/version: a versão não começa com um número)"
+          sed -n '/^\[cinzas\]$/,$p' "$projeto"
 
       - name: Importar o projeto
         run: |
@@ -299,23 +341,64 @@ jobs:
           fi
           grep -E "Subject:|Timestamp time" "$RUNNER_TEMP/verificacao.txt" | head -3 || true
 
+      # D151: cada cópia distribuída leva os créditos e as licenças de terceiros e os documentos do teste.
+      - name: Licenças e documentos dos pacotes
+        env:
+          VERSAO: ${{ needs.versao.outputs.versao }}
+        run: |
+          docs=pacote/docs
+          mkdir -p "$docs"
+          # O próprio executável do Linux exportado grava o LICENCAS-TERCEIROS.txt (--licenses: o texto da tela
+          # "Créditos e licenças", com a licença do Godot e os componentes de terceiros lidos do motor) e, de
+          # quebra, mostra que o executável exportado abre.
+          status=0
+          timeout 120 client/build/linux/CinzasDoMeridiano.x86_64 --headless -- \
+            --licenses="$GITHUB_WORKSPACE/$docs/LICENCAS-TERCEIROS.txt" > licencas.log 2>&1 || status=$?
+          if [ "$status" -ne 0 ] || [ ! -s "$docs/LICENCAS-TERCEIROS.txt" ]; then
+            cat licencas.log
+            echo "::error title=Licenças::o executável do Linux não gravou o arquivo de licenças (código $status)"
+            exit 1
+          fi
+          for trecho in "CINZAS DO MERIDIANO ${VERSAO} " "Seed-san model by VirtualCast" "Godot Engine contributors" \
+                        "The FreeType Project" "Mbed TLS" "==== Apache-2.0 ===="; do
+            if ! grep -qF -- "$trecho" "$docs/LICENCAS-TERCEIROS.txt"; then
+              echo "::error title=Licenças::falta \"$trecho\" em LICENCAS-TERCEIROS.txt"
+              exit 1
+            fi
+          done
+          # Guia, termos e política em texto: UTF-8 com BOM (o Bloco de Notas acerta os acentos) e os links entre
+          # eles apontando para os .txt do pacote
+          for doc in GUIA TERMOS PRIVACIDADE; do
+            { printf '\xEF\xBB\xBF'; sed -E 's/\b(GUIA|TERMOS|PRIVACIDADE)\.md\b/\1.txt/g' "docs/$doc.md"; } > "$docs/$doc.txt"
+          done
+          ls -la "$docs"
+
       - name: Empacotar
         env:
-          VERSAO: ${{ steps.versao.outputs.versao }}
+          VERSAO: ${{ needs.versao.outputs.versao }}
         run: |
           nome="CinzasDoMeridiano-${VERSAO}"
+          textos=(LICENCAS-TERCEIROS.txt GUIA.txt TERMOS.txt PRIVACIDADE.txt)
           mkdir -p dist pacote/linux pacote/windows
           # Linux: .tar.gz (preserva a permissão de execução)
           mkdir -p "pacote/linux/${nome}-linux-x86_64"
           cp client/build/linux/CinzasDoMeridiano.x86_64 "pacote/linux/${nome}-linux-x86_64/"
+          (cd pacote/docs && cp "${textos[@]}" "../linux/${nome}-linux-x86_64/")
           tar -C pacote/linux -czf "dist/${nome}-linux-x86_64.tar.gz" "${nome}-linux-x86_64"
           # Windows: .zip
           mkdir -p "pacote/windows/${nome}-windows-x86_64"
           cp client/build/windows/CinzasDoMeridiano.exe "pacote/windows/${nome}-windows-x86_64/"
+          (cd pacote/docs && cp "${textos[@]}" "../windows/${nome}-windows-x86_64/")
           (cd pacote/windows && zip -q -r -9 "$GITHUB_WORKSPACE/dist/${nome}-windows-x86_64.zip" "${nome}-windows-x86_64")
-          # macOS: o .zip do Godot já traz "Cinzas do Meridiano.app" (universal, assinatura ad-hoc)
+          # macOS: o .zip do Godot já traz "Cinzas do Meridiano.app" (universal, assinatura ad-hoc); os textos entram
+          # ao lado do .app, fora dele (dentro do pacote quebrariam a assinatura). O job macos os repõe depois de
+          # assinar.
           cp client/build/macos/CinzasDoMeridiano.zip "dist/${nome}-macos-universal.zip"
+          (cd pacote/docs && zip -q -9 "$GITHUB_WORKSPACE/dist/${nome}-macos-universal.zip" "${textos[@]}")
           ls -la dist
+          tar -tzvf "dist/${nome}-linux-x86_64.tar.gz"
+          unzip -l "dist/${nome}-windows-x86_64.zip"
+          unzip -l "dist/${nome}-macos-universal.zip" | grep -vF '.app/Contents/'
 
       - uses: actions/upload-artifact@v7
         with:
@@ -342,6 +425,7 @@ jobs:
           name: registros-exportacao
           path: |
             importacao.log
+            licencas.log
             client/build/exportacao-*.log
           retention-days: 14
           if-no-files-found: ignore
@@ -424,6 +508,13 @@ jobs:
             || echo "::warning title=macOS::o spctl não confirmou a aprovação do Gatekeeper neste runner"
           mkdir -p dist
           ditto -c -k --keepParent "$app" "dist/$nome"
+          # licenças e documentos (D151) de volta ao lado do .app, fora da assinatura
+          textos=(LICENCAS-TERCEIROS.txt GUIA.txt TERMOS.txt PRIVACIDADE.txt)
+          for t in "${textos[@]}"; do
+            [ -f "trabalho/$t" ] || { echo "::error title=macOS::$t não veio no pacote exportado"; exit 1; }
+          done
+          (cd trabalho && zip -q -9 "$GITHUB_WORKSPACE/dist/$nome" "${textos[@]}")
+          unzip -l "dist/$nome" | grep -vF '.app/Contents/'
           ls -la dist
 
       - uses: actions/upload-artifact@v7
@@ -438,14 +529,84 @@ jobs:
         run: |
           if [ -n "${KEYCHAIN:-}" ]; then security delete-keychain "$KEYCHAIN" || true; fi
 
-  publicar:
-    name: Publicar a release
-    needs: [testes, exportar, macos]
+
+  # A imagem que vai para o ghcr.io é a testada: construída uma vez (cache do buildx), carregada no Docker do
+  # runner, testada com o mesmo script do job docker do CI e só então publicada pela segunda chamada, que
+  # reaproveita o cache (mesmas camadas, mesmos rótulos). Só depois de CI, exportação e assinatura verdes.
+  imagem:
+    name: Imagem do servidor (teste e ghcr.io)
+    needs: [versao, ci, exportar, macos]
     if: >-
       always() && startsWith(github.ref, 'refs/tags/v')
-      && needs.testes.result == 'success'
+      && needs.versao.result == 'success'
+      && needs.ci.result == 'success'
       && needs.exportar.result == 'success'
       && (needs.macos.result == 'success' || needs.macos.result == 'skipped')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Nome da imagem (o ghcr.io exige minúsculas)
+        run: echo "IMAGEM=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/cinzas-servidor" >> "$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@v4
+
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGEM }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - name: Construir para o teste (com a versão da tag)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/Dockerfile
+          build-args: CINZAS_VERSION=${{ needs.versao.outputs.versao }}
+          load: true
+          tags: cinzas-servidor:teste
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Teste rápido do contêiner (o mesmo do CI, com a versão no hello)
+        env:
+          VERSAO: ${{ needs.versao.outputs.versao }}
+        run: bash deploy/teste-conteiner.sh cinzas-servidor:teste "$VERSAO"
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publicar a imagem testada
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/Dockerfile
+          build-args: CINZAS_VERSION=${{ needs.versao.outputs.versao }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+
+  publicar:
+    name: Publicar a release
+    needs: [versao, ci, exportar, macos, imagem]
+    if: >-
+      always() && startsWith(github.ref, 'refs/tags/v')
+      && needs.versao.result == 'success'
+      && needs.ci.result == 'success'
+      && needs.exportar.result == 'success'
+      && (needs.macos.result == 'success' || needs.macos.result == 'skipped')
+      && needs.imagem.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -458,9 +619,10 @@ jobs:
 
       - name: Montar os arquivos e as notas
         env:
-          VERSAO: ${{ needs.exportar.outputs.versao }}
+          VERSAO: ${{ needs.versao.outputs.versao }}
           MACOS_ASSINADO: ${{ needs.macos.result == 'success' }}
           WINDOWS_ASSINADO: ${{ needs.exportar.outputs.windows_assinado }}
+          SERVIDOR: ${{ vars.SERVIDOR_PADRAO }}
         run: |
           mkdir dist
           cp artefatos/cliente-linux/* artefatos/cliente-windows/* dist/
@@ -471,67 +633,43 @@ jobs:
           fi
           (cd dist && sha256sum -- * > SHA256SUMS.txt && cat SHA256SUMS.txt)
           if [ "$WINDOWS_ASSINADO" = true ]; then win="assinado (Authenticode, com carimbo de tempo)"; else win="**sem assinatura**: o SmartScreen avisa; \"Mais informações\" > \"Executar assim mesmo\""; fi
-          if [ "$MACOS_ASSINADO" = true ]; then mac="assinado (Developer ID) e notarizado"; else mac="**sem notarização** (assinatura ad-hoc): botão direito no app > Abrir, ou \`xattr -dr com.apple.quarantine \"Cinzas do Meridiano.app\"\`"; fi
+          if [ "$MACOS_ASSINADO" = true ]; then mac="assinado (Developer ID) e notarizado"; else mac="**sem notarização** (assinatura ad-hoc): o Gatekeeper bloqueia na primeira vez; veja o guia (no macOS 15: Ajustes do Sistema > Privacidade e Segurança > Abrir Mesmo Assim)"; fi
+          if [ -n "$SERVIDOR" ]; then
+            jogar="Para jogar: abra o cliente; o campo **Servidor** da tela de entrada já vem com \`${SERVIDOR}\`."
+          else
+            jogar="Para jogar: abra o cliente e, no campo **Servidor** da tela de entrada, use o endereço \`wss://\` divulgado para o teste."
+          fi
+          # documentos desta versão (a tag), no repositório
+          docs="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/docs"
+          imagem="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/cinzas-servidor:${VERSAO}"
           {
             echo "## CINZAS DO MERIDIANO ${VERSAO}"
             echo
             echo "| Plataforma | Arquivo | Assinatura |"
             echo "|---|---|---|"
-            echo "| Linux x86_64 | \`CinzasDoMeridiano-${VERSAO}-linux-x86_64.tar.gz\` | não se aplica |"
+            echo "| Linux x86_64 | \`CinzasDoMeridiano-${VERSAO}-linux-x86_64.tar.gz\` | não se aplica (\`chmod +x\` se o executável perder a permissão) |"
             echo "| Windows x86_64 | \`CinzasDoMeridiano-${VERSAO}-windows-x86_64.zip\` | ${win} |"
             echo "| macOS (Intel e Apple Silicon) | \`CinzasDoMeridiano-${VERSAO}-macos-universal.zip\` | ${mac} |"
             echo
-            echo "Para jogar: abra o cliente e, no campo **Servidor** da tela de entrada, use o endereço \`wss://\` divulgado para o teste."
+            echo "### Antes de jogar"
+            echo
+            echo "- **[Guia do testador](${docs}/GUIA.md)**: requisitos (64 bits, placa de vídeo com OpenGL 3.3), como abrir em cada sistema (SmartScreen, Gatekeeper, \`chmod +x\`), onde fica o registro do jogo para mandar quando ele nem abre e como relatar problemas (\`/bug\` ou *Esc → Reportar um problema*)."
+            echo "- [Termos de uso](${docs}/TERMOS.md) e [Política de privacidade](${docs}/PRIVACIDADE.md) do teste público."
+            echo "- Cada pacote traz \`GUIA.txt\`, \`TERMOS.txt\`, \`PRIVACIDADE.txt\` e \`LICENCAS-TERCEIROS.txt\` (créditos e licenças de terceiros, os mesmos da tela *Créditos e licenças* do jogo)."
+            echo
+            echo "${jogar} A tela de título mostra a versão (\`${VERSAO}\`); ela vai junto em cada \`/bug\`."
+            echo
+            echo "Servidor desta versão: \`${imagem}\` (o \`hello\` e o \`/bug\` dizem \`${VERSAO}\`)."
+            echo
             echo "Conferir os downloads: \`sha256sum -c SHA256SUMS.txt\`."
           } > notas.md
           cat notas.md
 
       - uses: softprops/action-gh-release@v3
         with:
-          name: CINZAS DO MERIDIANO ${{ needs.exportar.outputs.versao }}
+          name: CINZAS DO MERIDIANO ${{ needs.versao.outputs.versao }}
           body_path: notas.md
           generate_release_notes: true
           prerelease: ${{ contains(github.ref_name, '-') }}
           files: dist/*
           fail_on_unmatched_files: true
-
-  imagem:
-    name: Imagem do servidor (ghcr.io)
-    needs: testes
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Nome da imagem (o ghcr.io exige minúsculas)
-        run: echo "IMAGEM=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/cinzas-servidor" >> "$GITHUB_ENV"
-
-      - uses: docker/setup-buildx-action@v4
-
-      - uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ env.IMAGEM }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-
-      - uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: deploy/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max

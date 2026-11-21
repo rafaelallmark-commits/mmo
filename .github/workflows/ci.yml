@@ -1,20 +1,34 @@
 # Integração contínua de CINZAS DO MERIDIANO (docs/08-operacao.md §8.8):
 #   servidor           - valida os dados do jogo e roda todas as suítes de teste (Node 22, SQLite)
 #   servidor-postgres  - as mesmas suítes no PostgreSQL 17 (contêiner de serviço do job)
-#   cliente   - importa o projeto Godot 4.3 em modo headless e falha com qualquer erro de script
-#   docker    - constrói a imagem do servidor (sem publicar) e faz um teste rápido do contêiner
+#   cliente   - importa o projeto Godot 4.3 em modo headless (falha com qualquer erro de script) e roda o
+#               --autotest do cliente contra um servidor de verdade (critério 9 do Marco 1)
+#   docker    - constrói a imagem do servidor (sem publicar) e faz o teste rápido do contêiner
+#               (deploy/teste-conteiner.sh, o mesmo que a release roda antes de publicar a imagem)
+# A release (release.yml) chama este mesmo arquivo (workflow_call) com a versão da tag: nada é publicado sem
+# estes quatro jobs verdes. Por isso o push de tag não dispara o CI de novo aqui.
 name: CI
 
 on:
   push:
+    branches: ['**']
   pull_request:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      versao:
+        description: Versão da release (tag sem o "v"); a imagem é construída com ela e o hello tem que trazê-la
+        type: string
+        required: false
+        default: ''
 
 permissions:
   contents: read
 
+# Chamado pela release, github.workflow é o nome de quem chamou ("Release"): o grupo fica diferente do da
+# própria release (nomes de grupo não diferenciam maiúsculas) e do CI de um push no mesmo ramo.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 # "shell: bash" explícito = bash --noprofile --norc -eo pipefail. Sem ele o GitHub usa "bash -e" (sem pipefail)
@@ -101,9 +115,9 @@ jobs:
         run: npm test
 
   cliente:
-    name: Cliente Godot (importação headless)
+    name: Cliente Godot (importação e autotest contra o servidor)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
 
@@ -126,6 +140,17 @@ jobs:
           mv "Godot_v${GODOT_VERSION}_linux.x86_64" ~/godot/godot
           chmod +x ~/godot/godot
 
+      # o servidor do autotest (Node 22 e as dependências de server/)
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Instalar as dependências do servidor
+        working-directory: server
+        run: npm ci --no-audit --no-fund
+
       - name: Importar o projeto
         run: |
           # O Godot sai com código 0 mesmo com erro de script; quem decide é o texto da saída.
@@ -143,58 +168,73 @@ jobs:
           fi
           echo "Importação sem erros de script."
 
-      - name: Guardar o registro da importação
+      # Critério 9 do Marco 1 (docs/05-arquitetura.md): o cliente de verdade, headless, contra um servidor de
+      # verdade (--dev, banco descartável). O autotest conecta, cria a conta e o personagem, entra no mundo pela
+      # rotina da interface, anda, derrota um Rato de Sulco, coleta o saque e sai com "[autotest] OK" e código 0
+      # (client/scripts/autotest.gd); qualquer falha sai com código 1, e o próprio autotest desiste em 150 s.
+      - name: Autotest do cliente contra um servidor
+        run: |
+          porta=7777
+          node --disable-warning=ExperimentalWarning server/src/main.js --dev --host 127.0.0.1 --port "$porta" \
+            --db "$RUNNER_TEMP/autotest.db" > servidor-autotest.log 2>&1 &
+          servidor=$!
+          # em qualquer saída do passo o servidor recebe Ctrl+C (salva e sai)
+          trap 'kill -INT "$servidor" 2> /dev/null || true' EXIT
+          for _ in $(seq 1 120); do
+            grep -q "servidor ouvindo" servidor-autotest.log && break
+            kill -0 "$servidor" 2> /dev/null || break
+            sleep 0.5
+          done
+          if ! grep -q "servidor ouvindo" servidor-autotest.log; then
+            cat servidor-autotest.log
+            echo "::error title=Autotest do cliente::o servidor não subiu em 60 s"
+            exit 1
+          fi
+          status=0
+          timeout 300 ~/godot/godot --headless --path client -- --autotest --server="ws://127.0.0.1:$porta" \
+            --account=robo --password=robo123 --class=breaker --name=Robo > autotest-cliente.log 2>&1 || status=$?
+          kill -INT "$servidor" 2> /dev/null || true
+          wait "$servidor" || true
+          grep -E '^\[autotest\]' autotest-cliente.log || true
+          if grep -nE 'SCRIPT ERROR|Parse Error' autotest-cliente.log; then
+            echo "::error title=Autotest do cliente::erros de script durante o autotest (linhas acima)"
+            exit 1
+          fi
+          if [ "$status" -ne 0 ] || ! grep -qx '\[autotest\] OK' autotest-cliente.log; then
+            tail -n 40 autotest-cliente.log
+            tail -n 20 servidor-autotest.log
+            echo "::error title=Autotest do cliente::o autotest não terminou com sucesso (código $status; 124 = passou de 5 min)"
+            exit 1
+          fi
+          echo "Autotest do cliente: ok"
+
+      - name: Guardar os registros da importação e do autotest
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: importacao-cliente
-          path: importacao.log
+          name: registros-cliente
+          path: |
+            importacao.log
+            autotest-cliente.log
+            servidor-autotest.log
           retention-days: 7
           if-no-files-found: ignore
 
   docker:
-    name: Imagem do servidor (build, sem publicar)
+    name: Imagem do servidor (build e teste rápido, sem publicar)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
 
+      # Chamado pela release, constrói com a versão da tag (CINZAS_VERSION); num push comum, sem ela (o hello
+      # traz a do package.json).
       - name: Construir a imagem
-        run: docker build -f deploy/Dockerfile -t cinzas-servidor:ci .
+        env:
+          VERSAO: ${{ inputs.versao }}
+        run: docker build -f deploy/Dockerfile --build-arg "CINZAS_VERSION=${VERSAO}" -t cinzas-servidor:ci .
 
-      - name: Teste rápido do contêiner (saúde, usuário, WebSocket, backup, parada graciosa)
-        run: |
-          docker run -d --name cinzas-ci -p 127.0.0.1:9100:9100 cinzas-servidor:ci
-          estado=starting
-          for _ in $(seq 1 45); do
-            estado=$(docker inspect -f '{{.State.Health.Status}}' cinzas-ci)
-            [ "$estado" = healthy ] && break
-            sleep 2
-          done
-          if [ "$estado" != healthy ]; then
-            docker logs cinzas-ci
-            echo "::error title=Imagem do servidor::o contêiner não ficou saudável (estado: $estado)"
-            exit 1
-          fi
-          curl -fsS http://127.0.0.1:9100/health; echo
-          uid=$(docker exec cinzas-ci id -u)
-          if [ "$uid" = 0 ]; then echo "::error::o servidor está rodando como root"; exit 1; fi
-          echo "usuário do serviço: uid $uid"
-          # o WebSocket do jogo responde com "hello" (cliente WebSocket nativo do Node 22, no contêiner)
-          docker exec cinzas-ci node -e '
-            const ws = new WebSocket("ws://127.0.0.1:7777");
-            const fim = (ok, msg) => { console.log(msg); process.exit(ok ? 0 : 1); };
-            setTimeout(() => fim(false, "sem resposta do WebSocket"), 5000);
-            ws.onerror = () => fim(false, "erro no WebSocket");
-            ws.onmessage = (e) => { const m = JSON.parse(e.data); fim(m.t === "hello", "WebSocket: " + e.data); };'
-          # backup a quente dentro do contêiner (mesmo comando do guia de operação)
-          docker exec cinzas-ci npm run --silent backup -- --db /data/cinzas.db --para /data/backups
-          # parada graciosa: SIGTERM, o servidor salva e sai com código 0
-          docker stop -t 45 cinzas-ci > /dev/null
-          docker logs cinzas-ci > servidor-docker.log 2>&1
-          cat servidor-docker.log
-          grep -q "salvando e encerrando" servidor-docker.log \
-            || { echo "::error::o servidor não encerrou de forma graciosa"; exit 1; }
-          codigo=$(docker inspect -f '{{.State.ExitCode}}' cinzas-ci)
-          if [ "$codigo" != 0 ]; then echo "::error::o servidor saiu com código $codigo"; exit 1; fi
-          echo "Teste do contêiner: ok"
+      - name: Teste rápido do contêiner (saúde, usuário, hello com a versão, backup, parada graciosa)
+        env:
+          VERSAO: ${{ inputs.versao }}
+        run: bash deploy/teste-conteiner.sh cinzas-servidor:ci "$VERSAO"

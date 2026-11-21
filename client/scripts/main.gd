@@ -10,6 +10,8 @@ const WorldScript = preload("res://scripts/world.gd")
 const HudScript = preload("res://scripts/hud.gd")
 const MenuScene = preload("res://scripts/menu_scene.gd")
 const Theme_ = preload("res://scripts/ui_theme.gd")
+const BuildInfo = preload("res://scripts/build_info.gd")
+const Credits = preload("res://scripts/credits.gd")
 
 const SETTINGS_PATH := "user://opcoes.cfg"
 const TIPS := [
@@ -38,7 +40,8 @@ var journal := {}
 var party = null
 var chars_cache := []
 var classes_cache := []
-var settings := {"camera_sensitivity": 1.0, "show_names": true, "ui_scale": 1.0}
+# "server": último servidor digitado na tela Entrar ("" = o padrão da release; ver _remember_server)
+var settings := {"camera_sensitivity": 1.0, "show_names": true, "ui_scale": 1.0, "server": ""}
 var snap_cache := {}   # entidades conhecidas (snapshots por diferença do servidor)
 const PROTOCOL := 3    # versão do protocolo que este cliente fala (o servidor manda no "hello")
 var server_hello := {}
@@ -62,13 +65,20 @@ func _ready() -> void:
 		var s: String = a.trim_prefix("--")
 		var kv := s.split("=", true, 1)
 		args[kv[0]] = kv[1] if kv.size() > 1 else "true"
-	# endereço padrão do campo "Servidor": a release do teste público grava cinzas/servidor_padrao no projeto
-	server_url = str(ProjectSettings.get_setting("cinzas/servidor_padrao", server_url))
-	server_url = args.get("server", server_url)
+	if args.has("licenses"):
+		# --licenses=arquivo: grava o arquivo de licenças de terceiros que vai em cada pacote (release.yml) e sai
+		get_tree().quit(0 if Credits.write_file(str(args["licenses"]), BuildInfo.version()) == OK else 1)
+		return
 	accounts_url = args.get("accounts", accounts_url)
 	account = args.get("account", "")
 	password = args.get("password", "")
 	_load_settings()
+	# campo "Servidor": --server; senão o último que o jogador digitou (opções); senão o padrão que a release
+	# grava (cinzas/servidor_padrao); senão o servidor local
+	server_url = str(settings.get("server", ""))
+	if server_url == "":
+		server_url = BuildInfo.default_server()
+	server_url = args.get("server", server_url)
 	Net.connected.connect(_on_connected)
 	Net.disconnected.connect(_on_disconnected)
 	Net.message.connect(_on_message)
@@ -142,6 +152,8 @@ func _save_settings() -> void:
 	_apply_settings()
 
 func _apply_settings() -> void:
+	if not is_inside_tree():
+		return
 	get_tree().root.content_scale_factor = float(settings["ui_scale"])
 	_apply_graphics()
 
@@ -306,14 +318,25 @@ func show_title() -> void:
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	screen = root
 	ui.add_child(root)
+	# coluna centrada na vertical, acima do rodapé; com pouca altura (interface ampliada nas opções) o título
+	# encolhe para os quatro botões caberem
+	var compact := get_viewport().get_visible_rect().size.y < 560.0
+	var area := MarginContainer.new()
+	area.set_anchors_preset(Control.PRESET_FULL_RECT)
+	area.add_theme_constant_override("margin_left", 70)
+	area.add_theme_constant_override("margin_top", 16)
+	area.add_theme_constant_override("margin_bottom", 58)
+	area.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(area)
 	var col := VBoxContainer.new()
-	col.set_anchors_preset(Control.PRESET_CENTER_LEFT)
-	col.position = Vector2(70, -150)
-	col.add_theme_constant_override("separation", 12)
-	root.add_child(col)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_theme_constant_override("separation", 8 if compact else 12)
+	area.add_child(col)
 	var t := Label.new()
 	t.text = "CINZAS DO\nMERIDIANO"
-	t.add_theme_font_size_override("font_size", 56)
+	t.add_theme_font_size_override("font_size", 42 if compact else 56)
 	t.add_theme_color_override("font_color", Color("#ffd9a0"))
 	t.add_theme_color_override("font_outline_color", Color("#3a1a10"))
 	t.add_theme_constant_override("outline_size", 14)
@@ -325,7 +348,7 @@ func show_title() -> void:
 	sub.add_theme_constant_override("outline_size", 6)
 	col.add_child(sub)
 	var gap := Control.new()
-	gap.custom_minimum_size = Vector2(0, 18)
+	gap.custom_minimum_size = Vector2(0, 4 if compact else 18)
 	col.add_child(gap)
 	var btns := VBoxContainer.new()
 	btns.custom_minimum_size = Vector2(240, 0)
@@ -333,20 +356,59 @@ func show_title() -> void:
 	col.add_child(btns)
 	_button(btns, "Jogar", show_login, true)
 	_button(btns, "Opções", show_options)
+	_button(btns, "Créditos e licenças", show_credits)
 	_button(btns, "Sair", func(): get_tree().quit())
+	# rodapé, no canto inferior esquerdo: a versão inteira do cliente (a mesma que vai no /bug) e o protocolo,
+	# e embaixo o crédito dos modelos. Uma coluna só: com a interface ampliada as duas linhas não se cruzam.
+	var foot := VBoxContainer.new()
+	foot.add_theme_constant_override("separation", 2)
+	root.add_child(foot)
+	var ver := Label.new()
+	ver.name = "VersionLabel"
+	ver.text = "Teste público · versão %s · protocolo %d" % [BuildInfo.version(), PROTOCOL]
+	ver.add_theme_font_size_override("font_size", 13)
+	ver.add_theme_color_override("font_color", Color(1, 1, 1, 0.75))
+	foot.add_child(ver)
 	var cred := Label.new()
 	cred.text = "Personagens: Seed-san © VirtualCast, Inc. · amostra VRM © 2022 pixiv Inc. (VRM Public License 1.0)"
-	cred.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	cred.position = Vector2(20, -34)
 	cred.add_theme_font_size_override("font_size", 12)
 	cred.add_theme_color_override("font_color", Color(1, 1, 1, 0.65))
-	root.add_child(cred)
-	var ver := Label.new()
-	ver.text = "Teste público · protocolo %d" % PROTOCOL
-	ver.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	ver.position = Vector2(-170, -34)
-	ver.add_theme_color_override("font_color", Color(1, 1, 1, 0.6))
-	root.add_child(ver)
+	foot.add_child(cred)
+	foot.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE, 18)
+	foot.grow_vertical = Control.GROW_DIRECTION_BEGIN
+
+## Créditos e licenças (D151): créditos do jogo e dos modelos, licença do Godot Engine, componentes de
+## terceiros e os textos das licenças (o mesmo conteúdo do LICENCAS-TERCEIROS.txt dos pacotes).
+func show_credits() -> void:
+	state = "credits"
+	_ensure_menu_scene()
+	menu_scene.set_view("title")
+	var box := _menu_panel("Créditos e licenças", "center", 760)
+	var tabs := TabContainer.new()
+	tabs.name = "CreditsTabs"
+	# cabe na tela também com a interface ampliada (escala até 1,5 nas opções; o retângulo visível já vem
+	# dividido pela escala)
+	var avail := get_viewport().get_visible_rect().size
+	tabs.custom_minimum_size = Vector2(minf(760.0, avail.x - 80.0), clampf(avail.y - 270.0, 200.0, 430.0))
+	box.custom_minimum_size.x = tabs.custom_minimum_size.x
+	box.add_child(tabs)
+	var pages := [
+		["Créditos", Credits.game_text(BuildInfo.version())],
+		["Godot Engine", Credits.engine_text()],
+		["Terceiros", Credits.components_text()],
+		["Licenças", Credits.licenses_text()],
+	]
+	for i in pages.size():
+		var rt := RichTextLabel.new()
+		rt.bbcode_enabled = false
+		rt.text = pages[i][1]
+		rt.selection_enabled = true
+		rt.scroll_active = true
+		rt.add_theme_color_override("default_color", Theme_.TEXT)
+		rt.add_theme_font_size_override("normal_font_size", 14)
+		tabs.add_child(rt)
+		tabs.set_tab_title(i, pages[i][0])
+	_button(box, "Voltar", show_title, true)
 
 # ---------------- ENTRAR ----------------
 var _pending_register := false
@@ -388,7 +450,19 @@ func show_login() -> void:
 	_status(box)
 	e_pass.text_submitted.connect(func(_t): b1.pressed.emit())
 
+## Guarda nas opções o servidor usado na tela Entrar (D150): na próxima vez o campo já vem com ele. O padrão
+## da release fica guardado como "" para que uma versão nova com outro SERVIDOR_PADRAO valha para quem nunca
+## mudou o campo; um --server da linha de comando vale só para aquela execução e não é guardado.
+func _remember_server() -> void:
+	if args.has("server") and server_url == str(args["server"]):
+		return
+	var keep := "" if server_url == BuildInfo.default_server() else server_url
+	if str(settings.get("server", "")) != keep:
+		settings["server"] = keep
+		_save_settings()
+
 func connect_and_login(register: bool) -> void:
+	_remember_server()
 	_pending_register = register
 	_kicked_reason = ""
 	set_status("Conectando a %s..." % server_url)
@@ -1378,7 +1452,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				toggle_pause_menu()
 		elif state == "create":
 			show_chars(_selected_char)
-		elif state in ["login"]:
+		elif state in ["login", "credits"]:
 			show_title()
 		get_viewport().set_input_as_handled()
 
@@ -1389,8 +1463,19 @@ func _on_message(m: Dictionary) -> void:
 		"hello":
 			server_hello = m
 			if int(m.get("protocol", 0)) != PROTOCOL:
-				var why := "Versão incompatível: este cliente fala o protocolo %d e o servidor, o %d. Atualize o jogo." % [PROTOCOL, int(m.get("protocol", 0))]
-				set_status(why, true)
+				# o aviso diz onde baixar a versão nova (D150: cinzas/pagina_download, gravada na exportação)
+				var page := BuildInfo.download_page(server_url)
+				var why := "Versão incompatível: este cliente (%s) fala o protocolo %d e o servidor, o %d." % [BuildInfo.version(), PROTOCOL, int(m.get("protocol", 0))]
+				why += (" Baixe a versão nova em %s" % page) if page != "" else " Atualize o jogo."
+				# como numa expulsão: o fechamento da conexão que vem logo depois não troca o aviso
+				_kicked_reason = why
+				reconnecting = false
+				if state == "world" and hud:
+					hud.show_disconnect(why)
+					in_world = false
+				else:
+					set_status(why, true)
+					_offer_download(page)
 				Net.close()
 				_hello_waiters.clear()
 				if not _transfer.is_empty():
@@ -1606,6 +1691,20 @@ func _on_message(m: Dictionary) -> void:
 			else:
 				set_status(_kicked_reason, true)  # já toca o som de erro
 			in_world = false
+
+## Versão incompatível: botão que abre no navegador a página para baixar a versão nova, logo abaixo da
+## linha de status da tela atual.
+func _offer_download(page: String) -> void:
+	if page == "" or status_label == null or not is_instance_valid(status_label):
+		return
+	var box := status_label.get_parent()
+	if box == null or box.has_node("DownloadLink"):
+		return
+	var lb := LinkButton.new()
+	lb.name = "DownloadLink"
+	lb.text = "Abrir a página para baixar a versão nova"
+	lb.pressed.connect(func(): OS.shell_open(page))
+	box.add_child(lb)
 
 func _on_disconnected(reason: String) -> void:
 	if not _transfer.is_empty():

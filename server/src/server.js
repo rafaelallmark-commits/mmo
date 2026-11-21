@@ -61,6 +61,9 @@ export class GameServer {
       partyInviteGapMs: 10_000,
       ...Object.fromEntries(Object.entries(opts).filter(([, v]) => v !== undefined)),
     };
+    // versão desta implantação (hello, log de início e /bug): a tag da release (CINZAS_VERSION na imagem,
+    // opção version) ou, sem ela, a do package.json (D150); conferida antes de abrir o banco
+    this.serverVersion = deploymentVersion(this.opts.version);
     this.data = opts.data ?? loadGameData(opts.dataDir);
     // arquivo SQLite (desenvolvimento) ou postgres://... (produção); veja db.js
     this.store = createStore(this.opts.dbPath);
@@ -78,7 +81,6 @@ export class GameServer {
     this.refineRng = () => randomInt(0, 1_000_000) / 1_000_000;
     this.closing = false;
     this.dataVersion = dataVersionOf(this.data);
-    this.serverVersion = SERVER_VERSION;
     this.byChar = new Map(); // charId -> session
     this.byAccount = new Map(); // accountId -> session
     this.byName = new Map(); // nome minúsculo -> charId (online)
@@ -180,7 +182,7 @@ export class GameServer {
     return new Promise((resolve) => {
       const onListening = (addr) => {
         this.port = addr.port;
-        this.log(`CINZAS DO MERIDIANO ${SERVER_VERSION} — servidor ouvindo em ${this.tls ? 'wss' : 'ws'}://${this.opts.host}:${this.port} (${this.zones.size} zonas, tick ${this.opts.tickHz} Hz, escala ${this.opts.timeScale}x, XP ${this.opts.xpRate}x, protocolo ${PROTOCOL_VERSION}, dados ${this.dataVersion}${this.opts.dev ? ', modo dev' : ''}, login: ${this.opts.auth}, banco: ${this.store.describe()})`);
+        this.log(`CINZAS DO MERIDIANO ${this.serverVersion} — servidor ouvindo em ${this.tls ? 'wss' : 'ws'}://${this.opts.host}:${this.port} (${this.zones.size} zonas, tick ${this.opts.tickHz} Hz, escala ${this.opts.timeScale}x, XP ${this.opts.xpRate}x, protocolo ${PROTOCOL_VERSION}, dados ${this.dataVersion}${this.opts.dev ? ', modo dev' : ''}, login: ${this.opts.auth}, banco: ${this.store.describe()})`);
         resolve(this.port);
       };
       if (this.opts.tlsCert && this.opts.tlsKey) {
@@ -394,7 +396,7 @@ export class GameServer {
     });
     ws.on('close', () => this.dropSession(s));
     ws.on('error', () => {});
-    this.sendTo(s, { t: 'hello', protocol: PROTOCOL_VERSION, server: 'cinzas-zone', version: SERVER_VERSION, dataVersion: this.dataVersion, auth: this.opts.auth, dev: !!this.opts.dev });
+    this.sendTo(s, { t: 'hello', protocol: PROTOCOL_VERSION, server: 'cinzas-zone', version: this.serverVersion, dataVersion: this.dataVersion, auth: this.opts.auth, dev: !!this.opts.dev });
   }
 
   dropSession(s) {
@@ -2374,6 +2376,16 @@ function dataVersionOf(data) {
     if (v && typeof v === 'object') h.update(k).update(JSON.stringify(v));
   }
   return h.digest('hex').slice(0, 12);
+}
+
+// Versão da implantação: a release grava a tag sem o "v" (ex.: 0.4.0-teste.2) e ela vale inteira, com o
+// sufixo; vazia, fica a do package.json. Só letras, números e . + _ - (até 64), como uma tag do git.
+export const DEPLOY_VERSION_RE = /^[0-9A-Za-z][0-9A-Za-z.+_-]{0,63}$/;
+export function deploymentVersion(v) {
+  if (v == null || String(v).trim() === '') return SERVER_VERSION;
+  const s = String(v).trim();
+  if (!DEPLOY_VERSION_RE.test(s)) throw new Error(`versão inválida em CINZAS_VERSION: "${s.slice(0, 80)}" (use a tag da release sem o "v", ex.: 0.4.0-teste.2)`);
+  return s;
 }
 
 function charRow(r) {

@@ -43,6 +43,12 @@ WORKDIR /opt/cinzas/server
 # 7777: WebSocket do jogo (atrás do proxy TLS). 9100: métricas Prometheus e /health (só rede interna).
 EXPOSE 7777 9100
 
+# Versão da implantação (hello, log de início e /bug): a release passa a tag sem o "v", com o sufixo
+# (--build-arg CINZAS_VERSION=0.4.0-teste.2). Vazia, o servidor usa a do package.json. Fica no fim para uma
+# versão nova não refazer as camadas das dependências.
+ARG CINZAS_VERSION=
+ENV CINZAS_VERSION=${CINZAS_VERSION}
+
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --start-interval=2s --retries=3 \
   CMD ["node", "-e", "fetch('http://127.0.0.1:9100/health',{signal:AbortSignal.timeout(4000)}).then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
 

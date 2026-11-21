@@ -7,7 +7,7 @@ Como o jogador se move entre telas, painéis e mapas. Este documento manda: o cl
 ```
                 ┌──────────────┐
   abrir o jogo →│   TÍTULO     │── Opções ──► [Opções] ──► volta
-                │ Jogar · Sair │
+                │ Jogar · Sair │── Créditos e licenças ──► CRÉDITOS ── Voltar ──► Título
                 └──────┬───────┘
                        │ Jogar
                 ┌──────▼───────┐
@@ -34,19 +34,21 @@ Como o jogador se move entre telas, painéis e mapas. Este documento manda: o cl
 
 | Tela | Conteúdo | Saídas |
 |---|---|---|
-| **Título** | logotipo, cena 3D de fundo (ponte ao amanhecer), Jogar, Opções, Sair | Jogar → Entrar; Opções → painel; Sair → fecha |
-| **Entrar** | servidor, conta, senha; Entrar, Criar conta, Confirmar e-mail, Esqueci a senha, Voltar; erros em vermelho | sucesso → Personagens; e-mail não confirmado → Confirmar e-mail (conta preenchida); termos novos → Termos atualizados; Voltar → Título |
+| **Título** | logotipo, cena 3D de fundo (ponte ao amanhecer), Jogar, Opções, Créditos e licenças, Sair; no rodapé, a versão inteira do cliente e o protocolo (ex.: "versão 0.4.0-teste.2 · protocolo 3", a mesma que vai no `/bug`) e o crédito dos modelos | Jogar → Entrar; Opções → painel; Créditos e licenças → Créditos; Sair → fecha |
+| **Créditos** | abas Créditos (jogo e modelos VRM), Godot Engine (licença do motor e atribuições), Terceiros (componentes do motor, com direitos e licença) e Licenças (textos completos); o mesmo conteúdo do `LICENCAS-TERCEIROS.txt` dos pacotes | Voltar ou **Esc** → Título |
+| **Entrar** | servidor, conta, senha; Entrar, Criar conta, Confirmar e-mail, Esqueci a senha, Voltar; erros em vermelho. O campo **Servidor** vem com o último servidor usado para entrar (guardado em `user://opcoes.cfg`) ou, na primeira vez, com o padrão da release; versão incompatível mostra onde baixar a nova, com um botão que abre a página | sucesso → Personagens; e-mail não confirmado → Confirmar e-mail (conta preenchida); termos novos → Termos atualizados; Voltar → Título |
 | **Criar conta** (teste público) | conta, e-mail, senha; caixa de idade e de aceite; links dos Termos e da Política | Criar e receber o código → Confirmar e-mail; Voltar → Entrar |
 | **Confirmar e-mail** | explicação, conta, código; Confirmar, Reenviar código, Esqueci a senha, Voltar; dica (validade, lixo eletrônico, limites) | Confirmar → Entrar com o aviso; Esqueci a senha → Esqueci a senha; Voltar → Entrar |
 | **Esqueci a senha** | e-mail, Enviar código; código, nova senha, Trocar a senha | Trocar → Entrar; Voltar → Entrar |
 | **Termos atualizados** | aviso com a versão nova, links dos Termos e da Política, caixa de aceite; Aceitar e entrar, Não aceito: baixar meus dados, Não aceito: excluir a conta, Voltar | Aceitar → Personagens; os dois "Não aceito" voltam aqui; Voltar → Entrar |
-| **Personagens** | até 4 cartões (nome, classe, nível, mapa); personagem selecionado em 3D no centro, girando; Baixar meus dados, Excluir conta | Jogar → Carregando; Criar novo → Criação; Baixar meus dados → Baixar meus dados; Excluir conta → Excluir conta; Voltar → Entrar |
+| **Personagens** | até 4 cartões (nome, classe, nível, mapa); personagem selecionado em 3D no centro, girando; Baixar meus dados, Excluir personagem, Excluir conta | Jogar → Carregando; Criar novo → Criação; Baixar meus dados → Baixar meus dados; Excluir personagem → Excluir personagem; Excluir conta → Excluir conta; Voltar → Entrar |
 | **Baixar meus dados** | o que vem no arquivo, senha, Baixar; depois: caminho do arquivo em `user://dados`, Abrir a pasta, Salvar uma cópia em outro lugar... | Voltar → Personagens (ou Termos atualizados) |
+| **Excluir personagem** | aviso (itens, ouro, missões e clã; o depósito da conta fica), nome do personagem, senha da conta, Excluir personagem para sempre, Cancelar | Excluir → Personagens, com o aviso; Cancelar → Personagens |
 | **Excluir conta** | aviso, senha, Excluir para sempre, Cancelar | Excluir → Título; Cancelar → Personagens (ou Termos atualizados) |
 | **Criação** | 8 classes em dois grupos (Âmbar / Nacre), papel e armas da classe, prévia 3D muda ao escolher, nome | Criar → Personagens; Voltar → Personagens |
 | **Carregando** | nome do mapa, dica de jogo; aparece ao entrar no mundo e em cada troca de mapa | → Mundo (personagem novo: → Abertura) |
 | **Abertura** | ~40 s na ponte antes do amanhecer (docs/02, "Abertura"): caravana, primeiro toque, sulco vermelho, a margem que cede e Mara entregando o mapa; legendas, sem interface. Só na primeira entrada de um personagem novo neste computador | Pular (Esc, Espaço, Enter ou botão) ou fim da cena → Mundo, no Posto da Ponte |
-| **Opções** | sensibilidade da câmera, mostrar nomes, escala da interface; gráficos: modo leve, sombras, tela cheia, limite de quadros (salvos em `user://opcoes.cfg`); volume geral, da música e dos efeitos (salvos em `user://settings.cfg`) | Fechar → tela anterior |
+| **Opções** | sensibilidade da câmera, mostrar nomes, escala da interface; gráficos: modo leve, sombras, tela cheia, limite de quadros (salvos em `user://opcoes.cfg`, junto com o último servidor usado na tela Entrar); volume geral, da música e dos efeitos (salvos em `user://settings.cfg`) | Fechar → tela anterior |
 
 ## 7.2 Dentro do jogo: camadas
 
@@ -58,7 +60,7 @@ Da mais baixa para a mais alta. Uma camada de cima bloqueia o clique nas de baix
 | 2. HUD fixo | vida/mana/XP com os efeitos negativos e o tempo que falta, barra de atalhos (1–8), alvo (com a descrição do monstro), rastreador de missões, painel de grupo, chat | sempre visível |
 | 3. Painéis | Inventário (**I**), Ficha (**C**), Missões (**J**), Clã (**L**) — podem ficar abertos juntos | tecla ou **Esc** |
 | 4. Diálogos | NPC (missões, loja, prova de classe, ferreiro), quadro de missões das praças, convites (grupo, troca, clã, duelo), janela de troca, ações sobre outro jogador | clique no NPC, no quadro ou no jogador / **Esc** (fechar a troca a cancela) |
-| 5. Menu de pausa | Continuar, Opções, Trocar de personagem, Sair para o título, Sair do jogo | **Esc** sem nada aberto |
+| 5. Menu de pausa | Continuar, Opções, Reportar um problema (abre o chat com `/bug `), Trocar de personagem, Sair para o título, Sair do jogo | **Esc** sem nada aberto |
 | 6. Avisos bloqueantes | Você caiu (voltar ao posto) · Conexão perdida (reconectar) | automático |
 
 **Esc** fecha a camada aberta mais alta; sem nada aberto, abre o menu de pausa. O jogo não pausa (é online): o menu só cobre a tela.

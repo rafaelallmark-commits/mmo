@@ -24,7 +24,8 @@
 #   docker compose logs -f servidor
 #
 # Os jogadores conectam em wss://jogo.exemplo.com.br (campo "Servidor" do cliente ou --server=...); o
-# cliente cria a conta e pede o token em https://jogo.exemplo.com.br/contas (serviço "contas").
+# cliente cria a conta e pede o token em https://jogo.exemplo.com.br/contas (serviço "contas"). Um navegador
+# em https://jogo.exemplo.com.br/ vê a página do jogo (site/index.html: baixar, guia, termos, avisos).
 # Portas abertas na internet: só 80 e 443 (proxy). O jogo (7777) fica na rede interna do compose e as
 # métricas/saúde (9100) só no 127.0.0.1 desta máquina: curl http://127.0.0.1:9100/health
 #
@@ -98,6 +99,10 @@ services:
       DOMINIO: ${DOMINIO:?defina DOMINIO (o domínio do teste, com DNS apontando para esta máquina) em deploy/.env}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # página do jogo em https://DOMINIO/ (avisos da equipe em site/index.html: salvar o arquivo já publica)
+      - ./site:/srv/site:ro
+      # guia do jogador em https://DOMINIO/guia (o Caddyfile só serve o GUIA.md desta pasta)
+      - ../docs:/srv/docs:ro
       - caddy_dados:/data        # certificados e chaves do TLS: não apague (limites de emissão)
       - caddy_config:/config
     logging:

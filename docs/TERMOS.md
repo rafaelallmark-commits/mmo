@@ -80,10 +80,11 @@ equipamento.
 ## 8. Mudanças e encerramento
 
 Podemos mudar estes termos. Cada versão tem um número (no topo deste texto), e a conta guarda a
-versão que você aceitou e quando. Quando a versão muda, o jogo mostra os termos novos no login
-seguinte e só deixa entrar depois do seu aceite; se não quiser aceitar, na mesma tela dá para baixar
-seus dados ou excluir a conta. Você pode encerrar o uso a qualquer momento excluindo a conta. Podemos
-encerrar o teste ou contas que violem estes termos.
+versão que você aceitou e quando. Mudanças relevantes serão avisadas no jogo e na seção *Avisos* da
+página do teste (`https://[domínio do teste]/`) antes de valer. Quando a versão muda, o jogo mostra os
+termos novos no login seguinte e só deixa entrar depois do seu aceite; se não quiser aceitar, na mesma
+tela dá para baixar seus dados ou excluir a conta. Você pode encerrar o uso a qualquer momento excluindo
+a conta. Podemos encerrar o teste ou contas que violem estes termos.
 
 ## 9. Lei aplicável
 

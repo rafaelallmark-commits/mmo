@@ -530,20 +530,23 @@ func _nav_tick() -> void:
 			_nav_shot("02_opcoes")
 			main.options_panel.queue_free()
 			main.options_panel = null
-			main.show_login()
+			main.show_credits()
 		2:
+			_nav_shot("10_creditos")
+			main.show_login()
+		3:
 			_nav_shot("03_entrar")
 			main.account = main.args.get("account", "vitrine")
 			main.password = main.args.get("password", "vitrine123")
 			main.connect_and_login(true)
 			next_wait = 2000
-		3:
+		4:
 			if main.state != "chars":
 				return
 			main.show_create()
 			main._create_class = main.args.get("class", "emberweaver")
 			main._build_create(main.args.get("name", "Vitrine"))
-		4:
+		5:
 			_nav_shot("04_criacao")
 			if main.chars_cache.is_empty():
 				Net.request("create_char", {"name": main.args.get("name", "Vitrine"), "classId": main._create_class}, func(r):
@@ -556,27 +559,27 @@ func _nav_tick() -> void:
 			else:
 				main.show_chars()
 			next_wait = 1500
-		5:
+		6:
 			_nav_shot("05_personagens")
 			main.enter_world(main._selected_char)
 			next_wait = 250
-		6:
+		7:
 			_nav_shot("06_carregando")
 			next_wait = 2500
-		7:
+		8:
 			if not main.in_world:
 				return
 			Net.request("move", {"x": 30.0, "z": 50.0})
 			next_wait = 3500
-		8:
+		9:
 			_nav_shot("07_mundo")
 			main.world.cam_dist = 11.0
 			next_wait = 1200
-		9:
+		10:
 			_nav_shot("08_mundo_perto")
 			main.toggle_pause_menu()
 			next_wait = 600
-		10:
+		11:
 			_nav_shot("09_menu_pausa")
 			say("OK")
 			get_tree().quit(0)

@@ -18,6 +18,8 @@ Personagens: modelos VRM de anime — **Seed-san model by VirtualCast, Inc.** e 
 
 *Capturas reais do cliente (Godot 4.3, renderização por software em Linux), geradas pelos modos `--navshots` e `--sceneshots`. Fluxo de telas em [docs/07-navegacao.md](docs/07-navegacao.md).*
 
+**Para testar o jogo** sem compilar nada: baixe o pacote do seu sistema (Windows, macOS ou Linux) na página de [Releases](https://github.com/rafaelallmark-commits/mmo/releases) e siga o [guia do testador](docs/GUIA.md) — requisitos, como abrir em cada sistema, onde fica o registro do jogo e como relatar problemas.
+
 ## Documentação
 
 | Documento | Conteúdo |
@@ -31,11 +33,11 @@ Personagens: modelos VRM de anime — **Seed-san model by VirtualCast, Inc.** e 
 | [docs/07-navegacao.md](docs/07-navegacao.md) | Telas, camadas dentro do jogo, mapa do mundo, controles, direção gráfica e som |
 | [docs/08-operacao.md](docs/08-operacao.md) | Execução e operação: opções do servidor, métricas, banco e backup, testes e medições; implantação do teste público (CI, releases assinadas, Docker/Compose, systemd, TLS); várias zonas |
 | [docs/relatorio-progressao.md](docs/relatorio-progressao.md) | Marco 4: tempo medido por nível (1→25) de cada classe caçando solo, contra as metas da tabela de XP; economia de tônicos e equipamento, mortes e problemas encontrados *(gerado pela simulação)* |
-| [docs/GUIA.md](docs/GUIA.md) | Guia do jogador do teste público: entrar, classes, controles, progressão, equipamento, mapas, grupo, troca, clã, duelo e convivência |
+| [docs/GUIA.md](docs/GUIA.md) | Guia do jogador e do testador do teste público: baixar e abrir em cada sistema (SmartScreen, Gatekeeper, `chmod +x`), registro do jogo e como relatar problemas, entrar, classes, controles, progressão, equipamento, mapas, grupo, troca, clã, duelo e convivência |
 | [docs/TERMOS.md](docs/TERMOS.md) · [docs/PRIVACIDADE.md](docs/PRIVACIDADE.md) | Termos de uso (regras de convivência e jogo limpo) e política de privacidade do teste público (rascunhos) |
 | [docs/DECISOES.md](docs/DECISOES.md) | Todas as decisões tomadas por conta própria e o motivo |
 | [docs/09-checklist-do-dono.md](docs/09-checklist-do-dono.md) | O que só o dono do projeto pode fazer antes do teste público: publicar, máquina e domínio, e-mail, textos legais, alertas, backups, assinatura e decisões de produto |
-| [docs/CREDITOS.md](docs/CREDITOS.md) | Créditos e licenças dos modelos de personagem; som e música originais (síntese por `tools/audio/gerar_sons.py`) |
+| [docs/CREDITOS.md](docs/CREDITOS.md) | Créditos e licenças: modelos de personagem, ícone original, licença do Godot e componentes de terceiros (tela *Créditos e licenças* e `LICENCAS-TERCEIROS.txt` de cada pacote), som e música originais (síntese por `tools/audio/gerar_sons.py`) |
 
 ## Requisitos
 
@@ -173,7 +175,7 @@ Teste automático do **cliente** (headless, contra um servidor rodando), da raiz
 /Applications/Godot.app/Contents/MacOS/Godot --headless --path client -- --autotest --server=ws://127.0.0.1:7777 --account=robo --password=robo123 --class=breaker --name=Robo
 ```
 
-Ele cria a conta/personagem se preciso, entra no mundo pela mesma rotina da interface, anda até (30, 50), ataca um Rato de Sulco, coleta o saque e termina com `[autotest] OK` (código de saída 0). Mensagens `Parameter "m" is null` vêm do renderizador "dummy" do modo headless e são inofensivas. Com servidor `--dev`, `--board` vai depois a Pedrâmbar e abre o quadro de missões da praça pelo clique da interface, e `--defense` aceita "O Teste de Pressão" com Joca, abre a válvula e confere o Joca da defesa no lugar do NPC, o cronômetro e o seletor de título da ficha.
+Ele cria a conta/personagem se preciso, entra no mundo pela mesma rotina da interface, anda até (30, 50), ataca um Rato de Sulco, coleta o saque e termina com `[autotest] OK` (código de saída 0; qualquer falha sai com 1). O CI roda este mesmo autotest a cada push, contra um servidor `--dev` de verdade (job `cliente`). Mensagens `Parameter "m" is null` vêm do renderizador "dummy" do modo headless e são inofensivas. Com servidor `--dev`, `--board` vai depois a Pedrâmbar e abre o quadro de missões da praça pelo clique da interface, e `--defense` aceita "O Teste de Pressão" com Joca, abre a válvula e confere o Joca da defesa no lugar do NPC, o cronômetro e o seletor de título da ficha.
 
 Vitrine com as 8 classes, monstros e NPCs (salva capturas, inclusive closes do rosto):
 
@@ -278,8 +280,8 @@ data/     dados do jogo (classes, habilidades, itens, monstros, saque, mapas, XP
 server/   servidor autoritativo de zona (Node.js) + testes + ferramentas
 client/   projeto Godot 4
 docs/     design e arquitetura
-deploy/   implantação do teste público (Docker, Compose + Caddy, systemd)
-.github/  CI (testes, importação do cliente, imagem) e releases (exportação e assinatura)
+deploy/   implantação do teste público (Docker, Compose + Caddy, página do jogo, systemd)
+.github/  CI (testes, importação e autotest do cliente, imagem) e releases (CI inteiro, exportação, assinatura, licenças)
 ```
 
 Detalhes em [docs/05-arquitetura.md](docs/05-arquitetura.md).
