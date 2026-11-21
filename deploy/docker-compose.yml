@@ -38,7 +38,18 @@
 #   CINZAS_DB_SENHA_ARQUIVO=./segredos/senha_banco.txt
 #   FIM
 #   docker compose up -d --build
-# Backup no PostgreSQL: docker compose exec -T banco pg_dump -U cinzas -Fc cinzas > cinzas-AAAA-MM-DD.dump
+#
+# Teto de jogadores: 200 personagens no mundo ao mesmo tempo (decisão do dono do projeto; D149). Acima disso a
+# entrada responde "Servidor cheio (200 jogadores)..."; contas gm e admin entram sempre. CINZAS_MAX_PLAYERS=N
+# no .env muda o teto (0 = sem limite).
+#
+# Backup de hora em hora, sem nada a configurar (docs §8.8, D148): o serviço "backup" copia o SQLite e, com o
+# perfil "postgres", o "backup-banco" roda o pg_dump; as cópias ficam em /data/backups (volume "dados"): as 14
+# mais recentes e a mais nova de cada dia, nenhuma com mais de 14 dias. Cópia fora da máquina (opcional,
+# desligada): perfil "copia-externa" com COPIA_DESTINO e COPIA_S3_* no .env (docs §8.8).
+#
+# Monitoramento (opcional): perfil "monitoramento" — Prometheus, Grafana, Alertmanager e node-exporter. Os
+# alertas chegam por e-mail, Telegram ou Discord com as variáveis ALERTA_* no .env (docs §8.3).
 name: cinzas
 
 services:
@@ -71,6 +82,8 @@ services:
       CINZAS_TRUST_PROXY: "1"    # o IP real vem do X-Forwarded-For do Caddy (limite por IP, auditoria)
       CINZAS_MAX_CONN_PER_IP: ${CINZAS_MAX_CONN_PER_IP:-8}
       CINZAS_LOG_FORMAT: json
+      # teto de personagens no mundo (decisão do dono: 200 no teste público; 0 = sem limite; gm/admin entram sempre)
+      CINZAS_MAX_PLAYERS: ${CINZAS_MAX_PLAYERS:-200}
     expose:
       - "7777"                   # alcançável só pelo proxy (rede interna)
     ports:
@@ -119,7 +132,10 @@ services:
       banco:
         condition: service_healthy
         required: false
-    command: ["node", "--disable-warning=ExperimentalWarning", "src/contas-main.js", "--port", "7780", "--host", "0.0.0.0", "--email-dir", "/data/emails"]
+    # métricas (pedidos, cadastros, falhas de e-mail) numa porta à parte, que o Caddy não conhece: o
+    # Prometheus coleta pela rede interna; só responde a endereços internos (rede do compose, 127.0.0.1)
+    command: ["node", "--disable-warning=ExperimentalWarning", "src/contas-main.js", "--port", "7780", "--host", "0.0.0.0", "--email-dir", "/data/emails",
+              "--metrics-port", "9101", "--metrics-host", "0.0.0.0"]
     volumes:
       - dados:/data
     secrets: [senha_banco]
@@ -139,6 +155,9 @@ services:
       CINZAS_SMTP_HELO: ${CINZAS_SMTP_HELO:-}
     expose:
       - "7780"                   # alcançável só pelo proxy (https://DOMINIO/contas/...)
+      - "9101"                   # métricas: só o Prometheus, pela rede interna
+    ports:
+      - "127.0.0.1:9101:9101"    # métricas do serviço de contas: só nesta máquina, nunca na internet
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:7780/saude',{signal:AbortSignal.timeout(4000)}).then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
       interval: 15s
@@ -149,6 +168,35 @@ services:
       options:
         max-size: "20m"
         max-file: "5"
+
+  # --- Backup de hora em hora (sempre ligado; docs/08-operacao.md §8.8, D148) -------------------------------
+  # O mesmo "npm run backup" do guia (tools/backup.mjs), rodando sem parar: VACUUM INTO do SQLite com o jogo no
+  # ar para /data/backups, conferido com integrity_check; ficam as 14 mais recentes e a mais nova de cada dia,
+  # nenhuma com mais de 14 dias (política de privacidade). A métrica do último backup vai para o volume
+  # "metricas", que o node-exporter lê (alerta se passar de 2 h sem backup). Com o banco no PostgreSQL
+  # (CINZAS_DB=postgres://...) este serviço fica parado e quem faz o backup é o "backup-banco".
+  backup:
+    image: ${CINZAS_IMAGEM:-cinzas-servidor:local}
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 60s       # um backup em andamento termina antes de o contêiner parar
+    depends_on:
+      servidor:
+        condition: service_healthy   # o banco já existe e está migrado
+    command: ["node", "--disable-warning=ExperimentalWarning", "tools/backup.mjs", "--para", "/data/backups",
+              "--manter", "14", "--diarias", "--dias", "14", "--a-cada", "3600",
+              "--metrica", "/metricas/backup-sqlite.prom", "--somente-sqlite"]
+    environment:
+      CINZAS_DB: ${CINZAS_DB:-/data/cinzas.db}      # o mesmo banco da zona
+    volumes:
+      - dados:/data
+      - metricas:/metricas
+    network_mode: none           # só lê e grava arquivos: nenhuma rede
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
 
   # --- PostgreSQL central (opcional): perfil "postgres" — ver o cabeçalho e docs/08-operacao.md §8.11 ----
   # Zona e contas passam a usar este banco com CINZAS_DB=postgres://cinzas@banco:5432/cinzas no .env; a
@@ -182,20 +230,135 @@ services:
         max-size: "20m"
         max-file: "5"
 
+  # Backup do PostgreSQL de hora em hora (perfil "postgres"): deploy/backup-postgres.sh na imagem postgres:17
+  # (pg_dump da versão do servidor), pg_dump -Fc conferido com pg_restore --list para /data/backups, com a
+  # mesma rotação e a mesma métrica do serviço "backup" (que, com o banco no PostgreSQL, fica parado).
+  backup-banco:
+    image: postgres:17
+    profiles: ["postgres"]
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 60s       # um pg_dump em andamento termina antes de o contêiner parar
+    user: "10001:10001"          # o mesmo usuário da imagem do jogo: as cópias ficam dele no volume "dados"
+    depends_on:
+      banco:
+        condition: service_healthy
+      backup:
+        condition: service_started   # cria o volume "metricas" com o dono certo antes deste gravar nele
+    entrypoint: ["/bin/sh", "/opt/cinzas/backup-postgres.sh"]
+    environment:
+      PGHOST: banco
+      PGPORT: "5432"
+      PGUSER: cinzas
+      PGDATABASE: cinzas
+      BACKUP_SENHA_ARQUIVO: /run/secrets/senha_banco
+      BACKUP_DIR: /data/backups
+      BACKUP_MANTER: "14"
+      BACKUP_DIARIAS: "1"
+      BACKUP_DIAS: "14"
+      BACKUP_A_CADA: "3600"
+      BACKUP_METRICA: /metricas/backup-postgres.prom
+    secrets: [senha_banco]
+    volumes:
+      - ./backup-postgres.sh:/opt/cinzas/backup-postgres.sh:ro
+      - dados:/data
+      - metricas:/metricas
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  # --- Cópia fora da máquina (opcional, desligada): perfil "copia-externa" — docs/08-operacao.md §8.8 -------
+  # rclone sync de /data/backups para um armazenamento compatível com S3 (Backblaze B2, Cloudflare R2, Wasabi,
+  # AWS S3...) de hora em hora: o destino espelha a pasta, então a rotação de 14 dias vale lá também. As cópias
+  # vão cifradas com COPIA_SENHA_CIFRA (rclone crypt). Tudo no .env: COPIA_DESTINO=balde/pasta,
+  # COPIA_S3_PROVEDOR, COPIA_S3_ENDPOINT, COPIA_S3_REGIAO, COPIA_S3_CHAVE, COPIA_S3_SEGREDO, COPIA_SENHA_CIFRA; e
+  # COMPOSE_PROFILES=...,copia-externa para ligar.
+  copia-externa:
+    image: rclone/rclone:1.68.2
+    profiles: ["copia-externa"]
+    restart: unless-stopped
+    init: true
+    depends_on: [backup]
+    entrypoint: ["/bin/sh", "/opt/cinzas/copia-externa.sh"]
+    environment:
+      COPIA_DESTINO: ${COPIA_DESTINO:-}
+      COPIA_A_CADA: ${COPIA_A_CADA:-3600}
+      COPIA_SENHA_CIFRA: ${COPIA_SENHA_CIFRA:-}     # obrigatória, a menos de COPIA_SEM_CIFRA=sim
+      COPIA_SEM_CIFRA: ${COPIA_SEM_CIFRA:-}
+      COPIA_METRICA: /metricas/copia-externa.prom
+      RCLONE_CONFIG_EXTERNO_TYPE: s3
+      RCLONE_CONFIG_EXTERNO_PROVIDER: ${COPIA_S3_PROVEDOR:-Other}
+      RCLONE_CONFIG_EXTERNO_ENDPOINT: ${COPIA_S3_ENDPOINT:-}
+      RCLONE_CONFIG_EXTERNO_REGION: ${COPIA_S3_REGIAO:-}
+      RCLONE_CONFIG_EXTERNO_ACCESS_KEY_ID: ${COPIA_S3_CHAVE:-}
+      RCLONE_CONFIG_EXTERNO_SECRET_ACCESS_KEY: ${COPIA_S3_SEGREDO:-}
+    volumes:
+      - ./copia-externa.sh:/opt/cinzas/copia-externa.sh:ro
+      - dados:/dados:ro          # só lê /dados/backups
+      - metricas:/metricas
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
   # --- Monitoramento (opcional): docker compose --profile monitoramento up -d -----------------------
-  # Prometheus coleta as métricas da zona (servidor:9100) e avalia os alertas de monitoramento/alertas.yml;
-  # Grafana mostra o painel pronto em http://127.0.0.1:3000 (só nesta máquina; use um túnel SSH de fora).
+  # Prometheus coleta as métricas da zona (servidor:9100), do serviço de contas (contas:9101) e da máquina
+  # (node-exporter: disco, e a idade do último backup) e avalia os alertas de monitoramento/alertas.yml;
+  # o Alertmanager manda os alertas por e-mail, Telegram ou Discord (variáveis ALERTA_* no .env; sem elas,
+  # os alertas só aparecem nas páginas). Grafana mostra o painel pronto em http://127.0.0.1:3000. Tudo só
+  # nesta máquina; de fora, um túnel SSH (ssh -L 3000:127.0.0.1:3000 -L 9093:127.0.0.1:9093 servidor).
   prometheus:
     image: prom/prometheus:v2.55.1
     profiles: ["monitoramento"]
     restart: unless-stopped
-    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=15d"]
+    depends_on: [alertmanager]
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=15d",
+              "--web.external-url=http://127.0.0.1:9090"]
     volumes:
       - ./monitoramento/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./monitoramento/alertas.yml:/etc/prometheus/alertas.yml:ro
       - prometheus_dados:/prometheus
     ports:
       - "127.0.0.1:9090:9090"
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    profiles: ["monitoramento"]
+    restart: unless-stopped
+    # monta a configuração a partir do modelo com as variáveis ALERTA_* (nenhum segredo no git) e sobe
+    entrypoint: ["/bin/sh", "/etc/alertmanager/entrada.sh"]
+    command: ["--web.external-url=http://127.0.0.1:9093", "--cluster.listen-address="]
+    environment:
+      ALERTA_EMAIL_PARA: ${ALERTA_EMAIL_PARA:-}
+      ALERTA_SMTP_SERVIDOR: ${ALERTA_SMTP_SERVIDOR:-}
+      ALERTA_SMTP_DE: ${ALERTA_SMTP_DE:-}
+      ALERTA_SMTP_USUARIO: ${ALERTA_SMTP_USUARIO:-}
+      ALERTA_SMTP_SENHA: ${ALERTA_SMTP_SENHA:-}
+      ALERTA_TELEGRAM_TOKEN: ${ALERTA_TELEGRAM_TOKEN:-}
+      ALERTA_TELEGRAM_CHAT: ${ALERTA_TELEGRAM_CHAT:-}
+      ALERTA_DISCORD_WEBHOOK: ${ALERTA_DISCORD_WEBHOOK:-}
+    volumes:
+      - ./monitoramento/alertmanager.yml:/etc/alertmanager/modelo.yml:ro
+      - ./monitoramento/alertmanager-entrada.sh:/etc/alertmanager/entrada.sh:ro
+      - alertmanager_dados:/alertmanager
+    tmpfs:
+      - /tmp                     # a configuração montada (com as senhas) fica só na memória
+    read_only: true
+    ports:
+      - "127.0.0.1:9093:9093"
+  node-exporter:
+    # métricas da máquina (disco, memória, CPU) e, pelo coletor textfile, a idade do último backup
+    image: prom/node-exporter:v1.8.2
+    profiles: ["monitoramento"]
+    restart: unless-stopped
+    command: ["--path.rootfs=/host", "--collector.textfile.directory=/metricas"]
+    pid: host
+    read_only: true
+    volumes:
+      - /:/host:ro,rslave        # só leitura: o node-exporter só olha a máquina
+      - metricas:/metricas:ro
   grafana:
     image: grafana/grafana:11.3.1
     profiles: ["monitoramento"]
@@ -218,6 +381,8 @@ volumes:
   caddy_config:
   prometheus_dados:
   grafana_dados:
+  alertmanager_dados:            # silêncios e avisos já mandados (perfil "monitoramento")
+  metricas:                      # métricas dos backups (arquivos .prom) que o node-exporter lê
   banco:                         # dados do PostgreSQL (perfil "postgres")
 
 secrets:

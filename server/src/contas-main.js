@@ -27,6 +27,8 @@ const tokenSecret = arg('token-secret', process.env.CINZAS_TOKEN_SECRET ?? null)
 if (!checkSecrets([['CINZAS_TOKEN_SECRET (--token-secret)', tokenSecret]])) process.exit(2);
 const metricsPort = arg('metrics-port', process.env.CINZAS_CONTAS_METRICS_PORT || null);
 if (metricsPort != null && !/^\d{1,5}$/.test(String(metricsPort))) { console.error('--metrics-port (ou CINZAS_CONTAS_METRICS_PORT) precisa de um número de porta.'); process.exit(2); }
+const metricsHost = arg('metrics-host', '127.0.0.1');
+if (metricsHost === true) { console.error('--metrics-host precisa de um endereço (ex.: 127.0.0.1, ou 0.0.0.0 na rede interna do contêiner).'); process.exit(2); }
 
 const svc = new AccountsService({
   port: Number(arg('port', process.env.CINZAS_CONTAS_PORT ?? 7780)),
@@ -37,7 +39,7 @@ const svc = new AccountsService({
   mail,
   ...(arg('docs-dir', process.env.CINZAS_DOCS_DIR ?? null) ? { docsDir: arg('docs-dir', process.env.CINZAS_DOCS_DIR) } : {}),
   metricsPort,
-  metricsHost: arg('metrics-host', '127.0.0.1'),
+  metricsHost,
 });
 await svc.start();
 const stop = async () => { await svc.stop(); process.exit(0); };

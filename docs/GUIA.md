@@ -17,6 +17,9 @@ Bem-vindo a Várdia. Este guia cobre o que você precisa para começar; as regra
 5. Crie o personagem: escolha a **origem** (Âmbar ou Nácar), a **classe** e o nome (3 a 16 letras, números,
    `_` ou `-`, **sem espaços**).
 
+Apareceu **"Servidor cheio"** ao entrar? O teste chegou ao limite de jogadores ao mesmo tempo: tente de novo em alguns
+minutos.
+
 ## 2. As oito classes
 
 | Origem | Classe | Papel | Armas |

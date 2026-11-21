@@ -33,17 +33,16 @@ export class AccountsService {
       docsDir: join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'docs'), ...opts };
     if (!this.opts.tokenSecret) throw new Error('serviço de contas precisa de --token-secret (ou CINZAS_TOKEN_SECRET)');
     this.store = opts.store ?? createStore(this.opts.dbPath); // arquivo SQLite ou postgres://...
+    // pedidos, cadastros e e-mails (enviados e com falha), expostos em GET /metrics numa porta à parte (start)
+    this.metrics = new AccountsMetrics();
     this.mailer = this.metrics.wrapMailer(opts.mailer ?? createMailer(opts.mail ?? { kind: 'console' })); // conta envios e falhas
     this.hits = new Map(); // ip -> [instantes]
   }
 
   log(...a) { if (this.opts.log) console.log(new Date().toISOString().slice(11, 19), '[contas]', ...a); }
 
-  // Pedidos, cadastros e e-mails (enviados e com falha), expostos em GET /metrics numa porta à parte
-  // (opts.metricsPort, padrão desligada; opts.metricsHost, padrão 127.0.0.1) que o proxy nunca repassa:
-  // o Caddy só conhece a porta principal, e /contas/metrics lá cai em "Rota inexistente".
-  metrics = new AccountsMetrics();
-
+  // Métricas (opts.metricsPort, padrão desligada; opts.metricsHost, padrão 127.0.0.1) numa porta à parte, que o
+  // proxy nunca repassa: o Caddy só conhece a porta principal, e /contas/metrics lá cai em "Rota inexistente".
   async start() {
     this.srv = http.createServer((req, res) => this.onRequest(req, res));
     await new Promise((resolve) => this.srv.listen(this.opts.port, this.opts.host, () => {

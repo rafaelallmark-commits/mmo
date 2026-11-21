@@ -30,7 +30,9 @@ serviço (registros de segurança), nos termos do art. 7º da LGPD.
 ## Compartilhamento
 
 Não vendemos nem compartilhamos dados. Usamos apenas provedores necessários para operar: hospedagem
-do servidor e envio de e-mail (SMTP), sob contrato.
+do servidor, envio de e-mail (SMTP) e, se usado, armazenamento das cópias de segurança fora do servidor (cifradas
+antes de sair dele), sob contrato. Os avisos de operação que a equipe recebe (e-mail, Telegram ou Discord) e o
+monitor de disponibilidade levam só números do servidor, sem dados de jogadores.
 
 ## Seus direitos (art. 18 da LGPD)
 
@@ -42,7 +44,7 @@ do servidor e envio de e-mail (SMTP), sob contrato.
   Na exclusão apagamos na hora o e-mail, a senha, os itens e as missões; o nome da conta e dos
   personagens é trocado por um código anônimo. Registros de segurança ligados à conta ficam até
   completar os 90 dias e então são apagados. Cópias de segurança do banco são rotacionadas e
-  substituídas em até 14 dias.
+  substituídas em até 14 dias, inclusive a cópia guardada fora do servidor, quando houver.
 - **Correção**: troca de senha por código enviado ao e-mail; demais correções pelo contato acima.
 
 ## Segurança

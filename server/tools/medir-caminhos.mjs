@@ -1,6 +1,6 @@
 // Mede a busca de caminho (o que cada pedido "move" roda) nos mapas do jogo, com a mesma grade da zona.
 //
-//   node tools/medir-caminhos.mjs [--nav arquivo.js] [--pares 300] [--repeticoes 15] [--semente 1]
+//   node tools/medir-caminhos.mjs [--nav arquivo.js] [--pares 300] [--repeticoes 15] [--semente 1] [--comparar outro.js]
 //
 //   Casos fixos: galerias_eco (2,153)→(167,2) e as diagonais de canto a canto (ponto livre mais perto de
 //   cada canto) de galerias_eco, cava_primeira e canais_eclusa; mediana e máximo de --repeticoes.
@@ -9,6 +9,8 @@
 //   --nav: outra implementação de NavGrid para comparar, por exemplo a de antes da busca por pontos de salto:
 //     git show 674fdd6:server/src/nav.js > /tmp/nav-antigo.js
 //     node tools/medir-caminhos.mjs --nav /tmp/nav-antigo.js
+//   --comparar: roda também outra implementação nos mesmos pares sorteados e compara o resultado (destinos
+//     aceitos e recusados, comprimento do caminho suavizado), ex.: --comparar /tmp/nav-antigo.js
 //   Resultado de referência: docs/relatorio-carga.md ("Busca de caminho").
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -17,6 +19,7 @@ import { navSpec, NAV_OPTS } from '../src/zone.js';
 
 const arg = (n, d) => { const i = process.argv.indexOf(`--${n}`); return i === -1 ? d : process.argv[i + 1]; };
 const navFile = arg('nav', null);
+const otherFile = arg('comparar', null);
 const PAIRS = Number(arg('pares', 300));
 const REPS = Math.max(1, Number(arg('repeticoes', 15)));
 let seed = Number(arg('semente', 1)) >>> 0 || 1;
@@ -92,3 +95,28 @@ console.log('os mais lentos, repetidos (mediana / máximo):');
 for (const r of slow.slice(0, 5)) console.log(`  ${r.id.padEnd(17)} ${`(${r.q.map((v) => v.toFixed(1)).join(', ')})`.padEnd(30)} ${fmt(r.med)} ${fmt(r.max)}  expansões ${r.exp ?? '-'}`);
 const worst = Math.max(worstFixed, slow[0]?.med ?? 0);
 console.log(`\npior caso por pedido (mediana): ${worst.toFixed(2)} ms · 20 pedidos/s desse caso custam ${(20 * worst).toFixed(0)} ms por segundo (tick de 100 ms a 10 Hz)`);
+
+// comparação com outra implementação nos mesmos pares sorteados
+if (otherFile) {
+  const Other = (await import(pathToFileURL(resolve(otherFile)).href)).NavGrid;
+  const others = new Map();
+  let same = 0, shorter = 0, longer = 0, both = 0, mismatch = 0, sumA = 0, sumB = 0;
+  const rel = [];
+  for (const r of all) {
+    if (!others.has(r.id)) others.set(r.id, new Other(navSpec(maps[r.id]), NAV_OPTS));
+    const a = grid(r.id).findPath(...r.q), b = others.get(r.id).findPath(...r.q);
+    if (!a !== !b) { mismatch++; console.log(`  destino aceito por uma e recusado pela outra: ${r.id} (${r.q.map((v) => v.toFixed(2)).join(', ')})`); continue; }
+    if (!a) continue;
+    both++;
+    const la = pathLen(r.q[0], r.q[1], a), lb = pathLen(r.q[0], r.q[1], b);
+    sumA += la; sumB += lb;
+    rel.push((la - lb) / Math.max(lb, 1e-9));
+    if (Math.abs(la - lb) < 1e-6) same++; else if (la < lb) shorter++; else longer++;
+  }
+  rel.sort((x, y) => x - y);
+  const pct = (v) => `${(v * 100).toFixed(1)}%`;
+  console.log(`\ncomparação com ${otherFile} nos ${all.length} pares sorteados: ${mismatch} com resultado diferente (aceito × recusado); ` +
+    `dos ${both} caminhos, ${same} iguais (${pct(same / both)}), ${shorter} mais curtos (${pct(shorter / both)}) e ${longer} mais longos (${pct(longer / both)}) ` +
+    `nesta implementação; comprimento total ${((sumA / sumB - 1) * 100).toFixed(2)}%; diferença p1 ${pct(rel[Math.floor(rel.length * 0.01)])}, ` +
+    `p99 ${pct(rel[Math.floor(rel.length * 0.99)])}, máxima ${pct(rel[rel.length - 1])}`);
+}

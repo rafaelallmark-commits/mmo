@@ -32,25 +32,136 @@ cd server && npm install && npm start -- --port 7777 --db cinzas.db --metrics-po
 
 O cliente conecta com `--server=ws://host:porta` (ex.: `godot --path client -- --server=ws://127.0.0.1:7777`).
 
-## 8.3 Métricas e saúde
+## 8.3 Métricas, saúde e alertas
 
-Com `--metrics-port`, o servidor expõe:
+Com `--metrics-port`, o servidor expõe, **só para endereços internos** (loopback e redes privadas, como a rede do
+Docker Compose; pedido de outro endereço, ou repassado por um proxy com `X-Forwarded-For`, recebe 403):
 
-- `GET /metrics` — texto do Prometheus (`cinzas_players_online`, `cinzas_tick_ms_p50|p95|p99|max`,
-  `cinzas_slow_ticks_total`, `cinzas_bytes_out_per_s`, `cinzas_msgs_in_per_s`, `cinzas_cpu_pct`, `cinzas_rss_mb`, …).
-- `GET /metrics.json` — o mesmo em JSON (janela dos últimos 6000 ticks = 10 min).
-- `GET /health` — `200 {"ok":true}` enquanto o servidor responde.
-- `POST /metrics/reset` — zera a janela (usado pelo teste de carga depois do aquecimento).
+- `GET /metrics` — texto do Prometheus (tabela abaixo).
+- `GET /metrics.json` — o mesmo em JSON, com os contadores e as médias por segundo da janela atual (o teste de carga
+  usa as médias).
+- `GET /health` — `200 {"ok":true,...}` enquanto o laço do jogo anda; **503** (`"erro": "laço do jogo parado: ..."`)
+  quando o último tick foi há mais de 5 s. O `HEALTHCHECK` da imagem usa esta rota: com o laço parado o Docker marca o
+  contêiner como *unhealthy* (com o processo inteiro travado nem o `/health` responde, e o resultado é o mesmo). O
+  Compose não reinicia sozinho um contêiner *unhealthy*: o alerta `LacoDoJogoParado` avisa e
+  `docker compose restart servidor` resolve.
+- `POST /metrics/reset` — recomeça a janela do JSON e dos percentis (teste de carga, depois do aquecimento); os
+  contadores não mudam.
 
-Alertas sugeridos: `tick_ms_p99 > 30` por 5 min; `slow_ticks_total` subindo; `/health` falhando 3 vezes;
-`rss_mb` crescendo sem parar (vazamento).
+Tudo o que se acumula é **contador** (`_total`, desde a subida do processo; volta a zero quando ele reinicia, como o
+Prometheus espera): taxa e porcentagem saem no Prometheus com `rate()` e `increase()`. Antes eram médias desde a subida
+(`cinzas_cpu_pct`, `cinzas_*_per_s`, `cinzas_db_wait_ms_per_s`), que viravam linha reta depois de horas no ar e
+escondiam o pico de agora (D147). Os percentis do tick continuam na janela dos últimos 6000 ticks (10 min).
 
-**Painel pronto**: `docker compose --profile monitoramento up -d` (em `deploy/`) sobe Prometheus (coleta a cada 15 s,
-retenção de 15 dias, alertas acima em `deploy/monitoramento/alertas.yml`) e Grafana com o painel "Cinzas do Meridiano —
-servidor de zona" (jogadores, duração do tick com as linhas de 30 e 50 ms, ticks lentos, banda, mensagens, CPU e
-memória) em `http://127.0.0.1:3000` — só nesta máquina; de fora, `ssh -L 3000:127.0.0.1:3000 servidor`. Senha do
-admin do Grafana em `GRAFANA_SENHA` no `deploy/.env`. Para receber os alertas por e-mail ou chat, ligue um
-Alertmanager ao Prometheus.
+| Métrica do servidor de zona (porta 9100) | Tipo | O que é | Como ler |
+|---|---|---|---|
+| `cinzas_players_online` · `cinzas_sessions` · `cinzas_zones` | medidor | Personagens no mundo, conexões abertas, zonas e instâncias ativas | valor |
+| `cinzas_max_players` | medidor | Teto de jogadores (`--max-players`; 0 = sem limite) | valor |
+| `cinzas_server_full_total` | contador | Entradas recusadas com o servidor cheio | `increase(…[1h])` |
+| `cinzas_tick_ms_p50` · `_p95` · `_p99` · `_max` · `_mean` | medidor | Duração do tick nos últimos 6000 ticks (10 min), em ms | valor |
+| `cinzas_last_tick_age_seconds` | medidor | Segundos desde o fim do último tick (acima de 5: laço parado, `/health` 503) | valor |
+| `cinzas_ticks_total` · `cinzas_slow_ticks_total` | contador | Ticks simulados; ticks acima de 50 ms | `increase(cinzas_slow_ticks_total[10m])` |
+| `cinzas_cpu_seconds_total` | contador | Segundos de CPU do processo (usuário + sistema) | `rate(…[5m])` = fração de um núcleo (0,07 = 7%) |
+| `cinzas_msgs_in_total` · `cinzas_msgs_out_total` | contador | Mensagens recebidas dos clientes e enviadas a eles | `rate(…[5m])` = mensagens/s |
+| `cinzas_bytes_in_total` · `cinzas_bytes_out_total` · `cinzas_snapshot_bytes_out_total` | contador | Bytes recebidos, enviados e, dos enviados, os de snapshots | `rate(…[5m])` = bytes/s |
+| `cinzas_rss_mb` · `cinzas_heap_mb` · `cinzas_uptime_s` | medidor | Memória residente, heap do JavaScript, tempo no ar | valor |
+| `cinzas_db_calls_total` · `cinzas_db_wait_seconds_total` | contador | Só PostgreSQL: chamadas pela ponte síncrona; tempo com o laço parado esperando o banco | `rate(cinzas_db_wait_seconds_total[5m])` = fração do tempo parada |
+| `cinzas_db_call_ms_p50` · `_p99` · `_max` | medidor | Só PostgreSQL: duração de uma chamada, nas últimas 8192 | valor |
+
+O **serviço de contas** tem as próprias métricas, numa porta à parte que o proxy não conhece
+(`npm run contas -- --metrics-port 9101`, ou `CINZAS_CONTAS_METRICS_PORT`; escuta em `--metrics-host`, padrão
+`127.0.0.1`) e com a mesma regra de endereço interno: no Compose, `contas:9101` na rede interna e `127.0.0.1:9101`
+na máquina. A porta do serviço (a que o Caddy repassa) continua sem `/metrics`.
+
+| Métrica do serviço de contas (porta 9101) | Tipo | O que é |
+|---|---|---|
+| `cinzas_accounts_requests_total{route,status}` | contador | Pedidos por rota e código de resposta HTTP (caminho desconhecido conta como `route="outra"`) |
+| `cinzas_accounts_signups_total` | contador | Contas criadas (cadastro aceito) |
+| `cinzas_accounts_emails_sent_total` · `cinzas_accounts_email_failures_total` | contador | E-mails entregues ao servidor de envio; envios que falharam (servidor fora, recusa, certificado) |
+| `cinzas_accounts_cpu_seconds_total` · `cinzas_accounts_rss_mb` · `cinzas_accounts_uptime_s` | contador, medidores | CPU, memória e tempo no ar do processo |
+
+Os **backups** (§8.8) gravam a própria métrica num arquivo que o node-exporter lê (coletor *textfile*):
+
+| Métrica do backup (`db="sqlite"` ou `db="postgres"`) | O que é |
+|---|---|
+| `cinzas_backup_last_success_timestamp_seconds` · `cinzas_backup_last_failure_timestamp_seconds` | Hora (Unix) do último backup conferido e da última falha |
+| `cinzas_backup_last_size_bytes` · `cinzas_backup_last_duration_seconds` | Tamanho e duração do último backup conferido |
+| `cinzas_backup_copies` · `cinzas_backup_oldest_copy_timestamp_seconds` | Cópias guardadas depois da rotação e a hora da mais velha |
+| `cinzas_offsite_copy_last_success_timestamp_seconds` · `…_last_failure_timestamp_seconds` | Cópia para fora da máquina (perfil `copia-externa`) |
+
+**Painel e alertas**: `docker compose --profile monitoramento up -d` (em `deploy/`) sobe o Prometheus (coleta a cada
+15 s a zona, as contas e o node-exporter; retenção de 15 dias; alertas de `deploy/monitoramento/alertas.yml`), o
+**Alertmanager**, o **node-exporter** (disco, memória e CPU da máquina, montada só para leitura, e a métrica dos
+backups) e o Grafana com o painel "Cinzas do Meridiano — servidor de zona" (jogadores e teto, duração do tick com as
+linhas de 30 e 50 ms, ticks lentos, banda, mensagens, CPU, memória, espera pelo banco, serviço de contas, idade do
+último backup e disco livre) em `http://127.0.0.1:3000`. Tudo só nesta máquina; de fora,
+`ssh -L 3000:127.0.0.1:3000 -L 9090:127.0.0.1:9090 -L 9093:127.0.0.1:9093 servidor` (Grafana, Prometheus, Alertmanager).
+Senha do admin do Grafana em `GRAFANA_SENHA` no `deploy/.env`.
+
+| Alerta | Dispara quando | Gravidade |
+|---|---|---|
+| `ServidorForaDoAr` | a zona não responde às métricas por 1 min | crítica |
+| `LacoDoJogoParado` | `cinzas_last_tick_age_seconds > 5` por 30 s (contêiner *unhealthy*) | crítica |
+| `TickLento` · `TicksAcimaDe50ms` | p99 do tick acima de 30 ms por 5 min · mais de 5 ticks acima de 50 ms em 10 min | aviso |
+| `CPUAlta` | `rate(cinzas_cpu_seconds_total[5m]) > 0.8` por 10 min (o laço do jogo usa um núcleo só) | aviso |
+| `MemoriaCrescendo` | memória acima de 600 MB e subindo sem parar por 30 min | aviso |
+| `ServidorCheio` | alguma entrada recusada pelo teto de jogadores nos últimos 15 min | aviso |
+| `BancoLento` | só PostgreSQL: mais de 50 ms por segundo esperando o banco, ou chamada p99 acima de 5 ms, por 5 min | aviso |
+| `ServicoDeContasForaDoAr` | o serviço de contas não responde às métricas por 2 min | crítica |
+| `FalhaNoEnvioDeEmail` | algum envio de e-mail falhou nos últimos 15 min (códigos não chegam) | aviso |
+| `DiscoQuaseCheio` | menos de 10% livre num disco da máquina por 5 min | crítica |
+| `BackupAtrasado` | o último backup conferido tem mais de 2 h | crítica |
+| `BackupFalhou` · `SemMetricaDeBackup` | a última tentativa falhou · nenhum serviço de backup gravou a métrica há 30 min | aviso · crítica |
+| `CopiaMaisVelhaQue14Dias` | sobrou cópia com mais de 14 dias (a política de privacidade promete menos) | aviso |
+| `CopiaExternaAtrasada` | a cópia para fora da máquina não termina bem há 3 h (só com o perfil `copia-externa`) | aviso |
+| `MonitorDaMaquinaForaDoAr` · `MetricaDeBackupIlegivel` | o node-exporter não responde por 5 min · não consegue ler um arquivo `.prom` do volume `metricas` (sem isso, nada de alerta de disco e de backup) | aviso |
+
+### Alertas que chegam a alguém
+
+O Alertmanager agrupa os alertas, manda um aviso quando disparam e outro quando resolvem, e lembra os que continuam
+ativos (a cada 1 h os críticos, a cada 4 h os avisos). O canal sai das variáveis `ALERTA_*` no `deploy/.env`, que fica
+fora do git: `deploy/monitoramento/alertmanager.yml` é só um modelo com os três receptores prontos, e cada um entra
+quando as variáveis dele estão preenchidas (D147). Sem nenhuma, o Alertmanager sobe igual e os alertas ficam só nas
+páginas. Ligue um ou mais canais:
+
+- **E-mail (SMTP)** — pode ser o mesmo provedor do e-mail do jogo (§8.9):
+  ```
+  ALERTA_EMAIL_PARA=equipe@exemplo.com.br                  # um ou mais, separados por vírgula
+  ALERTA_SMTP_SERVIDOR=smtp.exemplo.com.br:587             # host:porta (587 = STARTTLS; 465 = TLS direto)
+  ALERTA_SMTP_DE=Alertas Cinzas <alertas@exemplo.com.br>
+  ALERTA_SMTP_USUARIO=...                                  # se o servidor pedir login
+  ALERTA_SMTP_SENHA=...
+  ```
+- **Telegram** — no Telegram, fale com o **@BotFather**, mande `/newbot` e guarde o token. Ponha o robô no grupo da
+  equipe (ou mande qualquer mensagem para ele), abra `https://api.telegram.org/bot<TOKEN>/getUpdates` no navegador e
+  copie o `chat.id` (o de grupo começa com `-`):
+  ```
+  ALERTA_TELEGRAM_TOKEN=123456789:AA...
+  ALERTA_TELEGRAM_CHAT=-1001234567890
+  ```
+- **Discord** — no canal da equipe: *Editar canal → Integrações → Webhooks → Novo webhook → Copiar URL do webhook*:
+  ```
+  ALERTA_DISCORD_WEBHOOK=https://discord.com/api/webhooks/...
+  ```
+
+Depois, `docker compose --profile monitoramento up -d alertmanager` (recria o serviço com as variáveis novas) e
+`docker compose logs alertmanager`: a configuração montada passa pelo `amtool check-config` antes de subir, e uma
+variável que faltou aparece no registro (ex.: `a variável ALERTA_TELEGRAM_CHAT está vazia`). Valor com `$` no `.env`
+(senha, token) vai entre aspas simples, senão o Compose tenta trocá-lo por uma variável. Para conferir o canal, mande
+um alerta de teste (chega em ~30 s; o "resolvido" vem uns 5 min depois):
+
+```bash
+docker compose exec alertmanager amtool --alertmanager.url=http://127.0.0.1:9093 \
+  alert add Teste gravidade=aviso --annotation=resumo="Teste do canal de alertas"
+```
+
+**Monitor externo de disponibilidade** (recomendado antes de abrir o teste): o Prometheus e o Alertmanager rodam na
+mesma máquina do jogo; se ela, a rede ou o Docker caírem, ninguém é avisado por eles. Cadastre um monitor externo —
+um serviço como UptimeRobot, Better Stack ou Healthchecks.io, ou um Uptime Kuma em **outra** máquina — que consulte
+`https://DOMINIO/contas/saude` a cada 1 a 5 minutos, espere `200` com `{"ok":true}` e avise por e-mail ou Telegram.
+O mesmo teste pega DNS errado, certificado vencido e proxy fora do ar. Um segundo monitor em `https://DOMINIO/`
+aceitando o código `426` (o jogo só fala WebSocket) confere o caminho até a zona. A escolha do serviço e a conta
+ficam com o dono do projeto.
 
 Referência medida (100 clientes juntos no mesmo mapa, 10 Hz): tick p50 4,8 ms, p99 10,2 ms, máximo 22 ms,
 nenhum acima de 50 ms; CPU do processo ~7% de um núcleo; 144 MB de memória.
@@ -71,9 +182,13 @@ Esta seção é o SQLite (desenvolvimento). Em produção o banco é o PostgreSQ
 - SQLite em modo WAL; cada operação que mexe em inventário, ouro, XP ou saque roda numa transação.
 - **Migrações versionadas** (`server/src/store.js`, tabela `schema_version`): rodam em ordem, uma vez, numa
   transação cada. Bancos anteriores ao controle de versão são reconhecidos e atualizados.
-- **Backup a quente**: `npm run backup -- --db cinzas.db --para backups --manter 14` (VACUUM INTO: foto
-  consistente com o jogo rodando, confere a integridade e mantém só as 14 mais recentes). Agende de hora em hora.
-- **Restaurar**: pare o servidor, troque o arquivo `.db` pela cópia (apague `-wal` e `-shm` antigos) e suba.
+- **Backup a quente**: `npm run backup -- --db cinzas.db --para backups --manter 14 --diarias` (VACUUM INTO: foto
+  consistente com o jogo rodando; confere a integridade; ficam as 14 mais recentes e a mais nova de cada dia, nenhuma
+  com mais de 14 dias — `--dias`, padrão 14, é o prazo da política de privacidade; D148). Agende de hora em hora; no
+  Docker Compose o serviço `backup` já faz isso (§8.8). `--metrica arquivo.prom` grava a hora do último backup para o
+  node-exporter; `--a-cada 3600` deixa o processo rodando e copiando de hora em hora.
+- **Restaurar**: pare o servidor, troque o arquivo `.db` pela cópia (apague `-wal` e `-shm` antigos) e suba. O ensaio
+  completo, para fazer antes de abrir o teste e de tempos em tempos, está em §8.8 ("Ensaio de restauração").
 
 ## 8.6 Testes e medições
 
@@ -86,12 +201,23 @@ Esta seção é o SQLite (desenvolvimento). Em produção o banco é o PostgreSQ
 | `npm run telemetria -- --db cinzas.db` | Tempo jogado por nível no banco real contra as metas (±25%). | segundos |
 | `npm run simular-progressao` | Simulação acelerada da caça solo do nível 1 ao teto (25) para as 8 classes; escreve `docs/relatorio-progressao.md` (a versão no git é essa rodada completa, do 1 ao 25, com 8 sementes fixas). | ~13 min |
 | `npm run validate-data` | Valida os JSON de `data/`. | segundos |
+| `npm run medir-caminhos` | Busca de caminho em todos os mapas: casos de canto a canto nas Galerias, na Cava e nos Canais e 3.000 pedidos sorteados (`--nav` mede outra implementação, `--comparar` compara os caminhos). Antes/depois em [relatorio-carga.md](relatorio-carga.md#busca-de-caminho-antes-e-depois-2026-11-21): pior pedido de 52–77 ms para ~1 ms. | ~10 s |
 
 ## 8.7 Solução de problemas
 
 - **Cliente não conecta**: confira a porta e `--host`; `curl http://127.0.0.1:9100/health`.
+- **"Servidor cheio (N jogadores)"**: o teto de `--max-players` (`CINZAS_MAX_PLAYERS`; 200 no Compose) foi atingido.
+  Contas `gm` e `admin` entram assim mesmo; quem já está no mundo reconecta. Para subir o teto, mude a variável no
+  `deploy/.env` e recrie o serviço (`docker compose up -d servidor`), olhando antes `cinzas_tick_ms_p99` e
+  `rate(cinzas_cpu_seconds_total[5m])` no painel.
+- **Contêiner `unhealthy`** (`docker compose ps`): `curl http://127.0.0.1:9100/health` diz por quê (`laço do jogo
+  parado: último tick há N s`); sem resposta, o processo inteiro travou. `docker compose logs servidor` e
+  `docker compose restart servidor` (os personagens voltam do último salvamento, a cada 10 s).
 - **Ticks lentos**: veja `cinzas_tick_ms_p99` e o número de jogadores/zonas; zonas sem jogadores continuam
   simulando monstros.
+- **Alertas não chegam**: `docker compose logs alertmanager` (variável faltando ou recusada pelo `amtool`), a página
+  `http://127.0.0.1:9093` (o alerta chegou ao Alertmanager?) e `http://127.0.0.1:9090/alerts` (disparou no Prometheus?);
+  mande um alerta de teste (§8.3).
 - **Banco travado** (`database is locked`): o arquivo aceita vários processos do jogo ao mesmo tempo (serviço de
   contas e, em várias zonas, cada zona — §8.10), mas não um segundo servidor de um processo só nem uma cópia aberta
   por outra ferramenta que segure a trava por mais de 3 s.
@@ -186,7 +312,8 @@ O executável exportado passa no `--autotest` contra um servidor local
 
 A imagem (`deploy/Dockerfile`, base `node:22-bookworm-slim`) roda como `cinzas` (uid 10001), com o código só para
 leitura e o banco no volume `/data`; expõe 7777 (jogo) e 9100 (métricas e `/health`, usado pelo `HEALTHCHECK`).
-O `docker-compose.yml` sobe o servidor e o proxy TLS:
+O `docker-compose.yml` sobe o servidor, o serviço de contas, o proxy TLS e o backup de hora em hora (perfis opcionais:
+`postgres`, `monitoramento` e `copia-externa`):
 
 ```bash
 cd deploy
@@ -202,20 +329,21 @@ docker compose logs -f servidor
 - **Imagem publicada**: ponha `CINZAS_IMAGEM=ghcr.io/<dono>/cinzas-servidor:<versão>` no `deploy/.env` e rode
   `docker compose pull servidor contas && docker compose up -d --no-build`. A variável vale para a zona **e** para as
   contas: as duas leem e migram o mesmo banco, então nunca rodam versões diferentes.
-- **Backup**: `docker compose exec servidor npm run backup -- --db /data/cinzas.db --para /data/backups`.
-  Para agendar no cron do host, entre na pasta `deploy/` do repositório (aqui em `/opt/cinzas`) e use `-T`
-  (sem terminal):
-  `0 * * * * cd /opt/cinzas/deploy && docker compose exec -T servidor npm run --silent backup -- --db /data/cinzas.db --para /data/backups`.
-  Copie para fora da máquina: `docker compose cp servidor:/data/backups ./backups`.
+- **Teto de jogadores**: 200 personagens no mundo ao mesmo tempo (`CINZAS_MAX_PLAYERS`, padrão do Compose; decisão
+  do dono do projeto para o teste público, D149). Com o servidor cheio, a entrada responde "Servidor cheio (200
+  jogadores). Tente de novo em alguns minutos."; contas `gm` e `admin` entram sempre e não ocupam vaga; quem já está no
+  mundo reconecta. `CINZAS_MAX_PLAYERS=0` no `.env` tira o teto.
+- **Backup**: automático, de hora em hora, pelo serviço `backup` (abaixo, "Backups e cópia fora da máquina"). Um backup
+  na hora, além do agendado: `docker compose exec servidor npm run backup -- --db /data/cinzas.db --para /data/backups --manter 14 --diarias`.
 - **Restaurar**: troque o banco **dentro do volume e como o usuário da imagem** (`docker compose run` usa o
   usuário `cinzas`). Não use `docker compose cp` para pôr o banco no lugar: o arquivo entraria como root e o
   servidor não conseguiria gravar nele.
 
   ```bash
-  docker compose stop servidor
+  docker compose stop servidor contas backup     # todos que abrem o banco (o backup não copia no meio da troca)
   docker compose run --rm --no-deps servidor ls /data/backups        # escolha a cópia
   docker compose run --rm --no-deps servidor sh -c 'cp /data/backups/cinzas-AAAA-MM-DDTHH-MM-SS.db /data/cinzas.db && rm -f /data/cinzas.db-wal /data/cinzas.db-shm'
-  docker compose start servidor
+  docker compose start servidor contas backup
   ```
 
   Uma cópia que está fora da máquina entra no volume assim (depois use `/data/backups/restaurar.db` no `cp` acima):
@@ -232,10 +360,97 @@ docker compose logs -f servidor
   `banco`) e `CINZAS_DB=postgres://cinzas@banco:5432/cinzas` na zona e nas contas; a senha fica em
   `deploy/segredos/senha_banco.txt` (fora do git) e chega aos três como segredo do compose. Sem o perfil nada muda
   (SQLite no volume `dados`). Como ligar, backup, restauração e como levar um banco SQLite que já existe para o
-  PostgreSQL: [§8.11, "No Docker Compose"](#811-postgresql). No PostgreSQL o backup é com o `pg_dump` do contêiner
-  `banco`, não com o `npm run backup` da zona (a imagem do jogo não traz o `pg_dump`): **troque a linha do cron**
-  ao ligar o perfil — a antiga continuaria copiando o `/data/cinzas.db`, que ninguém mais usa (o backup avisa no
-  erro padrão quando o `CINZAS_DB` do contêiner é o PostgreSQL).
+  PostgreSQL: [§8.11, "No Docker Compose"](#811-postgresql). No PostgreSQL o backup é o serviço `backup-banco` (o
+  `pg_dump` da imagem `postgres:17`; a imagem do jogo não traz o `pg_dump`), que sobe junto com o perfil; o serviço
+  `backup` do SQLite fica parado sozinho. Se você agendou um backup no cron do host em versões anteriores, tire a
+  linha: ela continuaria copiando o `/data/cinzas.db`, que ninguém mais usa (o backup avisa no erro padrão quando o
+  `CINZAS_DB` do contêiner é o PostgreSQL).
+
+### Backups e cópia fora da máquina
+
+Sem configurar nada, o serviço **`backup`** do Compose faz o backup do SQLite de hora em hora: é o `npm run backup`
+(`tools/backup.mjs`) rodando sem parar, com VACUUM INTO (foto consistente com o jogo no ar) e `integrity_check` antes
+de dar o nome final à cópia. Com o perfil `postgres`, quem faz é o **`backup-banco`** (`deploy/backup-postgres.sh` na
+imagem `postgres:17`: `pg_dump -Fc` conferido com `pg_restore --list`), e o `backup` fica parado. Os dois (D148):
+
+- gravam em `/data/backups` (volume `dados`): `cinzas-AAAA-MM-DDTHH-MM-SS.db` (SQLite) ou `.dump` (PostgreSQL);
+- guardam as **14 cópias mais recentes e a mais nova de cada dia**, e apagam qualquer uma com **mais de 14 dias** —
+  o prazo da política de privacidade para uma conta excluída sumir das cópias. São no máximo umas 27 cópias: veja o
+  tamanho de uma (`docker compose exec servidor ls -l /data/backups`) e confira que cabem no disco com folga;
+- não copiam de novo ao reiniciar: o próximo backup sai quando a cópia mais nova completa 1 h (na hora, se não houver
+  nenhuma recente);
+- uma falha (disco cheio, banco fora do ar) fica no registro (`docker compose logs backup` ou `backup-banco`) e não
+  apaga cópia nenhuma; o serviço tenta de novo na hora seguinte;
+- gravam a métrica do último backup no volume `metricas`, que o node-exporter do perfil `monitoramento` lê: os
+  alertas `BackupAtrasado` (mais de 2 h sem backup conferido), `BackupFalhou` e `CopiaMaisVelhaQue14Dias` (§8.3).
+
+**Cópia fora da máquina** (opcional, desligada por padrão): um disco perdido leva o banco e os backups juntos. O perfil
+`copia-externa` sobe o serviço `copia-externa` (`rclone/rclone`, `deploy/copia-externa.sh`), que de hora em hora faz
+`rclone sync` de `/data/backups` para um armazenamento compatível com S3 (Backblaze B2, Cloudflare R2, Wasabi, AWS S3,
+MinIO...). O **sync espelha** a pasta: o que a rotação apaga aqui some lá também, então o destino também fica nos 14
+dias. Crie o balde e uma chave de acesso só para ele no provedor e ponha no `deploy/.env`:
+
+```bash
+COMPOSE_PROFILES=copia-externa                        # junte com os outros perfis: postgres,monitoramento,copia-externa
+COPIA_DESTINO=cinzas-backups/teste-publico            # balde/pasta
+COPIA_S3_PROVEDOR=Other                               # ou AWS, Cloudflare, Wasabi, Minio... (nomes do rclone)
+COPIA_S3_ENDPOINT=https://s3.us-west-004.backblazeb2.com   # vazio na AWS
+COPIA_S3_REGIAO=us-west-004
+COPIA_S3_CHAVE=...                                    # id da chave de acesso
+COPIA_S3_SEGREDO=...                                  # segredo da chave (entre aspas simples se tiver $)
+COPIA_SENHA_CIFRA=...                                 # openssl rand -hex 24: cifra os arquivos (e os nomes) antes de mandar
+```
+
+- Com `COPIA_SENHA_CIFRA`, o rclone cifra as cópias antes de mandar: o provedor não lê e-mails nem resumos de senha.
+  **Guarde essa senha fora da máquina** (gerenciador de senhas da equipe): sem ela as cópias não voltam. Sem a senha o
+  serviço não sobe; mandar sem cifra exige dizer que é de propósito (`COPIA_SEM_CIFRA=sim`), e aí a política de
+  privacidade, que fala em cópias cifradas, precisa mudar junto.
+- **Versões antigas no provedor**: desligue o versionamento do balde ou ponha uma regra de ciclo de vida que apague
+  versões antigas em até 1 dia (no Backblaze B2, *Lifecycle Settings → Keep only the last version*). Sem isso o arquivo
+  apagado pelo sync fica guardado como versão antiga e passa dos 14 dias da política de privacidade.
+- O provedor passa a guardar dados pessoais (cifrados): a política de privacidade já prevê esse operador na seção
+  "Compartilhamento"; ao ligar a cópia, ponha o nome do provedor lá.
+- `docker compose logs copia-externa` mostra cada sincronização; o alerta `CopiaExternaAtrasada` avisa se nenhuma
+  termina bem em 3 h. Listar o que está lá: `docker compose run --rm copia-externa listar`. Trazer uma cópia de volta
+  (já decifrada): `docker compose run --rm -T copia-externa baixar cinzas-AAAA-MM-DDTHH-MM-SS.db > cinzas-AAAA-MM-DDTHH-MM-SS.db`
+  e depois o passo "Uma cópia que está fora da máquina entra no volume assim" acima.
+
+### Ensaio de restauração
+
+Um backup só vale se volta. Faça este ensaio antes de abrir o teste e depois de cada mudança de versão ou de banco,
+**sem tocar no banco do jogo**. O teste automático `server/test/backup.test.js` faz o mesmo a cada `npm test` (cria
+um banco com personagens, roda o `tools/backup.mjs`, restaura a cópia e confere tudo pelo `Store`) e, no
+`npm run test:pg`, também pelo `pg_dump`/`pg_restore` e pelo `deploy/backup-postgres.sh`; o ensaio confere o que só a
+máquina de verdade tem: o volume, as permissões e as cópias reais.
+
+1. **Escolha a cópia**: `docker compose run --rm --no-deps servidor ls -l /data/backups`.
+2. **SQLite** — abra a cópia só para leitura, confira a integridade e conte o que importa; rode o mesmo comando com
+   `/data/cinzas.db` no lugar da cópia para comparar com o banco do jogo:
+   ```bash
+   docker compose run --rm --no-deps servidor node --disable-warning=ExperimentalWarning -e '
+     const db = new (require("node:sqlite").DatabaseSync)(process.argv[1], { readOnly: true });
+     console.log("integridade:", db.prepare("PRAGMA integrity_check").get().integrity_check);
+     for (const t of ["accounts", "characters", "item_instances", "quest_progress", "audit_log"])
+       console.log(t, db.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get().n);
+     console.log("último salvamento:", new Date(db.prepare("SELECT MAX(updated_at) AS t FROM characters").get().t).toISOString());
+   ' /data/backups/cinzas-AAAA-MM-DDTHH-MM-SS.db
+   ```
+   Espere `integridade: ok`, contagens perto das do jogo e o último salvamento perto da hora da cópia.
+3. **PostgreSQL** — restaure num banco novo (`ensaio`) no próprio servidor, confira e apague (o contêiner
+   `backup-banco` já tem a conexão e o volume com as cópias):
+   ```bash
+   docker compose exec backup-banco sh -c 'export PGPASSWORD="$(cat /run/secrets/senha_banco)"
+     createdb ensaio && pg_restore --no-owner -d ensaio /data/backups/cinzas-AAAA-MM-DDTHH-MM-SS.dump &&
+     psql -d ensaio -c "SELECT COUNT(*) AS contas FROM accounts" -c "SELECT COUNT(*) AS personagens FROM characters" \
+       -c "SELECT to_timestamp(MAX(updated_at) / 1000) AS ultimo_salvamento FROM characters"
+     dropdb ensaio'
+   ```
+   Para comparar com o banco do jogo, rode o `psql` com `-d cinzas`.
+4. **Cópia de fora** (perfil `copia-externa`): traga uma cópia com `baixar` (seção anterior), ponha no volume com o
+   `cat > /data/backups/restaurar.db` de "Restaurar" e repita o passo 2 ou 3 com ela — é o caminho de um desastre de
+   verdade, com a senha da cifra vindo de fora da máquina.
+5. Anote a data, a cópia usada, as contagens e quanto tempo levou. Para restaurar de verdade, siga "Restaurar" acima
+   (SQLite) ou §8.11 (PostgreSQL).
 
 ### TLS pelo proxy
 
@@ -274,13 +489,17 @@ systemctl status cinzas; journalctl -u cinzas -f; systemctl list-timers backup.t
   NodeSource); ajuste o `ExecStart` se `command -v node` disser outro caminho.
 - `Restart=always`; parar manda SIGTERM com 45 s de prazo (`TimeoutStopSec`).
 - `/etc/cinzas/cinzas.env` (só do root, modelo em `deploy/cinzas.env.exemplo`) leva `CINZAS_AUTH=token`, o
-  `CINZAS_TOKEN_SECRET` e o SMTP; `cinzas.service` e `cinzas-contas.service` leem o mesmo arquivo.
+  `CINZAS_TOKEN_SECRET`, o SMTP e o teto de jogadores (`CINZAS_MAX_PLAYERS=200`); `cinzas.service` e
+  `cinzas-contas.service` leem o mesmo arquivo. As métricas das contas ficam em `127.0.0.1:9101` (§8.3).
 - Endurecimento: `ProtectSystem=strict` com só `/var/lib/cinzas` gravável, sem *capabilities*, filtro de chamadas
   de sistema, `/home` e dispositivos inacessíveis (`systemd-analyze security cinzas`: 1,5, "OK"). Sem
   `MemoryDenyWriteExecute`, que quebra o JIT do V8.
-- `backup.timer` roda `npm run backup -- --db /var/lib/cinzas/cinzas.db --para /var/lib/cinzas/backups` de hora em
-  hora (mantém as 14 mais recentes; `--manter N` para mais). Leve cópias para fora da máquina (rsync, rclone): um
-  disco perdido leva o banco e os backups juntos.
+- `backup.timer` roda `npm run backup -- --db /var/lib/cinzas/cinzas.db --para /var/lib/cinzas/backups --manter 14
+  --diarias` de hora em hora: a mesma rotação do Compose (as 14 mais recentes e a mais nova de cada dia, nada com mais
+  de 14 dias). Leve cópias para fora da máquina (o `deploy/copia-externa.sh` roda com o `rclone` da máquina:
+  `COPIA_ORIGEM=/var/lib/cinzas/backups`, `COPIA_DESTINO` e as variáveis `RCLONE_CONFIG_EXTERNO_*`): um disco perdido
+  leva o banco e os backups juntos. Com um node-exporter na máquina, `--metrica` grava a métrica do backup num arquivo
+  `.prom` da pasta do coletor *textfile* dele (o arquivo precisa ficar legível para o usuário do node-exporter).
 - **Restaurar** (como o usuário `cinzas`, para o arquivo continuar dele):
   `sudo systemctl stop cinzas`, depois
   `sudo -u cinzas cp /var/lib/cinzas/backups/cinzas-AAAA-MM-DDTHH-MM-SS.db /var/lib/cinzas/cinzas.db`,
@@ -296,8 +515,12 @@ systemctl status cinzas; journalctl -u cinzas -f; systemctl list-timers backup.t
 - Responsável e contato preenchidos em `docs/TERMOS.md` e `docs/PRIVACIDADE.md` (e revisados por assessoria jurídica).
 - Criar conta pelo cliente publicado: o e-mail com o código chega, a confirmação funciona e o login por token entra.
 - `docker compose ps` saudável; de outra máquina, `curl http://IP:9100/health` **não** pode responder (nem
-  `curl http://IP:7777/`, que só o proxy alcança).
-- Backup agendado e uma restauração testada.
+  `curl http://IP:7777/` nem `curl http://IP:9101/metrics`, que só a máquina alcança).
+- Backup rodando (`docker compose logs backup`), o **ensaio de restauração** feito (acima) e a decisão sobre a cópia
+  fora da máquina tomada (perfil `copia-externa`, com cifra e sem versões antigas no provedor).
+- Monitoramento no ar (`--profile monitoramento`), pelo menos um canal de alerta ligado e conferido com o alerta de
+  teste (§8.3), e o **monitor externo** de `https://DOMINIO/contas/saude` cadastrado.
+- Teto de jogadores conferido (`CINZAS_MAX_PLAYERS`, 200 por padrão).
 - Release publicada; se saiu sem assinatura, avise os jogadores sobre o SmartScreen e o Gatekeeper.
 
 ## 8.9 Contas, segurança e privacidade (teste público)
@@ -320,7 +543,7 @@ sem derrubar o serviço.
 
 ```bash
 npm start -- --auth token --token-secret "$CINZAS_TOKEN_SECRET" --tls-cert cert.pem --tls-key key.pem \
-  --max-conn-per-ip 8 --trust-proxy --log-format json --shutdown-grace 30 --audit-days 90
+  --max-conn-per-ip 8 --trust-proxy --log-format json --shutdown-grace 30 --audit-days 90 --max-players 200
 ```
 
 | Opção | Efeito |
@@ -333,6 +556,7 @@ npm start -- --auth token --token-secret "$CINZAS_TOKEN_SECRET" --tls-cert cert.
 | `--log-format json` | Uma linha JSON por evento (para coletores de log). |
 | `--shutdown-grace 30` | No `SIGTERM`: avisa os jogadores ("o servidor vai reiniciar em 30 s"), recusa novos logins, salva e sai. `Ctrl+C` sai na hora (salvando). |
 | `--audit-days 90` | Retenção da auditoria; códigos vencidos também são apagados (de hora em hora). |
+| `--max-players N` (ou `CINZAS_MAX_PLAYERS`) | Teto de personagens no mundo (0 = sem limite, o padrão; 200 no Docker Compose). Cheio, a entrada responde `server_full` com "Servidor cheio (N jogadores). Tente de novo em alguns minutos."; contas `gm` e `admin` entram sempre e não ocupam vaga, e quem já está no mundo reconecta. Com várias zonas a conta é do mundo inteiro (os personagens das outras zonas entram na soma): use o mesmo valor em todas. Métricas: `cinzas_max_players` e `cinzas_server_full_total`. |
 
 **Auditoria** (`audit_log`): entradas e falhas (com IP), comandos de mestre, saque, compras, refino,
 recompensas de missão, criação/confirmação/exclusão de conta, troca de senha, expulsões. Consulta:
@@ -493,9 +717,11 @@ docker compose logs servidor | grep banco:          # "banco: PostgreSQL cinzas@
   segredo é `/dev/null` e nada muda. O arquivo fica com o uid 10001 (o usuário da imagem do jogo) e modo 0600; o
   PostgreSQL o lê como root ao iniciar. A senha só é usada na **primeira** inicialização do volume `banco`: para
   trocá-la depois, `ALTER ROLE cinzas PASSWORD '...'` no banco e o arquivo novo, juntos.
-- **Backup**: `docker compose exec -T banco pg_dump -U cinzas -Fc cinzas > backups/cinzas-$(date +%F-%H%M).dump`
-  (formato custom, foto consistente com o jogo rodando). No cron do host, como o backup do SQLite em §8.8. Confira
-  com `pg_restore --list` e leve as cópias para fora da máquina.
+- **Backup**: automático, de hora em hora, pelo serviço `backup-banco`, que sobe junto com o perfil (§8.8, "Backups e
+  cópia fora da máquina"): `pg_dump -Fc` conferido com `pg_restore --list` em `/data/backups` (volume `dados`), com a
+  rotação de 14 dias e a métrica do último backup. Um dump na hora, fora do agendado:
+  `docker compose exec -T banco pg_dump -U cinzas -Fc cinzas > cinzas-$(date +%F-%H%M).dump`. Ensaio de restauração:
+  §8.8.
 - **Restaurar**: `docker compose stop servidor contas`, depois
   `docker compose exec -T banco pg_restore -U cinzas -d cinzas --clean --if-exists --no-owner < backups/arquivo.dump`
   e `docker compose start servidor contas`.
@@ -529,16 +755,17 @@ SQLite, e que um banco importado responde igual nos dois.
 | `busy_timeout = 3000` | `lock_timeout = 3s`; `statement_timeout = 10s` |
 | `rowid` implícito de `account_codes` | coluna `rid` (identidade) |
 
-**Backup** (agende de hora em hora, como no SQLite):
+**Backup** (agende de hora em hora, como no SQLite; no Docker Compose o serviço `backup-banco` já faz isso):
 
 ```bash
-npm run backup -- --db "$CINZAS_DB" --para backups --manter 14
+npm run backup -- --db "$CINZAS_DB" --para backups --manter 14 --diarias
 ```
 
 Roda `pg_dump -Fc` (formato custom: comprimido, foto consistente de uma transação, sem parar o jogo), confere o
-arquivo com `pg_restore --list` e mantém só as 14 cópias mais recentes (`backups/cinzas-AAAA-MM-DDTHH-MM-SS.dump`).
-O arquivo é gravado como `.dump.parcial` e só ganha o nome final depois de conferido: um backup que falha ou é
-interrompido não apaga outro nem fica parecendo um backup bom (sobra de uma execução morta: `.parcial`, apague).
+arquivo com `pg_restore --list` e faz a mesma rotação do SQLite: as 14 cópias mais recentes e a mais nova de cada dia,
+nada com mais de 14 dias (`backups/cinzas-AAAA-MM-DDTHH-MM-SS.dump`). O arquivo é gravado como `.dump.parcial` e só
+ganha o nome final depois de conferido: um backup que falha ou é interrompido não apaga outro nem fica parecendo um
+backup bom (sobras de execuções mortas, `.parcial` com mais de 1 h, saem na rotação seguinte).
 A senha vai por `PGPASSWORD`, não pela linha de comando; com `?schema=` o dump é só daquele esquema. O `pg_dump`
 precisa ser da versão do servidor ou mais novo (`--pg-bin` ou `CINZAS_PG_BIN` apontam a pasta dos binários).
 Para perder menos de uma hora num desastre, some o arquivamento contínuo de WAL do próprio PostgreSQL
@@ -592,9 +819,11 @@ um núcleo); memória ~30 MB maior (o worker e o `pg`). Medido de novo depois de
 entrarem (mesmo comando, servidor próprio nas portas 7762/7763 com `--url`/`--metricas`): tick p50 4,5, p95 9,9,
 p99 13,9, máx 34,8 ms, 0 de 599 acima de 50 ms; ponte 5,5 chamadas/s, 2,0 ms parados por segundo, chamada p99
 3,4 ms e máx 4,7 ms. A conferência de suspensões e silêncios (a cada minuto, no tick) busca todas as contas
-on-line numa consulta só (`findAccountsByIds`), não uma ida e volta por jogador. As
-métricas `cinzas_db_calls_per_s`, `cinzas_db_wait_ms_per_s` e `cinzas_db_call_ms_p50|p99|max` (só com
-PostgreSQL) mostram isso em produção; alerta sugerido: `db_call_ms_p99 > 5` ou `db_wait_ms_per_s > 50` por 5 min.
+on-line numa consulta só (`findAccountsByIds`), não uma ida e volta por jogador. Em produção, os contadores
+`cinzas_db_calls_total` e `cinzas_db_wait_seconds_total` e os medidores `cinzas_db_call_ms_p50|p99|max` (só com
+PostgreSQL) mostram isso: `rate(cinzas_db_wait_seconds_total[5m]) * 1000` é o tempo parado em ms por segundo, no
+painel "Espera pelo banco"; o alerta `BancoLento` dispara com mais de 50 ms por segundo ou chamada p99 acima de 5 ms
+por 5 min (§8.3).
 
 **Falhas** (conferidas em `store-pg.test.js`):
 - Espera de trava acima de 3 s ou comando acima de 10 s viram erro (o pedido falha, o jogo segue). A ponte

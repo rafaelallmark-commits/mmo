@@ -186,6 +186,7 @@ export class GameServer {
       this.wss.on('connection', (ws, req) => this.onConnection(ws, req));
       const tickMs = 1000 / this.opts.tickHz;
       let last = performance.now();
+      this.metrics.lastTickAt = last; // a saúde conta o laço parado a partir daqui, não da carga do banco e dos dados
       this.timer = setInterval(() => {
         const t = performance.now();
         const dt = Math.min(250, t - last) * this.opts.timeScale;

@@ -1,15 +1,16 @@
 // Operação: métricas como contadores para o Prometheus, saúde que acusa o laço do jogo parado, métricas só
-// pela rede interna, teto de jogadores (server_full) e as métricas do serviço de contas.
+// pela rede interna, teto de jogadores (server_full), as métricas do serviço de contas e a configuração do
+// monitoramento em deploy/ (painel, alertas, Prometheus, compose e o modelo do Alertmanager).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { GameServer } from '../src/server.js';
 import { AccountsService } from '../src/contas.js';
-import { isInternalAddress } from '../src/metrics.js';
+import { AccountsMetrics, Metrics, isInternalAddress, prometheusText } from '../src/metrics.js';
 import { SimClient, sleep } from './helpers/client.js';
 
 const SECRET = 'segredo-de-teste-0123456789-operacao';
@@ -91,7 +92,7 @@ test('métricas: CPU, mensagens, bytes, ticks e espera do banco são contadores 
 
 test('saúde: /health responde 503 quando o laço do jogo para e volta a 200 quando ele anda', async () => {
   const dir = tmp('cinzas-saude-');
-  const zone = new GameServer({ port: 0, host: '127.0.0.1', dbPath: join(dir, 's.db'), seed: 6, log: false, metricsPort: 0, tickStallMs: 400 });
+  const zone = new GameServer({ port: 0, host: '127.0.0.1', dbPath: join(dir, 's.db'), seed: 6, log: false, metricsPort: 0, tickStallMs: 1000 });
   await zone.start();
   const health = async () => { const r = await fetch(`http://127.0.0.1:${zone.metricsPort}/health`); return { status: r.status, body: await r.json() }; };
   try {
@@ -100,14 +101,14 @@ test('saúde: /health responde 503 quando o laço do jogo para e volta a 200 qua
     assert.equal(h.body.ok, true);
     // o laço para (o processo e o HTTP continuam vivos): depois do limite, 503
     clearInterval(zone.timer);
-    await sleep(700);
+    await sleep(1500);
     h = await health();
     assert.equal(h.status, 503, 'contêiner unhealthy');
     assert.equal(h.body.ok, false);
-    assert.ok(h.body.lastTickAgoMs >= 400, `último tick há ${h.body.lastTickAgoMs} ms`);
+    assert.ok(h.body.lastTickAgoMs >= 1000, `último tick há ${h.body.lastTickAgoMs} ms`);
     assert.match(h.body.erro, /laço do jogo parado/);
     const prom = await scrape(zone.metricsPort);
-    assert.ok(prom.values.cinzas_last_tick_age_seconds >= 0.4, 'idade do último tick na métrica');
+    assert.ok(prom.values.cinzas_last_tick_age_seconds >= 1, 'idade do último tick na métrica');
     // um tick e a saúde volta
     zone.step(100);
     h = await health();
@@ -175,6 +176,11 @@ test('teto de jogadores: cheio, enter responde server_full; gm e admin passam se
     // vagou: quem esperava entra
     await b.c.close();
     for (let i = 0; i < 50 && zone.byChar.has(b.charId); i++) await sleep(20);
+    // várias zonas: quem está on-line em outra zona (anunciado pelo mundo) ocupa vaga, e não conta duas vezes ao entrar por aqui
+    zone.remote = new Map([[9999, { name: 'Remota', zoneId: 'zona-b' }]]);
+    assert.equal((await c.c.request('enter', { charId: c.charId })).code, 'server_full', '1 aqui + 1 em outra zona = cheio');
+    assert.equal(zone.serverFull({ role: 'player' }, 9999), null, 'o personagem da outra zona passa');
+    delete zone.remote;
     const now = await c.c.request('enter', { charId: c.charId });
     assert.equal(now.ok, true, now.reason);
     await a.c.close(); await c.c.close(); await a2.close();
@@ -227,4 +233,116 @@ test('serviço de contas: pedidos, cadastros e falhas de e-mail em GET /metrics 
     assert.equal(values['cinzas_accounts_requests_total{route="outra",status="404"}'], 2, 'caminho desconhecido não vira série nova');
     assert.equal((await fetch(`http://127.0.0.1:${acc.metricsPort}/metrics`, { headers: { 'x-forwarded-for': '198.51.100.7' } })).status, 403);
   } finally { await acc.stop(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+// ---------- configuração do monitoramento (deploy/) ----------
+const DEPLOY = join(ROOT, '..', 'deploy');
+const readDeploy = (...p) => readFileSync(join(DEPLOY, ...p), 'utf8');
+
+// expressões do PromQL das regras (expr: em uma linha ou em bloco "expr: |")
+function ruleExprs(yaml) {
+  const out = [];
+  const lines = yaml.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^(\s*)expr:\s*(.*)$/.exec(lines[i]);
+    if (!m) continue;
+    if (m[2].trim() !== '|') { out.push(m[2]); continue; }
+    const block = [];
+    while (i + 1 < lines.length && (lines[i + 1].trim() === '' || lines[i + 1].search(/\S/) > m[1].length)) block.push(lines[++i]);
+    out.push(block.join(' '));
+  }
+  return out;
+}
+
+test('painel e alertas: só métricas que existem, e contador (_total) sempre dentro de rate() ou increase()', () => {
+  // tipos de todas as métricas que o jogo exporta (zona com PostgreSQL, contas) ou grava (backups, cópia externa)
+  const types = {};
+  const zoneText = prometheusText(new Metrics().snapshot({ players: 0, sessions: 0, zones: 1, maxPlayers: 200, fullRefusals: 0,
+    db: { totalCalls: 0, totalWaitMs: 0, p50Ms: 0, p99Ms: 0, maxMs: 0 } }));
+  const acc = new AccountsMetrics();
+  acc.request('/saude', 200);
+  for (const text of [zoneText, acc.text()]) for (const m of text.matchAll(/^# TYPE (\S+) (\S+)$/gm)) types[m[1]] = m[2];
+  for (const [file, re] of [[join(ROOT, 'tools', 'backup.mjs'), /cinzas_backup_[a-z_]+/g], [join(DEPLOY, 'copia-externa.sh'), /cinzas_offsite_[a-z_]+/g]]) {
+    for (const [name] of readFileSync(file, 'utf8').matchAll(re)) types[name] = 'gauge';
+  }
+  const panel = JSON.parse(readDeploy('monitoramento', 'grafana', 'painel-cinzas.json'));
+  const exprs = [
+    ...panel.panels.flatMap((p) => (p.targets ?? []).map((t) => [`painel "${p.title}"`, t.expr])),
+    ...ruleExprs(readDeploy('monitoramento', 'alertas.yml')).map((e) => ['alertas.yml', e]),
+  ];
+  assert.ok(exprs.length > 30);
+  for (const [where, expr] of exprs) {
+    for (const [name] of expr.matchAll(/\bcinzas_[a-z0-9_]+/g)) {
+      assert.ok(types[name], `${where}: ${name} não é exportada por ninguém (${expr})`);
+      const uses = expr.split(name).length - 1;
+      const inRate = [...expr.matchAll(new RegExp(`\\b(rate|increase)\\(${name}\\b`, 'g'))].length;
+      if (types[name] === 'counter') assert.equal(inRate, uses, `${where}: o contador ${name} precisa de rate()/increase() (${expr})`);
+      else assert.equal(inRate, 0, `${where}: ${name} é medidor, não vai em rate() (${expr})`);
+    }
+    for (const old of ['_per_s', 'cinzas_cpu_pct']) assert.ok(!expr.includes(old), `${where}: métrica antiga ${old}`);
+  }
+  // os tipos esperados do que mudou para contador
+  for (const n of ['cinzas_cpu_seconds_total', 'cinzas_bytes_out_total', 'cinzas_bytes_in_total', 'cinzas_msgs_in_total', 'cinzas_msgs_out_total', 'cinzas_db_wait_seconds_total', 'cinzas_accounts_email_failures_total']) {
+    assert.equal(types[n], 'counter', n);
+  }
+});
+
+test('compose e Prometheus ligados: alertas vão para o Alertmanager, contas e máquina são coletados, teto de 200, imagens com versão fixa', () => {
+  const prom = readDeploy('monitoramento', 'prometheus.yml');
+  assert.match(prom, /alerting:\s+alertmanagers:\s+- static_configs:\s+- targets: \["alertmanager:9093"\]/);
+  for (const t of ['servidor:9100', 'contas:9101', 'node-exporter:9100']) assert.ok(prom.includes(`"${t}"`), `alvo ${t}`);
+  const compose = readDeploy('docker-compose.yml');
+  assert.match(compose, /CINZAS_MAX_PLAYERS: \$\{CINZAS_MAX_PLAYERS:-200\}/);
+  assert.match(compose, /"--metrics-port", "9101", "--metrics-host", "0.0.0.0"/);
+  assert.match(compose, /"127\.0\.0\.1:9101:9101"/, 'métricas das contas só no 127.0.0.1 da máquina');
+  for (const image of compose.matchAll(/^\s+image: (\S+)$/gm)) {
+    if (image[1].startsWith('${CINZAS_IMAGEM')) continue;
+    assert.match(image[1], /:(v?\d+[\w.-]*)$/, `imagem com versão fixa: ${image[1]}`);
+  }
+  for (const s of ['alertmanager:', 'node-exporter:', 'backup:', 'backup-banco:', 'copia-externa:']) assert.ok(compose.includes(`\n  ${s}\n`), `serviço ${s}`);
+  assert.match(compose, /- \/:\/host:ro,rslave/, 'node-exporter só lê a máquina');
+  // nenhum segredo de alerta no git: o modelo só tem ${...}
+  const model = readDeploy('monitoramento', 'alertmanager.yml');
+  for (const line of model.split('\n').filter((l) => /^\s*(auth_password|bot_token|webhook_url|chat_id|to|smarthost):/.test(l))) {
+    assert.match(line, /\$\{ALERTA_[A-Z_]+(:int)?\}/, `valor vem do ambiente: ${line.trim()}`);
+  }
+});
+
+test('modelo do Alertmanager: sem variáveis sobe sem canal; cada canal entra com as suas, com aspas do YAML e chat_id numérico; variável faltando é erro', () => {
+  const script = join(DEPLOY, 'monitoramento', 'alertmanager-entrada.sh');
+  const gen = (env) => spawnSync('sh', [script, '--gerar'], { env: { PATH: process.env.PATH, ALERTA_MODELO: join(DEPLOY, 'monitoramento', 'alertmanager.yml'), ...env }, encoding: 'utf8' });
+  const body = (out) => out.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+  let r = gen({});
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /receivers:\s+- name: equipe\s*$/);
+  assert.ok(!/_configs:/.test(r.stdout), 'nenhum canal sem variável');
+  const all = {
+    ALERTA_EMAIL_PARA: 'equipe@exemplo.com.br', ALERTA_SMTP_SERVIDOR: 'smtp.exemplo.com.br:587', ALERTA_SMTP_DE: 'Alertas <alertas@exemplo.com.br>',
+    ALERTA_SMTP_USUARIO: 'alertas', ALERTA_SMTP_SENHA: `s3nh'a"com\\#:{x}`,
+    ALERTA_TELEGRAM_TOKEN: '123456:ABC-def', ALERTA_TELEGRAM_CHAT: '-1001234567890',
+    ALERTA_DISCORD_WEBHOOK: 'https://discord.com/api/webhooks/1/abc',
+  };
+  r = gen(all);
+  assert.equal(r.status, 0, r.stderr);
+  const out = body(r.stdout);
+  for (const k of ['email_configs:', 'telegram_configs:', 'discord_configs:']) assert.ok(out.includes(k), k);
+  assert.match(out, /auth_password: 's3nh''a"com\\#:\{x\}'/, 'aspa simples dobrada, o resto literal');
+  assert.match(out, /chat_id: -1001234567890\n/, 'chat_id sem aspas (o Alertmanager quer número)');
+  assert.match(out, /to: 'equipe@exemplo\.com\.br'/);
+  assert.ok(!out.includes('${'), 'nenhuma variável sobrando');
+  // login do SMTP é opcional (relé sem autenticação)
+  const { ALERTA_SMTP_USUARIO, ALERTA_SMTP_SENHA, ...semLogin } = all;
+  r = gen(semLogin);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(!r.stdout.includes('auth_username'));
+  // canal ligado pela metade: erro claro, nada sobe
+  r = gen({ ALERTA_TELEGRAM_TOKEN: '1:x' });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /ALERTA_TELEGRAM_CHAT está vazia/);
+  r = gen({ ALERTA_TELEGRAM_TOKEN: '1:x', ALERTA_TELEGRAM_CHAT: 'grupo' });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /ALERTA_TELEGRAM_CHAT precisa ser um número inteiro/);
+  r = gen({ ALERTA_EMAIL_PARA: 'a@b.c' });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /ALERTA_SMTP_DE está vazia/);
 });

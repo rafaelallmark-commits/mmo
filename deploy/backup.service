@@ -1,5 +1,6 @@
 # Backup a quente do banco de CINZAS DO MERIDIANO (VACUUM INTO: cópia consistente com o servidor rodando,
-# confere a integridade e mantém as 14 mais recentes). Disparado de hora em hora por backup.timer.
+# confere a integridade; ficam as 14 mais recentes e a mais nova de cada dia, nada com mais de 14 dias, como
+# promete a política de privacidade). Disparado de hora em hora por backup.timer.
 #   cp deploy/backup.service deploy/backup.timer /etc/systemd/system/
 #   systemctl daemon-reload && systemctl enable --now backup.timer
 #   systemctl start backup.service      # backup imediato;  journalctl -u backup.service
@@ -18,7 +19,7 @@ Group=cinzas
 WorkingDirectory=/opt/cinzas/server
 # npm sem verificação de atualização e sem arquivos de log; HOME no diretório gravável do serviço.
 Environment=NODE_ENV=production HOME=/var/lib/cinzas NPM_CONFIG_UPDATE_NOTIFIER=false NPM_CONFIG_LOGS_MAX=0
-ExecStart=/usr/bin/npm run backup -- --db /var/lib/cinzas/cinzas.db --para /var/lib/cinzas/backups
+ExecStart=/usr/bin/npm run backup -- --db /var/lib/cinzas/cinzas.db --para /var/lib/cinzas/backups --manter 14 --diarias
 UMask=0027
 Nice=10
 IOSchedulingClass=idle

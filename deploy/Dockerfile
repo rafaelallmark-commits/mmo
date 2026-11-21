@@ -32,10 +32,12 @@ COPY docs/TERMOS.md docs/PRIVACIDADE.md docs/
 
 # Usuário sem privilégios (uid/gid 10001). O código fica do root (só leitura para o serviço);
 # o único lugar gravável é /data. Para montar uma pasta do host em /data: chown 10001:10001 nela.
+# /metricas: onde o serviço "backup" do compose grava a métrica do último backup (volume "metricas", que o
+# node-exporter lê); a pasta da imagem dá o dono certo ao volume novo.
 RUN groupadd --gid 10001 cinzas \
  && useradd --uid 10001 --gid cinzas --create-home --home-dir /home/cinzas --shell /usr/sbin/nologin cinzas \
- && mkdir -p /data \
- && chown cinzas:cinzas /data
+ && mkdir -p /data /metricas \
+ && chown cinzas:cinzas /data /metricas
 VOLUME /data
 USER cinzas
 WORKDIR /opt/cinzas/server

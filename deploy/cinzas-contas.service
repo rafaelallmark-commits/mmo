@@ -21,7 +21,8 @@ Environment=NODE_ENV=production
 # modelo em deploy/cinzas.env.exemplo. O "-" deixa subir sem ele (login por senha, só para testes).
 EnvironmentFile=/etc/cinzas/cinzas.env
 # Escuta só em 127.0.0.1: o Caddy da máquina termina o TLS e repassa /contas/*.
-ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning src/contas-main.js --host 127.0.0.1 --port 7780 --db /var/lib/cinzas/cinzas.db --email-dir /var/lib/cinzas/emails --docs-dir /opt/cinzas/docs
+# Métricas (pedidos, cadastros, falhas de e-mail) em http://127.0.0.1:9101/metrics, só nesta máquina.
+ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning src/contas-main.js --host 127.0.0.1 --port 7780 --db /var/lib/cinzas/cinzas.db --email-dir /var/lib/cinzas/emails --docs-dir /opt/cinzas/docs --metrics-port 9101 --metrics-host 127.0.0.1
 Restart=always
 RestartSec=5
 KillSignal=SIGTERM
