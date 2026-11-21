@@ -7,7 +7,8 @@ do Marco 4 ([relatorio-carga.md](relatorio-carga.md), [relatorio-cenarios.md](re
 
 - **Servidor**: Node.js ≥ 22.13. Em desenvolvimento, nada mais (SQLite embutido, `node:sqlite`); em produção,
   **PostgreSQL** central (testado no 16; §8.11). Dependências: `ws` e `pg` (só carregado com PostgreSQL).
-- **Cliente**: Godot 4.3 (renderizador Compatibility). Roda pelo editor ou exportado.
+- **Cliente**: Godot 4.3 (renderizador Compatibility). Roda pelo editor ou exportado; para jogar, um computador de
+  64 bits (Windows 10/11, macOS 10.12 ou mais novo, Linux x86_64) com placa de vídeo de OpenGL 3.3 ([GUIA.md](GUIA.md), §1).
 - **Implantação** (teste público, §8.8): Docker 25+ com Compose, ou systemd; um domínio com DNS para o TLS.
 
 ## 8.2 Subir o servidor
@@ -87,6 +88,14 @@ Esta seção é o SQLite (desenvolvimento). Em produção o banco é o PostgreSQ
 | `npm run simular-progressao` | Simulação acelerada da caça solo do nível 1 ao teto (25) para as 8 classes; escreve `docs/relatorio-progressao.md` (a versão no git é essa rodada completa, do 1 ao 25, com 8 sementes fixas). | ~13 min |
 | `npm run validate-data` | Valida os JSON de `data/`. | segundos |
 
+Fora de `server/`, na raiz do repositório:
+
+| Comando | O que faz | Tempo |
+|---|---|---|
+| `godot --headless --path client -- --autotest --server=ws://127.0.0.1:7777` | Autotest do cliente contra um servidor rodando (`npm run dev`): conecta, cria conta e personagem, entra, anda, derrota um Rato de Sulco e coleta o saque; termina com `[autotest] OK` e código 0 (qualquer falha: código 1). O CI roda o mesmo (critério 9 do Marco 1). | ~30 s |
+| `deploy/teste-conteiner.sh <imagem> [versão]` | Teste rápido de uma imagem do servidor (saúde, usuário, `hello` com a versão, backup, parada graciosa): o mesmo do CI e da release. | ~1 min |
+| `godot --headless --path client -- --licenses=LICENCAS-TERCEIROS.txt` | Grava o arquivo de créditos e licenças de terceiros que vai nos pacotes (o mesmo texto da tela *Créditos e licenças*). | segundos |
+
 ## 8.7 Solução de problemas
 
 - **Cliente não conecta**: confira a porta e `--host`; `curl http://127.0.0.1:9100/health`.
@@ -97,43 +106,81 @@ Esta seção é o SQLite (desenvolvimento). Em produção o banco é o PostgreSQ
   por outra ferramenta que segure a trava por mais de 3 s.
 - **Godot headless** imprime `Parameter "m" is null` e `SHADER ERROR: Global uniform '...' does not exist`
   (renderizador dummy, sem uniformes globais): inofensivos. O CI só falha com `SCRIPT ERROR` ou `Parse Error`.
+- **Jogador diz que o jogo nem abre**: peça o `godot.log` (e o `godot<data>.log` mais recente, se ele abriu o jogo
+  de novo). Fica em `%APPDATA%\Godot\app_userdata\Cinzas do Meridiano\logs\` no Windows,
+  `~/Library/Application Support/Godot/app_userdata/Cinzas do Meridiano/logs/` no macOS e
+  `~/.local/share/godot/app_userdata/Cinzas do Meridiano/logs/` no Linux ([GUIA.md](GUIA.md), §2). A primeira linha
+  diz a versão do Godot; erro de OpenGL ou de driver aparece logo no começo.
+- **Navegador em `https://DOMINIO/`** mostra a página do jogo (`deploy/site`); o jogo continua em `wss://DOMINIO`
+  (o proxy separa pelo pedido de WebSocket). Antes desta página, o navegador recebia 426.
 
 ## 8.8 Implantação (teste público)
 
-Arquivos: `.github/workflows/ci.yml` e `release.yml`, `client/export_presets.cfg`, `.dockerignore` e a pasta
-`deploy/` (`Dockerfile`, `docker-compose.yml`, `Caddyfile`, `cinzas.service`, `backup.service`, `backup.timer`).
+Arquivos: `.github/workflows/ci.yml` e `release.yml`, `client/export_presets.cfg`, `client/assets/icon/`,
+`.dockerignore` e a pasta `deploy/` (`Dockerfile`, `docker-compose.yml`, `Caddyfile`, `site/` (página do jogo),
+`teste-conteiner.sh`, `cinzas.service`, `backup.service`, `backup.timer`).
 
 ### Integração contínua (`ci.yml`)
 
-Roda em todo push e pull request (e à mão, em *Actions → CI → Run workflow*).
+Roda em todo push de ramo e pull request (e à mão, em *Actions → CI → Run workflow*). O push de uma tag não o
+dispara de novo: a release chama este mesmo arquivo (`workflow_call`), com a versão da tag.
 
 | Job | O que faz | Falha quando |
 |---|---|---|
 | `servidor` | Node 22 (cache do npm), `npm ci`, `npm run validate-data`, `npm test` (~3 min). | Dado inválido ou teste quebrado. |
 | `servidor-postgres` | A mesma suíte no PostgreSQL 17: contêiner de serviço do job (`postgres:17`, só em localhost) e `npm test` com `CINZAS_TEST_PG` apontando para ele, um esquema isolado por banco de teste (§8.11). | Teste quebrado no PostgreSQL (SQL que diverge do SQLite, migração que falta num dos bancos). |
-| `cliente` | Baixa o Godot 4.3 oficial (SHA-512 conferido, guardado em cache) e roda `--headless --import` em `client/`. | A saída tem `SCRIPT ERROR` ou `Parse Error` (o Godot sai com código 0 mesmo assim; o registro fica como artefato). |
-| `docker` | `docker build -f deploy/Dockerfile .` (sem publicar) e um teste rápido do contêiner: saúde, usuário sem privilégios, `hello` no WebSocket, backup e parada graciosa. | A imagem não constrói ou o contêiner não passa no teste. |
+| `cliente` | Baixa o Godot 4.3 oficial (SHA-512 conferido, guardado em cache) e roda `--headless --import` em `client/`. Depois sobe o servidor (`node src/main.js --dev`, banco descartável, porta 7777) e roda o cliente headless com `--autotest` contra ele: conta, personagem, mundo, movimento, combate e saque pelo protocolo de verdade (critério 9 do Marco 1). Os registros da importação, do autotest e do servidor ficam como artefato (`registros-cliente`). | A saída tem `SCRIPT ERROR` ou `Parse Error` (o Godot sai com código 0 mesmo assim), o servidor não sobe em 60 s ou o autotest não termina com `[autotest] OK` e código 0 (o autotest desiste sozinho em 150 s; o passo, em 5 min). |
+| `docker` | `docker build -f deploy/Dockerfile .` (sem publicar; chamado pela release, com `CINZAS_VERSION` = versão da tag) e o teste rápido do contêiner, `deploy/teste-conteiner.sh`: saúde, usuário sem privilégios, `hello` no WebSocket com a versão esperada (a da tag ou a do `package.json`), backup, parada graciosa e a versão no registro de início. | A imagem não constrói ou o contêiner não passa no teste. |
 
 ### Releases (`release.yml`)
 
 Publicar uma versão: `git tag v0.4.0 && git push origin v0.4.0`. Tags com hífen (`v0.4.0-teste.1`) viram
-*pre-release*. O fluxo:
+*pre-release*. A versão é a tag inteira sem o `v`: `v0.4.0-teste.2` vale `0.4.0-teste.2` no cliente, no servidor, nos
+nomes dos pacotes e nas notas (D150). O fluxo:
 
-1. **testes**: os mesmos do CI; se falharem, nada é publicado.
-2. **exportar** (Ubuntu 24.04): baixa o Godot 4.3 e o `.tpz` de modelos de exportação (1 GB, SHA-512 conferido),
-   extrai só os de desktop (~240 MB, em cache), grava a versão da tag (`X.Y.Z`) em `config/version` (vai para o
-   `Info.plist` e para o recurso de versão do `.exe`), importa o projeto e exporta os presets `Linux`,
-   `Windows Desktop` e `macOS`. Assina o `.exe` se houver os segredos do Windows.
-3. **macos** (runner macOS, só com os 5 segredos da Apple): assina de novo o `.app` com Developer ID, runtime
-   endurecido e carimbo de tempo, notariza, grampeia o ticket e confere com o Gatekeeper (`spctl`).
-4. **publicar**: cria a release da tag com `CinzasDoMeridiano-<versão>-linux-x86_64.tar.gz`,
-   `…-windows-x86_64.zip`, `…-macos-universal.zip`, `SHA256SUMS.txt` e notas que dizem o que está assinado.
-5. **imagem**: publica `ghcr.io/<dono>/cinzas-servidor:<versão>` (e `<maior>.<menor>`; `latest` só em versão
-   final). O pacote nasce privado no ghcr.io: torne-o público nas configurações do pacote ou faça `docker login ghcr.io`.
+1. **versao**: tira o `v` da tag e confere o formato com a mesma regra do servidor (começa com letra ou número; só
+   letras, números e `. + _ -`; até 64); tag fora disso para a release aqui. Disparo manual: `0.0.0-dev.<commit>`.
+2. **ci**: **os mesmos do CI**, literalmente: o `ci.yml` chamado como workflow reutilizável (`workflow_call`), com a
+   versão — dados e testes no SQLite e no PostgreSQL, importação do cliente e autotest contra um servidor de verdade,
+   imagem com o teste rápido do contêiner (o `hello` tem que trazer a versão da tag). Sem os quatro jobs verdes,
+   nada é publicado: nem a imagem, nem a release.
+3. **exportar** (Ubuntu 24.04, em paralelo com o CI): baixa o Godot 4.3 e o `.tpz` de modelos de exportação (1 GB,
+   SHA-512 conferido), extrai só os de desktop (~240 MB, em cache) e grava no `project.godot` da cópia de trabalho
+   (nada é commitado) a parte numérica da versão em `config/version` (vai para o `Info.plist` e para o recurso de
+   versão do `.exe`) e a seção `[cinzas]`: `versao` (a inteira, que o título mostra e o `/bug` leva),
+   `servidor_padrao` e `pagina_download` (abaixo). Importa o projeto, exporta os presets `Linux`, `Windows Desktop`
+   e `macOS` e assina o `.exe` se houver os segredos do Windows. O executável do Linux recém-exportado roda uma vez
+   (`--headless -- --licenses=…`) para gravar o **`LICENCAS-TERCEIROS.txt`** (créditos do jogo e dos modelos,
+   licença do Godot e todos os componentes de terceiros com as licenças, o mesmo texto da tela *Créditos e
+   licenças*; D151), o que de quebra prova que ele abre. Cada pacote leva esse arquivo e `GUIA.txt`, `TERMOS.txt` e
+   `PRIVACIDADE.txt` (os de `docs/`, em UTF-8 com BOM para o Bloco de Notas, com os links entre eles apontando para os
+   `.txt`): no Linux e no Windows dentro da pasta do pacote, no macOS ao lado do `.app` (dentro dele quebrariam a
+   assinatura).
+4. **macos** (runner macOS, só com os 5 segredos da Apple): assina de novo o `.app` com Developer ID, runtime
+   endurecido e carimbo de tempo, notariza, grampeia o ticket, confere com o Gatekeeper (`spctl`) e põe os textos de
+   volta ao lado do `.app`.
+5. **imagem**: constrói a imagem do servidor com `CINZAS_VERSION` = versão da tag (o `hello`, o registro de início e o
+   `/bug` passam a dizer `0.4.0-teste.2` em vez do `0.1.0` do `package.json`), carrega no Docker do runner, roda nela
+   o mesmo `deploy/teste-conteiner.sh` do CI e só então publica **essa** imagem (a segunda chamada do build
+   reaproveita o cache: mesmas camadas) em `ghcr.io/<dono>/cinzas-servidor:<versão>` (e `<maior>.<menor>`;
+   `latest` só em versão final). Só roda com o CI, a exportação e a assinatura verdes. O pacote nasce privado no
+   ghcr.io: torne-o público nas configurações do pacote ou faça `docker login ghcr.io`.
+6. **publicar** (por último, só com tudo acima verde, imagem inclusive): cria a release da tag com
+   `CinzasDoMeridiano-<versão>-linux-x86_64.tar.gz`, `…-windows-x86_64.zip`, `…-macos-universal.zip`,
+   `SHA256SUMS.txt` e notas que dizem o que está assinado, apontam para o [guia do testador](GUIA.md) (instalação
+   em cada sistema, registro do jogo, como relatar), os [termos](TERMOS.md) e a [política de privacidade](PRIVACIDADE.md)
+   da tag e dizem qual imagem do servidor é dessa versão.
 
-Disparado à mão (*Run workflow*), o release só exporta e guarda os pacotes como artefatos da execução. O cache do
-GitHub é por ref, mas as tags enxergam o do ramo padrão: uma execução manual no `main` deixa o Godot e os modelos
-prontos para as próximas tags.
+**Variáveis do repositório** (*Settings → Secrets and variables → Actions → Variables*; não são segredos):
+
+| Variável | Para quê |
+|---|---|
+| `SERVIDOR_PADRAO` | Endereço que o campo **Servidor** do cliente traz na primeira vez (ex.: `wss://jogo.exemplo.com.br`). Sem ela, `ws://127.0.0.1:7777`. Depois o cliente lembra o último servidor usado para entrar (em `user://opcoes.cfg`). |
+| `PAGINA_DOWNLOAD` | Página que o aviso de **versão incompatível** do cliente manda abrir para baixar a versão nova (`https://…`). Sem ela: a página do jogo no domínio do `SERVIDOR_PADRAO` (`https://DOMINIO/`, que tem o link e os avisos) ou, sem `SERVIDOR_PADRAO` com `wss://`, a página de Releases do repositório. |
+
+Disparado à mão (*Run workflow*), o release roda o CI, exporta e guarda os pacotes como artefatos da execução
+(versão `0.0.0-dev.<commit>`), sem publicar nada. O cache do GitHub é por ref, mas as tags enxergam o do ramo
+padrão: uma execução manual no `main` deixa o Godot e os modelos prontos para as próximas tags.
 
 **Segredos de assinatura** (*Settings → Secrets and variables → Actions*, ou `gh secret set NOME < arquivo`):
 
@@ -149,8 +196,10 @@ prontos para as próximas tags.
 
 - **Sem os segredos** as versões saem assim mesmo, sem assinatura, com aviso no resumo da execução e nas notas da
   release: o Windows mostra o SmartScreen (*Mais informações → Executar assim mesmo*); no macOS o app tem só a
-  assinatura ad-hoc do Godot (necessária no Apple Silicon) e o Gatekeeper pede *botão direito → Abrir* ou
-  `xattr -dr com.apple.quarantine "Cinzas do Meridiano.app"`. Segredos incompletos contam como ausentes (com aviso).
+  assinatura ad-hoc do Godot (necessária no Apple Silicon) e o Gatekeeper bloqueia na primeira vez: no macOS 14 ou
+  anterior, *botão direito → Abrir*; no macOS 15, *Ajustes do Sistema → Privacidade e Segurança → Abrir Mesmo
+  Assim*; em qualquer um, `xattr -dr com.apple.quarantine "Cinzas do Meridiano.app"` ([GUIA.md](GUIA.md), §1).
+  Segredos incompletos contam como ausentes (com aviso).
 - **Com os segredos**, se a assinatura ou a notarização falhar a release **não** é publicada (melhor do que
   publicar sem assinatura por engano); rode o job de novo.
 - **Windows**: `osslsigncode` no runner Linux, SHA-256 e carimbo de tempo RFC 3161 (DigiCert; se falhar, Sectigo e
@@ -180,7 +229,20 @@ godot --headless --path . --export-release "Linux" build/linux/CinzasDoMeridiano
 ```
 
 O executável exportado passa no `--autotest` contra um servidor local
-(`./build/linux/CinzasDoMeridiano.x86_64 --headless -- --autotest --server=ws://127.0.0.1:7777`).
+(`./build/linux/CinzasDoMeridiano.x86_64 --headless -- --autotest --server=ws://127.0.0.1:7777`) e grava o arquivo
+de licenças dos pacotes com `./build/linux/CinzasDoMeridiano.x86_64 --headless -- --licenses=$PWD/LICENCAS-TERCEIROS.txt`
+(caminho absoluto; o texto sai com a versão de `cinzas/versao`, ou "dev" fora da release).
+
+**Ícone e metadados** (D151): o ícone é original (`client/assets/icon/icon.svg`, um sino com o sulco vermelho;
+[CREDITOS.md](CREDITOS.md)) e `tools/icone/gerar_icone.gd` gera, com o rasterizador do próprio Godot, o
+`icon_256.png` do projeto (`config/icon`: janela e barra de tarefas, também no Linux), o `icon_1024.png` do preset
+macOS (o Godot monta o `.icns`) e o `icon.ico` do preset Windows (16 a 256 px, os tamanhos que a exportação do 4.3
+lê). A pasta tem um `.gdignore`: o editor não importa esses arquivos, o ícone do projeto vai para o pacote como está
+e as exportações leem os outros do disco. No `.exe`, ícone, nome e versão são gravados pelo `rcedit` (passo opcional
+do release: sem ele o arquivo fica com o ícone do Godot, mas a janela do jogo usa o do projeto). **Empresa e
+copyright ficam vazios** (`application/company_name` e `application/copyright` do preset Windows,
+`application/copyright` do macOS) até existir o responsável legal que aparece nos [termos](TERMOS.md): preencha os
+três quando ele for definido; o nome do produto e a descrição já vêm preenchidos.
 
 ### Docker e Compose
 
@@ -197,6 +259,11 @@ curl http://127.0.0.1:9100/health             # métricas e saúde: só nesta m�
 docker compose logs -f servidor
 ```
 
+- **Versão**: a imagem da release traz a tag em `CINZAS_VERSION` (`hello`, registro de início e `/bug`; D150).
+  Construindo aqui, passe a mesma com `--build-arg CINZAS_VERSION=0.4.0-teste.2` (no compose:
+  `docker compose build --build-arg CINZAS_VERSION=...`); sem ela vale a do `package.json`. Um valor que não pareça
+  uma tag (espaço, aspas) faz o servidor recusar subir. Para conferir uma imagem como o CI confere:
+  `deploy/teste-conteiner.sh cinzas-servidor:local 0.4.0-teste.2`.
 - **Atualizar**: baixe a versão nova do repositório e rode `docker compose up -d --build`. Parar ou recriar o
   contêiner manda SIGTERM e dá 45 s (`stop_grace_period`) para o servidor salvar todos os personagens.
 - **Imagem publicada**: ponha `CINZAS_IMAGEM=ghcr.io/<dono>/cinzas-servidor:<versão>` no `deploy/.env` e rode
@@ -244,14 +311,27 @@ docker compose logs -f servidor
   os certificados; não o apague (há limite de emissões).
 - Os jogadores conectam em `wss://jogo.exemplo.com.br` (campo **Servidor** da tela de entrada, ou
   `CinzasDoMeridiano.x86_64 -- --server=wss://jogo.exemplo.com.br`). O Godot confere o certificado com a lista de
-  autoridades que vem com ele. O campo ainda começa com `ws://127.0.0.1:7777`.
-- O proxy só conhece a porta 7777, que só fala WebSocket (qualquer outra requisição recebe 426): métricas e saúde
-  não passam por ele. Recarregar o Caddy não derruba quem está jogando (`stream_close_delay`).
+  autoridades que vem com ele.
+- O Caddy separa pelo pedido: **WebSocket** (o jogo, no endereço raiz) vai para a porta 7777; `/contas/*` vai para o
+  serviço de contas; **todo o resto** recebe a **página do jogo** (`deploy/site/index.html`, montada em `/srv/site`):
+  estática, em português, sem scripts, cookies nem recursos de outros sites (a política de segurança que o Caddy
+  manda nem deixaria carregar), com o link para baixar (página de Releases), o guia em `https://DOMINIO/guia`
+  (`docs/GUIA.md` em texto, montado de `../docs`; o resto da pasta não é servido), os termos e a política (as
+  páginas do serviço de contas, `/contas/termos` e `/contas/privacidade`, as mesmas do aceite no cadastro) e o
+  contato da equipe (marcador `[e-mail da equipe]`, como nos termos). Métricas e saúde não passam pelo proxy.
+  Recarregar o Caddy não derruba quem está jogando (`stream_close_delay`).
+- **Avisos no site** (a política de privacidade e os termos prometem avisar "no jogo e no site"): a seção *Avisos*
+  da página. Edite `deploy/site/index.html` (um `<li>` com a data no começo da lista; o modelo está no comentário)
+  e salve: o Caddy lê o arquivo do disco a cada pedido, sem reiniciar nada. No jogo, o aviso é `/gm anunciar`.
 - Sem Docker, use o mesmo Caddyfile num Caddy instalado na máquina, trocando `servidor:7777` por `127.0.0.1:7777`
-  e `contas:7780` por `127.0.0.1:7780` (os dois serviços escutam só em `127.0.0.1`).
-- **Servidor padrão do cliente**: com a variável do repositório `SERVIDOR_PADRAO` (*Settings → Secrets and variables →
-  Actions → Variables*, ex.: `wss://jogo.exemplo.com.br`), a release grava `cinzas/servidor_padrao` no projeto e o campo
-  **Servidor** já vem preenchido nos pacotes publicados.
+  e `contas:7780` por `127.0.0.1:7780` (os dois serviços escutam só em `127.0.0.1`) e apontando `CINZAS_SITE` e
+  `CINZAS_DOCS` (ambiente do Caddy) para `deploy/site` e `docs/` do repositório (ex.: `/opt/cinzas/deploy/site` e
+  `/opt/cinzas/docs`).
+- **Servidor padrão e página de download do cliente**: com as variáveis do repositório `SERVIDOR_PADRAO` (ex.:
+  `wss://jogo.exemplo.com.br`) e, se precisar, `PAGINA_DOWNLOAD` (tabela em *Releases*), a release grava
+  `cinzas/servidor_padrao` e `cinzas/pagina_download` no projeto: o campo **Servidor** já vem preenchido nos pacotes
+  publicados e o aviso de versão incompatível diz onde baixar a nova. Sem `SERVIDOR_PADRAO` o campo começa com
+  `ws://127.0.0.1:7777`; depois de entrar uma vez, o cliente lembra o último servidor usado.
 
 ### systemd (sem Docker)
 
@@ -274,7 +354,9 @@ systemctl status cinzas; journalctl -u cinzas -f; systemctl list-timers backup.t
   NodeSource); ajuste o `ExecStart` se `command -v node` disser outro caminho.
 - `Restart=always`; parar manda SIGTERM com 45 s de prazo (`TimeoutStopSec`).
 - `/etc/cinzas/cinzas.env` (só do root, modelo em `deploy/cinzas.env.exemplo`) leva `CINZAS_AUTH=token`, o
-  `CINZAS_TOKEN_SECRET` e o SMTP; `cinzas.service` e `cinzas-contas.service` leem o mesmo arquivo.
+  `CINZAS_TOKEN_SECRET` e o SMTP; `cinzas.service` e `cinzas-contas.service` leem o mesmo arquivo. Ponha também
+  `CINZAS_VERSION=<versão da tag>` ao atualizar (sem imagem, é o único jeito de o `hello` e o `/bug` mostrarem a
+  versão da release em vez da do `package.json`).
 - Endurecimento: `ProtectSystem=strict` com só `/var/lib/cinzas` gravável, sem *capabilities*, filtro de chamadas
   de sistema, `/home` e dispositivos inacessíveis (`systemd-analyze security cinzas`: 1,5, "OK"). Sem
   `MemoryDenyWriteExecute`, que quebra o JIT do V8.
@@ -298,7 +380,14 @@ systemctl status cinzas; journalctl -u cinzas -f; systemctl list-timers backup.t
 - `docker compose ps` saudável; de outra máquina, `curl http://IP:9100/health` **não** pode responder (nem
   `curl http://IP:7777/`, que só o proxy alcança).
 - Backup agendado e uma restauração testada.
-- Release publicada; se saiu sem assinatura, avise os jogadores sobre o SmartScreen e o Gatekeeper.
+- Variáveis do repositório `SERVIDOR_PADRAO` (e `PAGINA_DOWNLOAD`, se não for a página do jogo) definidas **antes**
+  da tag; release publicada, com os quatro textos em cada pacote, e a tela de título dos pacotes mostrando a versão
+  da tag; se saiu sem assinatura, avise os jogadores sobre o SmartScreen e o Gatekeeper (o [guia](GUIA.md) já tem o
+  passo a passo, inclusive o do macOS 15).
+- `https://DOMINIO/` abre a página do jogo com o link de download certo, o contato da equipe preenchido e a seção
+  *Avisos* em dia; `https://DOMINIO/guia`, `/contas/termos` e `/contas/privacidade` respondem; o cliente publicado
+  entra em `wss://DOMINIO`.
+- Empresa e copyright dos presets preenchidos, se o responsável legal já existir.
 
 ## 8.9 Contas, segurança e privacidade (teste público)
 

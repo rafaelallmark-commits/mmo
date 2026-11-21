@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cinzas do Meridiano — teste público</title>
+<meta name="description" content="Cinzas do Meridiano, MMORPG 3D de ação para PC em teste público: onde baixar, como instalar, guia, termos, privacidade e avisos da equipe.">
+<link rel="icon" type="image/png" href="/icone.png">
+<!--
+  Página do jogo (https://DOMÍNIO/), servida pelo Caddy a partir de deploy/site (docs/08-operacao.md §8.8).
+  Estática de propósito: sem scripts, cookies, fontes ou qualquer recurso de outro site (o Caddyfile manda uma
+  política de segurança que nem deixaria carregar). Quem não é WebSocket cai aqui; o jogo continua em wss://.
+-->
+<style>
+  :root {
+    --fundo: #1b1714; --painel: #231e1a; --borda: #5a4a36; --ambar: #e3a548; --nacar: #9fd3d1;
+    --texto: #e8e1d3; --apagado: #9a927f; --brasa: #ff5a4f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--fundo); color: var(--texto);
+    font: 17px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  }
+  main, header, footer { max-width: 760px; margin: 0 auto; padding: 0 20px; }
+  header { padding-top: 40px; padding-bottom: 8px; text-align: center; }
+  header img { width: 96px; height: 96px; }
+  h1 { margin: 12px 0 4px; color: #ffd9a0; letter-spacing: 0.06em; font-size: 2.1rem; }
+  .lema { margin: 0 0 14px; color: var(--apagado); font-style: italic; }
+  h2 { color: var(--ambar); font-size: 1.25rem; margin: 0 0 10px; }
+  section {
+    background: var(--painel); border: 1px solid var(--borda); border-radius: 6px;
+    padding: 18px 22px; margin: 18px 0;
+  }
+  #avisos { border-color: var(--brasa); }
+  #avisos li { margin-bottom: 6px; }
+  .data { color: var(--apagado); font-variant-numeric: tabular-nums; }
+  a { color: var(--nacar); }
+  a:hover, a:focus { color: #d2f1ef; }
+  .baixar {
+    display: inline-block; margin: 6px 0 10px; padding: 10px 18px; border-radius: 6px;
+    background: #b5562c; border: 1px solid var(--ambar); color: #fff4e2; text-decoration: none; font-weight: 600;
+  }
+  .baixar:hover, .baixar:focus { background: #c8653a; color: #fff; }
+  code { background: #0e0c0a; border: 1px solid var(--borda); border-radius: 4px; padding: 0 5px; }
+  ol, ul { padding-left: 1.3em; margin: 0; }
+  li { margin-bottom: 4px; }
+  footer { color: var(--apagado); font-size: 0.9rem; padding-bottom: 40px; text-align: center; }
+</style>
+</head>
+<body>
+<header>
+  <img src="/icone.png" alt="" width="96" height="96">
+  <h1>CINZAS DO MERIDIANO</h1>
+  <p class="lema">Os sinos voltaram a tocar debaixo da terra.</p>
+  <p>MMORPG 3D de ação para PC, com caça em grupo em mapas compartilhados — em <strong>teste público</strong>.</p>
+</header>
+
+<main>
+  <!--
+    AVISOS DA EQUIPE. Reinícios e manutenções programados, mudanças nos Termos de Uso ou na Política de
+    Privacidade (que prometem avisar "no jogo e no site") e o fim do teste são publicados aqui.
+    Para publicar: ponha um <li> no começo da lista, com a data, e tire os avisos vencidos. O Caddy lê este
+    arquivo do disco a cada pedido: salvar já publica, sem reiniciar nada. Avisos no jogo: /gm anunciar.
+    Modelo: <li><span class="data">21/11/2026</span> — Manutenção de 30 minutos às 22h (horário de Brasília).</li>
+  -->
+  <section id="avisos" aria-labelledby="titulo-avisos">
+    <h2 id="titulo-avisos">Avisos</h2>
+    <ul>
+      <li>Nenhum aviso no momento.</li>
+    </ul>
+  </section>
+
+  <section id="baixar" aria-labelledby="titulo-baixar">
+    <h2 id="titulo-baixar">Baixar e jogar</h2>
+    <a class="baixar" href="https://github.com/rafaelallmark-commits/mmo/releases">Baixar na página de Releases</a>
+    <ol>
+      <li>Escolha o pacote do seu sistema na versão mais nova: Windows (<code>…-windows-x86_64.zip</code>), macOS
+        (<code>…-macos-universal.zip</code>, Intel e Apple Silicon) ou Linux (<code>…-linux-x86_64.tar.gz</code>).</li>
+      <li>Extraia e abra o jogo. Na primeira vez o Windows (SmartScreen) e o macOS (Gatekeeper) podem pedir uma
+        confirmação, e no Linux pode faltar o <code>chmod +x</code>: o <a href="/guia">guia</a> mostra o caminho em
+        cada sistema.</li>
+      <li>Na tela de entrada, crie a conta (o campo <strong>Servidor</strong> já vem com o endereço do teste:
+        <code>wss://</code> seguido do endereço desta página) e confirme o e-mail com o código de 6 dígitos.</li>
+    </ol>
+    <p>Requisitos: computador de 64 bits com Windows 10 ou 11, macOS 10.12 ou mais novo, ou Linux; placa de vídeo
+      com OpenGL 3.3; conexão com a internet.</p>
+  </section>
+
+  <section id="documentos" aria-labelledby="titulo-documentos">
+    <h2 id="titulo-documentos">Documentos</h2>
+    <ul>
+      <li><a href="/guia">Guia do jogador e do testador</a> — instalação, controles, classes, onde fica o registro do
+        jogo e como relatar problemas.</li>
+      <li><a href="/contas/termos">Termos de uso e regras de convivência</a></li>
+      <li><a href="/contas/privacidade">Política de privacidade</a></li>
+    </ul>
+    <p>Os pacotes também trazem o guia, os termos, a política e as licenças de terceiros em texto.</p>
+  </section>
+
+  <section id="problemas" aria-labelledby="titulo-problemas">
+    <h2 id="titulo-problemas">Encontrou um problema?</h2>
+    <p>No jogo, digite <code>/bug o que aconteceu</code> no chat ou use <strong>Esc → Reportar um problema</strong>:
+      o relato vai com o mapa, a posição e as versões do jogo e do servidor. Se o jogo nem abre, mande para a
+      equipe o arquivo de registro <code>godot.log</code> (o guia diz onde ele fica em cada sistema). Quem
+      reporta falhas de boa-fé não é punido.</p>
+  </section>
+</main>
+
+<footer>
+  <p>Esta página não usa cookies, rastreadores nem recursos de outros sites.<br>
+    Contato da equipe: [e-mail da equipe].</p>
+</footer>
+</body>
+</html>

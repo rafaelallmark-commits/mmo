@@ -4,6 +4,7 @@ extends RefCounted
 
 const Theme_ = preload("res://scripts/ui_theme.gd")
 const ItemText = preload("res://scripts/item_text.gd")
+const BuildInfo = preload("res://scripts/build_info.gd")
 const RANK_NAME := {"leader": "líder", "officer": "oficial", "member": "membro"}
 
 var hud
@@ -600,7 +601,7 @@ func chat_command(t: String) -> bool:
 		if text.length() < 5:
 			hud.error("Use: /bug o que aconteceu (vai junto o lugar e a hora)")
 		else:
-			Net.request("bug_report", {"text": text, "client": str(ProjectSettings.get_setting("application/config/version", "dev"))}, _msg_or_err)
+			Net.request("bug_report", {"text": text, "client": BuildInfo.version()}, _msg_or_err)
 	elif t.begins_with("/denunciar "):
 		var nr := split_name(t.substr(11))
 		if nr[0] == "" or nr[1] == "":

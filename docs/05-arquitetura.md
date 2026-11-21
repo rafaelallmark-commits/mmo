@@ -35,12 +35,16 @@ Movimento válido (destino dentro do mapa e fora de áreas bloqueadas e de peça
 mmo/
 ├── README.md                      como rodar servidor, dois clientes, testes e cenários
 ├── .github/workflows/
-│   ├── ci.yml                     a cada push/PR: dados + testes, importação do cliente, build da imagem
-│   └── release.yml                a cada tag v*: exporta e assina o cliente, publica a release e a imagem
+│   ├── ci.yml                     a cada push/PR (e chamado pela release): dados + testes (SQLite e PostgreSQL),
+│   │                              importação e autotest do cliente contra um servidor, imagem com teste rápido
+│   └── release.yml                a cada tag v*: CI inteiro, exporta e assina o cliente (versão, licenças e
+│                                  documentos em cada pacote), testa e publica a imagem, publica a release
 ├── deploy/                        implantação do teste público (docs/08 §8.8)
-│   ├── Dockerfile                 imagem do servidor (node:22-bookworm-slim, usuário sem privilégios)
-│   ├── docker-compose.yml         servidor + proxy TLS (Caddy); "contas" e "banco" reservados
-│   ├── Caddyfile                  wss://domínio -> servidor:7777 (métricas não passam)
+│   ├── Dockerfile                 imagem do servidor (node:22-bookworm-slim, usuário sem privilégios, CINZAS_VERSION)
+│   ├── teste-conteiner.sh         teste rápido de uma imagem (o mesmo no CI e na release)
+│   ├── docker-compose.yml         servidor + contas + proxy TLS (Caddy); "banco" e monitoramento opcionais
+│   ├── Caddyfile                  WebSocket -> servidor:7777, /contas -> contas, o resto -> página do jogo
+│   ├── site/                      página do jogo (https://domínio/): baixar, guia, termos, privacidade, avisos
 │   ├── cinzas.service             systemd sem Docker (endurecido)
 │   └── backup.service/.timer      backup a quente de hora em hora
 ├── .dockerignore                  contexto da imagem: só server/ e data/
@@ -100,6 +104,8 @@ mmo/
 │   │   ├── moderacao.test.js      silêncio, denúncia, suspensão, ferramenta, anúncio
 │   │   ├── nivel25.test.js        pós-v1: teto 25, Cava Primeira, habilidades do 25 e o capítulo 6 inteiro
 │   │   ├── multizona.test.js      mundo + 2 zonas: transferência, tokens, posse única, grupo/clã, quedas
+│   │   ├── versao.test.js         versão da release (CINZAS_VERSION) no hello, no registro e no /bug
+│   │   ├── site.test.js           página do jogo sem rastreadores e as rotas do Caddyfile
 │   │   └── helpers/client.js      cliente simulado (mesmo protocolo do Godot)
 │   └── tools/
 │       ├── validate-data.js       validador (também usado nos testes)
@@ -110,16 +116,20 @@ mmo/
 │       └── create-character.js    cria contas/personagens de teste no banco
 ├── tools/poses/                   modelo do braço e gerador da tabela WPOSES (poses guiadas pela arma)
 ├── tools/audio/gerar_sons.py      síntese de todos os sons e blocos de música (Python + numpy, determinístico)
+├── tools/icone/gerar_icone.gd     PNG e .ico do ícone a partir do SVG (rasterizador do Godot, determinístico)
 ├── client/                        projeto Godot 4.3
-│   ├── project.godot              autoloads Net e Sfx; cena principal
-│   ├── export_presets.cfg         presets "Linux", "Windows Desktop" e "macOS" (saída em build/)
+│   ├── project.godot              autoloads Net e Sfx; cena principal; ícone; a release grava a seção [cinzas]
+│   ├── export_presets.cfg         presets "Linux", "Windows Desktop" e "macOS" (saída em build/), com os ícones
+│   ├── assets/icon/               ícone original: icon.svg e os PNG/.ico gerados (fora da importação: .gdignore)
 │   ├── scenes/main.tscn
 │   ├── audio/                     sfx/ (efeitos) e music/ (sinos, flauta, bordões, percussão), gerados
 │   ├── shaders/                   cel shading, contorno, terreno, grama, folhagem, água, céu, "vazado"
 │   └── scripts/
 │       ├── net.gd                 WebSocketPeer, pedidos com rid e callbacks
 │       ├── audio.gd               autoload Sfx: pools de efeitos 2D/3D, volumes, música generativa por zona
-│       ├── main.gd                fluxo login → personagens → mundo; estado recebido
+│       ├── main.gd                fluxo título → login → personagens → mundo; estado recebido; --licenses
+│       ├── build_info.gd          o que a release grava: versão inteira, servidor padrão, página de download
+│       ├── credits.gd             créditos e licenças de terceiros (tela do título e LICENCAS-TERCEIROS.txt)
 │       ├── world.gd               mundo 3D, câmera suave, entidades interpoladas/previstas, clique
 │       ├── motion.gd              relógio da zona, interpolação de Hermite, previsão do próprio personagem
 │       ├── scenery.gd             cenário: terreno, grama, peças (MultiMesh), estruturas, céu, partículas
@@ -227,7 +237,7 @@ O teste de aceitação envia o mesmo pedido de coleta 4 vezes (2 simultâneos, 2
 ## Testes automatizados
 
 - `npm test` roda unitários (regras, equipamento, dados) e o **teste de aceitação do Marco 1** (servidor real em porta aleatória + banco temporário + dois clientes WebSocket simulados). O teste acelera o relógio do jogo (4×) e, só na fase de "caçar até o nível 5", liga uma taxa de XP de evento (15×) pelo próprio objeto do servidor, para caber em ~25 s; regras e fórmulas são as mesmas.
-- O cliente Godot tem o modo `--autotest`, usado em headless para importar o projeto, conectar, criar personagem, entrar, andar, atacar e coletar.
+- O cliente Godot tem o modo `--autotest`, usado em headless para importar o projeto, conectar, criar personagem, entrar, andar, atacar e coletar. O CI roda esse autotest a cada push contra um servidor de verdade (`node src/main.js --dev`), e a release, que chama o mesmo CI, também (08-operacao.md §8.8).
 
 ---
 
@@ -247,7 +257,7 @@ Critérios (todos cobertos por `server/test/acceptance.test.js`, exceto onde ind
 6. O servidor valida classe ("Classe exigida: Cantora do Véu ou Tecelão da Brasa. Sua classe é Quebraferro."), espaço ("Este item não pode ser equipado."), empunhadura (arma de duas mãos libera a mão secundária; foco recusado enquanto ela estiver equipada) e atributos permanentes (bônus de anel não libera requisito — teste unitário).
 7. Redistribuir atributos devolve à bolsa o equipamento que deixou de atender (ou à caixa de recuperação se a bolsa estiver cheia — teste unitário).
 8. Desconectar e reconectar mantém o equipamento; reiniciar o servidor com o mesmo banco também.
-9. Cliente Godot importa sem erros e completa o `--autotest` contra o servidor (verificado manualmente nesta entrega com Godot 4.3 headless; ver README).
+9. Cliente Godot importa sem erros e completa o `--autotest` contra o servidor (Godot 4.3 headless; verificado a cada push pelo job `cliente` do CI e antes de cada release — antes era só manual; ver README).
 
 ### Marco 2 — Oito classes e grupos (concluído)
 
@@ -303,14 +313,15 @@ Feito: métricas do servidor e HTTP de métricas, snapshots por diferença e int
 | Anti-trapaça | servidor já autoritativo | + limite de comandos por segundo, detecção de velocidade/posição anômalas nos registros, auditoria de saque e ouro |
 | Comandos de mestre | `--dev` liga para todos | papéis de conta; registro de cada comando |
 | Operação | um processo no terminal | serviço gerenciado (reinício automático, logs estruturados, métricas, alertas), desligamento gracioso com aviso aos jogadores |
-| Cliente | rodado pelo editor | executáveis exportados e assinados (macOS notarizado), verificação de versão do protocolo no `hello` |
+| Cliente | rodado pelo editor | executáveis exportados e assinados (macOS notarizado), verificação de versão do protocolo no `hello` — **feito**, com a versão inteira da release no título e no `/bug`, o aviso de versão incompatível dizendo onde baixar a nova, o ícone próprio e os créditos e licenças de terceiros na tela e em cada pacote |
 | Dados | lidos do disco no início | versionados; mudanças de balanceamento publicadas com o servidor; validador roda no CI |
 | Privacidade | — | política de privacidade, exclusão de conta, retenção de logs |
 
 Já preparado ([08-operacao.md §8.8](08-operacao.md)): `wss://` atrás de um proxy Caddy com certificado automático,
 serviço gerenciado (Docker com verificação de saúde e reinício, ou systemd endurecido) com desligamento gracioso,
-backup de hora em hora, CI com o validador de dados e os testes, e executáveis exportados para Linux, Windows e macOS,
-assinados e notarizados quando houver certificados. Também prontos: serviço de contas, limites por conexão, papéis de
+backup de hora em hora, CI com o validador de dados, os testes no SQLite e no PostgreSQL, o autotest do cliente contra
+um servidor e o teste do contêiner (a release só publica com ele verde), executáveis exportados para Linux, Windows e
+macOS, assinados e notarizados quando houver certificados, e a página do jogo no mesmo domínio do `wss://`. Também prontos: serviço de contas, limites por conexão, papéis de
 mestre e privacidade ([§8.9](08-operacao.md#89-contas-segurança-e-privacidade-teste-público)) e o PostgreSQL central
 no compose (perfil `postgres`, [§8.11](08-operacao.md#811-postgresql)).
 

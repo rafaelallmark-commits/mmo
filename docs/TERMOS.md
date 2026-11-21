@@ -71,9 +71,9 @@ equipamento.
 
 ## 8. Mudanças e encerramento
 
-Podemos mudar estes termos; mudanças relevantes serão avisadas no jogo antes de valer. Você pode
-encerrar o uso a qualquer momento excluindo a conta. Podemos encerrar o teste ou contas que violem
-estes termos.
+Podemos mudar estes termos; mudanças relevantes serão avisadas no jogo e na seção *Avisos* da página do
+teste (`https://[domínio do teste]/`) antes de valer. Você pode encerrar o uso a qualquer momento excluindo
+a conta. Podemos encerrar o teste ou contas que violem estes termos.
 
 ## 9. Lei aplicável
 

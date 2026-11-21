@@ -56,4 +56,5 @@ O jogo é destinado a maiores de 13 anos; menores de 18 devem ter autorização 
 
 ## Mudanças
 
-Avisaremos no jogo e no site antes de mudanças relevantes nesta política.
+Avisaremos no jogo e na seção *Avisos* da página do teste (`https://[domínio do teste]/`) antes de mudanças
+relevantes nesta política.

@@ -1,14 +1,16 @@
 ; Engine configuration file.
-; Projeto Godot 4 do cliente de CINZAS DO MERIDIANO (Marco 1).
+; Projeto Godot 4 do cliente de CINZAS DO MERIDIANO. A release grava aqui, só na cópia de trabalho dela,
+; config/version e a seção [cinzas] (versão inteira, servidor padrão e página de download; D150).
 
 config_version=5
 
 [application]
 
 config/name="Cinzas do Meridiano"
-config/description="Cliente do MMORPG Cinzas do Meridiano (Marco 1)."
+config/description="Cliente do MMORPG Cinzas do Meridiano (teste público)."
 run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.3")
+config/icon="res://assets/icon/icon_256.png"
 
 [autoload]
 
