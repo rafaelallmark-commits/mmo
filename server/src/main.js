@@ -2,7 +2,7 @@
 //   [--metrics-port 9100] [--metrics-host 127.0.0.1] [--lag-ms 0] [--jitter-ms 0]
 //   [--auth both|password|token] [--token-secret S | CINZAS_TOKEN_SECRET] [--tls-cert f --tls-key f]
 //   [--rate-limit 20] [--rate-burst 40] [--max-conn-per-ip 0] [--trust-proxy] [--log-format text|json]
-//   [--shutdown-grace 30] [--audit-days 90]
+//   [--shutdown-grace 30] [--audit-days 90] [--max-players 0 | CINZAS_MAX_PLAYERS] (0 = sem teto)
 //   várias zonas: [--world ws://127.0.0.1:7790 --zone-id zona-a --maps estrada_velha,pedrambar
 //                  --public-url ws://host:7777] com o segredo do mundo em CINZAS_WORLD_SECRET (ou --world-secret)
 import { GameServer } from './server.js';
@@ -50,7 +50,13 @@ const opts = {
   zoneId: textArg('zone-id', process.env.CINZAS_ZONE_ID),
   maps: textArg('maps', process.env.CINZAS_MAPS),
   publicUrl: textArg('public-url', process.env.CINZAS_PUBLIC_URL),
+  // teto de personagens no mundo; com o servidor cheio, "enter" responde server_full (gm e admin entram)
+  maxPlayers: Number(textArg('max-players', process.env.CINZAS_MAX_PLAYERS || '0')),
 };
+if (!Number.isInteger(opts.maxPlayers) || opts.maxPlayers < 0) {
+  console.error('--max-players (ou CINZAS_MAX_PLAYERS) precisa ser um número inteiro de 0 para cima (0 = sem teto).');
+  process.exit(2);
+}
 if (!opts.world && (opts.maps || opts.zoneId || opts.publicUrl)) console.error('aviso: --maps, --zone-id e --public-url só valem com --world (várias zonas); ignorados.');
 if (!checkSecrets([['CINZAS_TOKEN_SECRET (--token-secret)', opts.tokenSecret], ['CINZAS_WORLD_SECRET (--world-secret)', opts.worldSecret]], { dev: opts.dev })) process.exit(2);
 let server;

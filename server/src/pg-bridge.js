@@ -34,6 +34,8 @@ export class PgBridge {
     this.backoffMs = 0;
     this.lastError = null;
     this.lat = new Float64Array(8192); // duração das últimas chamadas (ms): quanto o laço de eventos ficou parado
+    this.totalCalls = 0; // desde a criação (contadores do Prometheus; resetStats não zera)
+    this.totalWaitMs = 0;
     this.resetStats();
     this.spawn(config.connectTimeoutMs ?? 10000);
   }
@@ -44,12 +46,15 @@ export class PgBridge {
     const arr = Array.from(this.lat.subarray(0, this.latN)).sort((a, b) => a - b);
     const q = (p) => (arr.length ? arr[Math.min(arr.length - 1, Math.floor(p * arr.length))] : 0);
     const secs = Math.max(0.001, (performance.now() - this.since) / 1000);
-    return { calls: this.calls, callsPerS: this.calls / secs, waitMsPerS: this.waitMs / secs, meanMs: this.calls ? this.waitMs / this.calls : 0, p50Ms: q(0.5), p99Ms: q(0.99), maxMs: this.maxMs };
+    return { calls: this.calls, callsPerS: this.calls / secs, waitMsPerS: this.waitMs / secs, meanMs: this.calls ? this.waitMs / this.calls : 0, p50Ms: q(0.5), p99Ms: q(0.99), maxMs: this.maxMs,
+      totalCalls: this.totalCalls, totalWaitMs: this.totalWaitMs };
   }
 
   record(ms) {
     this.calls++;
     this.waitMs += ms;
+    this.totalCalls++;
+    this.totalWaitMs += ms;
     if (ms > this.maxMs) this.maxMs = ms;
     this.lat[this.latIdx] = ms;
     this.latIdx = (this.latIdx + 1) % this.lat.length;
