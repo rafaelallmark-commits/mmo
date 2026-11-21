@@ -192,7 +192,11 @@ test('marca da equipe no snapshot e no chat, que ninguém imita; papel relido na
     const entOf = (c, id) => c.snap?.ents.find((e) => e.id === `p${id}`);
     assert.equal(entOf(p, gId)?.staff, true, 'snapshot da entrada');
     assert.equal(entOf(p, pId)?.staff, false);
-    await p.waitFor((m) => m.t === 'snap' && m.ents.some((e) => e.id === `p${gId}` && e.staff === true), 3000, 'marca no snapshot por diferença');
+    // O primeiro snapshot por diferença (o completo, o único com a identidade de quem não muda) pode chegar no
+    // mesmo pacote da resposta da entrada, antes de qualquer espera: confere o estado que o cliente reconstrói só
+    // com snapshots por diferença depois de receber pelo menos um.
+    await p.waitFor((m) => m.t === 'snap' && m.d === 1, 3000, 'snapshot por diferença');
+    assert.equal(p.known.get(`p${gId}`)?.staff, true, 'marca no snapshot por diferença');
     await g.waitFor((m) => m.t === 'snap' && m.ents.some((e) => e.id === `p${pId}` && e.staff === false), 3000, 'jogador sem marca');
     // chat: o servidor põe staff; o que o cliente manda é ignorado
     let got = p.waitFor((m) => m.t === 'chat' && m.text === 'boa noite', 3000, 'fala da equipe');
@@ -207,11 +211,13 @@ test('marca da equipe no snapshot e no chat, que ninguém imita; papel relido na
     assert.equal((await g.request('gm', { cmd: 'where', name: 'Povoado' })).ok, true);
     server.store.setRole(server.store.findAccount('c_guarda').id, 'player');
     const told = g.waitFor((m) => m.t === 'system' && /papel na equipe mudou/.test(m.text), 3000, 'aviso do papel');
+    // esperas registradas antes da varredura: o snapshot seguinte pode sair enquanto o teste espera o aviso
+    const unmarked = p.waitFor((m) => m.t === 'snap' && m.ents.some((e) => e.id === `p${gId}` && e.staff === false), 3000, 'marca retirada do snapshot por diferença');
     server.mod.lastSweep = 0;
     server.mod.sweep();
     await told;
     assert.equal((await g.request('gm', { cmd: 'where', name: 'Povoado' })).code, 'forbidden', 'perdeu o poder sem sair do jogo');
-    await p.waitFor((m) => m.t === 'snap' && m.ents.some((e) => e.id === `p${gId}` && e.staff === false), 3000, 'marca retirada do snapshot por diferença');
+    await unmarked;
     got = p.waitFor((m) => m.t === 'chat' && m.text === 'agora sou jogador', 3000, 'fala depois do rebaixamento');
     await g.request('chat', { text: 'agora sou jogador' });
     assert.equal((await got).staff, undefined);
