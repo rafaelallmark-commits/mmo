@@ -192,14 +192,16 @@ mmo/
 
 Um índice único `(char_id, slot) WHERE loc='equip'` garante no banco que dois itens nunca ocupem o mesmo espaço.
 
-## Protocolo (v1)
+## Protocolo
 
-Todo pedido do cliente leva `rid` (texto único por pedido). A resposta é `{ t:"res", rid, req, ok, ... }`; em recusa, `code` (máquina) e `reason` (texto em português, com valor atual e exigido). Respostas com mudança de estado trazem `char` (ficha completa) para o cliente substituir o que tem.
+Versão atual: **3** (`PROTOCOL_VERSION` em `server/src/server.js`, enviada no `hello`; o cliente de outra versão mostra onde baixar a nova). Mensagens JSON por WebSocket. Todo pedido do cliente leva `rid` (texto único por pedido). A resposta é `{ t:"res", rid, req, ok, ... }`; em recusa, `code` (máquina) e `reason` (texto em português, com valor atual e exigido). Respostas com mudança de estado trazem `char` (ficha completa) para o cliente substituir o que tem.
 
 | Pedido | Campos | Resposta / efeito |
 |---|---|---|
-| `register` | account, password | cria conta (senha com scrypt + sal) |
+| `ping` | — | `now` (hora do servidor); os testes usam para esperar as mensagens anteriores chegarem |
+| `register` | account, password | cria conta (senha com scrypt + sal); com `--auth token`, recusa com `use_accounts` (a conta é criada no serviço de contas) |
 | `login` | account, password | envia `defs` (dados do jogo), devolve personagens e classes criáveis; derruba sessão antiga da mesma conta |
+| `login_token` | token | `--auth token`: entra com o token assinado que o serviço de contas deu em `POST /sessoes` (mesma resposta do `login`) |
 | `list_chars`, `create_char` | name, classId | personagem com kit inicial (M1: Quebraferro e Tecelão); nomes com palavras da equipe são recusados (D145) |
 | `delete_char` | charId, password | só fora do mundo: exclui o personagem (clã, grupo, itens, missões, ignorados; nome liberado; depósito da conta mantido) e devolve a lista nova (D144) |
 | `delete_account` | password | só fora do mundo: exclui a conta e encerra a sessão. Nos dois, a senha é conferida fora da thread do jogo, com no máximo 5 erradas por conta a cada 10 min (`too_many`) |
@@ -209,6 +211,7 @@ Todo pedido do cliente leva `rid` (texto único por pedido). A resposta é `{ t:
 | `stop` | — | para |
 | `cast` | skill, target ou x/z | valida grau, recarga, mana, alcance; aplica efeito |
 | `use_item` | instance | consumível (recarga compartilhada de tônicos 3 s) |
+| `discard` | instance | joga fora um item da bolsa (item de missão: `bound`) |
 | `pickup` | loot | **idempotente** (ver abaixo) |
 | `equip` | instance | valida e equipa; devolve `slot`, `displaced` |
 | `unequip` | slot | guarda na bolsa |
@@ -217,12 +220,21 @@ Todo pedido do cliente leva `rid` (texto único por pedido). A resposta é `{ t:
 | `claim_recovery` | instance | caixa de recuperação → bolsa |
 | `learn_skill` | skill | grau extra (teto por nível) |
 | `respawn` | — | volta ao posto de guarda |
-| `chat` | text | canal da zona |
+| `revive_ally` | name ou target | levanta um aliado caído a até 3 m: 5 s parado (mover, agir ou apanhar interrompe); ele volta com 20% da vida (D154) |
+| `portal` | portal | atravessa um portal próximo (nível exigido; mapa de outra zona: evento `transfer`) |
+| `chat` | text, channel (zone/party/clan/whisper), to | canais da zona, do grupo, do clã e sussurro; o servidor põe `staff` nas falas da equipe |
+| `report`, `bug_report` | name + reason / text | denúncia (com as últimas falas do denunciado, para a equipe) e relato de problema (com a versão do cliente e o lugar); avisam a equipe on-line |
 | `char` | — | ficha atual |
-| `talk`, `interact`, `buy`, `quests`, `quest_accept`, `quest_turnin` | npc / object / item | NPCs, objetos de missão, loja e diário; `interact` no quadro da praça devolve `board` (missões aceitáveis no mundo, com nível, NPC e mapa) e na Válvula principal começa a defesa do Joca |
+| `talk`, `interact`, `buy`, `sell`, `quests`, `quest_accept`, `quest_turnin` | npc / object / item (e qty) | NPCs, objetos de missão, loja e diário; `interact` no quadro da praça devolve `board` (missões aceitáveis no mundo, com nível, NPC e mapa) e na Válvula principal começa a defesa do Joca |
+| `quest_choice` | quest, option, npc | resposta escolhida num diálogo de missão: grava a escolha, pode dar título e muda falas seguintes |
 | `set_title` | title (ou null) | título mostrado acima do nome, entre os ganhos em respostas e missões |
 | `trial_start` | npc | prova de classe (instância solo) |
 | `party_invite`, `party_accept`, `party_decline`, `party_leave`, `party_kick` | name / from | grupos de até 5; no máximo 1 convite a cada 10 s por quem convida (`too_fast`) |
+| `trade_request`, `trade_accept`, `trade_decline` | name / from | convite de troca entre jogadores perto um do outro |
+| `trade_offer`, `trade_lock`, `trade_confirm`, `trade_cancel` | items [instance…], gold | oferta (itens da bolsa, nada de missão), trava, confirmação dupla e cancelamento; a troca é atômica no banco (D83) |
+| `clan_create`, `clan_invite`, `clan_accept`, `clan_decline`, `clan_leave` | name + tag / name / clanId | clãs: criar (custa ouro), convidar, aceitar, recusar e sair |
+| `clan_kick`, `clan_rank`, `clan_transfer`, `clan_disband`, `clan_motd`, `clan_info` | charId, rank, text | cargos (líder, oficial, membro), expulsar, passar a liderança, desfazer, mensagem do dia e a ficha do clã |
+| `duel_request`, `duel_accept`, `duel_decline` | name / from | duelo sem morte (contagem, luta até 1 de vida, sem perda) |
 | `ignore_add`, `ignore_remove`, `ignore_list` | name | lista de ignorados do personagem (até 100, no banco): falas e convites de quem está nela não chegam; a equipe não pode ser ignorada (D145) |
 | `enhance_quote`, `enhance` | npc (ferreiro), instance | custo, chance e prévia; refino com RNG semeado (falha mantém o grau e gasta ouro e materiais) |
 | `storage_list`, `storage_put`, `storage_take` | npc (guarda-volumes), instance | depósito compartilhado pela conta |
@@ -232,7 +244,7 @@ Todo pedido do cliente leva `rid` (texto único por pedido). A resposta é `{ t:
 
 Com várias zonas, o `enter` de um personagem cujo mapa é de outra zona responde `{ ok, transfer: { url, token, mapId } }`, e um portal para um mapa de outra zona manda o evento `transfer` com os mesmos campos (seção [Múltiplas zonas](#múltiplas-zonas)).
 
-Eventos do servidor: `hello`, `defs`, `snap` (10 Hz: `now` = relógio da zona em ms; por entidade id, tipo, posição, velocidade `vx`/`vz`, vida, alvo; nos personagens, `staff` — verdadeiro para contas `gm`/`admin`, que o cliente mostra como **[Equipe]**), `hit` (origem, destino, dano, crítico, errou, habilidade), `death`, `spawn`, `loot` (só para o dono), `xp`, `level_up`, `char`, `buff`, `ground`, `cast`, `player_dead`, `respawn`, `joined`, `left`, `chat` (com `staff: true` quando quem fala é da equipe), `kicked`, `cast` (habilidade usada, para os efeitos), `shield`, `quest_update`, `party`, `trial`, `boss` (fase, vida, proteção, válvula, comportas), `warn` (aviso de perigo: círculo, cone ou linha, duração; nos golpes de monstro também `src`, `id`, `kind` e `name` da mecânica; `hazard` quando é um perigo do mapa, como a esteira da Oficina; `kind: 'bell2'` é a faixa do segundo toque do tutorial, só para o dono), `warn_cancel` (o golpe avisado não sai: monstro atordoado, morto ou fora da luta), `mech` (mecânicas dos monstros: `burst`, `pull`, `drain`, `echo`, `dash`, `summon`, `vanish`, `pressure`), `debuff` (efeito negativo num jogador: id, nome, duração, texto), `cleanse` (a Alvorada tirou um efeito), `speed` (só para o próprio jogador: a velocidade de caminhada mudou por reforço ou efeito negativo; a previsão do movimento acompanha), `notice` (`kind`: `shutdown`, `announce` ou `staff` — denúncia nova ou `/bug`, só para a equipe), `say` (fala de quem o jogador resgata no tutorial: `eid`, `name`, `text`, só para o dono) e `escort` (mensagens da escolta e da defesa: marcos, ondas, queda, recomeço, vitória e o tempo que falta). Entidades do tutorial (Bento, Ligia, Caio) vão no `snap` como tipo `e` com `def` `man`/`woman`/`boy` e só para o dono (`zone.snapshot(charId)` e o filtro `owner` dos snapshots por diferença).
+Eventos do servidor: `hello`, `defs`, `snap` (10 Hz: `now` = relógio da zona em ms; por entidade id, tipo, posição, velocidade `vx`/`vz`, vida, alvo; nos personagens, `staff` — verdadeiro para contas `gm`/`admin`, que o cliente mostra como **[Equipe]**), `hit` (origem, destino, dano, crítico, errou, habilidade), `death`, `spawn`, `loot` (só para o dono), `xp`, `level_up`, `char`, `buff`, `ground`, `cast`, `player_dead`, `respawn`, `joined`, `left`, `chat` (com `staff: true` quando quem fala é da equipe), `kicked`, `cast` (habilidade usada, para os efeitos), `shield`, `quest_update`, `party`, `trial`, `boss` (fase, vida, proteção, válvula, comportas), `warn` (aviso de perigo: círculo, cone ou linha, duração; nos golpes de monstro também `src`, `id`, `kind` e `name` da mecânica; `hazard` quando é um perigo do mapa, como a esteira da Oficina; `kind: 'bell2'` é a faixa do segundo toque do tutorial, só para o dono), `warn_cancel` (o golpe avisado não sai: monstro atordoado, morto ou fora da luta), `mech` (mecânicas dos monstros: `burst`, `pull`, `drain`, `echo`, `dash`, `summon`, `vanish`, `pressure`), `debuff` (efeito negativo num jogador: id, nome, duração, texto), `cleanse` (a Alvorada tirou um efeito), `speed` (só para o próprio jogador: a velocidade de caminhada mudou por reforço ou efeito negativo; a previsão do movimento acompanha), `notice` (`kind`: `shutdown`, `announce` ou `staff` — denúncia nova ou `/bug`, só para a equipe), `say` (fala de quem o jogador resgata no tutorial: `eid`, `name`, `text`, só para o dono) e `escort` (mensagens da escolta e da defesa: marcos, ondas, queda, recomeço, vitória e o tempo que falta). Entidades do tutorial (Bento, Ligia, Caio) vão no `snap` como tipo `e` com `def` `man`/`woman`/`boy` e só para o dono (`zone.snapshot(charId)` e o filtro `owner` dos snapshots por diferença). Também: `res` (resposta a um pedido), `zone` (troca de mapa ou instância: ficha, snapshot e saques do mapa novo), `system` (mensagem do jogo no chat), `heal` (cura: origem, destino, quantia), `cast_start` · `cast_end` · `cast_cancel` (habilidade com tempo de conjuração: começo para todos, resultado para quem conjura, interrupção), `channel_end` (interação com tempo terminada ou interrompida, com o motivo), `trade_invite` · `trade` · `trade_done` · `trade_closed` (convite, estado da troca, troca feita com a ficha nova, troca encerrada), `clan_invite` · `clan_event` (convite e entradas, saídas e mudanças do clã), `duel_invite` · `duel` · `duel_start` · `duel_end` (convite; contagem, luta e resultado para os dois; início e fim avisados à zona) e `transfer` (várias zonas: conectar na zona do mapa novo).
 
 ## Movimento no cliente
 
