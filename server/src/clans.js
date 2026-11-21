@@ -116,7 +116,8 @@ export class ClanManager {
     const clan = this.st.clanById(p.char.clanId);
     // ignorado pelo convidado (lista no banco): recusado em silêncio; a zona dele também confere na entrega
     if (!p.char.staff && this.st.isIgnoring(t.charId, p.char.id)) return { ok: true, message: `Convite enviado a ${t.name}.` };
-    this.s.worldSend(t.charId, { t: 'clan_invite', clan: { id: clan.id, name: clan.name, tag: clan.tag }, from: p.char.name }, { kind: 'clan_invite', clanId: clan.id, from: p.char.id });
+    // (staff: a zona dele não descarta o convite da equipe, mesmo de quem ele ignorava antes de ela entrar na equipe)
+    this.s.worldSend(t.charId, { t: 'clan_invite', clan: { id: clan.id, name: clan.name, tag: clan.tag }, from: p.char.name, ...(p.char.staff ? { staff: true } : {}) }, { kind: 'clan_invite', clanId: clan.id, from: p.char.id });
     return { ok: true, message: `Convite enviado a ${t.name}.` };
   }
 

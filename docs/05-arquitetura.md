@@ -395,6 +395,9 @@ decisões D111–D118 em [DECISOES.md](DECISOES.md).
   a zona, e a conferência roda antes de cada passo da simulação e de cada comando. Um `kick` que chega antes
   de a entrada terminar de carregar marca a época concedida, e a entrada desiste em vez de carregar sem
   posse. Ao reconectar — ou quando o mundo reinicia — a zona diz quem tem carregado e o mundo refaz as posses.
+  A administração pelo chat (`/gm renomear`, `retirar`, `retirar_ouro`, D146) pede a posse do mesmo jeito, com o
+  aviso da equipe no `kick` (`acquire` com `kickReason`), muda o banco sem ninguém com o personagem carregado e
+  devolve a posse em seguida (se o próprio jogador entrou nesta zona no meio, a época nova fica com a sessão dele).
 - **Transferência** (portal, teleporte de mestre ou `enter` de quem está salvo num mapa de outra zona):
 
 ```

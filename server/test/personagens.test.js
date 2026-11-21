@@ -60,18 +60,27 @@ async function player(server, url, acc, name, role = null) {
   return { c, id };
 }
 
-test('nomes reservados: palavras da equipe sem diferença de maiúsculas e acentos, ignorando _ e -', async () => {
+// nomes de gente que começam ou terminam com gm, adm, mod ou dev: precisam valer (D145)
+const COMMON_NAMES = ['Modesto', 'Devanir', 'Admir', 'Admilson', 'Modena', 'Devon', 'Gmelina', 'GMelina', 'MODESTO', 'Admar', 'Devair',
+  'Modestina', 'Ademar', 'Ademod', 'Desmod', 'Modelo', 'Lia-Moda', 'Ana_Devota', 'Bjørn', 'Joana', 'Gema', 'Tomas', 'Aurora', 'Lia_2004', 'Remo'];
+// imitações: a palavra curta inteira ou separada por _, -, algarismo ou troca de maiúscula; as longas também no começo
+// ou no fim; algarismos lidos como letras
+const IMITATIONS = ['GM', 'gm', 'G_M', 'GM_Fulano', 'gm_joao', 'Joao-GM', 'Fulano-Mod', 'Dev1', 'Gm2', 'Adm_Lia', 'Ana_GM_Lia', 'GMJoao',
+  'JoaoGM', 'AdmLia', 'DevMaria', 'maria-dev', 'Ana-Mods', 'M0d', 'D3V', 'M0d_Ana', 'Ana_d3v', 'mod-ana', 'Admin', 'Adm1n', 'ADMINISTRADOR',
+  'Équipe', 'EquipeAzul', 'Moderação', 'Moderador_X', 'Suporte', 'sup_orte', 'Sistema', 'Staff_1', 'St4ff', 'Mestre', 'Grão_Mestre',
+  'excluido_3', 'Excluída_9'];
+
+test('nomes reservados: palavras da equipe sem diferença de maiúsculas e acentos, ignorando _ e -; nomes de gente valem', async () => {
   // regra pura (names.js)
-  for (const n of ['GM', 'gm_joao', 'Joao-GM', 'Admin', 'Adm1n', 'ADMINISTRADOR', 'Équipe', 'EquipeAzul', 'Moderação', 'Moderador_X', 'M0d',
-    'mod-ana', 'Suporte', 'sup_orte', 'Sistema', 'Staff_1', 'DevMaria', 'maria-dev', 'Mestre', 'Grão_Mestre', 'excluido_3', 'Excluída_9']) {
-    assert.equal(isReservedCharName(n), true, `${n} é reservado`);
-  }
-  for (const n of ['Joana', 'Gema', 'Tomas', 'Aurora', 'Lia_2004', 'Remo', 'Ademar']) assert.equal(isReservedCharName(n), false, `${n} vale`);
+  for (const n of IMITATIONS) assert.equal(isReservedCharName(n), true, `${n} é reservado`);
+  for (const n of COMMON_NAMES) assert.equal(isReservedCharName(n), false, `${n} vale`);
   assert.equal(foldName('Grão_Mestre-7'), 'graomestret');
   assert.equal(hasStaffWord('Clã do Mestre'), true);
   assert.equal(isReservedClanName('Equipe Azul'), true);
   assert.equal(isReservedClanName("Guarda d'Equipe"), true);
-  assert.equal(isReservedClanName('Guarda do Sal'), false);
+  assert.equal(isReservedClanName('Clã do GM'), true, 'palavra curta separada por espaço');
+  assert.equal(isReservedClanName('Os GMs'), true, 'no plural');
+  for (const n of ['Guarda do Sal', 'Moda Livre', 'Devotos do Vau']) assert.equal(isReservedClanName(n), false, `clã ${n} vale`);
   for (const t of ['GM', 'ADM', 'MOD', 'DEV', 'STAF', 'EQP', 'gm', 'GMX', 'XGM', 'M0D']) assert.equal(isReservedClanTag(t), true, `sigla ${t}`);
   for (const t of ['SAL', 'VAU', 'OE', 'EQ']) assert.equal(isReservedClanTag(t), false, `sigla ${t} vale`);
 
@@ -79,21 +88,25 @@ test('nomes reservados: palavras da equipe sem diferença de maiúsculas e acent
   const { server, url, done } = await boot({ dev: true });
   try {
     const c = await account(server, url, 'p_nomes');
-    for (const n of ['GM_Joao', 'Admin', 'Équipe', 'moderação', 'joao-gm', 'Sup_Orte', 'Mestre', 'excluido_1']) {
+    for (const n of ['GM_Joao', 'Dev1', 'Fulano-Mod', 'Adm_Lia', 'Admin', 'Équipe', 'moderação', 'joao-gm', 'Sup_Orte', 'Mestre', 'excluido_1']) {
       const r = await c.request('create_char', { name: n, classId: 'breaker' });
       assert.equal(r.code, 'bad_name', `${n}: ${r.reason}`);
     }
-    const id = await makeChar(c, 'Fundadora');
-    await enter(c, id);
-    await c.request('gm', { cmd: 'xp', level: 10 });
-    await c.request('gm', { cmd: 'gold', amount: 600 });
-    assert.equal((await c.request('clan_create', { name: 'Equipe Azul', tag: 'AZL' })).code, 'bad_name');
-    assert.equal((await c.request('clan_create', { name: 'Clã do Mestre', tag: 'CDM' })).code, 'bad_name');
-    for (const tag of ['GM', 'adm', 'MOD', 'DEV', 'STAF', 'EQP']) assert.equal((await c.request('clan_create', { name: 'Guarda do Sal', tag })).code, 'bad_tag', `sigla ${tag}`);
-    const ok = await c.request('clan_create', { name: 'Guarda do Sal', tag: 'SAL' });
+    // nomes de gente com gm, adm, mod ou dev no começo ou no fim são aceitos (4 por conta)
+    for (const n of ['Modesto', 'Devanir', 'Admilson', 'Gmelina']) await makeChar(c, n);
+    const c2 = await account(server, url, 'p_nomes2');
+    const id = await makeChar(c2, 'Fundadora');
+    await enter(c2, id);
+    await c2.request('gm', { cmd: 'xp', level: 10 });
+    await c2.request('gm', { cmd: 'gold', amount: 600 });
+    assert.equal((await c2.request('clan_create', { name: 'Equipe Azul', tag: 'AZL' })).code, 'bad_name');
+    assert.equal((await c2.request('clan_create', { name: 'Clã do Mestre', tag: 'CDM' })).code, 'bad_name');
+    assert.equal((await c2.request('clan_create', { name: 'Clã do GM', tag: 'CGM' })).code, 'bad_name');
+    for (const tag of ['GM', 'adm', 'MOD', 'DEV', 'STAF', 'EQP']) assert.equal((await c2.request('clan_create', { name: 'Guarda do Sal', tag })).code, 'bad_tag', `sigla ${tag}`);
+    const ok = await c2.request('clan_create', { name: 'Guarda do Sal', tag: 'SAL' });
     assert.equal(ok.ok, true, ok.reason);
-    log('personagem e clã com palavras da equipe recusados; Guarda do Sal [SAL] criado');
-    c.ws.close();
+    log('personagem e clã com palavras da equipe recusados; Modesto, Devanir, Admilson e Gmelina aceitos; Guarda do Sal [SAL] criado');
+    c.ws.close(); c2.ws.close();
     await sleep(50);
   } finally { await done(); }
 });

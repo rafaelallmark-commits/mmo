@@ -37,7 +37,9 @@ const DB = arg('db', null);
 const DB_LABEL = !DB ? 'SQLite (arquivo temporário)' : isPostgresUrl(DB) ? `PostgreSQL ${parsePgUrl(DB).label}` : `SQLite ${DB}`; // sem a senha
 const OUT = arg('saida', null);
 const MD = arg('md', null);
-const TAG = Math.random().toString(36).slice(2, 7);
+// só letras: um algarismo no meio da etiqueta separaria um pedaço como "gm" ou "dev", que os nomes da equipe
+// reservam (D145), e o personagem de todos os robôs desta execução seria recusado
+const TAG = Array.from({ length: 5 }, () => 'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random() * 26)]).join('');
 const CLASSES = ['breaker', 'bastion', 'pikeman', 'warden', 'dawnshield', 'windwalker', 'veilsinger', 'emberweaver'];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const pct = (arr, p) => { if (!arr.length) return 0; const a = [...arr].sort((x, y) => x - y); return a[Math.min(a.length - 1, Math.floor(p * a.length))]; };

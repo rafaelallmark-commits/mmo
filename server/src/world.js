@@ -329,6 +329,8 @@ export class WorldService {
     if (grace > 0 && !this.leases.has(m.charId)) await sleep(grace);
     const deadline = Date.now() + this.opts.downAfterMs + 5000;
     const kicked = new Set(); // posses para as quais este pedido já mandou "kick" (repetir não faz mal)
+    // aviso a quem sai: a outra conexão da conta ou, na administração pelo chat (D146), o motivo da equipe
+    const kickReason = typeof m.kickReason === 'string' && m.kickReason ? m.kickReason.slice(0, 300) : 'Sua conta entrou em outra conexão.';
     for (;;) {
       if (!this.isCurrent(z)) return { ok: false, code: 'world_down', reason: 'Zona desconectada do mundo.' };
       const { error, list, wait } = this.conflictsFor(z, m);
@@ -338,7 +340,7 @@ export class WorldService {
         const holder = this.zones.get(l.zoneId);
         if (holder?.connected && !kicked.has(l)) {
           kicked.add(l);
-          this.send(holder, { t: 'kick', charId: cid, epoch: l.epoch, reason: 'Sua conta entrou em outra conexão.' });
+          this.send(holder, { t: 'kick', charId: cid, epoch: l.epoch, reason: kickReason });
         }
       }
       const left = deadline - Date.now();
@@ -533,7 +535,8 @@ export class WorldService {
   }
 
   // ---------- grupos ----------
-  partyInvite(z, { charId, name }) {
+  partyInvite(z, m) {
+    const { charId, name } = m;
     const me = this.online.get(charId);
     if (!me || !this.owns(z, charId)) return { ok: false, code: 'not_in_world', reason: 'Personagem fora do mundo.' };
     const targetId = typeof name === 'string' ? this.names.get(name.trim().toLowerCase()) : null;
@@ -543,8 +546,12 @@ export class WorldService {
     const pid = this.charParty.get(charId);
     if (pid && this.parties.get(pid).members.size >= PARTY_MAX) return { ok: false, code: 'full', reason: `Grupo cheio (máximo ${PARTY_MAX}).` };
     if (pid && this.parties.get(pid).leader !== charId) return { ok: false, code: 'not_leader', reason: 'Só o líder pode convidar.' };
+    // quem convida está na lista de ignorados do convidado (a zona de quem convida conferiu): depois das mesmas
+    // conferências de qualquer convite, "enviado" sem guardar nem entregar — ninguém descobre que é ignorado
+    if (m.silentFor === targetId) return { ok: true };
     this.invites.set(targetId, { from: charId, at: Date.now() });
-    this.deliver(targetId, { t: 'party_invite', from: me.name, fromId: charId });
+    // staff: convite da equipe, que a zona do convidado entrega mesmo a quem a ignorava (D145)
+    this.deliver(targetId, { t: 'party_invite', from: me.name, fromId: charId, ...(m.staff === true ? { staff: true } : {}) });
     return { ok: true };
   }
 

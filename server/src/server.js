@@ -1719,15 +1719,16 @@ export class GameServer {
       return { ok: false, code: 'too_fast', reason: `Espere ${Math.ceil((last + this.opts.partyInviteGapMs - now) / 1000)} s para convidar de novo.`, cache: false };
     }
     if (this.world) {
-      // várias zonas: o convite mora no mundo; a lista de ignorados do convidado é conferida aqui antes (na
-      // memória, se ele está nesta zona; no banco, se está em outra) e de novo na zona dele, na entrega
+      // várias zonas: o convite mora no mundo; a lista de ignorados do convidado é conferida aqui (na memória, se
+      // ele está nesta zona; no banco, se está em outra) e de novo na zona dele, na entrega. Ignorado: o mundo
+      // faz as mesmas conferências (grupo cheio, já em grupo, líder) e só então responde "enviado" sem guardar
+      // nem entregar (silentFor) — uma recusa aqui antes delas entregaria que ele é ignorado.
+      // (staff: a zona do convidado não descarta o convite da equipe, nem de quem foi ignorado antes de entrar nela)
       const key = typeof name === 'string' ? name.trim().toLowerCase() : '';
       const tid = this.byName.get(key) ?? this.remoteByName.get(key);
-      if (tid != null && tid !== c.id && !c.staff && (this.byChar.has(tid) ? this.ignoredBy(tid, c.id, false) : this.store.isIgnoring(tid, c.id))) {
-        this.partyInviteAt.set(c.id, now);
-        return { ok: true, cache: false };
-      }
-      return this.worldParty('party_invite', { charId: c.id, name }).then((r) => { if (r.ok) this.partyInviteAt.set(c.id, Date.now()); return r; });
+      const silent = tid != null && tid !== c.id && !c.staff && (this.byChar.has(tid) ? this.ignoredBy(tid, c.id, false) : this.store.isIgnoring(tid, c.id));
+      return this.worldParty('party_invite', { charId: c.id, name, staff: !!c.staff, ...(silent ? { silentFor: tid } : {}) })
+        .then((r) => { if (r.ok) this.partyInviteAt.set(c.id, Date.now()); return r; });
     }
     const targetId = typeof name === 'string' ? this.byName.get(name.trim().toLowerCase()) : null;
     if (!targetId) return { ok: false, code: 'offline', reason: `${name} não está conectado.` };
@@ -2247,6 +2248,26 @@ export class GameServer {
   }
 
   // ---------- administração (D146): chamados por moderation.js, só para admin ----------
+  // Muda no banco um personagem que não está carregado nesta zona. Com várias zonas, pede antes a posse dele ao
+  // mundo, como uma entrada: se ele está on-line em outra zona, ela o grava e desconecta (com kickReason), e
+  // ninguém o carrega enquanto fn roda; depois a posse volta. Sem isso, a zona dele (ou um login no meio)
+  // gravaria por cima do ouro e dos itens mudados aqui. fn decide de novo se ele está carregado aqui (playerOf).
+  withCharHeld(charId, name, kickReason, fn) {
+    if (!this.world || this.playerOf(charId)) return fn();
+    const busy = { ok: false, code: 'busy', reason: `${name} está mudando de zona agora. Tente de novo em instantes.`, cache: false };
+    return this.world.request('acquire', { charId, name, kickReason }, this.world.downMs * 2 + 10000).then((r) => {
+      if (!r.ok) return { ok: false, code: r.code ?? 'busy', reason: r.reason ?? busy.reason, cache: false };
+      if (this.leaseRevoked(r.epoch)) return busy; // outra entrada já pediu o personagem: a posse foi devolvida
+      try { return fn(); } finally {
+        // a entrada do próprio jogador nesta zona ganhou a posse logo antes desta concessão, que é a mais nova: a
+        // época passa para a sessão dele (devolver deixaria o personagem carregado aqui sem dono no mundo)
+        const s = this.playerOf(charId) ? this.byChar.get(charId) : null;
+        if (s) s.leaseEpoch = r.epoch;
+        else this.world.notify('release', { charId, epoch: r.epoch });
+      }
+    });
+  }
+
   // Nome novo com o personagem on-line nesta zona: memória (nome, busca por nome, grupo, diretório do mundo)
   // e o próprio jogador fica sabendo; o banco já foi gravado.
   renameOnline(p, name) {
@@ -2265,7 +2286,7 @@ export class GameServer {
 
   // Retira até `want` unidades de defId do personagem: bolsa, caixa de recuperação, equipamento e o que ele
   // guardou no depósito da conta, nessa ordem. On-line nesta zona: memória e banco (troca aberta cancelada,
-  // atributos recalculados, ficha nova para ele); fora do ar: só o banco. Devolve { qty, instances }.
+  // atributos recalculados, ficha nova para ele); fora do ar: só o banco. Devolve { qty, instances, online }.
   takeItemsOf(charId, defId, want) {
     const p = this.playerOf(charId);
     const fromRow = (r) => ({ id: r.id, defId: r.def_id, qty: r.qty, enh: r.enh, loc: r.loc, slot: r.slot });
@@ -2282,7 +2303,7 @@ export class GameServer {
       left -= take;
       plan.push({ it, take });
     }
-    if (!plan.length) return { qty: 0, instances: [] };
+    if (!plan.length) return { qty: 0, instances: [], online: !!p };
     if (p) this.trades.cancel(charId, 'Troca cancelada: a equipe mexeu nos itens.');
     this.store.tx(() => {
       for (const { it, take } of plan) {
@@ -2302,7 +2323,7 @@ export class GameServer {
       this.sendTo(s, { t: 'char', char: p.zone.charView(p) });
       this.sendTo(s, { t: 'system', text: `A equipe retirou do seu personagem: ${this.data.items[defId].name} ×${qty}.` });
     }
-    return { qty, instances: plan.map((x) => x.it.id) };
+    return { qty, instances: plan.map((x) => x.it.id), online: !!p };
   }
 
   // Retira até n de ouro do personagem (on-line nesta zona: memória e banco; fora do ar: banco).
@@ -2310,19 +2331,19 @@ export class GameServer {
     const p = this.playerOf(charId);
     if (p) {
       const taken = Math.min(n, p.char.gold);
-      if (!taken) return { taken: 0, gold: p.char.gold };
+      if (!taken) return { taken: 0, gold: p.char.gold, online: true };
       this.trades.cancel(charId, 'Troca cancelada: a equipe mexeu no ouro.');
       p.char.gold -= taken;
       this.store.saveCharacter(p.char);
       const s = this.byChar.get(charId);
       this.sendTo(s, { t: 'char', char: p.zone.charView(p) });
       this.sendTo(s, { t: 'system', text: `A equipe retirou ${taken} de ouro do seu personagem.` });
-      return { taken, gold: p.char.gold };
+      return { taken, gold: p.char.gold, online: true };
     }
     const c = this.store.loadCharacter(charId);
     const taken = Math.min(n, c?.gold ?? 0);
     if (taken) this.store.setCharacterGold(charId, c.gold - taken);
-    return { taken, gold: (c?.gold ?? 0) - taken };
+    return { taken, gold: (c?.gold ?? 0) - taken, online: false };
   }
 
   // Comandos de mestre (D138). Moderação (expulsar, suspender, silenciar, onde, anunciar) e teleporte do

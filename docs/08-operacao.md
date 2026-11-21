@@ -736,8 +736,10 @@ maior que o seu, e cada comando fica na auditoria (`mod_rename`, `mod_rename_cla
 | `/gm retirar Nome item [quantidade] [motivo]` | Retira o item (pelo identificador dos dados, ex.: `axe_1h_t1`) da bolsa, da caixa de recuperação, do equipamento e do que o personagem guardou no depósito da conta, nessa ordem; sem quantidade, todas as unidades. |
 | `/gm retirar_ouro Nome quantia [motivo]` | Retira ouro, até o que o personagem tem. |
 
-Com várias zonas e o personagem on-line em outra zona, o nome muda no banco e ele é desconectado lá (entra de novo já
-com o nome novo); itens e ouro são recusados com o aviso para usar `/gm onde` e repetir o comando na zona dele.
+Com várias zonas e o personagem fora desta zona, a zona pede ao mundo a posse dele antes de mudar o banco, como
+numa entrada: se ele está on-line em outra zona, ela o grava e o desconecta ("A equipe precisou revisar seu
+personagem. Entre de novo em instantes." ou, no renomear, o nome novo), e ninguém o carrega enquanto o banco muda;
+ele entra de novo já com a mudança. Fora do ar, a posse só impede que ele entre no meio do comando.
 
 Jogadores denunciam com `/denunciar Nome motivo` (5 por hora); a denúncia grava as últimas falas do denunciado que
 o denunciante podia ver (as do mapa e os sussurros, falas de grupo e de clã que chegaram a ele; D123). Cada denúncia e
@@ -842,8 +844,9 @@ de posses e grupos. Cada zona continua com as próprias métricas (`--metrics-po
   conexão") antes de a nova entrada carregar o personagem; nunca há duas cópias.
 - **Moderação** vale em todas as zonas: suspensão e silêncio na chegada por transferência e os comandos de
   mestre (`expulsar`, `suspender`, `silenciar`, `onde`, `anunciar`) alcançam quem está em outra zona. O aviso de
-  denúncia nova e de `/bug` chega à equipe de todas as zonas; `/gm renomear` de quem está em outra zona muda o nome
-  no banco e o desconecta lá; `/gm retirar` e `/gm retirar_ouro` só valem na zona em que o personagem está (D146).
+  denúncia nova e de `/bug` chega à equipe de todas as zonas; `/gm renomear`, `/gm retirar` e `/gm retirar_ouro` de
+  quem está em outra zona pegam a posse do personagem pelo mundo (a zona dele grava e o desconecta) antes de mudar o
+  banco, e a devolvem em seguida (D146).
 - **Lista de ignorados** vale entre zonas: fica no banco, a zona de quem fala confere antes de mandar e a zona de
   quem recebe confere de novo na entrega (sussurro, fala de grupo e de clã, convites de grupo e de clã).
 
