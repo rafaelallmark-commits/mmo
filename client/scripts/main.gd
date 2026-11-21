@@ -8,6 +8,8 @@ const WorldScript = preload("res://scripts/world.gd")
 const HudScript = preload("res://scripts/hud.gd")
 const MenuScene = preload("res://scripts/menu_scene.gd")
 const Theme_ = preload("res://scripts/ui_theme.gd")
+const BuildInfo = preload("res://scripts/build_info.gd")
+const Credits = preload("res://scripts/credits.gd")
 
 const SETTINGS_PATH := "user://opcoes.cfg"
 const TIPS := [
@@ -36,7 +38,8 @@ var journal := {}
 var party = null
 var chars_cache := []
 var classes_cache := []
-var settings := {"camera_sensitivity": 1.0, "show_names": true, "ui_scale": 1.0}
+# "server": último servidor digitado na tela Entrar ("" = o padrão da release; ver _remember_server)
+var settings := {"camera_sensitivity": 1.0, "show_names": true, "ui_scale": 1.0, "server": ""}
 var snap_cache := {}   # entidades conhecidas (snapshots por diferença do servidor)
 const PROTOCOL := 3    # versão do protocolo que este cliente fala (o servidor manda no "hello")
 var server_hello := {}
@@ -60,13 +63,20 @@ func _ready() -> void:
 		var s: String = a.trim_prefix("--")
 		var kv := s.split("=", true, 1)
 		args[kv[0]] = kv[1] if kv.size() > 1 else "true"
-	# endereço padrão do campo "Servidor": a release do teste público grava cinzas/servidor_padrao no projeto
-	server_url = str(ProjectSettings.get_setting("cinzas/servidor_padrao", server_url))
-	server_url = args.get("server", server_url)
+	if args.has("licenses"):
+		# --licenses=arquivo: grava o arquivo de licenças de terceiros que vai em cada pacote (release.yml) e sai
+		get_tree().quit(0 if Credits.write_file(str(args["licenses"]), BuildInfo.version()) == OK else 1)
+		return
 	accounts_url = args.get("accounts", accounts_url)
 	account = args.get("account", "")
 	password = args.get("password", "")
 	_load_settings()
+	# campo "Servidor": --server; senão o último que o jogador digitou (opções); senão o padrão que a release
+	# grava (cinzas/servidor_padrao); senão o servidor local
+	server_url = str(settings.get("server", ""))
+	if server_url == "":
+		server_url = BuildInfo.default_server()
+	server_url = args.get("server", server_url)
 	Net.connected.connect(_on_connected)
 	Net.disconnected.connect(_on_disconnected)
 	Net.message.connect(_on_message)
@@ -268,6 +278,7 @@ func show_title() -> void:
 	col.add_child(btns)
 	_button(btns, "Jogar", show_login, true)
 	_button(btns, "Opções", show_options)
+	_button(btns, "Créditos e licenças", show_credits)
 	_button(btns, "Sair", func(): get_tree().quit())
 	var cred := Label.new()
 	cred.text = "Personagens: Seed-san © VirtualCast, Inc. · amostra VRM © 2022 pixiv Inc. (VRM Public License 1.0)"
@@ -276,12 +287,48 @@ func show_title() -> void:
 	cred.add_theme_font_size_override("font_size", 12)
 	cred.add_theme_color_override("font_color", Color(1, 1, 1, 0.65))
 	root.add_child(cred)
+	# versão inteira do cliente (a do /bug) e protocolo, no canto inferior direito
 	var ver := Label.new()
-	ver.text = "Teste público · protocolo %d" % PROTOCOL
-	ver.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	ver.position = Vector2(-170, -34)
+	ver.name = "VersionLabel"
+	ver.text = "Teste público · versão %s · protocolo %d" % [BuildInfo.version(), PROTOCOL]
+	ver.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	ver.add_theme_color_override("font_color", Color(1, 1, 1, 0.6))
 	root.add_child(ver)
+	ver.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_MINSIZE, 20)
+	ver.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	ver.grow_vertical = Control.GROW_DIRECTION_BEGIN
+
+## Créditos e licenças (D151): créditos do jogo e dos modelos, licença do Godot Engine, componentes de
+## terceiros e os textos das licenças (o mesmo conteúdo do LICENCAS-TERCEIROS.txt dos pacotes).
+func show_credits() -> void:
+	state = "credits"
+	_ensure_menu_scene()
+	menu_scene.set_view("title")
+	var box := _menu_panel("Créditos e licenças", "center", 760)
+	var tabs := TabContainer.new()
+	tabs.name = "CreditsTabs"
+	# cabe na tela também com a interface ampliada (escala até 1,5 nas opções; o retângulo visível já vem
+	# dividido pela escala)
+	var avail := get_viewport().get_visible_rect().size
+	tabs.custom_minimum_size = Vector2(minf(760.0, avail.x - 80.0), clampf(avail.y - 270.0, 200.0, 430.0))
+	box.custom_minimum_size.x = tabs.custom_minimum_size.x
+	box.add_child(tabs)
+	var pages := [
+		["Créditos", Credits.game_text(BuildInfo.version())],
+		["Godot Engine", Credits.engine_text()],
+		["Terceiros", Credits.components_text()],
+		["Licenças", Credits.licenses_text()],
+	]
+	for i in pages.size():
+		var rt := RichTextLabel.new()
+		rt.bbcode_enabled = false
+		rt.text = pages[i][1]
+		rt.selection_enabled = true
+		rt.scroll_active = true
+		rt.add_theme_color_override("default_color", Theme_.TEXT)
+		tabs.add_child(rt)
+		tabs.set_tab_title(i, pages[i][0])
+	_button(box, "Voltar", show_title, true)
 
 # ---------------- ENTRAR ----------------
 var _pending_register := false
@@ -315,6 +362,7 @@ func show_login() -> void:
 	e_pass.text_submitted.connect(func(_t): b1.pressed.emit())
 
 func connect_and_login(register: bool) -> void:
+	_remember_server()
 	_pending_register = register
 	_kicked_reason = ""
 	server_hello = {}

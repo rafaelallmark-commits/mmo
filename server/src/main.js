@@ -5,6 +5,8 @@
 //   [--shutdown-grace 30] [--audit-days 90]
 //   várias zonas: [--world ws://127.0.0.1:7790 --zone-id zona-a --maps estrada_velha,pedrambar
 //                  --public-url ws://host:7777] com o segredo do mundo em CINZAS_WORLD_SECRET (ou --world-secret)
+//   versão da implantação (hello, log e /bug): CINZAS_VERSION, que a imagem da release traz com a tag; sem ela,
+//   a do package.json
 import { GameServer } from './server.js';
 import { checkSecrets } from './segredo.js';
 
@@ -50,6 +52,7 @@ const opts = {
   zoneId: textArg('zone-id', process.env.CINZAS_ZONE_ID),
   maps: textArg('maps', process.env.CINZAS_MAPS),
   publicUrl: textArg('public-url', process.env.CINZAS_PUBLIC_URL),
+  version: process.env.CINZAS_VERSION || undefined,
 };
 if (!opts.world && (opts.maps || opts.zoneId || opts.publicUrl)) console.error('aviso: --maps, --zone-id e --public-url só valem com --world (várias zonas); ignorados.');
 if (!checkSecrets([['CINZAS_TOKEN_SECRET (--token-secret)', opts.tokenSecret], ['CINZAS_WORLD_SECRET (--world-secret)', opts.worldSecret]], { dev: opts.dev })) process.exit(2);
