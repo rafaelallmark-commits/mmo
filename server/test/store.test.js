@@ -46,3 +46,28 @@ test('banco do M1 sem controle de versão é migrado uma única vez', { skip: SQ
     s2.close();
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('migração 6: contas antigas ficam com os termos na versão 1 e a data do aceite vem da auditoria do cadastro', { skip: SQLITE_ONLY }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cinzas-store-'));
+  try {
+    const path = join(dir, 'v5.db');
+    // banco parado na versão 5 (antes do aceite gravado na conta), com uma conta do serviço de contas (que tem a
+    // linha account_created com a versão aceita) e uma criada direto na zona (sem aceite nenhum)
+    const old = new DatabaseSync(path);
+    old.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)');
+    for (const m of MIGRATIONS.filter((x) => x.v <= 5)) m.up(old);
+    old.exec(`INSERT INTO schema_version (version) VALUES (5);
+      INSERT INTO accounts (name, pass_hash, salt, created_at, email, verified) VALUES ('cadastro', 'x', 'y', 1000, 'c@exemplo.com', 1);
+      INSERT INTO accounts (name, pass_hash, salt, created_at) VALUES ('dazona', 'x', 'y', 2000);
+      INSERT INTO audit_log (at, kind, account_id, ip, data_json) VALUES (1500, 'account_created', 1, '10.0.0.1', '{"terms":1}');
+      INSERT INTO audit_log (at, kind, account_id, ip, data_json) VALUES (1600, 'login', 2, '10.0.0.1', '{"via":"senha"}');`);
+    old.close();
+    const st = new Store(path);
+    try {
+      assert.deepEqual(st.migrated, [6]);
+      assert.deepEqual([st.findAccount('cadastro').terms_version, st.findAccount('cadastro').terms_at], [1, 1500]);
+      assert.deepEqual([st.findAccount('dazona').terms_version, st.findAccount('dazona').terms_at], [1, null]);
+      assert.deepEqual(st.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'account_events'").all().map((r) => r.name), ['account_events']);
+    } finally { st.close(); }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

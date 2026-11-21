@@ -69,7 +69,8 @@ mmo/
 │   │   ├── clans.js               clãs: fundar, convidar, cargos, liderança, mensagem do dia, chat do clã
 │   │   ├── duel.js                duelos sem morte: pedido, contagem, dano até 1 de vida, fuga e empate
 │   │   ├── moderation.js          suspensão, silêncio, expulsão, anúncio e denúncias com contexto
-│   │   ├── contas.js              serviço de contas (HTTP, processo separado): cadastro, e-mail, token, senha
+│   │   ├── contas.js              serviço de contas (HTTP, processo separado): cadastro, e-mail, token, senha,
+│   │   │                          aceite dos termos (versão na conta), limites de e-mail e de código, exportação
 │   │   ├── world.js · world-main.js   serviço de mundo (várias zonas): registro, posse, transferência, grupos
 │   │   ├── worldlink.js           ligação da zona com o mundo: hello com HMAC, sinal de vida, pedidos, cerca
 │   │   ├── token.js · mailer.js · metrics.js   token HMAC de uso único · SMTP mínimo · métricas/saúde
@@ -96,6 +97,7 @@ mmo/
 │   │   ├── ch4.test.js            capítulo 4: canalização, escolta, escolha de diálogo
 │   │   ├── snapshots.test.js · store.test.js   snapshots por diferença · migrações
 │   │   ├── publico.test.js        contas, token, limites, papéis, desligamento, TLS, SMTP
+│   │   ├── contas.test.js         confirmar depois, conta não confirmada vence, limites de e-mail e de código, termos novos
 │   │   ├── social.test.js         refino +4..+6, troca atômica, clãs, duelos
 │   │   ├── moderacao.test.js      silêncio, denúncia, suspensão, ferramenta, anúncio
 │   │   ├── nivel25.test.js        pós-v1: teto 25, Cava Primeira, habilidades do 25 e o capítulo 6 inteiro
@@ -131,7 +133,8 @@ mmo/
 │       ├── social.gd              troca, painel do clã, convites, aviso de duelo, ações sobre outro jogador
 │       ├── item_text.gd           descrição de itens com requisitos em vermelho e comparação
 │       ├── ui_theme.gd            paleta
-│       └── autotest.gd            modos --autotest (headless; --transfer cruza para outra zona), --navshots e --sceneshots
+│       └── autotest.gd            modos --autotest (headless; --transfer cruza para outra zona), --navshots, --sceneshots
+│                                  e --contastest (telas de conta: código, termos novos, baixar meus dados)
 └── docs/                          este conjunto de documentos
 ```
 
@@ -305,7 +308,7 @@ Feito: métricas do servidor e HTTP de métricas, snapshots por diferença e int
 | Operação | um processo no terminal | serviço gerenciado (reinício automático, logs estruturados, métricas, alertas), desligamento gracioso com aviso aos jogadores |
 | Cliente | rodado pelo editor | executáveis exportados e assinados (macOS notarizado), verificação de versão do protocolo no `hello` |
 | Dados | lidos do disco no início | versionados; mudanças de balanceamento publicadas com o servidor; validador roda no CI |
-| Privacidade | — | política de privacidade, exclusão de conta, retenção de logs |
+| Privacidade | — | política de privacidade, exclusão de conta, retenção de logs — **feito**: aceite dos termos gravado na conta (com novo aceite quando a versão sobe), conta não confirmada apagada em 7 dias, limites de e-mail e de código no banco e *Baixar meus dados* no cliente (D141–D143) |
 
 Já preparado ([08-operacao.md §8.8](08-operacao.md)): `wss://` atrás de um proxy Caddy com certificado automático,
 serviço gerenciado (Docker com verificação de saúde e reinício, ou systemd endurecido) com desligamento gracioso,

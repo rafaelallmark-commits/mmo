@@ -110,6 +110,26 @@ test('PostgreSQL: banco parado na versão 1, com dados, sobe para a última sem 
   } finally { s2.close(); }
 });
 
+test('PostgreSQL: migração 6 — contas antigas com os termos na versão 1 e a data do aceite vinda da auditoria do cadastro', { skip }, () => {
+  const schema = schemaOf('v5');
+  const old = new PgStore(PG_URL, { schema, targetVersion: 5 });
+  try {
+    assert.deepEqual(old.migrated, [1, 2, 3, 4, 5]);
+    old.exec(`INSERT INTO accounts (name, pass_hash, salt, created_at, email, verified) VALUES ('cadastro', 'x', 'y', 1000, 'c@exemplo.com', 1);
+      INSERT INTO accounts (name, pass_hash, salt, created_at) VALUES ('dazona', 'x', 'y', 2000);
+      INSERT INTO audit_log (at, kind, account_id, ip, data_json) VALUES (1500, 'account_created', 1, '10.0.0.1', '{"terms":1}');
+      INSERT INTO audit_log (at, kind, account_id, ip, data_json) VALUES (1600, 'login', 2, '10.0.0.1', '{"via":"senha"}');`);
+  } finally { old.close(); }
+  const st = new PgStore(PG_URL, { schema, dropSchemaOnClose: true });
+  try {
+    assert.deepEqual(st.migrated, [6]);
+    assert.deepEqual([st.findAccount('CADASTRO').terms_version, st.findAccount('cadastro').terms_at], [1, 1500]);
+    assert.deepEqual([st.findAccount('dazona').terms_version, st.findAccount('dazona').terms_at], [1, null]);
+    st.noteAccountEvent('mail', 1, 'c@exemplo.com');
+    assert.equal(st.accountEventStats('mail', 1, 'C@EXEMPLO.COM', 0).address.n, 1);
+  } finally { st.close(); }
+});
+
 test('PostgreSQL: três processos subindo juntos no mesmo esquema aplicam cada migração uma vez', { skip }, async () => {
   const schema = schemaOf('corrida');
   const code = `import { PgStore } from ${JSON.stringify(new URL('../src/store-pg.js', import.meta.url).href)};
@@ -179,6 +199,8 @@ test('PostgreSQL: banco SQLite importado (sqlite-para-pg) responde igual nos doi
     lite.logLevel(c1, 3, 'breaker', 300);
     lite.insertItem({ id: 'guardado', charId: c2, defId: 'potion_hp_s', qty: 5, enh: 0, loc: 'storage', slot: null, source: 'teste' });
     lite.issueCode(a1, 'verify');
+    lite.noteAccountEvent('mail', a1, 'Aurora@Exemplo.com');
+    lite.setTermsAccepted(a1, 1, now - 5000);
     lite.audit('login', { accountId: a1, ip: '10.0.0.1' });
     lite.audit('loot', { charId: c1, loot: 'loot-b', gold: 12 });
     let clan;
@@ -191,7 +213,7 @@ test('PostgreSQL: banco SQLite importado (sqlite-para-pg) responde igual nos doi
 
     pg = new PgStore(PG_URL, { schema, dropSchemaOnClose: true });
     const counts = importSqliteToPg(join(dir, 'origem.db'), pg);
-    assert.deepEqual(counts, { accounts: 2, characters: 3, clans: 1, clan_members: 2, item_instances: 3, loot_drops: 2, daily_claims: 1, quest_progress: 3, level_log: 2, account_codes: 1, audit_log: 2 });
+    assert.deepEqual(counts, { accounts: 2, characters: 3, clans: 1, clan_members: 2, item_instances: 3, loot_drops: 2, daily_claims: 1, quest_progress: 3, level_log: 2, account_codes: 1, account_events: 1, audit_log: 2 });
     assert.throws(() => importSqliteToPg(join(dir, 'origem.db'), pg), /não está vazia/, 'não importa por cima de dados');
 
     const src = new Store(join(dir, 'origem.db'));
@@ -206,6 +228,7 @@ test('PostgreSQL: banco SQLite importado (sqlite-para-pg) responde igual nos doi
         ['countItems', (s) => s.countItems(c1)], ['characterNameTaken', (s) => s.characterNameTaken('zed')], ['exportAccount', (s) => sortItems(s.exportAccount(a1))],
         ['clanOfChar', (s) => s.clanOfChar(c2)], ['clanMembers', (s) => s.clanMembers(s.clanOfChar(c1).id)], ['clanByNameOrTag', (s) => s.clanByNameOrTag('guarda do sal', 'x')],
         ['characterByName', (s) => s.characterByName('YARA')], ['findAccountsByIds', (s) => s.findAccountsByIds([a2, a1])], ['findAccount banida', (s) => s.findAccount('bento')],
+        ['accountEventStats', (s) => s.accountEventStats('mail', a1, 'aurora@exemplo.com', 0)],
       ]) assert.deepStrictEqual(f(pg), f(src), `${what}: mesmo resultado nos dois bancos`);
       assert.throws(() => pg.tx(() => pg.createClan('GUARDA DO SAL', 'NOVA', c2)), 'nome importado continua único');
       let novo;

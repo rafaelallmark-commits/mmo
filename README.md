@@ -187,6 +187,30 @@ Percorrer todas as telas e salvar uma captura de cada (precisa de janela, não u
 /Applications/Godot.app/Contents/MacOS/Godot --path client -- --navshots=/tmp/telas --server=ws://127.0.0.1:7777 --account=vitrine --password=vitrine123 --class=breaker --name=Brakka
 ```
 
+Telas de conta do teste público pela interface, apertando os botões de verdade (roda com `--headless`): cadastro,
+"fecha o jogo" sem confirmar, a recusa do login abre a tela do código com a conta preenchida, o reenvio é barrado
+pelo limite de um e-mail por minuto, confirma com o código lido do e-mail, entra e usa *Baixar meus dados*. Precisa de
+uma zona com login por token e do serviço de contas gravando os e-mails numa pasta, com o mesmo segredo nos dois
+terminais (gere um com `openssl rand -hex 32` e exporte em `CINZAS_TOKEN_SECRET` nos dois; dentro de `server/`, banco
+novo):
+
+```bash
+npm start -- --auth token --db /tmp/contas.db
+```
+
+```bash
+npm run contas -- --db /tmp/contas.db --email arquivo --email-dir /tmp/emails
+```
+
+E, da raiz do repositório (termina com `[autotest] OK`):
+
+```bash
+/Applications/Godot.app/Contents/MacOS/Godot --headless --path client -- --contastest=/tmp/emails --server=ws://127.0.0.1:7777 --account=testador --password=senha-forte-1
+```
+
+Com `--termos=conta:senha` (uma conta que aceitou uma versão anterior dos termos, por exemplo depois de subir
+`TERMS_VERSION`), o mesmo modo depois entra com ela pela tela *Termos atualizados*.
+
 Tour do cenário: teleporta (comando de mestre — servidor iniciado com `npm run dev`) por pontos de cada mapa, salva visão de jogo, ampla, de perto e uma sequência correndo, e mede a fluidez (velocidade quadro a quadro):
 
 ```bash

@@ -150,6 +150,24 @@ export const MIGRATIONS = [
     db.exec('ALTER TABLE accounts ADD COLUMN ban_reason TEXT');
     db.exec('ALTER TABLE accounts ADD COLUMN muted_until INTEGER');
   } },
+  { v: 6, name: 'contas: aceite dos termos na conta e limites de e-mail e de tentativas', up: (db) => {
+    // versão dos Termos de Uso e da Política de Privacidade aceita e quando; as contas que já existem ficam
+    // com a versão 1 (a única até aqui) e a data da linha account_created da auditoria, se ela ainda existir
+    db.exec('ALTER TABLE accounts ADD COLUMN terms_version INTEGER NOT NULL DEFAULT 1');
+    db.exec('ALTER TABLE accounts ADD COLUMN terms_at INTEGER');
+    db.exec(`UPDATE accounts SET terms_at = (SELECT MIN(a.at) FROM audit_log a
+      WHERE a.kind = 'account_created' AND a.account_id = accounts.id AND a.data_json LIKE '%"terms":%')`);
+    // e-mails mandados ('mail', com o resumo do endereço de destino) e códigos errados ('code_fail'), para os
+    // limites por conta e por endereço; sem chave estrangeira: o contador do endereço sobrevive à exclusão
+    db.exec(`CREATE TABLE IF NOT EXISTS account_events (
+      kind TEXT NOT NULL CHECK (kind IN ('mail','code_fail')),
+      account_id INTEGER,
+      addr_hash TEXT,
+      at INTEGER NOT NULL
+    )`);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_account_events_account ON account_events(account_id, kind, at)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_account_events_addr ON account_events(addr_hash, kind, at)');
+  } },
 ];
 
 export function migrate(db) {
@@ -188,6 +206,21 @@ export function hashPassword(password, salt) {
 // hash do código de 6 dígitos (só ele fica no banco)
 export function codeHash(accountId, code) {
   return createHash('sha256').update(`${accountId}:${String(code)}`).digest('hex');
+}
+
+// resumo do endereço de e-mail para os limites de envio (o endereço em si não fica em account_events)
+export function addressHash(email) {
+  return createHash('sha256').update(`email:${String(email).trim().toLowerCase()}`).digest('hex');
+}
+
+// Retenção do serviço de contas (purgeOld): conta nunca confirmada some depois de 7 dias (libera nome e
+// e-mail); os eventos dos limites (e-mails mandados, códigos errados) valem por 24 h.
+export const UNVERIFIED_TTL_MS = 7 * 86400000;
+export const ACCOUNT_EVENTS_TTL_MS = 86400000;
+
+// { n, first, last } de um evento de conta (contagem e instantes do primeiro e do último na janela)
+export function eventStat(row) {
+  return { n: Number(row?.n ?? 0), first: row?.first ?? null, last: row?.last ?? null };
 }
 
 // linha de characters + linhas de item_instances (já ordenadas) -> personagem em memória
@@ -266,10 +299,11 @@ export class Store {
 
   // ---------- contas ----------
   // email/verified: contas criadas pelo serviço de contas (teste público) começam sem verificação.
-  createAccount(name, password, { email = null, verified = true } = {}) {
+  // termsVersion/termsAt: aceite dos termos no cadastro, gravado junto com a conta (sem eles: versão 1, sem data).
+  createAccount(name, password, { email = null, verified = true, termsVersion = 1, termsAt = null } = {}) {
     const salt = randomBytes(16).toString('hex');
-    const r = this.prep('INSERT INTO accounts (name, pass_hash, salt, created_at, email, verified) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(name, hashPassword(password, salt), salt, Date.now(), email, verified ? 1 : 0);
+    const r = this.prep('INSERT INTO accounts (name, pass_hash, salt, created_at, email, verified, terms_version, terms_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(name, hashPassword(password, salt), salt, Date.now(), email, verified ? 1 : 0, termsVersion, termsAt);
     return Number(r.lastInsertRowid);
   }
 
@@ -312,6 +346,28 @@ export class Store {
   setRole(accountId, role) { this.prep('UPDATE accounts SET role = ? WHERE id = ?').run(role, accountId); }
   setBan(accountId, until, reason) { this.prep('UPDATE accounts SET banned_until = ?, ban_reason = ? WHERE id = ?').run(until, reason, accountId); }
   setMute(accountId, until) { this.prep('UPDATE accounts SET muted_until = ? WHERE id = ?').run(until, accountId); }
+  setTermsAccepted(accountId, version, at = Date.now()) { this.prep('UPDATE accounts SET terms_version = ?, terms_at = ? WHERE id = ?').run(version, at, accountId); }
+
+  // Eventos dos limites do serviço de contas: 'mail' (e-mail mandado: conta e resumo do endereço de destino)
+  // e 'code_fail' (palpite errado contra um código válido, anotado por consumeCode).
+  noteAccountEvent(kind, accountId, email = null) {
+    this.prep('INSERT INTO account_events (kind, account_id, addr_hash, at) VALUES (?, ?, ?, ?)').run(kind, accountId ?? null, email ? addressHash(email) : null, Date.now());
+  }
+
+  // libera os limites de uma conta antes do prazo (ferramenta de operação): apaga os eventos dela
+  clearAccountEvents(accountId) {
+    return Number(this.prep('DELETE FROM account_events WHERE account_id = ?').run(accountId).changes);
+  }
+
+  // Contagem e instantes (primeiro, último) de um tipo de evento desde `since`, separados por conta e por
+  // endereço de destino: { account: { n, first, last }, address: { n, first, last } }.
+  accountEventStats(kind, accountId, email, since) {
+    const q = 'SELECT COUNT(*) AS n, MIN(at) AS first, MAX(at) AS last FROM account_events WHERE kind = ? AND at > ? AND ';
+    return {
+      account: eventStat(this.prep(`${q}account_id = ?`).get(kind, since, accountId ?? null)),
+      address: eventStat(this.prep(`${q}addr_hash = ?`).get(kind, since, email ? addressHash(email) : null)),
+    };
+  }
 
   // Código de 6 dígitos (verificação de e-mail ou troca de senha). Guarda só o hash; vale 30 min.
   issueCode(accountId, kind, ttlMs = 30 * 60 * 1000) {
@@ -322,13 +378,17 @@ export class Store {
     return code;
   }
 
-  // true se o código confere (usa uma vez; 5 tentativas erradas invalidam)
+  // true se o código confere (usa uma vez; 5 tentativas erradas invalidam). Palpite errado contra um código
+  // válido também vira um evento 'code_fail' da conta (limite diário do serviço de contas).
   consumeCode(accountId, kind, code) {
     const row = this.prep('SELECT rowid AS rid, * FROM account_codes WHERE account_id = ? AND kind = ? AND used_at IS NULL AND expires_at > ? ORDER BY created_at DESC LIMIT 1').get(accountId, kind, Date.now());
     if (!row) return false;
     const ok = row.code_hash === codeHash(accountId, code);
     if (ok) this.prep('UPDATE account_codes SET used_at = ? WHERE rowid = ?').run(Date.now(), row.rid);
-    else this.prep('UPDATE account_codes SET attempts = attempts + 1, used_at = CASE WHEN attempts + 1 >= 5 THEN ? ELSE NULL END WHERE rowid = ?').run(Date.now(), row.rid);
+    else {
+      this.prep('UPDATE account_codes SET attempts = attempts + 1, used_at = CASE WHEN attempts + 1 >= 5 THEN ? ELSE NULL END WHERE rowid = ?').run(Date.now(), row.rid);
+      this.noteAccountEvent('code_fail', accountId);
+    }
     return ok;
   }
 
@@ -358,7 +418,7 @@ export class Store {
 
   // Portabilidade (LGPD): tudo o que guardamos da conta, em JSON.
   exportAccount(accountId) {
-    const acc = this.prep('SELECT id, name, email, verified, role, created_at, banned_until, ban_reason, muted_until FROM accounts WHERE id = ?').get(accountId);
+    const acc = this.prep('SELECT id, name, email, verified, role, created_at, terms_version, terms_at, banned_until, ban_reason, muted_until FROM accounts WHERE id = ?').get(accountId);
     const chars = this.prep('SELECT id, name, class_id, level, xp, gold, map_id, played_s, created_at, updated_at FROM characters WHERE account_id = ?').all(accountId);
     const ids = chars.map((c) => c.id);
     const inChars = (sql) => ids.flatMap((id) => this.prep(sql).all(id));
@@ -415,12 +475,22 @@ export class Store {
       : this.prep('SELECT * FROM audit_log ORDER BY id DESC LIMIT ?').all(limit);
   }
 
-  // retenção: apaga auditoria mais velha que N dias e códigos vencidos
+  // retenção: apaga auditoria mais velha que N dias, códigos vencidos, eventos dos limites com mais de 24 h e
+  // contas nunca confirmadas com mais de 7 dias (sem personagens: quem não confirmou nunca entrou no jogo), o
+  // que libera o nome e o e-mail delas
   purgeOld(auditDays) {
-    const cut = Date.now() - auditDays * 86400000;
+    const now = Date.now();
+    const cut = now - auditDays * 86400000;
     const a = this.prep('DELETE FROM audit_log WHERE at < ?').run(cut).changes;
-    const c = this.prep('DELETE FROM account_codes WHERE expires_at < ?').run(Date.now() - 86400000).changes;
-    return { audit: Number(a), codes: Number(c) };
+    const c = this.prep('DELETE FROM account_codes WHERE expires_at < ?').run(now - 86400000).changes;
+    const e = this.prep('DELETE FROM account_events WHERE at < ?').run(now - ACCOUNT_EVENTS_TTL_MS).changes;
+    const stale = `SELECT id FROM accounts WHERE verified = 0 AND deleted_at IS NULL AND created_at < ?
+      AND NOT EXISTS (SELECT 1 FROM characters c WHERE c.account_id = accounts.id)`;
+    const u = this.tx(() => {
+      this.prep(`DELETE FROM account_codes WHERE account_id IN (${stale})`).run(now - UNVERIFIED_TTL_MS);
+      return this.prep(`DELETE FROM accounts WHERE id IN (${stale})`).run(now - UNVERIFIED_TTL_MS).changes;
+    });
+    return { audit: Number(a), codes: Number(c), events: Number(e), unverified: Number(u) };
   }
 
   // ---------- personagens ----------

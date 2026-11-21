@@ -20,8 +20,10 @@ responsáveis) e aceita estes termos e a [Política de Privacidade](PRIVACIDADE.
 - A conta é pessoal: não compartilhe a senha nem venda, empreste ou compre contas.
 - Você responde pelo que for feito com a sua conta. Se suspeitar de acesso indevido, troque a senha
   (código por e-mail) e avise a equipe.
-- Você pode exportar seus dados ou excluir a conta a qualquer momento (tela de personagens ou serviço
-  de contas).
+- A conta precisa ser confirmada pelo código enviado ao e-mail; conta não confirmada em 7 dias é
+  apagada.
+- Você pode baixar seus dados (**Baixar meus dados**) ou excluir a conta (**Excluir conta**) a qualquer
+  momento, na tela de personagens do jogo; o serviço de contas oferece o mesmo.
 
 ## 3. Convivência
 
@@ -71,9 +73,11 @@ equipamento.
 
 ## 8. Mudanças e encerramento
 
-Podemos mudar estes termos; mudanças relevantes serão avisadas no jogo antes de valer. Você pode
-encerrar o uso a qualquer momento excluindo a conta. Podemos encerrar o teste ou contas que violem
-estes termos.
+Podemos mudar estes termos. Cada versão tem um número (no topo deste texto), e a conta guarda a
+versão que você aceitou e quando. Quando a versão muda, o jogo mostra os termos novos no login
+seguinte e só deixa entrar depois do seu aceite; se não quiser aceitar, na mesma tela dá para baixar
+seus dados ou excluir a conta. Você pode encerrar o uso a qualquer momento excluindo a conta. Podemos
+encerrar o teste ou contas que violem estes termos.
 
 ## 9. Lei aplicável
 

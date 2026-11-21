@@ -165,14 +165,88 @@ test('códigos de conta (uso único, 5 erros invalidam, o novo anula o anterior)
   } finally { st.close(); }
 });
 
+test('contas: aceite dos termos gravado na conta, eventos dos limites por conta e por endereço, palpite errado anotado', () => {
+  const st = createStore(':memory:');
+  try {
+    const t0 = Date.now();
+    const acc = st.createAccount('Termos', 'senha', { email: 'Termos@Exemplo.com', verified: false, termsVersion: 3, termsAt: t0 });
+    let row = st.findAccount('termos');
+    assert.deepEqual([row.terms_version, row.terms_at], [3, t0], 'versão e data do aceite gravadas no cadastro');
+    st.setTermsAccepted(acc, 4, t0 + 5);
+    row = st.findAccountById(acc);
+    assert.deepEqual([row.terms_version, row.terms_at], [4, t0 + 5]);
+    const exp = st.exportAccount(acc).conta;
+    assert.deepEqual([exp.terms_version, exp.terms_at], [4, t0 + 5], 'a exportação traz a versão e a data do aceite');
+    // e-mails: por conta e por endereço (sem diferença de maiúsculas); o do endereço não depende da conta
+    const empty = { n: 0, first: null, last: null };
+    assert.deepEqual(st.accountEventStats('mail', acc, 'termos@exemplo.com', t0 - 1000), { account: empty, address: empty });
+    st.noteAccountEvent('mail', acc, 'Termos@Exemplo.com');
+    st.noteAccountEvent('mail', null, 'TERMOS@exemplo.com'); // cadastro de outra conta (já excluída) com o mesmo endereço
+    st.noteAccountEvent('mail', acc + 1000, 'outro@exemplo.com');
+    let s = st.accountEventStats('mail', acc, 'termos@exemplo.com', t0 - 1000);
+    assert.equal(s.account.n, 1);
+    assert.equal(s.address.n, 2);
+    assert.ok(s.address.first >= t0 && s.address.last >= s.address.first && typeof s.address.last === 'number');
+    assert.equal(st.accountEventStats('mail', acc, 'termos@exemplo.com', Date.now() + 1000).address.n, 0, 'fora da janela não conta');
+    assert.deepEqual(st.accountEventStats('mail', null, null, t0 - 1000), { account: empty, address: empty }, 'sem conta e sem endereço: nada');
+    // palpite errado contra um código válido vira 'code_fail'; sem código válido não conta; acerto não conta
+    const wrongFor = (c) => (c === '000000' ? '111111' : '000000');
+    assert.equal(st.consumeCode(acc, 'verify', '123456'), false);
+    assert.equal(st.accountEventStats('code_fail', acc, null, t0 - 1000).account.n, 0, 'sem código válido, não é palpite');
+    const code = st.issueCode(acc, 'verify');
+    st.consumeCode(acc, 'verify', wrongFor(code));
+    st.consumeCode(acc, 'verify', wrongFor(code));
+    assert.equal(st.consumeCode(acc, 'verify', code), true);
+    s = st.accountEventStats('code_fail', acc, null, t0 - 1000);
+    assert.equal(s.account.n, 2);
+    assert.equal(s.address.n, 0, 'palpite errado não tem endereço');
+    // a ferramenta de operação libera os limites da conta: apaga só os eventos dela
+    assert.equal(st.clearAccountEvents(acc), 3, 'um e-mail e dois palpites errados');
+    assert.deepEqual(st.accountEventStats('code_fail', acc, null, t0 - 1000).account, empty);
+    assert.equal(st.accountEventStats('mail', acc, 'termos@exemplo.com', t0 - 1000).address.n, 1, 'o e-mail mandado pelo cadastro de outra conta continua contando para o endereço');
+  } finally { st.close(); }
+});
+
+test('retenção: conta nunca confirmada some depois de 7 dias (libera nome e e-mail); eventos dos limites, depois de 24 h', () => {
+  const st = createStore(':memory:');
+  try {
+    const DAY = 86400000;
+    const age = (id, days) => st.db.prepare('UPDATE accounts SET created_at = ? WHERE id = ?').run(Date.now() - days * DAY, id);
+    const velha = st.createAccount('velha', 'senha', { email: 'velha@exemplo.com', verified: false });
+    st.issueCode(velha, 'verify'); // código pendente (chave estrangeira para a conta)
+    const recente = st.createAccount('recente', 'senha', { email: 'recente@exemplo.com', verified: false });
+    const confirmada = st.createAccount('confirmada', 'senha', { email: 'confirmada@exemplo.com', verified: true });
+    const comPersonagem = st.createAccount('compers', 'senha', { email: 'compers@exemplo.com', verified: false });
+    newChar(st, comPersonagem, 'Guardado');
+    const excluida = st.createAccount('excluida', 'senha', { email: 'excluida@exemplo.com', verified: false });
+    st.deleteAccount(excluida);
+    age(velha, 8); age(recente, 6); age(confirmada, 30); age(comPersonagem, 30); age(excluida, 30);
+    st.noteAccountEvent('mail', velha, 'velha@exemplo.com');
+    st.noteAccountEvent('mail', recente, 'recente@exemplo.com');
+    st.db.prepare('UPDATE account_events SET at = ? WHERE account_id = ?').run(Date.now() - DAY - 1000, velha);
+    const r = st.purgeOld(90);
+    assert.equal(r.unverified, 1, 'só a conta não confirmada com mais de 7 dias');
+    assert.equal(r.events, 1, 'só o evento com mais de 24 h');
+    assert.equal(st.findAccount('velha'), undefined);
+    assert.equal(st.findAccountByEmail('velha@exemplo.com'), undefined);
+    assert.ok(st.findAccount('recente') && st.findAccount('confirmada') && st.findAccount('compers'), 'recente, confirmada e com personagem ficam');
+    assert.equal(st.accountEventStats('mail', recente, 'recente@exemplo.com', 0).account.n, 1);
+    // nome e e-mail livres de novo
+    const nova = st.createAccount('VELHA', 'outra', { email: 'Velha@Exemplo.com', verified: false });
+    assert.equal(st.findAccountByEmail('velha@exemplo.com').id, nova);
+    assert.equal(st.purgeOld(90).unverified, 0, 'a conta nova (de hoje) fica');
+  } finally { st.close(); }
+});
+
 test('formato e ordem das linhas iguais nos dois bancos', () => {
   const st = createStore(':memory:');
   try {
     const acc = st.createAccount('ordem', 'senha');
     const row = st.findAccount('ordem');
     assert.equal(Object.getPrototypeOf(row), null, 'linhas sem protótipo, como no node:sqlite');
-    assert.deepEqual(Object.keys(row), ['id', 'name', 'pass_hash', 'salt', 'created_at', 'email', 'verified', 'role', 'deleted_at', 'banned_until', 'ban_reason', 'muted_until']);
+    assert.deepEqual(Object.keys(row), ['id', 'name', 'pass_hash', 'salt', 'created_at', 'email', 'verified', 'role', 'deleted_at', 'banned_until', 'ban_reason', 'muted_until', 'terms_version', 'terms_at']);
     assert.equal(typeof row.id, 'number'); assert.equal(typeof row.created_at, 'number'); assert.equal(row.role, 'player'); assert.equal(row.email, null);
+    assert.deepEqual([row.terms_version, row.terms_at], [1, null], 'sem aceite registrado: versão 1 (a do banco antigo), sem data');
     const id = newChar(st, acc, 'Ordem');
     assert.equal(typeof id, 'number');
     // missões: ordem binária de quest_id (no SQLite vem do índice da chave primária)

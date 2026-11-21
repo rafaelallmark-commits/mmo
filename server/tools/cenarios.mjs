@@ -26,7 +26,7 @@ const SUITES = [
   ['Regras, morte, equipamento, habilidades, navegação, dados', 'test/rules.test.js test/death.test.js test/equipment.test.js test/skills.test.js test/nav.test.js test/data.test.js'],
   ['Capítulo 4 completo: canalização, escolta da carroça, escolha de diálogo', 'test/ch4.test.js'],
   ['Pós-versão 1: refino +4..+6 com selo, troca atômica, clãs, duelos (e casos de borda)', 'test/social.test.js'],
-  ['Teste público: contas e token, limites, papéis, desligamento gracioso, TLS, SMTP com TLS obrigatório, segredos, moderação e denúncias', 'test/publico.test.js test/moderacao.test.js test/email.test.js'],
+  ['Teste público: contas e token, limites, papéis, desligamento gracioso, TLS, SMTP com TLS obrigatório, segredos, moderação e denúncias; confirmar o e-mail depois, conta não confirmada que vence, limites de e-mail e de código, termos novos', 'test/publico.test.js test/moderacao.test.js test/email.test.js test/contas.test.js'],
   ['Ajustes do M4: recargas entre zonas, tônicos por nível, venda, descarte, armeiro, pedido que falha no meio sai sem gravar', 'test/ajustes.test.js'],
   ['Níveis 21–25: teto, A Cava Primeira, elite diária, habilidades do nível 25, capítulo 6 inteiro', 'test/nivel25.test.js'],
   ['Várias zonas: mundo + 2 zonas, transferência com token, posse única, grupo e clã entre zonas, quedas e moderação', 'test/multizona.test.js'],

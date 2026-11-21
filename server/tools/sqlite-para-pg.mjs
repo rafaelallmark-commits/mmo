@@ -18,7 +18,7 @@ import { Store } from '../src/store.js';
 import { PgStore, isPostgresUrl } from '../src/store-pg.js';
 
 // ordem das chaves estrangeiras; schema_version não vai (o PostgreSQL já está na última versão)
-export const TABLES = ['accounts', 'characters', 'clans', 'clan_members', 'item_instances', 'loot_drops', 'daily_claims', 'quest_progress', 'level_log', 'account_codes', 'audit_log'];
+export const TABLES = ['accounts', 'characters', 'clans', 'clan_members', 'item_instances', 'loot_drops', 'daily_claims', 'quest_progress', 'level_log', 'account_codes', 'account_events', 'audit_log'];
 const IDENTITY = { accounts: 'id', characters: 'id', clans: 'id', audit_log: 'id' };
 const CHUNK = 500;
 

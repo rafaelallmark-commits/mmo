@@ -166,6 +166,14 @@ export class GameServer {
 
   audit(kind, fields) { try { this.store.audit(kind, fields); } catch (e) { this.log('auditoria falhou', kind, e.message); } }
 
+  purge() {
+    try {
+      const r = this.store.purgeOld(this.opts.auditDays);
+      if (r.unverified) this.log(`retenção: ${r.unverified} conta(s) nunca confirmada(s) apagada(s) depois de 7 dias`);
+      return r;
+    } catch { return null; /* banco ocupado: tenta depois */ }
+  }
+
   start() {
     return new Promise((resolve) => {
       const onListening = (addr) => {
@@ -192,8 +200,11 @@ export class GameServer {
         this.step(dt);
       }, tickMs);
       this.saveTimer = setInterval(() => this.saveAll(), 10_000);
-      // retenção (privacidade): auditoria mais velha que auditDays e códigos vencidos, de hora em hora
-      this.purgeTimer = setInterval(() => { try { this.store.purgeOld(this.opts.auditDays); } catch { /* banco ocupado: tenta depois */ } }, 3600_000);
+      // retenção (privacidade): auditoria mais velha que auditDays, códigos vencidos, eventos dos limites do
+      // serviço de contas e contas nunca confirmadas há 7 dias — um minuto depois de subir (reinícios frequentes
+      // não adiam a limpeza para sempre) e depois de hora em hora
+      this.purgeKick = setTimeout(() => this.purge(), 60_000);
+      this.purgeTimer = setInterval(() => this.purge(), 3600_000);
     }).then(async (port) => {
       if (this.opts.metricsPort != null && this.opts.metricsPort !== false) {
         this.metricsSrv = await startMetricsServer({
@@ -339,7 +350,7 @@ export class GameServer {
 
   // crash: true (testes de queda) para como se o processo morresse: sem salvar e sem avisar o mundo
   async stop({ crash = false } = {}) {
-    clearInterval(this.timer); clearInterval(this.saveTimer); clearInterval(this.purgeTimer);
+    clearInterval(this.timer); clearInterval(this.saveTimer); clearInterval(this.purgeTimer); clearTimeout(this.purgeKick);
     if (crash) { this.crashed = true; this.world?.kill(); }
     for (const s of [...this.sessions]) this.dropSession(s); // salva e libera a posse de cada personagem
     if (this.world && !crash) await this.world.stop();
