@@ -66,6 +66,64 @@ function classesDoc() {
   return out.join('\n');
 }
 
+// ---------------------------------------------------------------- mecânicas dos monstros
+const s1 = (ms) => `${String(Math.round(ms / 10) / 100).replace('.', ',')} s`;
+// plural do nome do monstro: só a primeira palavra (Rato-Engrenagem → Ratos-Engrenagem, Ecoante → Ecoantes)
+const plural = (name) => name.replace(/^([^\s-]+)/, (w) => (/[aeiou]$/i.test(w) ? `${w}s` : `${w}es`));
+const cap = (t) => t[0].toUpperCase() + t.slice(1);
+// O que a mecânica faz, com os números dos dados (server/src/mechanics.js aplica as mesmas regras).
+function debuffDesc(d) {
+  const parts = [];
+  if (d.mods?.hitChancePct) parts.push(`${d.mods.hitChancePct}% de acerto`);
+  if (d.mods?.moveSpeedPct) parts.push(`${d.mods.moveSpeedPct}% de velocidade`);
+  if (d.mpPctPerSec) parts.push(`−${n1(d.mpPctPerSec)}% da mana máxima por segundo`);
+  if (d.silence) parts.push('sem habilidades');
+  return `**${d.name}** por ${s1(d.durationMs)} (${parts.join(', ').replace(/-/g, '−')})`;
+}
+function areaDesc(t) {
+  const shape = {
+    circle: `círculo de ${n1(t.radius)} m em volta do monstro`,
+    target_circle: `círculo de ${n1(t.radius)} m onde o alvo está`,
+    cone: `cone de ${n1(t.range)} m e ${t.angleDeg}° à frente`,
+    line: `linha de ${n1(t.length)} × ${n1(t.width)} m à frente${t.rails ? ', só nos eixos do mapa' : ''}`,
+  }[t.shape];
+  const fx = [];
+  if (t.damagePct > 0) fx.push(`${t.damagePct}% do dano ${t.magic ? 'como dano mágico' : 'físico'}`);
+  if (t.dash) fx.push('o monstro corre a linha inteira');
+  if (t.pullTo) fx.push(`puxa até ${n1(t.pullTo)} m dele`);
+  if (t.stunMs) fx.push(`atordoa ${s1(t.stunMs)} (menos com Vitalidade)`);
+  if (t.debuff) fx.push(debuffDesc(t.debuff));
+  if (t.spawn) fx.push(`gera ${t.spawn.count === 1 ? `um ${data.monsters[t.spawn.monster].name}` : `${t.spawn.count} ${plural(data.monsters[t.spawn.monster].name)}`}, até ${t.spawn.maxAlive} de uma vez`);
+  return `${shape}, avisado ${s1(t.warnMs)} antes; em quem ficou: ${fx.join('; ')}`;
+}
+function mechanicDesc(m) {
+  const k = m.mechanic;
+  switch (k.kind) {
+    case 'telegraph': {
+      const when = `a cada ${s1(k.everyMs)}, a primeira ${k.firstMs ? `${s1(k.firstMs)} depois de entrar em combate` : 'logo ao entrar em combate'}${k.minRange != null ? `, com o alvo a ${n1(k.minRange)}–${n1(k.maxRange)} m` : ''}`;
+      return `${cap(areaDesc(k))}. ${cap(when)}.${k.patrolRadius ? ` Patrulha até ${n1(k.patrolRadius)} m de casa.` : ''}`;
+    }
+    case 'death_burst': return `Ao morrer, explosão de ${n1(k.radius)} m onde caiu, avisada ${s1(k.warnMs)} antes: ${k.damagePct}% do dano ${k.magic ? 'como dano mágico' : 'físico'} em quem ficou.`;
+    case 'leech': return `Cada mordida que acerta gruda: ${debuffDesc(k.debuff)}, renovado a cada mordida.`;
+    case 'swarm': return `+${k.damagePctPerAlly}% de dano por ${m.name} lutando a até ${n1(k.radius)} m (até +${k.damagePctPerAlly * k.maxAllies}%).`;
+    case 'pierce': return `Os golpes ignoram ${k.defensePiercePct}% da defesa.`;
+    case 'echo': return `A cada ${s1(k.everyMs)} (a primeira ${s1(k.firstMs ?? k.everyMs)} depois de entrar em combate), no lugar do golpe comum, devolve ${k.pct}% do último golpe que levou nos últimos ${s1(k.memoryMs)} (até ${k.capPct}% do seu dano máximo) a quem o deu, se estiver a até ${k.range} m (senão, em quem ele enfrenta).`;
+    case 'summon': return `A cada limiar de vida (${k.thresholdsPct.join('%, ')}%) chama ${k.count === 1 ? `um ${data.monsters[k.monster].name}` : `${k.count} ${plural(data.monsters[k.monster].name)}`}, até ${k.maxAlive} vivos; os reforços dão XP, não deixam saque e somem quando o invocador cai ou desiste.`;
+    case 'pressure': return `Pressão alta por ${s1(k.highMs)} (+${k.highDamagePct}% de dano); na virada solta **${k.vent.name}** (${areaDesc(k.vent)}) e passa ${s1(k.lowMs)} em pressão baixa (−${k.lowDefensePct}% de defesa e resistência mágica).`;
+    case 'territorial': return `Passivo, mas ataca quem chega a ${n1(k.radius)} m.`;
+    default: return '—';
+  }
+}
+
+function mechanicsSection() {
+  const out = ['\n### Mecânicas dos monstros\n'];
+  out.push('Cada espécie com mecânica tem um campo `mechanic` em `data/monsters.json` (o servidor aplica em `server/src/mechanics.js`; docs/06 explica como jogar contra elas). Golpes de área são sempre avisados no chão (círculo, cone ou linha) com tempo para sair clicando: quem sai a tempo não leva nada, e atordoar o monstro durante o aviso cancela o golpe. Efeitos negativos são curtos, aparecem na interface e a Alvorada tira um por vez; atordoamento passa pela resistência a controle da Vitalidade.\n');
+  const rows = Object.values(data.monsters).filter((m) => m.mechanic).map((m) => [`${m.name} (${m.level}${m.rank === 'normal' ? '' : `, ${{ elite: 'elite', boss: 'chefe' }[m.rank]}`})`, `**${m.mechanic.name}**`, mechanicDesc(m)]);
+  out.push(table(['Monstro', 'Mecânica', 'O que faz'], rows));
+  out.push('\nO Custódio da Eclusa tem o encontro próprio do calabouço (válvulas, linhas do piso e comportas; docs/02 §5.3). Os demais monstros só perseguem e golpeiam; a assistência vale para todos os agressivos (atingido, chama os iguais parados a até 8 m).\n');
+  return out.join('\n');
+}
+
 // ---------------------------------------------------------------- 04 progressão
 const seq = (...v) => { let i = 0; return () => v[i++ % v.length]; };
 
@@ -105,7 +163,8 @@ function progressionDoc() {
   const mod = data.formulas.xp.levelDiffMod;
   out.push(table(['Diferença (monstro − jogador)', ...Object.keys(mod).sort((a, b) => a - b).map((k) => (Number(k) > 0 ? `+${k}` : k))], [['Multiplicador', ...Object.keys(mod).sort((a, b) => a - b).map((k) => n1(mod[k]))]]));
   out.push('\nFora da tabela vale o extremo (−6 ou menos: ×0,1; +5 ou mais: ×1,4).\n');
-  out.push(table(['Monstro', 'Área', 'Nível', 'Tipo', 'Comportamento', 'Vida', 'Dano', 'Defesa', 'XP base', 'XP p/ jogador 2 níveis acima'], mons.map(([, m]) => [m.name, data.maps[m.area]?.name ?? m.area, m.level, { normal: 'normal', elite: 'elite', boss: 'chefe' }[m.rank], m.aggro === 'aggressive' ? `agressivo (${m.aggroRadius} m)` : 'passivo', m.hp, `${m.damage[0]}–${m.damage[1]}`, m.defense, m.xp, Math.round(m.xp * levelDiffMod(m.level, m.level + 2, data))])));
+  out.push(table(['Monstro', 'Área', 'Nível', 'Tipo', 'Comportamento', 'Vida', 'Dano', 'Defesa', 'XP base', 'XP p/ jogador 2 níveis acima'], mons.map(([, m]) => [m.name, data.maps[m.area]?.name ?? m.area, m.level, { normal: 'normal', elite: 'elite', boss: 'chefe' }[m.rank], m.aggro === 'aggressive' ? `agressivo (${m.aggroRadius} m)` : m.mechanic?.kind === 'territorial' ? `passivo (ataca a ${n1(m.mechanic.radius)} m)` : 'passivo', m.hp, `${m.damage[0]}–${m.damage[1]}${m.attackIntervalMs !== 1800 && m.damage[1] > 0 ? ` a cada ${n1(m.attackIntervalMs / 1000)} s` : ''}`, m.defense, m.xp, Math.round(m.xp * levelDiffMod(m.level, m.level + 2, data))])));
+  out.push(mechanicsSection());
   // exemplos solo e grupo
   out.push('\n### Exemplo solo\n');
   const hound = data.monsters.rust_hound;

@@ -168,6 +168,8 @@ test('as 8 habilidades do nível 25 só existem no 25, sobem de grau e executam 
     if (s.effect.bonusSacred) assert.ok(sent.some((m) => m.t === 'hit' && m.skill === 'sacred' && m.dst === t.eid), `${s.name} causa dano sagrado`);
     if (k === 'party_buff') {
       assert.ok(ally.buffs.some((b) => b.id === sid) && p.buffs.some((b) => b.id === sid), `${s.name} chega ao grupo`);
+      // as salamandras mordem quem pisa na margem (território): paradas durante a medida da regeneração
+      for (const m of ms) zone.addMonsterFx(m, { kind: 'stun', until: zone.now + 2000, by: 0 });
       const before = ally.char.hp;
       ally.lastCombatAt = zone.now; // em combate: a regeneração normal cai para um quarto
       for (let i = 0; i < 10; i++) zone.tick(100);

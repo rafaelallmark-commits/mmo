@@ -1,5 +1,5 @@
 {
- "_doc": "Definições de monstros. Estatísticas derivadas da curva por nível (ver docs/04) e editáveis à mão. aggro: passive (só reage) ou aggressive (ataca dentro de aggroRadius).",
+ "_doc": "Definições de monstros. Estatísticas derivadas da curva por nível (ver docs/04) e editáveis à mão. aggro: passive (só reage) ou aggressive (ataca dentro de aggroRadius). description: uma linha de até 80 caracteres, mostrada no quadro do alvo (diz o que o monstro faz, sem prometer o que não existe). mechanic (opcional, uma por espécie; server/src/mechanics.js; conferida pelo validate-data e descrita em docs/06): id (único entre as mecânicas) e name aparecem nos avisos e nos golpes; kind = telegraph (golpe avisado: o monstro para, a zona manda o aviso com a forma — shape circle em volta dele (radius), target_circle onde o alvo está (radius), cone à frente (range, angleDeg) ou line à frente (length, width) — e, vencido warnMs (no mínimo 1.200 ms), acerta quem ficou dentro com damagePct% de uma rolagem do dano do monstro, contra a defesa ou, com magic, contra a resistência mágica; lança a cada everyMs, a primeira vez firstMs depois de entrar em combate, com o alvo entre minRange e maxRange (padrão: o alcance da forma; target_circle até 14 m); extras: stunMs (atordoa pela regra da Vitalidade, até 2.000 ms), debuff (efeito negativo curto: id, name, durationMs até 6.000, mods hitChancePct e moveSpeedPct, mpPctPerSec, silence), pullTo (puxa até essa distância do monstro), dash (corre pela linha), rails (linha e perseguição só nos eixos do mapa), spawn (monster, count, maxAlive) e patrolRadius (passeia até esse raio de casa)), death_burst (ao morrer, explosão avisada onde caiu: radius, warnMs, damagePct, magic), leech (golpe corpo a corpo que acerta aplica o debuff), swarm (+damagePctPerAlly% de dano por monstro igual em combate a até radius m, até maxAllies), pierce (o golpe ignora defensePiercePct% da defesa), echo (a cada everyMs, a primeira vez firstMs depois de entrar em combate, no lugar do golpe comum devolve pct% do último golpe recebido nos últimos memoryMs, até capPct% do dano máximo, a quem o deu, se estiver a até range m), summon (a cada limiar de thresholdsPct% de vida chama count monster, até maxAlive vivos; reforços não deixam saque e somem com o invocador), pressure (alterna highMs de pressão alta, com +highDamagePct% de dano, e lowMs de pressão baixa, com −lowDefensePct% de defesa e resistência; a troca da alta para a baixa solta o vent, um golpe avisado como em telegraph) e territorial (monstro passivo que ataca quem chega a radius m).",
  "monsters": {
   "furrow_rat": {
    "name": "Rato de Sulco",
@@ -51,7 +51,13 @@
    "respawnSec": 20,
    "xp": 16,
    "lootTable": "lt_tier_1",
-   "description": "Carapaça morna; foge da luz e morde quem pisa no ninho."
+   "description": "Carapaça morna; vive no escuro e morde quem pisa no ninho (2,5 m).",
+   "mechanic": {
+    "kind": "territorial",
+    "id": "nest",
+    "name": "Ninho",
+    "radius": 2.5
+   }
   },
   "rust_hound": {
    "name": "Cão de Ferrugem",
@@ -88,10 +94,10 @@
    "aggro": "passive",
    "hp": 99,
    "damage": [
-    7,
-    9
+    10,
+    13
    ],
-   "attackIntervalMs": 1800,
+   "attackIntervalMs": 2600,
    "attackRange": 2.2,
    "defense": 11,
    "mres": 7,
@@ -129,7 +135,22 @@
    "respawnSec": 20,
    "xp": 66,
    "lootTable": "lt_tier_1",
-   "description": "Investe contra o que se move. Deixa um rastro de fuligem."
+   "description": "Investe em linha reta contra quem está a 4–12 m; deixa rastro de fuligem.",
+   "mechanic": {
+    "kind": "telegraph",
+    "id": "charge",
+    "name": "Investida",
+    "shape": "line",
+    "length": 12,
+    "width": 1.6,
+    "minRange": 4,
+    "maxRange": 12,
+    "warnMs": 1500,
+    "everyMs": 10000,
+    "firstMs": 0,
+    "damagePct": 150,
+    "dash": true
+   }
   },
   "cracked_foreman": {
    "name": "Capataz Rachado",
@@ -155,7 +176,18 @@
    "respawnSec": 120,
    "xp": 180,
    "lootTable": "lt_cracked_foreman",
-   "description": "Autômato de turno que ainda cobra a carga das caravanas. Elite."
+   "description": "Autômato de turno que cobra as caravanas; bate o martelo no chão em volta.",
+   "mechanic": {
+    "kind": "telegraph",
+    "id": "shift_hammer",
+    "name": "Martelo de Turno",
+    "shape": "circle",
+    "radius": 3.5,
+    "warnMs": 2000,
+    "everyMs": 9000,
+    "firstMs": 4000,
+    "damagePct": 200
+   }
   },
   "pump_toad": {
    "name": "Sapo-Bomba",
@@ -181,7 +213,16 @@
    "respawnSec": 20,
    "xp": 66,
    "lootTable": "lt_tier_1",
-   "description": "Infla com água quente e explode em vapor quando morre."
+   "description": "Infla com água quente e estoura em vapor (3,5 m) quando morre.",
+   "mechanic": {
+    "kind": "death_burst",
+    "id": "steam_burst",
+    "name": "Estouro de Vapor",
+    "radius": 3.5,
+    "warnMs": 1500,
+    "damagePct": 200,
+    "magic": true
+   }
   },
   "silt_eel": {
    "name": "Enguia de Lodo",
@@ -285,7 +326,18 @@
    "respawnSec": 20,
    "xp": 153,
    "lootTable": "lt_tier_5",
-   "description": "Gruda e drena mana."
+   "description": "Gruda e drena mana: cada mordida tira 3% da mana por segundo por 3 s.",
+   "mechanic": {
+    "kind": "leech",
+    "id": "leech",
+    "name": "Sanguessuga",
+    "debuff": {
+     "id": "leeched",
+     "name": "Sanguessuga",
+     "durationMs": 3000,
+     "mpPctPerSec": 3
+    }
+   }
   },
   "master_pump": {
    "name": "Bomba-Mestra Desregulada",
@@ -311,7 +363,25 @@
    "respawnSec": 120,
    "xp": 448,
    "lootTable": "lt_master_pump",
-   "description": "Elite do brejo. Alterna pressão alta e baixa; derruba Brasa Cristalizada."
+   "description": "Alterna pressão alta (bate forte, solta vapor) e baixa (fica vulnerável).",
+   "mechanic": {
+    "kind": "pressure",
+    "id": "pressure",
+    "name": "Pressão Alternada",
+    "highMs": 8000,
+    "lowMs": 6000,
+    "highDamagePct": 30,
+    "lowDefensePct": 50,
+    "vent": {
+     "id": "steam_vent",
+     "name": "Vapor",
+     "shape": "circle",
+     "radius": 4.5,
+     "warnMs": 1750,
+     "damagePct": 150,
+     "magic": true
+    }
+   }
   },
   "digger_automaton": {
    "name": "Autômato Escavador",
@@ -348,8 +418,8 @@
    "aggro": "aggressive",
    "hp": 207,
    "damage": [
-    16,
-    18
+    12,
+    14
    ],
    "attackIntervalMs": 1800,
    "attackRange": 2.2,
@@ -363,7 +433,15 @@
    "respawnSec": 20,
    "xp": 177,
    "lootTable": "lt_tier_9",
-   "description": "Enxame. Fraco sozinho, perigoso em grupo."
+   "description": "Enxame: fraco sozinho; +20% de dano por rato lutando perto (até +40%).",
+   "mechanic": {
+    "kind": "swarm",
+    "id": "swarm",
+    "name": "Enxame",
+    "radius": 6,
+    "damagePctPerAlly": 20,
+    "maxAllies": 2
+   }
   },
   "blind_welder": {
    "name": "Soldador Cego",
@@ -389,7 +467,20 @@
    "respawnSec": 20,
    "xp": 178,
    "lootTable": "lt_tier_9",
-   "description": "Solda o que toca. Cone de faíscas à frente."
+   "description": "Solda o que toca; solta um cone de faíscas à frente (6 m).",
+   "mechanic": {
+    "kind": "telegraph",
+    "id": "spark_cone",
+    "name": "Cone de Faíscas",
+    "shape": "cone",
+    "range": 6,
+    "angleDeg": 70,
+    "warnMs": 1500,
+    "everyMs": 9000,
+    "firstMs": 3500,
+    "damagePct": 160,
+    "magic": true
+   }
   },
   "belt_blade": {
    "name": "Lâmina de Esteira",
@@ -400,12 +491,12 @@
    "aggro": "passive",
    "hp": 243,
    "damage": [
-    20,
-    22
+    22,
+    25
    ],
    "attackIntervalMs": 1800,
    "attackRange": 2.2,
-   "defense": 35,
+   "defense": 30,
    "mres": 23,
    "evasion": 38,
    "accuracy": 86,
@@ -415,7 +506,22 @@
    "respawnSec": 20,
    "xp": 160,
    "lootTable": "lt_tier_9",
-   "description": "Corre em trilhos; dano alto, defesa baixa."
+   "description": "Corre só em trilhos e dispara por eles; dano alto, defesa baixa.",
+   "mechanic": {
+    "kind": "telegraph",
+    "id": "rail_rush",
+    "name": "Corrida no Trilho",
+    "shape": "line",
+    "length": 10,
+    "width": 1.6,
+    "maxRange": 10,
+    "warnMs": 1500,
+    "everyMs": 9000,
+    "firstMs": 3000,
+    "damagePct": 180,
+    "dash": true,
+    "rails": true
+   }
   },
   "shift_supervisor": {
    "name": "Supervisor de Turno",
@@ -441,7 +547,20 @@
    "respawnSec": 120,
    "xp": 712,
    "lootTable": "lt_shift_supervisor",
-   "description": "Elite da oficina. Chama Ratos-Engrenagem a cada 30% de vida."
+   "description": "Chama dois Ratos-Engrenagem a cada 30% de vida perdida.",
+   "mechanic": {
+    "kind": "summon",
+    "id": "shift_call",
+    "name": "Chamado de Turno",
+    "thresholdsPct": [
+     70,
+     40,
+     10
+    ],
+    "monster": "gear_rat",
+    "count": 2,
+    "maxAlive": 6
+   }
   },
   "echo_bat": {
    "name": "Morcego de Eco",
@@ -467,7 +586,27 @@
    "respawnSec": 20,
    "xp": 178,
    "lootTable": "lt_tier_9",
-   "description": "Desorienta com gritos; ataca em bandos."
+   "description": "O grito desorienta (−25% de acerto e de velocidade); ataca em bandos.",
+   "mechanic": {
+    "kind": "telegraph",
+    "id": "disorienting_cry",
+    "name": "Grito Desorientador",
+    "shape": "circle",
+    "radius": 4,
+    "warnMs": 1500,
+    "everyMs": 10000,
+    "firstMs": 4000,
+    "damagePct": 0,
+    "debuff": {
+     "id": "disoriented",
+     "name": "Desorientado",
+     "durationMs": 4000,
+     "mods": {
+      "hitChancePct": -25,
+      "moveSpeedPct": -25
+     }
+    }
+   }
   },
   "thermal_larva": {
    "name": "Larva Térmica",
@@ -519,7 +658,18 @@
    "respawnSec": 20,
    "xp": 184,
    "lootTable": "lt_tier_13",
-   "description": "Criatura feita do som dos sinos. Repete o último golpe recebido."
+   "description": "Feito do som dos sinos; a cada 3 golpes, devolve o último que levou.",
+   "mechanic": {
+    "kind": "echo",
+    "id": "echo",
+    "name": "Eco",
+    "everyMs": 5400,
+    "firstMs": 3600,
+    "pct": 60,
+    "capPct": 200,
+    "memoryMs": 6000,
+    "range": 15
+   }
   },
   "gallery_guardian": {
    "name": "Guardião de Galeria",
@@ -571,7 +721,20 @@
    "respawnSec": 20,
    "xp": 233,
    "lootTable": "lt_tier_13",
-   "description": "Tece fios condutores que dão choque."
+   "description": "Tece fios condutores: o fio cai sob a vítima e dá um choque que atordoa.",
+   "mechanic": {
+    "kind": "telegraph",
+    "id": "conduit_web",
+    "name": "Fio Condutor",
+    "shape": "target_circle",
+    "radius": 2.5,
+    "warnMs": 1750,
+    "everyMs": 10000,
+    "firstMs": 3000,
+    "damagePct": 120,
+    "magic": true,
+    "stunMs": 1000
+   }
   },
   "echo_mother": {
    "name": "Mãe do Eco",
@@ -597,8 +760,25 @@
    "respawnSec": 120,
    "xp": 824,
    "lootTable": "lt_echo_mother",
-   "description": "Elite das galerias. Cada grito gera um Ecoante.",
-   "daily": true
+   "description": "Cada grito (6 m) gera um Ecoante, até três de uma vez.",
+   "daily": true,
+   "mechanic": {
+    "kind": "telegraph",
+    "id": "mother_cry",
+    "name": "Grito da Mãe",
+    "shape": "circle",
+    "radius": 6,
+    "warnMs": 2000,
+    "everyMs": 12000,
+    "firstMs": 5000,
+    "damagePct": 120,
+    "magic": true,
+    "spawn": {
+     "monster": "echoer",
+     "count": 1,
+     "maxAlive": 3
+    }
+   }
   },
   "gate_watcher": {
    "name": "Vigia de Comporta",
@@ -650,7 +830,27 @@
    "respawnSec": 20,
    "xp": 257,
    "lootTable": "lt_tier_17",
-   "description": "Arrasta os pés pela lama e puxa quem estiver perto."
+   "description": "Arrasta os pés pela lama e puxa quem está a até 5 m, que fica atolado.",
+   "mechanic": {
+    "kind": "telegraph",
+    "id": "drag",
+    "name": "Arrasto",
+    "shape": "circle",
+    "radius": 5,
+    "warnMs": 2000,
+    "everyMs": 15000,
+    "firstMs": 6000,
+    "damagePct": 100,
+    "pullTo": 1.8,
+    "debuff": {
+     "id": "mired",
+     "name": "Atolado",
+     "durationMs": 3000,
+     "mods": {
+      "moveSpeedPct": -40
+     }
+    }
+   }
   },
   "pressure_slag": {
    "name": "Escória Pressurizada",
@@ -676,7 +876,16 @@
    "respawnSec": 20,
    "xp": 283,
    "lootTable": "lt_tier_17",
-   "description": "Vapor solidificado; explode em área ao morrer."
+   "description": "Vapor solidificado; explode em área (4 m) ao morrer.",
+   "mechanic": {
+    "kind": "death_burst",
+    "id": "slag_burst",
+    "name": "Explosão de Escória",
+    "radius": 4,
+    "warnMs": 1750,
+    "damagePct": 220,
+    "magic": true
+   }
   },
   "custodian_shard": {
    "name": "Fragmento do Custódio",
@@ -702,8 +911,23 @@
    "respawnSec": 120,
    "xp": 1204,
    "lootTable": "lt_custodian_shard",
-   "description": "Pedaço autônomo do Custódio; patrulha os canais.",
-   "daily": true
+   "description": "Pedaço autônomo do Custódio; patrulha os canais e solta descargas em linha.",
+   "daily": true,
+   "mechanic": {
+    "kind": "telegraph",
+    "id": "shard_discharge",
+    "name": "Descarga do Fragmento",
+    "shape": "line",
+    "length": 14,
+    "width": 2.2,
+    "warnMs": 1500,
+    "everyMs": 10000,
+    "firstMs": 4000,
+    "damagePct": 150,
+    "magic": true,
+    "stunMs": 1000,
+    "patrolRadius": 10
+   }
   },
   "lock_custodian": {
    "name": "O Custódio da Eclusa",
@@ -755,7 +979,13 @@
    "respawnSec": 20,
    "xp": 317,
    "lootTable": "lt_tier_21",
-   "description": "Pele que brilha como brasa debaixo da água parada; só morde quem pisa na sua margem."
+   "description": "Brilha como brasa sob a água parada; só morde quem pisa na margem (2,5 m).",
+   "mechanic": {
+    "kind": "territorial",
+    "id": "shore",
+    "name": "Margem",
+    "radius": 2.5
+   }
   },
   "bronze_bellringer": {
    "name": "Sineiro de Bronze",
@@ -781,7 +1011,7 @@
    "respawnSec": 20,
    "xp": 323,
    "lootTable": "lt_tier_21",
-   "description": "Autômato de carga com um sino no peito; ainda carrega placas de chamada para um posto que ninguém atende."
+   "description": "Autômato de carga com um sino no peito; leva placas a um posto vazio."
   },
   "buried_voice": {
    "name": "Voz Soterrada",
@@ -807,7 +1037,7 @@
    "respawnSec": 20,
    "xp": 367,
    "lootTable": "lt_tier_21",
-   "description": "Um pedido de socorro que ficou tempo demais no metal; repete a última frase e ataca quem não responde."
+   "description": "Pedido de socorro preso no metal; repete a frase e ataca quem não responde."
   },
   "basalt_mole": {
    "name": "Toupeira de Basalto",
@@ -833,7 +1063,13 @@
    "respawnSec": 20,
    "xp": 409,
    "lootTable": "lt_tier_21",
-   "description": "Cava sempre na direção do calor; garras de pedra que atravessam rocha e couraça."
+   "description": "Cava rumo ao calor; garras de pedra que ignoram 25% da couraça.",
+   "mechanic": {
+    "kind": "pierce",
+    "id": "stone_claws",
+    "name": "Garras de Pedra",
+    "defensePiercePct": 25
+   }
   },
   "deep_sealer": {
    "name": "Selador da Porta Funda",
@@ -859,8 +1095,26 @@
    "respawnSec": 120,
    "xp": 1636,
    "lootTable": "lt_deep_sealer",
-   "description": "Máquina mais velha que o Custódio: sela qualquer fresta da Porta Funda e responde sozinha a quem chama do outro lado.",
-   "daily": true
+   "description": "Mais velha que o Custódio; o Selo (6 m) deixa quem fica sem habilidades.",
+   "daily": true,
+   "mechanic": {
+    "kind": "telegraph",
+    "id": "seal",
+    "name": "Selo",
+    "shape": "circle",
+    "radius": 6,
+    "warnMs": 2000,
+    "everyMs": 12000,
+    "firstMs": 5000,
+    "damagePct": 100,
+    "magic": true,
+    "debuff": {
+     "id": "sealed",
+     "name": "Selado",
+     "durationMs": 3000,
+     "silence": true
+    }
+   }
   },
   "trial_construct": {
    "name": "Construto de Prova",

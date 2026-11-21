@@ -6,7 +6,7 @@
 //   node --disable-warning=ExperimentalWarning tools/simular-progressao.mjs [--classes a,b]
 //     [--ate-nivel 20] [--seed N] [--repeticoes R] [--paralelo P] [--saida arquivo.json]
 //     [--md docs/relatorio-progressao.md] [--sem-md] [--sem-prova] [--sem-comparacao]
-//     [--comparar-sem-prova] [--viagem-s 60] [--reacao-ms 200] [--pausa-ms 500]
+//     [--comparar-sem-prova] [--viagem-s 60] [--reacao-ms 200] [--reacao-aviso-ms 600] [--pausa-ms 500]
 //     [--banco-arquivo] [--detalhe]
 //   npm run simular-progressao -- --classes breaker --repeticoes 1
 //
@@ -22,7 +22,7 @@ import { dirname, join, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { availableParallelism } from 'node:os';
 import { loadGameData } from '../src/data.js';
-import { agregar, relatorioMarkdown, FAIXA_TOLERANCIA } from './lib/progressao/relatorio.mjs';
+import { agregar, relatorioMarkdown, FAIXA_TOLERANCIA, nomesMecanicas } from './lib/progressao/relatorio.mjs';
 import { PADROES } from './lib/progressao/bot.mjs';
 
 const AQUI = dirname(fileURLToPath(import.meta.url));
@@ -33,7 +33,7 @@ const argv = process.argv.slice(2);
 const opt = (k, d) => { const i = argv.indexOf(`--${k}`); return i === -1 || argv[i + 1] === undefined || argv[i + 1].startsWith('--') ? d : argv[i + 1]; };
 const flag = (k) => argv.includes(`--${k}`);
 if (flag('ajuda') || flag('help')) {
-  console.log('Uso: node --disable-warning=ExperimentalWarning tools/simular-progressao.mjs [--classes a,b] [--ate-nivel 20] [--seed N] [--repeticoes R] [--paralelo P] [--saida arquivo.json] [--md arquivo.md] [--sem-md] [--sem-prova] [--sem-comparacao] [--comparar-sem-prova] [--viagem-s 60] [--reacao-ms 200] [--pausa-ms 500] [--banco-arquivo] [--detalhe]');
+  console.log('Uso: node --disable-warning=ExperimentalWarning tools/simular-progressao.mjs [--classes a,b] [--ate-nivel 20] [--seed N] [--repeticoes R] [--paralelo P] [--saida arquivo.json] [--md arquivo.md] [--sem-md] [--sem-prova] [--sem-comparacao] [--comparar-sem-prova] [--viagem-s 60] [--reacao-ms 200] [--reacao-aviso-ms 600] [--pausa-ms 500] [--banco-arquivo] [--detalhe]');
   process.exit(0);
 }
 
@@ -50,6 +50,7 @@ const opcoes = {
   prova: !flag('sem-prova'),
   viagemPorMapaMs: Number(opt('viagem-s', PADROES.viagemPorMapaMs / 1000)) * 1000,
   reacaoMs: Number(opt('reacao-ms', PADROES.reacaoMs)),
+  reacaoAvisoMs: Number(opt('reacao-aviso-ms', PADROES.reacaoAvisoMs)),
   pausaAposAbateMs: Number(opt('pausa-ms', PADROES.pausaAposAbateMs)),
   detalhe: flag('detalhe'),
 };
@@ -98,7 +99,7 @@ const tempoRealS = (performance.now() - t0) / 1000;
 
 const parametros = {
   geradoEm: new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC', classes, ateNivel, sementes, repeticoes, paralelo, tempoRealS: Math.round(tempoRealS),
-  prova: opcoes.prova, comparacaoSemProva: !!semProvaRes, viagemPorMapaS: opcoes.viagemPorMapaMs / 1000, reacaoMs: opcoes.reacaoMs, pausaAposAbateMs: opcoes.pausaAposAbateMs, tickMs: 100,
+  prova: opcoes.prova, comparacaoSemProva: !!semProvaRes, viagemPorMapaS: opcoes.viagemPorMapaMs / 1000, reacaoMs: opcoes.reacaoMs, reacaoAvisoMs: opcoes.reacaoAvisoMs, pausaAposAbateMs: opcoes.pausaAposAbateMs, tickMs: 100,
   linhaDeComando: argv.filter((a, i) => !['--saida', '--md'].includes(argv[i - 1]) && !['--saida', '--md', '--detalhe'].includes(a)).join(' '),
 };
 const rel = agregar(resultados, data, parametros);
@@ -195,6 +196,17 @@ function problemasEncontrados(rel, runs) {
     const totalM = ks.reduce((s, [, k]) => s + k.mortes, 0);
     out.push(`**Onde se morre:** níveis com mais mortes: ${mortes.map((m) => `${m.nivel} (${fmt(m.mortes, 2)} por classe)`).join(', ')}. Monstros que mais derrubam (mortes por execução, somando as classes; um monstro conta em toda morte em que estava batendo): ${top.map(([d, v]) => `${data.monsters[d].name} (nv ${data.monsters[d].level}, ${data.monsters[d].aggro === 'aggressive' ? 'agressivo' : 'passivo'}) ${fmt(v, 1)}`).join(', ')}. Mortes por classe (média por execução): ${ord.map(([c, k]) => `${nome(c)} ${fmt(k.mortes, 1)}`).join(', ')} — ${fmt(totalM / ks.length, 1)} em média.${textoLutas(ks)}`);
   }
+  // 6b. mecânicas dos monstros: avisos, esquivas e o que ainda acerta
+  const mks = ks.filter(([, k]) => k.mecanicas?.avisos);
+  if (mks.length) {
+    const mm = (f) => mks.reduce((s, [, k]) => s + f(k.mecanicas), 0) / mks.length;
+    const fatias = mks.map(([, k]) => k.mecanicas.danoPct);
+    const golpes = {};
+    for (const [, k] of mks) for (const [id, v] of Object.entries(k.mecanicas.porMecanica)) golpes[id] = (golpes[id] || 0) + v.dano / mks.length;
+    const nomesMec = nomesMecanicas(data);
+    const top = Object.entries(golpes).filter(([id]) => nomesMec[id]).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    out.push(`**Mecânicas dos monstros:** cada execução vê em média ${fmt(mm((m) => m.avisos), 0)} golpes avisados; o bot estava dentro de ${fmt(mm((m) => m.dentro), 0)}, saiu ${fmt(mm((m) => m.esquivas), 0)} vezes e esperou fora (sem entrar para atacar) ${fmt(mm((m) => m.esperas), 0)} vezes. O que ainda acerta — áreas em que a reação de ${fmt(parametros.reacaoAvisoMs / 1000, 1)} s não bastou e as mecânicas sem aviso — soma de ${fmt(Math.min(...fatias), 1)}% a ${fmt(Math.max(...fatias), 1)}% do dano recebido${top.length ? `; mais dano: ${top.map(([id, v]) => `${nomesMec[id].nome} (${nomesMec[id].monstro}, ${fmt(v, 0)} por execução)`).join(', ')}` : ''}.`);
+  }
   // 7. economia
   const eco = ks.map(([c, k]) => ({ c, e: k.economia, pocoes: k.economia.gastoPocoes / Math.max(1, k.economia.ouroGanho), equip: k.economia.gastoEquip / Math.max(1, k.economia.ouroGanho) }));
   const pctF = (v) => `${fmt(v * 100, 0)}%`;
@@ -238,6 +250,7 @@ function textosExtras(rel, runs, p) {
     `**Ações só pelo protocolo:** move, attack, stop, cast, use_item, pickup, equip/unequip, allocate, learn_skill, buy, sell, respawn, quest_accept/trial_start e os comandos de mestre teleport/quest_done. As decisões usam a visão montada pelos snapshots e a ficha devolvida pelo pedido \`char\` (o bot não lê o estado interno da zona). Reação a cada ${p.reacaoMs} ms, no máximo uma habilidade por decisão, respeitando a recarga global; habilidades com conjuração só começam com o personagem parado e o bot não age até o fim (\`cast_end\`). ${fmt(p.pausaAposAbateMs / 1000, 1)} s de pausa depois de cada abate antes de escolher o próximo alvo. É um jogador eficiente: um jogador humano tende a ser mais lento (pausas, erros de posicionamento, distração).`,
     `**Viagem entre mapas:** teleporte de mestre até o posto de guarda do mapa (ou ao lado do NPC, na cidade) seguido de ${p.viagemPorMapaS} s parados por troca de mapa no caminho de portais (busca em largura respeitando o nível mínimo de cada portal). Dentro do mapa o bot anda (move/attack) como um jogador.`,
     '**Área de caça:** grupos de monstros normais com nível em [nível−2, nível+1], preferindo o próprio nível, monstros passivos e grupos agressivos menos densos; elites, chefes e elites diárias ficam de fora (só são enfrentados se atacarem). O alvo é o monstro do grupo com menos vizinhos agressivos a 8,5 m (puxar pela borda). Morte vale 3 pontos de perigo e fuga 1; 3 pontos em 10 min fazem o bot caçar um nível abaixo por 20 min, longe daquela área.',
+    `**Golpes avisados dos monstros:** o bot recebe o mesmo aviso que o cliente desenha (\`warn\`: círculo, cone ou linha, com a duração) e só o percebe ${fmt(p.reacaoAvisoMs / 1000, 1)} s depois, como um jogador que vê o chão marcar e clica; se está dentro (com meio metro de folga), anda até o ponto seguro mais perto fora de todas as áreas marcadas (até no meio de uma conjuração) e espera lá até o golpe sair; se está fora, não anda nem ataca para dentro (o ataque corpo a corpo perseguiria o monstro no meio do círculo). Atordoamento, puxão e efeitos negativos (Desorientado, Atolado, Sanguessuga) valem para ele como para qualquer jogador; o bot não usa a Alvorada nem habilidades para interromper o aviso.`,
     '**Tônicos:** em combate, vida abaixo de 40% — 50% com dois monstros batendo e 65% com três ou mais, quando a recarga de 3 s dos tônicos é o gargalo (com três ou mais bebe o maior tônico que tem; senão, o menor que aproveita bem a cura); fora de combate, vida abaixo de 55% (sem tônico, descansa com `stop` até 92%). Conjuradores (Tecelão, Cantora): mana abaixo de 20% em combate e de 35% fora (sem tônico, descansa até 85%); as classes físicas não param por mana (lutam com o ataque básico). Tônico Médio só a partir do nível 9 (o servidor confere o nível do item). Foge para o posto abaixo de 20% de vida sem tônico; caído, espera 5 s e volta ao posto (`respawn`, 50% de vida).',
     '**Cidade:** na cidade da classe (Pedrâmbar ou Vau de Nácar), primeiro o armeiro, depois a loja de tônicos. Vai quando restam menos de 5 tônicos e 80% do ouro compra ao menos 40 Pequenos, quando o ouro paga o equipamento que falta (abaixo) ou quando a bolsa enche. Estoque-alvo: 100 tônicos de vida ou 2,5 × o gasto do nível anterior ou do atual (o maior), até 300; de mana, 60 (ou 2,5 × o gasto, até 300) para conjuradores e 10 para os demais. A ida e a volta custam as mesmas trocas de mapa.',
     '**Equipamento:** ao chegar ao nível 5, 9, 13, 17, 21 ou 25 o bot quer as peças comuns da faixa (arma, mão secundária e 4 de armadura; o Cetro da faixa 17 é raro, então a Cantora usa a Varinha comum nessa faixa) e as **compra no armeiro com ouro** (`buy`, valor × `economy.gearPriceMult`), a arma primeiro, guardando antes o ouro de 60 tônicos de vida (e 40 de mana para conjuradores; essa reserva nunca passa de 60% do ouro). Vai à cidade só por isso quando o ouro, tirada a reserva, paga todas as peças que faltam (no máximo uma ida dessas a cada 10 min). Com o kit completo e ouro além do estoque cheio de tônicos, compra adiantado o kit da próxima faixa (a até 2 níveis dela) e as joias da faixa. Também recolhe do chão as melhorias da própria classe e equipa quando cumpre os requisitos. Sem refino no ferreiro.',

@@ -95,6 +95,20 @@ próximos animados), **Sombras**, **Tela cheia** e limite de **quadros por segun
 - **Depósito**: guarda-volumes compartilhado entre os personagens da sua conta.
 - Caiu? Volte ao posto de guarda do mapa. Se sair do jogo no meio de uma instância, você volta à porta dela.
 
+### Monstros com truques
+
+Clique num monstro: o quadro do alvo, no alto da tela, diz numa linha o que ele faz. Muitos têm um truque:
+
+- **Chão vermelho = saia.** Antes de um golpe de área o monstro para, recua e treme, um sino toca e o chão marca a
+  área (círculo, cone ou linha) — 1,5 a 2 s, tempo de clicar para fora. Quem sai não leva nada. Atordoar o monstro
+  nesse meio-tempo cancela o golpe. Sapos-Bomba e Escórias explodem **depois de morrer**: afaste-se do corpo.
+- **Efeitos negativos** (Desorientado, Atolado, Sanguessuga, Selado, Atordoado) aparecem sob as suas barras com o
+  tempo que falta e duram poucos segundos; a **Alvorada** do Escudeiro tira um por vez. Vitalidade encurta o
+  atordoamento.
+- **Elites** chamam ajuda ou mudam de comportamento: o Supervisor de Turno chama ratos a cada 30% de vida, a Mãe do
+  Eco gera Ecoantes, a Bomba-Mestra alterna pressão alta e baixa (bata forte na baixa). A lista completa está em
+  `docs/06-mundo-e-mapas.md`.
+
 ## 5. Mapas
 
 Pedrâmbar e Vau de Nácar (cidades) → **A Estrada Velha** (níveis 1–5) → **Brejo das Bombas** (5–9) →

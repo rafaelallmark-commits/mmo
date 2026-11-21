@@ -14,6 +14,39 @@ Complementa os itens 2 e 5. Os números de monstros (vida, dano, XP, agressão, 
 | Reaparecimento | normal 20 s, elite 120 s, chefe só por instância | Pontos de caça se mantêm vivos com 2–5 jogadores. |
 | Saque | individual por participante (≥ 5% de participação) | Ninguém disputa saque; cada um vê só o seu. |
 
+## Mecânicas dos monstros
+
+Vinte espécies têm uma mecânica própria (campo `mechanic` de `data/monsters.json`, aplicada em `server/src/mechanics.js`; os números exatos estão na tabela "Mecânicas dos monstros" de [docs/04](04-progressao-e-formulas.md), gerada dos dados). Regras comuns:
+
+- **Golpe de área sempre avisado.** O monstro para, recua, treme e vira para onde vai golpear; o chão marca a área em vermelho — círculo em volta dele, círculo onde o alvo está, cone à frente ou linha — e um sino toca no lugar dele. Quando a marcação enche, o golpe acerta quem ficou dentro (com 0,3 m de folga do corpo na borda); quem saiu não leva nada. O aviso dura 1,5 s nas linhas, no cone e nos círculos de até 4 m, 1,75 s no vapor da Bomba-Mestra, na Escória e no fio sob os pés, e 2 s nos círculos de 5 a 6 m e no Martelo do Capataz (o primeiro elite); nunca menos de 1,2 s (o `validate-data` recusa): tempo de perceber (~0,7 s), clicar e dar os passos para fora. Atordoar o monstro durante o aviso cancela o golpe e a marcação some; o mesmo vale quando ele morre ou sai da luta no meio do aviso.
+- **Efeitos negativos são curtos** (3 a 4 s): aparecem sob as barras de vida e mana com o tempo que falta e como uma marca no personagem, e a **Alvorada** tira um por vez (o atordoamento primeiro, depois o que dura mais). **Controle** de monstro — o atordoamento (Fio Condutor, Descarga do Fragmento, linhas do Custódio) e o Selo — passa pela resistência a controle da Vitalidade (até 50% mais curto) e não pega em quem está imune a controle (Égide Firme), que também não é puxado. Lentidão (Desorientado, Atolado) e a drenagem de mana valem o tempo inteiro.
+- **Reforços** (Ratos-Engrenagem do Supervisor, Ecoantes da Mãe do Eco) dão XP, não deixam saque e somem quando quem os chamou cai ou volta para casa.
+- O **quadro do alvo** mostra a descrição do monstro numa linha — é ali que se descobre o que cada um faz.
+
+| Monstro | Mecânica | Como jogar |
+|---|---|---|
+| Besouro-Brasa (2), Salamandra de Cisterna (21) | **Ninho** / **Margem**: passivos que mordem quem chega a 2,5 m | Contorne o bando e puxe um de cada vez. |
+| Lagarto de Lastro (4) | golpes lentos e pesados (um a cada 2,6 s, mesmo dano por segundo) | Pancadas maiores: beba antes de a vida ficar baixa. |
+| Capataz Rachado (4, elite) | **Martelo de Turno**: círculo de 3,5 m em volta dele, aviso de 2 s | O primeiro elite ensina a sair do vermelho. |
+| Javali de Cinza (5) | **Investida** em linha contra quem está a 4–12 m, já ao entrar em combate | Um passo de lado: ele passa direto e fica longe. |
+| Sapo-Bomba (5), Escória Pressurizada (18) | **Estouro de Vapor** / **Explosão de Escória**: explodem ao morrer (3,5 e 4 m) | Depois do golpe final, afaste-se do corpo. |
+| Bomba-Mestra Desregulada (8, elite) | **Pressão Alternada**: alta por 8 s (+30% de dano), vapor de 4,5 m na virada e baixa por 6 s (−50% de defesa e resistência) | Segure na alta, saia do vapor e gaste tudo na baixa (o quadro do alvo mostra a pressão). |
+| Sanguessuga Fervente (9) | **Sanguessuga**: cada mordida gruda e drena 3% da mana por segundo por 3 s | Mate rápido ou de longe; a Alvorada tira. |
+| Rato-Engrenagem (10) | **Enxame**: +20% de dano por rato lutando a até 6 m (até +40%) | Puxe um por vez pela borda do bando. |
+| Soldador Cego (11) | **Cone de Faíscas**: 6 m e 70° à frente | Fique ao lado ou atrás dele. |
+| Supervisor de Turno (11, elite) | **Chamado de Turno**: dois Ratos-Engrenagem a cada 30% de vida perdida (até seis vivos) | Junte o dano perto dos limiares; o grupo segura os ratos. |
+| Lâmina de Esteira (12) | **Corrida no Trilho**: só anda nos eixos do mapa e dispara 10 m pelo trilho, através de quem está na frente | Saia do trilho de lado; atrás dele não há perigo. |
+| Morcego de Eco (12) | **Grito Desorientador**: 4 m em volta dele, −25% de acerto e de velocidade por 4 s | Afaste-se quando ele recuar para gritar. |
+| Ecoante (14) | **Eco**: a cada três golpes, devolve 60% do último golpe que levou a quem o deu | Não termine com o golpe mais forte; em grupo, quem bateu por último leva o eco. |
+| Mãe do Eco (15, elite) | **Grito da Mãe**: 6 m em volta dela; cada grito gera um Ecoante (até três) | Saia do círculo; atordoá-la no aviso impede o Ecoante de nascer. |
+| Aranha de Conduto (16) | **Fio Condutor**: cai sob a vítima e atordoa 1 s | Saia do círculo sob os pés. |
+| Draga Viva (17) | **Arrasto**: 5 m em volta dela; puxa até ela e atola (−40% de velocidade por 3 s) | Saia do círculo (perto dela não há o que puxar, mas o golpe e o atoleiro pegam). |
+| Fragmento do Custódio (19, elite) | **Descarga do Fragmento**: linha de 14 m que atordoa 1 s; patrulha até 10 m de casa | Não fique na frente dele. |
+| Toupeira de Basalto (24) | **Garras de Pedra**: os golpes ignoram 25% da defesa | A armadura vale menos: tônicos à mão. |
+| Selador da Porta Funda (24, elite) | **Selo**: 6 m em volta dele, 3 s sem habilidades | Quem cura fica fora do selo. |
+
+Os demais monstros só perseguem e golpeiam; a matilha (acima) vale para todos os agressivos — é o "chama os vizinhos quando ferido" do Cão de Ferrugem. O Custódio da Eclusa tem o encontro próprio do calabouço (docs/02 §5.3).
+
 ## As duas cidades
 
 Ambas têm os mesmos serviços para que nenhuma origem fique em desvantagem: **mestre(s) de classe**, **ferreiro** (refino até +6, Selo de Proteção), **armeiro** (peças comuns da faixa atual e da próxima, para a sua classe), **comerciante de tônicos** (qualquer comerciante compra itens da bolsa pela metade do valor), **depósito** (guarda-volumes compartilhado pelos personagens da conta, M3), **posto de guarda** (ponto de retorno) e **saída para a Estrada Velha**.
@@ -148,8 +181,9 @@ z=160└────────────────────────
 - Clique no chão para andar; clique no monstro para selecionar e atacar (o servidor aproxima até o alcance da arma e ataca no intervalo dela).
 - Barra de atalhos: 1 e 2 para habilidades, 3 e 4 para tônicos. Habilidade com alvo fora do alcance: o cliente aproxima primeiro; o servidor revalida o alcance.
 - Números de dano flutuantes (branco: seu dano; laranja: mágico; amarelo com "!": crítico; vermelho: dano recebido; "errou").
-- Anel de seleção amarelo sob o alvo; quadro do alvo com nome, nível, tipo (elite/chefe) e vida.
-- Áreas de efeito desenhadas no chão durante toda a duração; perigos de chefe sempre com aviso visual + sonoro antes do dano.
+- Anel de seleção amarelo sob o alvo; quadro do alvo com nome, nível, tipo (elite/chefe), vida e a descrição do monstro numa linha (o texto inteiro na dica do mouse).
+- Áreas de efeito desenhadas no chão durante toda a duração; perigos de chefe e golpes de área dos monstros sempre com aviso visual + sonoro antes do dano (círculo, cone ou linha vermelha que enche; o monstro recua e treme); explosão, puxão, drenagem de mana e eco com efeito próprio.
+- Efeitos negativos no próprio personagem (Atordoado, Desorientado, Atolado, Sanguessuga, Selado) sob as barras de vida e mana, com o tempo que falta, e como marca sobre o personagem (visível também nos outros).
 - Legibilidade com muitos monstros: nomes e vida só como rótulo curto; cores por família; o próprio personagem com contorno da cor da classe.
 
 ## Interface (telas)

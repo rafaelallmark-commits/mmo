@@ -24,6 +24,8 @@ var _t := 0.0
 var _phase := 0.0
 var _attack := -1.0
 var _hurt := -1.0
+var _windup := -1.0      # preparando um golpe avisado (mecânica do monstro): tempo decorrido
+var _windup_len := 1.0
 var _idle_arm := 0.0
 var _lean_s := 0.0
 var _lean_f := 0.0
@@ -51,6 +53,15 @@ func play_attack() -> void:
 
 func play_hurt() -> void:
 	_hurt = 0.0
+
+## O monstro prepara um golpe avisado: recua o corpo e treme cada vez mais até o golpe, que sai no fim.
+func play_windup(secs: float) -> void:
+	_windup = 0.0
+	_windup_len = maxf(0.2, secs)
+
+## O golpe avisado foi cancelado (o monstro foi atordoado ou caiu).
+func cancel_windup() -> void:
+	_windup = -1.0
 
 func _process(delta: float) -> void:
 	var sc := maxf(0.2, scale.x)
@@ -82,6 +93,15 @@ func _process(delta: float) -> void:
 		body.rotation.x = (0.08 + 0.1 * run) * _amp + _lean_f - 0.25 * hurt
 		body.rotation.z = _lean_s
 		body.scale = Vector3(1.0 + 0.1 * hurt, 1.0 - 0.12 * hurt, 1.0 + 0.1 * hurt)
+	if _windup >= 0.0:
+		_windup += delta
+		var w := clampf(_windup / _windup_len, 0.0, 1.0)
+		if body:
+			body.rotation.x -= 0.32 * smoothstep(0.0, 0.3, w)
+			body.rotation.z += sin(_t * 38.0) * 0.05 * w
+		if w >= 1.0:
+			_windup = -1.0
+			play_attack()
 	if head:
 		head.rotation.x = -0.06 * _amp + sin(_t * 0.8) * 0.02 * (1.0 - _amp) + 0.2 * hurt
 	if tail:

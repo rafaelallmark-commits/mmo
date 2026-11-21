@@ -521,6 +521,13 @@ func _process(delta: float) -> void:
 				if Vector2(tp.x - n.position.x, tp.z - n.position.z).length() > 0.05:
 					want = atan2(tp.x - n.position.x, tp.z - n.position.z)
 				turn_speed = 7.0
+		# preparando um cone ou uma linha avisada: olha para onde vai golpear
+		if e.has("face_until"):
+			if Time.get_ticks_msec() < int(e["face_until"]):
+				want = float(e["face_yaw"])
+				turn_speed = 12.0
+			else:
+				e.erase("face_until")
 		var diff := wrapf(want - yaw, -PI, PI)
 		var step := clampf(diff * clampf(delta * 12.0, 0.0, 1.0), -turn_speed * delta, turn_speed * delta)
 		yaw = wrapf(yaw + step, -PI, PI)
@@ -897,6 +904,36 @@ func on_heal(m: Dictionary) -> void:
 		return
 	_float_text(dst["node"].position, "+%d" % int(m["amount"]), Color("#6fd06a"))
 	vfx.on_heal(m)
+
+## Monstro preparando um golpe avisado (warn com src): recua e treme até o golpe sair (vfx.gd desenha a área).
+## face_yaw (cone, linha): o monstro vira para onde vai golpear até o fim do aviso.
+func monster_windup(eid, ms: float, face_yaw = null) -> void:
+	if eid == null or not entities.has(eid):
+		return
+	var e: Dictionary = entities[eid]
+	var n: Node3D = e["node"]
+	if n.has_method("play_windup"):
+		n.play_windup(ms / 1000.0)
+	if face_yaw != null:
+		e["face_yaw"] = float(face_yaw)
+		e["face_until"] = Time.get_ticks_msec() + int(ms)
+
+## O golpe avisado foi cancelado (warn_cancel): o monstro desiste da pose.
+func monster_windup_cancel(eid) -> void:
+	if eid == null or not entities.has(eid):
+		return
+	entities[eid].erase("face_until")
+	if entities[eid]["node"].has_method("cancel_windup"):
+		entities[eid]["node"].cancel_windup()
+
+## O servidor parou o meu personagem (atordoado, puxado): a previsão local não continua o caminho antigo.
+func halt_prediction() -> void:
+	_stop_prediction()
+
+## A velocidade do meu personagem mudou (reforço ou efeito negativo de monstro): vale já para a previsão.
+func set_move_speed(v: float) -> void:
+	if v > 0.0:
+		pred.max_speed = v
 
 func on_death(eid: String) -> void:
 	if entities.has(eid):

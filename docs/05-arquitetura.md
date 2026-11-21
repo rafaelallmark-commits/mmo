@@ -48,7 +48,7 @@ mmo/
 │   ├── classes.json               atributos, classes, origens, kits iniciais
 │   ├── skills.json                48 habilidades (níveis 1, 5, 10, 15, 20 e 25) + regras de graus
 │   ├── items.json                 252 definições de item (faixas 1–25, raridades, espaços, famílias)
-│   ├── monsters.json              36 monstros (6 áreas, provas, chefe)
+│   ├── monsters.json              36 monstros (6 áreas, provas, chefe) e a mecânica de cada espécie
 │   ├── loot_tables.json           tabelas de saque (normal, elite, chefe, por classe)
 │   ├── maps.json                  mapas (+ estradas, peças com colisão e casas geradas por gen-scenery)
 │   ├── xp_table.json              XP acumulada 1–25 e metas de tempo
@@ -60,6 +60,7 @@ mmo/
 │   │   ├── main.js                entrada (argumentos --port --db --dev ...)
 │   │   ├── server.js              WebSocket, sessões, autenticação, roteamento, idempotência por rid
 │   │   ├── zone.js                simulação da zona: jogadores, monstros (IA), combate, XP, saque
+│   │   ├── mechanics.js           mecânicas dos monstros: golpes avisados, explosão, eco, reforços, efeitos negativos
 │   │   ├── nav.js                 grade de ocupação, A* + suavização, seguidor com aceleração/frenagem
 │   │   ├── skills.js              execução das 40 habilidades (formas e efeitos)
 │   │   ├── quests.js              motor de missões (falar, matar, coletar, interagir, entrar no mapa, defender...), diárias, títulos, quadro
@@ -201,7 +202,7 @@ Todo pedido do cliente leva `rid` (texto único por pedido). A resposta é `{ t:
 
 Com várias zonas, o `enter` de um personagem cujo mapa é de outra zona responde `{ ok, transfer: { url, token, mapId } }`, e um portal para um mapa de outra zona manda o evento `transfer` com os mesmos campos (seção [Múltiplas zonas](#múltiplas-zonas)).
 
-Eventos do servidor: `hello`, `defs`, `snap` (10 Hz: `now` = relógio da zona em ms; por entidade id, tipo, posição, velocidade `vx`/`vz`, vida, alvo; nos personagens, `staff` — verdadeiro para contas `gm`/`admin`, que o cliente mostra como **[Equipe]**), `hit` (origem, destino, dano, crítico, errou, habilidade), `death`, `spawn`, `loot` (só para o dono), `xp`, `level_up`, `char`, `buff`, `ground`, `cast`, `player_dead`, `respawn`, `joined`, `left`, `chat` (com `staff: true` quando quem fala é da equipe), `kicked`, `cast` (habilidade usada, para os efeitos), `shield`, `quest_update`, `party`, `trial`, `boss` (fase, vida, proteção, válvula, comportas), `warn` (aviso de perigo: círculo ou linha, duração; `hazard` quando é um perigo do mapa, como a esteira da Oficina) e `notice` (`kind`: `shutdown`, `announce` ou `staff` — denúncia nova ou `/bug`, só para a equipe), `escort` (mensagens da escolta e da defesa: marcos, ondas, queda, recomeço, vitória e o tempo que falta).
+Eventos do servidor: `hello`, `defs`, `snap` (10 Hz: `now` = relógio da zona em ms; por entidade id, tipo, posição, velocidade `vx`/`vz`, vida, alvo; nos personagens, `staff` — verdadeiro para contas `gm`/`admin`, que o cliente mostra como **[Equipe]**), `hit` (origem, destino, dano, crítico, errou, habilidade), `death`, `spawn`, `loot` (só para o dono), `xp`, `level_up`, `char`, `buff`, `ground`, `cast`, `player_dead`, `respawn`, `joined`, `left`, `chat` (com `staff: true` quando quem fala é da equipe), `kicked`, `cast` (habilidade usada, para os efeitos), `shield`, `quest_update`, `party`, `trial`, `boss` (fase, vida, proteção, válvula, comportas), `warn` (aviso de perigo: círculo, cone ou linha, duração; nos golpes de monstro também `src`, `id`, `kind` e `name` da mecânica; `hazard` quando é um perigo do mapa, como a esteira da Oficina), `warn_cancel` (o golpe avisado não sai: monstro atordoado, morto ou fora da luta), `mech` (mecânicas dos monstros: `burst`, `pull`, `drain`, `echo`, `dash`, `summon`, `vanish`, `pressure`), `debuff` (efeito negativo num jogador: id, nome, duração, texto), `cleanse` (a Alvorada tirou um efeito), `speed` (só para o próprio jogador: a velocidade de caminhada mudou por reforço ou efeito negativo; a previsão do movimento acompanha), `notice` (`kind`: `shutdown`, `announce` ou `staff` — denúncia nova ou `/bug`, só para a equipe) e `escort` (mensagens da escolta e da defesa: marcos, ondas, queda, recomeço, vitória e o tempo que falta).
 
 ## Movimento no cliente
 
@@ -209,7 +210,7 @@ O servidor decide; o cliente só desenha bem (`client/scripts/motion.gd`, docs/0
 
 - **Relógio da zona**: cada snapshot traz `now`. O cliente mede a escala de tempo do servidor (`--time-scale`) e desenha o mundo 150 ms no passado, sempre entre dois snapshots.
 - **Interpolação de Hermite** com as velocidades do snapshot: curvas e frenagens saem redondas; teleporte (mais de 8 m entre amostras) não desliza pelo mapa.
-- **Previsão do próprio personagem**: a resposta do `move` traz o caminho; o personagem sai andando na hora com a mesma aceleração/frenagem do servidor (`stats.moveSpeed`, `accel`, `decel` na ficha). Se o servidor divergir (bloqueio, ataque, morte), a previsão para e o erro some em ~0,1 s, sem salto.
+- **Previsão do próprio personagem**: a resposta do `move` traz o caminho; o personagem sai andando na hora com a mesma aceleração/frenagem do servidor (`stats.moveSpeed`, `accel`, `decel` na ficha). Se o servidor divergir (bloqueio, ataque, morte), a previsão para e o erro some em ~0,1 s, sem salto. A velocidade muda no meio do caminho com o evento `speed` (reforço, Desorientado, Atolado), e atordoamento ou puxão de monstro param a previsão na hora.
 - O movimento usa o relógio real do sistema, não o `delta` do quadro (ver DECISOES D49).
 
 ## Saque individual e idempotência
@@ -291,7 +292,7 @@ Feito: métricas do servidor e HTTP de métricas, snapshots por diferença e int
 - Medição de latência no cliente (indicador na interface) e tolerância a 150 ms.
 - Revisão da progressão com telemetria de tempo por nível contra as metas da tabela de XP; ajuste de economia (ouro de entrada/saída, preço de tônicos, equipamento do armeiro e refino).
 - Documentação de execução, operação e cenários críticos atualizada.
-- **Aceitação**: relatório com p50/p95/p99 de tick e de latência; nenhum tick > 50 ms com 100 clientes; tempo médio por nível dentro de ±25% da meta; script de cenários críticos reproduzível. **Resultado**: com 100 clientes, tick p50/p95/p99 de 4,5/7,8/14,1 ms e nenhum acima de 50 ms (~9,5 KB/s por cliente); com 150 ms de atraso, todos conectados e sem erros; na simulação do 1 ao 25, a média das classes fica dentro de ±25% da meta em todos os níveis (7,4 h contra 7,7 h no total) e cada classe a até ±25% do total (de −16% a +11%); `npm run cenarios` reproduz tudo.
+- **Aceitação**: relatório com p50/p95/p99 de tick e de latência; nenhum tick > 50 ms com 100 clientes; tempo médio por nível dentro de ±25% da meta; script de cenários críticos reproduzível. **Resultado**: com 100 clientes, tick p50/p95/p99 de 4,5/7,8/14,1 ms e nenhum acima de 50 ms (~9,5 KB/s por cliente); com 150 ms de atraso, todos conectados e sem erros; na simulação do 1 ao 25 — já com as mecânicas dos monstros e o bot saindo das áreas avisadas 0,6 s depois de vê-las —, a média das classes fica dentro de ±25% da meta em todos os níveis (7,2 h contra 7,7 h no total), cada classe a até ±25% do total (de −15% a +1%) e as mortes ficam em 3,0 a 7,1 por execução (eram 2,8 a 10,3 antes das mecânicas); `npm run cenarios` reproduz tudo.
 
 ### Pós-v1 — Níveis 21–25
 

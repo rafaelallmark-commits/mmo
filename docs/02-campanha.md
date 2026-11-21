@@ -101,6 +101,7 @@ Cada missão principal lista **NPC**, **objetivo**, **diálogo curto**, **recomp
 - **Diálogo**: TEODORO: "Aquela máquina para as carroças e pede um recibo que ninguém emite há dezessete anos. Junta alguém. Sozinho, só se você for muito teimoso." · MARA (depois): "Ele tinha uma ordem de serviço no peito. Assinatura da Companhia. Por que uma máquina da Companhia ainda trabalha aqui fora?"
 - **Recompensa**: 200 XP. O próprio Capataz derruba, para cada participante elegível, **a primeira arma de nível 5 da sua classe** (saque individual): Machado de Pedreira, Garra de Manivela, Lança do Fosso, Arco de Teixo do Espinhal, Espada da Ponte, Azagaia de Vau, Cetro do Vau ou Varinha de Vidro Fosco.
 - **Pré-requisitos**: 1.4. Recomendado: 2 jogadores de nível 2+ ou 1 jogador de nível 5.
+- **Luta**: o primeiro elite ensina a ler o chão — a cada 9 s o Capataz ergue o martelo e o círculo de 3,5 m em volta dele fica vermelho por 2 s (**Martelo de Turno**); quem sai do círculo não leva nada (docs/06, "Mecânicas dos monstros").
 - **Conclusão**: participação registrada na morte do Capataz (dano, cura, proteção ou controle ≥ 5% do total). Não exige equipar a arma.
 
 ---
@@ -193,7 +194,7 @@ Cada missão principal lista **NPC**, **objetivo**, **diálogo curto**, **recomp
 - **Diálogo**: MARA (com a ordem na mão): "Duas assinaturas. Âmbar e Nacre. Na mesma noite, no mesmo papel. Eles desligaram juntos." · MARA: "E aqui embaixo, carimbo da Companhia: 'Registro substituído'. Alguém trocou os livros das duas cidades."
 - **Recompensa**: 2.700 XP, 150 ouro e a peça de cabeça de faixa 9 da sua armadura: Elmo de Ferro Frio, Capuz de Couro Rebitado ou Diadema de Tecido de Bomba.
 - **Pré-requisitos**: 3.3.
-- **Conclusão**: cofre aberto (interação) — o Supervisor de Turno (elite) guarda a sala, mas é possível abrir o cofre sem derrotá-lo se o grupo segurar a atenção dele.
+- **Conclusão**: cofre aberto (interação) — o Supervisor de Turno (elite) guarda a sala, mas é possível abrir o cofre sem derrotá-lo se o grupo segurar a atenção dele. Quem decide derrubá-lo enfrenta o **Chamado de Turno**: a cada 30% de vida perdida ele chama dois Ratos-Engrenagem (até seis vivos), que somem quando ele cai.
 
 ---
 
@@ -263,6 +264,7 @@ Cada missão principal lista **NPC**, **objetivo**, **diálogo curto**, **recomp
 - **Diálogo**: JOCA: "Ele largou pedaços de si pelos canais. Cada pedaço ainda abre uma porta."
 - **Recompensa**: 9.000 XP, Chave de Comporta (item de missão, abre o calabouço para o grupo).
 - **Pré-requisitos**: 5.1.
+- **Luta**: o Fragmento patrulha os canais em volta do seu posto e, em combate, solta a **Descarga do Fragmento** — uma linha de 14 m avisada 1,5 s antes que atordoa quem fica nela; um eco das linhas do piso que o Custódio usa no calabouço.
 - **Conclusão**: participação na morte de um Fragmento.
 
 ### 5.3 A Última Eclusa (calabouço)
@@ -337,6 +339,7 @@ Se a conexão cair no meio do encontro, a instância espera o jogador por 3 minu
 - **Diálogo**: ILDA: "O Selador fecha qualquer fresta e responde no nosso lugar. Derrube a máquina — junte gente, ela é teimosa como o Custódio — e mande a nossa resposta pelo tubo ao lado da porta. A nossa. Não a dela." · MARA (se escolheu abrir): "Você escreveu 'vamos abrir'. E do outro lado da porta, um sino respondeu. Um toque só. Não é eco: é alguém." · MARA (se escolheu esperar): "Você escreveu 'não vamos embora'. E do outro lado, um sino respondeu. Um toque só. Seja quem for, agora sabe que não está sozinho. Nem nós."
 - **Recompensa**: 23.800 XP, 1.500 ouro, Anel dos Fundadores (faixa 25 — fica na bolsa até o nível 25: o ciclo "achar algo que ainda não posso usar" fecha no teto).
 - **Pré-requisitos**: 6.4; nível 24. Recomendado: grupo de 2–3.
+- **Luta**: a cada 12 s o Selador "sela a fresta": o **Selo** marca 6 m em volta dele por 2 s e quem fica perde as habilidades por 3 s (a Alvorada tira) — a cura do grupo deve ficar fora do círculo.
 - **Conclusão**: participação na morte do Selador + canalização de 4 s no tubo. O sino do outro lado é o gancho do próximo arco (o "terceiro toque").
 
 **Pontos de caça da Cava** (todos com saque da faixa 21 e chance pequena da faixa 25): Salamandras de Cisterna (21, passivas, na margem norte da cisterna — solo tranquilo), Sineiros de Bronze (22, matilha no Salão das Placas), Vozes Soterradas (23, galeria ao norte das ruínas), Toupeiras de Basalto (24, Poço Quente e ao sul das ruínas — ponto de grupo) e o Selador da Porta Funda (elite diária). Mapa e números em `06-mundo-e-mapas.md`.
@@ -357,15 +360,15 @@ Missões secundárias apontam lugares bons para caçar em cada faixa e dão moti
 | Sapos de Vapor | Boticário Lume (Vau de Nácar) | 5–7 | Lagoa das Bombas | 12 Glândulas de Vapor | 570 XP, Tônicos ×8 | Ponto solo de baixo risco |
 | Fios de Enguia | Joca | 6–8 | Canal Raso (Enguias de Lodo, agressivas) | 10 Fios Condutores | 700 XP, Anel de Bronze | Bom para dupla corpo a corpo + distância |
 | Bico de Ferro | Vigia Olga Sal | 7–9 | Margem Alta (Garças de Ferrugem) | 8 Bicos de Garça | 825 XP | Garças isoladas: caça solo eficiente |
-| Bomba-Mestra | Joca (repetível 1×/dia) | 8–10 | Casa das Bombas (elite) | Derrotar a Bomba-Mestra Desregulada | 955 XP | Brasa Cristalizada e família de faixa 9; Amuleto do Segundo Toque (raro) |
+| Bomba-Mestra | Joca (repetível 1×/dia) | 8–10 | Casa das Bombas (elite: pressão alta e baixa, vapor em volta) | Derrotar a Bomba-Mestra Desregulada | 955 XP | Brasa Cristalizada e família de faixa 9; Amuleto do Segundo Toque (raro) |
 | Fusíveis Velhos | Pina | 9–11 | Galeria dos Escavadores | 6 Fusíveis Velhos | 1.575 XP | Família de armaduras de Ferro Frio |
 | Brasa para a Forja | Gusmão ou Tiela (repetível 1×/dia) | 9+ | — | 6 Brasas Cristalizadas e 10 Sucatas de Condutor | Pó de Refino ×4 (sem XP) | Dá destino à brasa e à sucata que sobram da caça |
-| Esteira Desgovernada | Pina | 11–12 | Trilhos da Esteira (Lâminas, passivas) | 10 abates seguidos sem ser atingido pela esteira | 2.150 XP | Monstro de vida baixa e dano alto: teste de posicionamento |
+| Esteira Desgovernada | Pina | 11–12 | Trilhos da Esteira (Lâminas, passivas) | 10 abates seguidos sem ser atingido pela esteira | 2.150 XP | Monstro de dano alto e defesa baixa que dispara pelos trilhos: teste de posicionamento |
 | Supervisor de Turno | Mara (repetível 1×/dia) | 11–13 | Sala do Supervisor (elite, grupo) | Derrotar o Supervisor | 2.500 XP | Pó de Refino; chance de faixa 13 |
-| Ecos Repetidos | Mara | 13–15 | Salão dos Sinos (Ecoantes) | 12 Ecos Presos | 4.400 XP | Ponto de grupo (Ecoantes repetem o último golpe) |
+| Ecos Repetidos | Mara | 13–15 | Salão dos Sinos (Ecoantes) | 12 Ecos Presos | 4.400 XP | Ponto de grupo (Ecoantes devolvem o último golpe que levaram) |
 | Seda Condutora | Tiela ou Gusmão | 15–16 | Ponte dos Fios (Aranhas de Conduto) | 10 fios de Seda Condutora e 4 Brasas Cristalizadas | 5.900 XP, 250 ouro, Pó de Refino ×5 | Material para refino +2/+3 |
-| Mãe do Eco | Ilda (repetível 1×/dia) | 15–17 | Ninho da Mãe (elite, grupo) | Derrotar a Mãe do Eco | 6.600 XP, 400 ouro | Faixa 13/17 |
-| Escória Viva | Joca | 17–19 | Bacia de Vapor (Escória Pressurizada) | 15 Núcleos de Escória | 14.000 XP, 450 ouro, Tônicos Médios ×5 | Ponto de grupo com explosões em área |
+| Mãe do Eco | Ilda (repetível 1×/dia) | 15–17 | Ninho da Mãe (elite, grupo; cada grito gera um Ecoante) | Derrotar a Mãe do Eco | 6.600 XP, 400 ouro | Faixa 13/17 |
+| Escória Viva | Joca | 17–19 | Bacia de Vapor (Escória Pressurizada) | 15 Núcleos de Escória | 14.000 XP, 450 ouro, Tônicos Médios ×5 | Ponto de grupo: a Escória explode ao morrer (saia do círculo) |
 | Draga Perdida | Ilda | 17–20 | Canal Lamacento (Dragas Vivas) | 10 abates | 15.000 XP, 500 ouro | Família de Liga Rubra (faixa 17) e, para a Cantora, o Cetro do Sino Mudo (raro) |
 | Badalos Soltos | Joca | 21–22 | Salão das Placas (Sineiros de Bronze, matilha) | 12 abates | 9.000 XP, Tônicos Médios ×8 | Máquinas em bando: puxar pela borda; faixa 21 |
 | Túneis Novos | Mara | 23–24 | Poço Quente e sul das ruínas (Toupeiras de Basalto) | 12 abates | 10.500 XP, Pó de Refino ×5 | Ponto de grupo; faixa 21 e chance de faixa 25 |

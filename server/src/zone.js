@@ -12,6 +12,10 @@ import { equippedList, equippedIn, bagCount, BAG_CAPACITY } from './equipment.js
 import { executeSkill, IMPLEMENTED_KINDS } from './skills.js';
 import { makeRng } from './rng.js';
 import { NavGrid, followPath, brake } from './nav.js';
+import {
+  mechanicTick, meleeMods, afterMeleeHit, recordBlow, tryEcho, afterMonsterDamaged, onMonsterDeath, tickHazards,
+  cancelWindup, resetMechanic, summonOrphaned, territoryRadius, railGoal, defenseFactor, debuffText,
+} from './mechanics.js';
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const r2 = (v) => Math.round(v * 100) / 100;
@@ -49,6 +53,8 @@ export class Zone {
     this.players = new Map(); // charId -> player
     this.monsters = new Map(); // eid -> monster
     this.groundEffects = [];
+    this.hazards = []; // áreas avisadas dos monstros (mechanics.js)
+    this.hazardSeq = 0;
     this.npcs = this.map.npcs ?? [];
     this.objects = this.map.objects ?? [];
     this.portals = this.map.portals ?? [];
@@ -60,8 +66,9 @@ export class Zone {
     this.monsterSeq = 0;
     this.escorts = new Map(); // eid -> Escort (ou Defense, que é uma escolta parada)
     this.escortSeq = 0;
-    // perigos do mapa (a esteira da Oficina): estado de cada um; só ligam com alguém que precise deles
-    this.hazards = Object.entries(this.map.hazards ?? {}).map(([id, def]) => ({ id, def, state: 'idle', at: 0, pattern: 0, list: [] }));
+    // perigos do mapa (a esteira da Oficina): estado de cada um; só ligam com alguém que precise deles. Lista
+    // própria, separada de this.hazards (os golpes avisados dos monstros, mechanics.js), que tem outro formato.
+    this.mapHazards = Object.entries(this.map.hazards ?? {}).map(([id, def]) => ({ id, def, state: 'idle', at: 0, pattern: 0, list: [] }));
     this.duels = new DuelManager(this);
     for (const sp of this.map.spawns ?? []) for (let i = 0; i < sp.count; i++) this.spawnMonster(sp);
   }
@@ -84,11 +91,12 @@ export class Zone {
     m.home = { x: m.x, z: m.z };
     m.hp = m.def.hp; m.state = 'idle'; m.targetId = null; m.threat.clear(); m.score.clear(); m.dots = []; m.fx = []; m.dest = null;
     m.path = null; m.chase = null; m.speed = 0; m.vx = 0; m.vz = 0; m.slotOffset = (this.rng() - 0.5) * 1.8;
+    m.mech = null; m.windup = null;
   }
 
   // ---------- jogadores ----------
   addPlayer(char) {
-    const p = { eid: `p${char.id}`, char, zone: this, cooldowns: {}, buffs: [], guards: [], shield: null, nextAttackPct: 0, targetId: null, dest: null, nextAttackAt: 0, lastCombatAt: -1e9, potionReadyAt: 0, facing: { x: 1, z: 0 } };
+    const p = { eid: `p${char.id}`, char, zone: this, cooldowns: {}, buffs: [], debuffs: [], guards: [], shield: null, nextAttackPct: 0, targetId: null, dest: null, nextAttackAt: 0, lastCombatAt: -1e9, potionReadyAt: 0, facing: { x: 1, z: 0 } };
     if (char.dead) this.respawnAtPost(p, false); // caiu (ou desconectou) morto: restaura no posto
     if (!this.inBounds(char.x, char.z) || this.isBlocked(char.x, char.z)) { char.x = this.map.spawnPoint.x; char.z = this.map.spawnPoint.z; }
     if (!this.nav.isFree(char.x, char.z)) {
@@ -120,13 +128,25 @@ export class Zone {
 
   recalc(p) {
     const buffs = {};
+    // reforços das habilidades e efeitos negativos dos monstros (mods negativos) somam do mesmo jeito
     for (const b of p.buffs) for (const [k, v] of Object.entries(b.mods)) buffs[k] = (buffs[k] || 0) + v;
+    for (const d of p.debuffs ?? []) for (const [k, v] of Object.entries(d.mods ?? {})) buffs[k] = (buffs[k] || 0) + v;
     const eq = equippedList(p.char, this.data);
+    const speedBefore = p.stats?.moveSpeedPct;
     p.stats = derivedStats(p.char, eq.map((e) => ({ def: e.def, enh: e.enh })), this.data, buffs);
     p.weaponDefId = eq.find((e) => e.def.slot === 'weapon')?.def.id ?? null;
     p.offhandDefId = eq.find((e) => e.def.slot === 'offhand')?.def.id ?? null;
     p.char.hp = Math.min(p.char.hp, p.stats.maxHp);
     p.char.mp = Math.min(p.char.mp, p.stats.maxMp);
+    // a velocidade mudou (reforço, Desorientado, Atolado): o cliente acerta a previsão do próprio movimento
+    if (speedBefore !== undefined && speedBefore !== p.stats.moveSpeedPct && this.players.get(p.char.id) === p) {
+      this.send(p.char.id, { t: 'speed', moveSpeed: this.moveSpeedOf(p) });
+    }
+  }
+
+  // Velocidade de caminhada do jogador (m/s) com reforços e efeitos negativos.
+  moveSpeedOf(p) {
+    return r2(this.f.movement.playerSpeed * (1 + (p.stats.moveSpeedPct || 0) / 100));
   }
 
   grantUnlockedSkills(char) {
@@ -168,20 +188,56 @@ export class Zone {
     return true;
   }
 
-  // Atordoamento em jogador (hoje só a descarga do Custódio): imunidade (Égide Firme etc.) anula, e a
-  // resistência a controle da Vitalidade (ccResistPct, até 50%) encurta. Devolve a duração aplicada.
+  // Atordoamento em jogador (descarga do Custódio, Fio Condutor da Aranha, Descarga do Fragmento): imunidade
+  // (Égide Firme etc.) anula, e a resistência a controle da Vitalidade (ccResistPct, até 50%) encurta — a regra
+  // de controlMs, que vale para todo controle de monstro em jogador (o Selo também). A interface mostra
+  // "Atordoado" ('debuff' com id 'stun'). Devolve a duração aplicada.
   stunPlayer(p, ms) {
-    if (p.char.dead || p.ccImmuneUntil > this.now) return 0;
-    const dur = Math.round(ms * (1 - Math.min(50, p.stats.ccResistPct || 0) / 100));
+    const dur = this.controlMs(p, ms);
     if (dur <= 0) return 0;
     p.stunUntil = Math.max(p.stunUntil || 0, this.now + dur);
+    this.broadcast({ t: 'debuff', eid: p.eid, id: 'stun', name: 'Atordoado', ms: Math.round(p.stunUntil - this.now), text: debuffText({ stun: true }) });
     return dur;
   }
 
-  // Tira um efeito negativo do jogador (Alvorada). Hoje o único é o atordoamento.
+  // Duração de um controle de monstro em jogador (atordoamento, selo): imunidade a controle anula e a
+  // resistência da Vitalidade (ccResistPct, até 50%) encurta.
+  controlMs(p, ms) {
+    if (p.char.dead || p.ccImmuneUntil > this.now) return 0;
+    return Math.round(ms * (1 - Math.min(50, p.stats.ccResistPct || 0) / 100));
+  }
+
+  // Efeito negativo de monstro em jogador (Desorientado, Atolado, Selado, Sanguessuga): curto, aparece na
+  // interface ('debuff') e a Alvorada tira (cleansePlayer). mods entram nas estatísticas como os reforços;
+  // mpPctPerSec drena a mana; silence impede habilidades e, como controle, passa pela regra do atordoamento
+  // (controlMs). O mesmo efeito de novo renova a duração.
+  addDebuff(p, d, by = null) {
+    if (p.char.dead) return null;
+    const ms = d.silence ? this.controlMs(p, d.durationMs) : d.durationMs;
+    if (ms <= 0) return null;
+    const until = this.now + ms;
+    let cur = p.debuffs.find((x) => x.id === d.id);
+    if (cur) { cur.until = Math.max(cur.until, until); cur.by = by; }
+    else {
+      cur = { id: d.id, name: d.name, until, mods: d.mods ?? null, mpPctPerSec: d.mpPctPerSec || 0, silence: !!d.silence, by, drainMsgAt: this.now + 1000 };
+      p.debuffs.push(cur);
+      if (cur.mods) this.recalc(p);
+    }
+    this.broadcast({ t: 'debuff', eid: p.eid, id: d.id, name: d.name, ms: Math.round(cur.until - this.now), text: debuffText(d) });
+    return cur;
+  }
+
+  // Tira um efeito negativo do jogador (Alvorada: "perdem um efeito negativo"): o atordoamento primeiro;
+  // senão, o efeito com mais tempo pela frente.
   cleansePlayer(p) {
-    if (p.stunUntil > this.now) { p.stunUntil = 0; this.broadcast({ t: 'cleanse', eid: p.eid }); return true; }
-    return false;
+    if (p.stunUntil > this.now) { p.stunUntil = 0; this.broadcast({ t: 'cleanse', eid: p.eid, id: 'stun' }); return true; }
+    const live = p.debuffs.filter((d) => d.until > this.now);
+    if (!live.length) return false;
+    const d = live.reduce((a, b) => (b.until > a.until ? b : a));
+    p.debuffs = p.debuffs.filter((x) => x !== d);
+    if (d.mods) this.recalc(p);
+    this.broadcast({ t: 'cleanse', eid: p.eid, id: d.id });
+    return true;
   }
 
   inBounds(x, z) {
@@ -244,8 +300,8 @@ export class Zone {
 
   inArea(a, c) { return c.x >= a.x0 && c.x <= a.x1 && c.z >= a.z0 && c.z <= a.z1; }
 
-  tickHazards() {
-    for (const h of this.hazards) {
+  tickMapHazards() {
+    for (const h of this.mapHazards) {
       const d = h.def;
       const inside = [...this.players.values()].filter((p) => !p.char.dead && this.inArea(d.area, p.char));
       if (h.state === 'idle') {
@@ -438,6 +494,9 @@ export class Zone {
       return { ok: false, code: 'not_learned', reason: `Nível ${s.unlockLevel} exigido para ${s.name}. Seu nível atual é ${c.level}.` };
     }
     if (!IMPLEMENTED_KINDS.has(s.effect.kind)) return { ok: false, code: 'not_implemented', reason: 'Habilidade ainda não implementada neste marco.' };
+    // Selo do Selador da Porta Funda: sem habilidades enquanto durar
+    const sealed = p.debuffs.find((d) => d.silence && d.until > this.now);
+    if (sealed) return { ok: false, code: 'silenced', reason: `${sealed.name}: sem habilidades por ${((sealed.until - this.now) / 1000).toFixed(1)} s.` };
     const ready = p.cooldowns[skillId] || 0;
     if (this.now < ready) return { ok: false, code: 'cooldown', reason: `${s.name} em recarga (${((ready - this.now) / 1000).toFixed(1)} s).` };
     const cost = s.mp + (s.mpPerRank || 0) * (rank - 1);
@@ -689,6 +748,7 @@ export class Zone {
     for (const p of this.players.values()) this.tickPlayer(p, dt);
     this.duels.tick();
     for (const m of this.monsters.values()) this.tickMonster(m, dt);
+    tickHazards(this);
     for (const [eid, e] of this.escorts) {
       const r = e.tick(dt);
       if (r === 'abandoned' || r === 'done') {
@@ -696,7 +756,7 @@ export class Zone {
         this.escorts.delete(eid);
       }
     }
-    if (this.hazards.length) this.tickHazards();
+    if (this.mapHazards.length) this.tickMapHazards();
     this.tickGround();
   }
 
@@ -754,6 +814,7 @@ export class Zone {
       if (p.buffs.length !== before) this.recalc(p);
     }
     if (p.guards.length) p.guards = p.guards.filter((g) => g.until > this.now);
+    if (p.debuffs.length) this.tickDebuffs(p, dt);
     if (p.shield && p.shield.until <= this.now) p.shield = null;
     const speed = this.f.movement.playerSpeed * (1 + (p.stats.moveSpeedPct || 0) / 100);
     const ox = c.x, oz = c.z;
@@ -813,13 +874,34 @@ export class Zone {
     c.mp = Math.min(p.stats.maxMp, c.mp + ((p.stats.maxMp * r.mpPctPerSec / 100) + p.stats.attrs.spi * r.mpPerSpiPerSec) * dt * factor);
   }
 
+  // Efeitos negativos do jogador: vencem sozinhos; a sanguessuga drena a mana (mpPctPerSec) e avisa a
+  // cada segundo quanto tirou ('mech' drain, para o cliente desenhar e mostrar o número).
+  tickDebuffs(p, dt) {
+    const before = p.debuffs.length;
+    p.debuffs = p.debuffs.filter((d) => d.until > this.now);
+    if (p.debuffs.length !== before) this.recalc(p);
+    for (const d of p.debuffs) {
+      if (!d.mpPctPerSec) continue;
+      const take = Math.min(p.char.mp, (p.stats.maxMp * d.mpPctPerSec / 100) * dt);
+      p.char.mp -= take;
+      d.drained = (d.drained || 0) + take;
+      if (this.now >= d.drainMsgAt) {
+        d.drainMsgAt = this.now + 1000;
+        if (d.drained >= 0.5) this.broadcast({ t: 'mech', kind: 'drain', eid: d.by, dst: p.eid, amount: Math.round(d.drained) });
+        d.drained = 0;
+      }
+    }
+  }
+
   monsterCombatStats(m) {
     const dd = this.monsterFx(m, 'defenseDown');
     const mark = this.monsterFx(m, 'mark');
+    // pressão baixa da Bomba-Mestra: defesa e resistência mágica caem
+    const low = defenseFactor(this, m);
     return {
       level: m.def.level,
-      defense: Math.round(m.def.defense * (1 - (dd?.pct || 0) / 100)),
-      mres: m.def.mres,
+      defense: Math.round(m.def.defense * (1 - (dd?.pct || 0) / 100) * low),
+      mres: Math.round(m.def.mres * low),
       evasion: Math.max(0, m.def.evasion - (mark?.evasionDown || 0)),
     };
   }
@@ -839,6 +921,7 @@ export class Zone {
     }
     this.broadcast({ t: 'hit', src: p.eid, dst: m.eid, dmg: res.damage, crit: !!res.crit, miss: !res.hit, skill: skillId, magic: !!res.magic });
     if (!res.hit) { this.addThreat(m, p, 1); return res; }
+    recordBlow(this, m, p, res); // o Ecoante guarda o último golpe que levou
     this.damageMonster(m, p.char.id, res.damage);
     return res;
   }
@@ -865,6 +948,7 @@ export class Zone {
       }
     }
     if (m.hp <= 0) this.killMonster(m);
+    else afterMonsterDamaged(this, m); // limiares de vida (Supervisor de Turno chama reforços)
   }
 
   killMonster(m) {
@@ -872,6 +956,7 @@ export class Zone {
     if (m.temp) m.removeAt = this.now + 3000;
     m.respawnAt = m.def.respawnSec > 0 && !m.noRespawn ? this.now + m.def.respawnSec * 1000 : Infinity;
     this.broadcast({ t: 'death', eid: m.eid });
+    onMonsterDeath(this, m); // o golpe que preparava não sai; explosão avisada (Sapo-Bomba, Escória)
     const radius = this.f.xp.shareRadius;
     // chefe: quem caiu na reta final também leva XP, saque e o crédito da missão (a participação já está
     // registrada); nos demais monstros, só quem está de pé
@@ -904,10 +989,11 @@ export class Zone {
         if (m.def.daily && s.lootEligible && this.store.claimDaily(c.id, `elite:${m.defId}`, dayKey(nowWall))) daily = true;
         this.grantXp(p, daily ? s.xp * 2 : s.xp);
         this.store.saveCharacter(c);
-        const drops = s.lootEligible ? [...this.rollLoot(m, c), ...(daily ? this.rollLoot(m, c) : [])] : [];
+        // reforços invocados (Supervisor, Mãe do Eco) não deixam saque nem material de missão
+        const drops = s.lootEligible && !m.noLoot ? [...this.rollLoot(m, c), ...(daily ? this.rollLoot(m, c) : [])] : [];
         // materiais de coleta que só caem com a missão ativa: para todo participante creditado (como os
         // abates das missões), um por abate
-        for (const q of this.hooks.questDrops?.(c, m.defId) ?? []) if (this.rng() < q.chance) drops.push({ defId: q.defId, qty: 1, gold: 0 });
+        if (!m.noLoot) for (const q of this.hooks.questDrops?.(c, m.defId) ?? []) if (this.rng() < q.chance) drops.push({ defId: q.defId, qty: 1, gold: 0 });
         if (daily) this.send(c.id, { t: 'system', text: `Elite diária: ${m.def.name} — XP em dobro e saque extra hoje.` });
         for (const d of drops) {
           const lp = this.nav.nearestFree(m.x + (this.rng() - 0.5) * 2, m.z + (this.rng() - 0.5) * 2, 3) ?? { x: m.x, z: m.z };
@@ -977,13 +1063,24 @@ export class Zone {
       m.dots = m.dots.filter((d) => d.nextAt <= d.until);
       if (m.state === 'dead') return;
     }
+    // reforço invocado cujo invocador caiu ou desistiu: some junto (sem XP nem saque)
+    if (m.summonerEid && summonOrphaned(this, m)) {
+      if (m.windup) cancelWindup(this, m);
+      m.state = 'dead'; m.hp = 0; m.targetId = null; m.threat.clear(); m.removeAt = this.now;
+      this.broadcast({ t: 'mech', kind: 'vanish', eid: m.eid });
+      return;
+    }
     if (m.fx.length) m.fx = m.fx.filter((f) => f.until > this.now);
-    if (this.monsterFx(m, 'stun')) { brake(m, dt, 30); return; }
+    // atordoado: não anda nem bate, e o golpe avisado que preparava não sai
+    if (this.monsterFx(m, 'stun')) { if (m.windup) cancelWindup(this, m); brake(m, dt, 30); return; }
+    // preparando um golpe avisado: parado até a área resolver (tickHazards)
+    if (m.windup) { brake(m, dt, 30); return; }
     const rooted = !!this.monsterFx(m, 'root');
     const slow = this.monsterFx(m, 'slow');
     const speed = rooted ? 0 : m.def.moveSpeed * (slow ? 1 - slow.pct / 100 : 1);
     const mopts = { accel: 14, decel: 20 };
     if (m.state === 'return') {
+      if (m.mech) resetMechanic(this, m); // desistiu da luta: a próxima começa do zero
       if (!m.path) m.path = this.nav.findPath(m.x, m.z, m.home.x, m.home.z) ?? [{ x: m.home.x, z: m.home.z }];
       if (followPath(m, m.path, dt, m.def.moveSpeed * 1.5, { ...mopts, isFree: this.isFreeFn })) { m.state = 'idle'; m.hp = m.def.hp; m.score.clear(); m.path = null; }
       return;
@@ -1010,15 +1107,19 @@ export class Zone {
       else if (!target || (best !== target && bestT > (m.threat.get(target.char.id) || 0) * this.f.threat.switchMargin)) { target = best; m.targetId = best.eid; }
     }
     if (!target && m.state === 'chase') { m.state = 'return'; m.path = null; m.chase = null; return; }
-    if (!target && m.def.aggroRadius > 0) {
+    // agressivo: ataca quem chega ao raio de agressão; passivo com território (ninho, margem): ao raio dele
+    const aggroR = m.def.aggroRadius > 0 ? m.def.aggroRadius : territoryRadius(m);
+    if (!target && aggroR > 0) {
       for (const p of this.players.values()) {
-        if (!p.char.dead && !this.inSafeZone(p.char) && dist(p.char, m) <= m.def.aggroRadius) { target = p; m.targetId = p.eid; m.state = 'chase'; m.threat.set(p.char.id, this.f.threat.proximityAggro); break; }
+        if (!p.char.dead && !this.inSafeZone(p.char) && dist(p.char, m) <= aggroR) { target = p; m.targetId = p.eid; m.state = 'chase'; m.threat.set(p.char.id, this.f.threat.proximityAggro); break; }
       }
     }
     if (!target) {
       if (this.now >= m.wanderAt) {
         m.wanderAt = this.now + 4000 + this.rng() * 6000;
-        const a = this.rng() * Math.PI * 2, d = 1 + this.rng() * Math.min(4, m.spawn.radius);
+        // patrulha (Fragmento do Custódio): passeia mais longe de casa que os demais
+        const roam = m.def.mechanic?.patrolRadius ?? Math.min(4, m.spawn.radius);
+        const a = this.rng() * Math.PI * 2, d = 1 + this.rng() * roam;
         const tx = m.home.x + Math.cos(a) * d, tz = m.home.z + Math.sin(a) * d;
         m.path = this.nav.isFree(tx, tz) ? this.nav.findPath(m.x, m.z, tx, tz) : null;
       }
@@ -1033,8 +1134,11 @@ export class Zone {
     const tc = target.char;
     const d = dist(m, tc);
     m.path = null;
+    // mecânica do monstro (data/monsters.json "mechanic"): golpe avisado pronto, pressão alternada
+    if (mechanicTick(this, m, target, d)) { brake(m, dt, 30); return; }
     if (d > m.def.attackRange) {
-      this.chase(m, this.attackSlot(m, tc, m.def.attackRange), 0, speed, dt, mopts);
+      // trilho (Lâmina de Esteira): persegue andando nos eixos do mapa
+      this.chase(m, railGoal(this, m, this.attackSlot(m, tc, m.def.attackRange)), 0, speed, dt, mopts);
       return;
     }
     brake(m, dt, mopts.decel * 1.5);
@@ -1050,11 +1154,14 @@ export class Zone {
     }
     if (this.now >= m.nextAttackAt) {
       m.nextAttackAt = this.now + m.def.attackIntervalMs;
-      const res = monsterAttack(m.def, target.stats, this.data, this.rng);
+      // o Ecoante devolve o último golpe que levou, no lugar do golpe comum
+      if (tryEcho(this, m, target)) return;
+      // enxame, garras que atravessam couraça, pressão alta
+      const res = monsterAttack(m.def, target.stats, this.data, this.rng, meleeMods(this, m));
       target.lastCombatAt = this.now;
       // golpe bloqueado pelo escudo: chega como "errou" (block marca o motivo) e não causa dano
       this.broadcast({ t: 'hit', src: m.eid, dst: target.eid, dmg: res.damage, crit: !!res.crit, miss: !res.hit || !!res.blocked, block: res.blocked || undefined, skill: null, magic: false });
-      if (res.hit && !res.blocked) this.damagePlayer(target, res.damage, m);
+      if (res.hit && !res.blocked) { this.damagePlayer(target, res.damage, m); afterMeleeHit(this, m, target); }
     }
   }
 
@@ -1100,7 +1207,8 @@ export class Zone {
   killPlayer(p) {
     const c = p.char;
     const attackers = [...this.monsters.values()].filter((m) => m.state !== 'dead' && m.targetId === p.eid).length;
-    c.hp = 0; c.dead = true; p.targetId = null; p.dest = null; p.buffs = []; p.guards = []; p.shield = null;
+    c.hp = 0; c.dead = true; p.targetId = null; p.dest = null; p.buffs = []; p.debuffs = []; p.guards = []; p.shield = null; p.stunUntil = 0;
+    this.recalc(p); // sem reforços nem efeitos negativos: quem volta ao posto (ou é levantado) volta sem eles
     p.deadAt = this.now; // volta sozinho ao posto depois de death.corpseTimeoutMs
     for (const m of this.monsters.values()) { m.threat.delete(c.id); if (m.targetId === p.eid) m.targetId = null; }
     this.store.saveCharacter(c);
@@ -1195,7 +1303,7 @@ export class Zone {
       permanent: s.permanent, attrs: s.attrs, hp: Math.ceil(c.hp), mp: Math.floor(c.mp), gold: c.gold, dead: c.dead,
       x: r2(c.x), z: r2(c.z), mapId: this.mapId, instance: this.instanceId,
       stats: { maxHp: s.maxHp, maxMp: s.maxMp, defense: s.defense, mres: s.mres, evasion: s.evasion, accuracy: s.accuracy, crit: s.crit, magicCrit: s.magicCrit, magicPower: s.magicPower, attackIntervalMs: s.attackIntervalMs, range: s.range, weapon: s.weapon.id, ccResistPct: s.ccResistPct,
-        moveSpeed: r2(this.f.movement.playerSpeed * (1 + (s.moveSpeedPct || 0) / 100)), accel: this.mv.accel, decel: this.mv.decel },
+        moveSpeed: this.moveSpeedOf(p), accel: this.mv.accel, decel: this.mv.decel },
       items: [...c.items.values()].map((it) => ({ id: it.id, defId: it.defId, qty: it.qty, enh: it.enh || 0, loc: it.loc, slot: it.slot })),
       bagCapacity: BAG_CAPACITY, bagUsed: bagCount(c),
       cooldowns: Object.fromEntries(Object.entries(p.cooldowns).map(([k, v]) => [k, Math.max(0, Math.round(v - this.now))])),

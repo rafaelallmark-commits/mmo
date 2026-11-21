@@ -17,6 +17,10 @@ var xp_text: Label
 var target_box: PanelContainer
 var target_label: Label
 var target_bar: ProgressBar
+var target_desc: Label  # descrição do monstro numa linha (o que ele faz)
+var debuff_box: HBoxContainer  # efeitos negativos no próprio personagem, com o tempo que falta
+var _debuffs := {}  # id -> { "label": Label, "until": msec, "name": String }
+var _db_acc := 0.0
 var hotbar: HBoxContainer
 var hot_buttons := []
 var msg_box: VBoxContainer
@@ -121,6 +125,11 @@ func _build_status(root: Control) -> void:
 	hp_text = _overlay_label(hp_bar)
 	mp_bar = _bar(v, Theme_.MP)
 	mp_text = _overlay_label(mp_bar)
+	# efeitos negativos dos monstros (Atordoado, Desorientado, Atolado, Sanguessuga, Selado)
+	debuff_box = HBoxContainer.new()
+	debuff_box.add_theme_constant_override("separation", 6)
+	debuff_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(debuff_box)
 	var hint := Label.new()
 	hint.text = "I inventário · C ficha · J missões · 1-6 habilidades · 7-8 tônicos · Q/E gira · roda zoom"
 	hint.add_theme_font_size_override("font_size", 10)
@@ -140,15 +149,25 @@ func _build_target(root: Control) -> void:
 	target_box = PanelContainer.new()
 	target_box.add_theme_stylebox_override("panel", Theme_.panel_style(0.85))
 	target_box.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	target_box.position = Vector2(-150, 12)
-	target_box.custom_minimum_size = Vector2(300, 0)
+	target_box.position = Vector2(-230, 12)
+	target_box.custom_minimum_size = Vector2(460, 0)
 	root.add_child(target_box)
 	var v := VBoxContainer.new()
 	target_box.add_child(v)
 	target_label = Label.new()
 	target_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(target_label)
-	target_bar = _bar(v, Theme_.HP, 276)
+	target_bar = _bar(v, Theme_.HP, 436)
+	# a descrição do monstro (data/monsters.json) numa linha; o texto inteiro fica na dica
+	target_desc = Label.new()
+	target_desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	target_desc.add_theme_font_size_override("font_size", 11)
+	target_desc.add_theme_color_override("font_color", Theme_.MUTED)
+	target_desc.clip_text = true
+	target_desc.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	target_desc.custom_minimum_size = Vector2(436, 0)
+	target_desc.mouse_filter = Control.MOUSE_FILTER_PASS
+	v.add_child(target_desc)
 	target_box.visible = false
 
 func _build_hotbar(root: Control) -> void:
@@ -175,7 +194,7 @@ func _build_hotbar(root: Control) -> void:
 func _build_messages(root: Control) -> void:
 	msg_box = VBoxContainer.new()
 	msg_box.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	msg_box.position = Vector2(-300, 90)
+	msg_box.position = Vector2(-300, 108)  # abaixo do quadro do alvo (com a linha da descrição)
 	msg_box.custom_minimum_size = Vector2(600, 0)
 	msg_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(msg_box)
@@ -468,6 +487,7 @@ func _process(delta: float) -> void:
 	_tick_ping(delta)
 	_tick_channel(delta)
 	_tick_defense(delta)
+	_tick_debuffs(delta)
 	# mantém o inventário inteiro dentro da tela, qualquer que seja a largura do conteúdo
 	if inv_panel and inv_panel.visible:
 		var vw := get_viewport().get_visible_rect().size.x
@@ -591,9 +611,88 @@ func refresh_target() -> void:
 		rank = " (caído)" if d.get("dead", false) else " (duelo)"
 		if d.get("staff", false):
 			who = "[Equipe] " + who
-	target_label.text = "%s · nível %d%s" % [who, int(d["lvl"]), rank]
+	# pressão alternada da Bomba-Mestra: o estado aparece junto do nome
+	var fx: Array = d.get("fx", []) if d.get("fx") is Array else []
+	var state := ""
+	if "pressure_high" in fx:
+		state = " · pressão alta"
+	elif "pressure_low" in fx:
+		state = " · pressão baixa (vulnerável)"
+	target_label.text = "%s · nível %d%s%s" % [who, int(d["lvl"]), rank, state]
 	target_bar.max_value = float(d["mhp"])
 	target_bar.value = float(d["hp"])
+	var desc := "" if d.get("k", "") == "p" else str(md.get("description", ""))
+	if target_desc.text != desc:
+		target_desc.text = desc
+		target_desc.tooltip_text = desc
+	target_desc.visible = desc != ""
+
+# ---------------- efeitos negativos no próprio personagem ----------------
+const DEBUFF_UI_COLORS := {
+	"stun": Color("#ffd84a"),
+	"disoriented": Color("#c08cff"),
+	"mired": Color("#c49a6c"),
+	"leeched": Color("#7fb2ff"),
+	"sealed": Color("#b8c0e0"),
+}
+
+## Efeito negativo aplicado (ou renovado) no meu personagem: entra na fila sob as barras com o tempo
+## que falta; na primeira vez, o aviso no centro da tela diz o que ele faz.
+func on_debuff(m: Dictionary) -> void:
+	var id := str(m.get("id", ""))
+	var ms := int(m.get("ms", 0))
+	if id == "" or ms <= 0:
+		return
+	var e: Dictionary = _debuffs.get(id, {})
+	var col: Color = DEBUFF_UI_COLORS.get(id, Theme_.AMBER)
+	if e.is_empty() or not is_instance_valid(e.get("label")):
+		var l := Label.new()
+		l.add_theme_font_size_override("font_size", 12)
+		l.add_theme_color_override("font_color", col)
+		l.add_theme_color_override("font_outline_color", Color.BLACK)
+		l.add_theme_constant_override("outline_size", 4)
+		l.mouse_filter = Control.MOUSE_FILTER_PASS
+		debuff_box.add_child(l)
+		e = {"label": l}
+		_debuffs[id] = e
+		_flash("%s: %s" % [str(m.get("name", id)), str(m.get("text", ""))], col)
+	e["name"] = str(m.get("name", id))
+	e["until"] = Time.get_ticks_msec() + ms
+	(e["label"] as Label).tooltip_text = str(m.get("text", ""))
+	_tick_debuffs(1.0)
+
+## A Alvorada tirou o efeito (ou ele acabou no servidor).
+func on_cleanse(m: Dictionary) -> void:
+	var id := str(m.get("id", "stun"))
+	var e: Dictionary = _debuffs.get(id, {})
+	if not e.is_empty() and is_instance_valid(e.get("label")):
+		(e["label"] as Label).queue_free()
+	_debuffs.erase(id)
+
+func clear_debuffs() -> void:
+	for e in _debuffs.values():
+		if is_instance_valid(e.get("label")):
+			(e["label"] as Label).queue_free()
+	_debuffs.clear()
+
+## Conta o tempo que falta de cada efeito (a cada 0,1 s) e tira os que acabaram.
+func _tick_debuffs(delta: float) -> void:
+	if _debuffs.is_empty():
+		return
+	_db_acc += delta
+	if _db_acc < 0.1:
+		return
+	_db_acc = 0.0
+	var now := Time.get_ticks_msec()
+	for id in _debuffs.keys():
+		var e: Dictionary = _debuffs[id]
+		var left := (int(e["until"]) - now) / 1000.0
+		if left <= 0.0 or not is_instance_valid(e.get("label")):
+			if is_instance_valid(e.get("label")):
+				(e["label"] as Label).queue_free()
+			_debuffs.erase(id)
+			continue
+		(e["label"] as Label).text = "%s %.1f s" % [e["name"], left]
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventKey) or not event.pressed or event.echo:
@@ -681,6 +780,7 @@ const STAFF_MARK := "[color=#8fd0ff][lb]Equipe][/color] "
 
 func show_death() -> void:
 	death_overlay.visible = true
+	clear_debuffs()  # quem cai perde os efeitos negativos (o servidor também os tira)
 
 func hide_death() -> void:
 	death_overlay.visible = false
@@ -1503,7 +1603,7 @@ func show_boss(m: Dictionary) -> void:
 		boss_label.add_theme_constant_override("outline_size", 6)
 		boss_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		boss_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
-		boss_label.position = Vector2(-320, 86)
+		boss_label.position = Vector2(-320, 104)
 		boss_label.size = Vector2(640, 60)
 		add_child(boss_label)
 	boss_label.visible = true
