@@ -100,6 +100,12 @@ static func describe(defs: Dictionary, inst: Dictionary, ch: Dictionary, compare
 			t += "Uso: recupera %d de vida\n" % int(u["healHp"])
 		if u.has("healMp"):
 			t += "Uso: recupera %d de mana\n" % int(u["healMp"])
+	if d.get("kind", "") == "map":
+		t += "Uso: a tecla M (ou um clique aqui) abre o mapa de onde você estiver\n"
+	if d.has("description"):
+		t += "[i]%s[/i]\n" % str(d["description"])
+	if d.get("questItem", false):
+		t += "[color=#9a927f]Item de missão: não se vende, não se descarta, não se troca e não vai para o depósito.[/color]\n"
 	# requisitos
 	var lvl_ok := int(ch.get("level", 1)) >= int(d.get("level", 1))
 	t += "[color=%s]Nível mínimo: %d[/color]\n" % [OK if lvl_ok else RED, int(d.get("level", 1))]

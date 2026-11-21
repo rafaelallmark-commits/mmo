@@ -33,6 +33,7 @@ Cidade de pedra, madeira e rotas de superfície.
 - **Armadura:** pesada (Força)
 - **Atributos iniciais:** Força 17 · Espírito 5 · Talento 11 · Agilidade 10 · Vitalidade 17
 - **Nível 1 com o kit inicial:** vida 111, mana 20, defesa 12, precisão 18, crítico 7,7%
+- **No tutorial (Três do Outro Lado):** classe corpo a corpo; a tecla 1 é Talho Profundo. Dicas: «Corpo a corpo: você precisa encostar no bicho para bater.» «Corpo a corpo: fique entre os bichos e o Caio e bata neles — quem apanha larga o menino e vem atrás de você.»
 - **Kit inicial (tutorial adapta à classe):** equipado Machado de Lasca, Couraça de Ferro Batido; na bolsa Machado de Lenhador, Tônico de Vida Pequeno ×5
 
 | Habilidade | Nível | Mana | Recarga | Alcance | Efeito | Valor principal nos graus 1–5 | Marco |
@@ -53,6 +54,7 @@ Cidade de pedra, madeira e rotas de superfície.
 - **Armadura:** pesada (Força)
 - **Atributos iniciais:** Força 16 · Espírito 6 · Talento 12 · Agilidade 8 · Vitalidade 18
 - **Nível 1 com o kit inicial:** vida 128, mana 23, defesa 17, precisão 18, crítico 5,6%
+- **No tutorial (Três do Outro Lado):** classe corpo a corpo; a tecla 1 é Placa Dinâmica. Dicas: «Corpo a corpo: você precisa encostar no bicho para bater.» «Corpo a corpo: fique entre os bichos e o Caio e bata neles — quem apanha larga o menino e vem atrás de você.»
 - **Kit inicial (tutorial adapta à classe):** equipado Martelo de Rebitar, Escudo de Ferro Batido, Couraça de Ferro Batido; na bolsa Garra de Arame, Tônico de Vida Pequeno ×5
 
 | Habilidade | Nível | Mana | Recarga | Alcance | Efeito | Valor principal nos graus 1–5 | Marco |
@@ -73,6 +75,7 @@ Cidade de pedra, madeira e rotas de superfície.
 - **Armadura:** pesada (Força)
 - **Atributos iniciais:** Força 16 · Espírito 5 · Talento 13 · Agilidade 11 · Vitalidade 15
 - **Nível 1 com o kit inicial:** vida 103, mana 20, defesa 11, precisão 20, crítico 10%
+- **No tutorial (Três do Outro Lado):** classe corpo a corpo; a tecla 1 é Estocada Longa. Dicas: «Corpo a corpo: você precisa encostar no bicho para bater.» «Corpo a corpo: fique entre os bichos e o Caio e bata neles — quem apanha larga o menino e vem atrás de você.»
 - **Kit inicial (tutorial adapta à classe):** equipado Lança de Freixo, Couraça de Ferro Batido; na bolsa Tônico de Vida Pequeno ×5
 
 | Habilidade | Nível | Mana | Recarga | Alcance | Efeito | Valor principal nos graus 1–5 | Marco |
@@ -93,6 +96,7 @@ Cidade de pedra, madeira e rotas de superfície.
 - **Armadura:** leve (Agilidade e Talento)
 - **Atributos iniciais:** Força 9 · Espírito 7 · Talento 13 · Agilidade 18 · Vitalidade 13
 - **Nível 1 com o kit inicial:** vida 84, mana 27, defesa 8, precisão 29, crítico 11,8%
+- **No tutorial (Três do Outro Lado):** classe à distância; a tecla 1 é Marca da Trilha. Dicas: «À distância: você acerta de longe. Mantenha distância e deixe o bicho vir até você.» «À distância: acerte os bichos de longe para eles largarem o Caio e virem atrás de você; recue para manter distância.»
 - **Kit inicial (tutorial adapta à classe):** equipado Arco de Vime, Aljava de Couro Cru, Gibão de Couro Cru; na bolsa Tônico de Vida Pequeno ×5
 
 | Habilidade | Nível | Mana | Recarga | Alcance | Efeito | Valor principal nos graus 1–5 | Marco |
@@ -118,6 +122,7 @@ Cidade de condutores que atravessam montanhas e rios.
 - **Armadura:** pesada (Força)
 - **Atributos iniciais:** Força 15 · Espírito 11 · Talento 9 · Agilidade 9 · Vitalidade 16
 - **Nível 1 com o kit inicial:** vida 110, mana 38, defesa 15, precisão 15, crítico 7,3%
+- **No tutorial (Três do Outro Lado):** classe corpo a corpo; a tecla 1 é Corte Solar. Dicas: «Corpo a corpo: você precisa encostar no bicho para bater.» «Corpo a corpo: fique entre os bichos e o Caio e bata neles — quem apanha larga o menino e vem atrás de você.»
 - **Kit inicial (tutorial adapta à classe):** equipado Espada de Guarda, Escudo de Ferro Batido, Couraça de Ferro Batido; na bolsa Montante de Guarda, Tônico de Vida Pequeno ×5
 
 | Habilidade | Nível | Mana | Recarga | Alcance | Efeito | Valor principal nos graus 1–5 | Marco |
@@ -138,6 +143,7 @@ Cidade de condutores que atravessam montanhas e rios.
 - **Armadura:** leve (Agilidade e Talento)
 - **Atributos iniciais:** Força 10 · Espírito 8 · Talento 12 · Agilidade 17 · Vitalidade 13
 - **Nível 1 com o kit inicial:** vida 87, mana 29, defesa 10, precisão 25, crítico 9,5%
+- **No tutorial (Três do Outro Lado):** classe à distância; a tecla 1 é Arremesso de Retorno. Dicas: «À distância: você acerta de longe. Mantenha distância e deixe o bicho vir até você.» «À distância: acerte os bichos de longe para eles largarem o Caio e virem atrás de você; recue para manter distância.»
 - **Kit inicial (tutorial adapta à classe):** equipado Azagaia de Junco, Broquel de Couro Cru, Gibão de Couro Cru; na bolsa Tônico de Vida Pequeno ×5
 
 | Habilidade | Nível | Mana | Recarga | Alcance | Efeito | Valor principal nos graus 1–5 | Marco |
@@ -158,6 +164,7 @@ Cidade de condutores que atravessam montanhas e rios.
 - **Armadura:** vestes mágicas (Espírito)
 - **Atributos iniciais:** Força 7 · Espírito 19 · Talento 12 · Agilidade 9 · Vitalidade 13
 - **Nível 1 com o kit inicial:** vida 79, mana 66, defesa 7, precisão 18, crítico 5,7%
+- **No tutorial (Três do Outro Lado):** classe à distância; a tecla 1 é Canto de Amparo. Dicas: «À distância: você acerta de longe. Mantenha distância e deixe o bicho vir até você.» «À distância: acerte os bichos de longe para eles largarem o Caio e virem atrás de você; recue para manter distância.»
 - **Kit inicial (tutorial adapta à classe):** equipado Cetro de Latão, Foco de Vidro Bruto, Veste de Linho; na bolsa Cajado de Aprendiz, Tônico de Vida Pequeno ×5
 
 | Habilidade | Nível | Mana | Recarga | Alcance | Efeito | Valor principal nos graus 1–5 | Marco |
@@ -178,6 +185,7 @@ Cidade de condutores que atravessam montanhas e rios.
 - **Armadura:** vestes mágicas (Espírito)
 - **Atributos iniciais:** Força 7 · Espírito 20 · Talento 12 · Agilidade 9 · Vitalidade 12
 - **Nível 1 com o kit inicial:** vida 74, mana 68, defesa 7, precisão 18, crítico 5,7%
+- **No tutorial (Três do Outro Lado):** classe à distância; a tecla 1 é Faísca de Vidro. Dicas: «À distância: você acerta de longe. Mantenha distância e deixe o bicho vir até você.» «À distância: acerte os bichos de longe para eles largarem o Caio e virem atrás de você; recue para manter distância.»
 - **Kit inicial (tutorial adapta à classe):** equipado Varinha de Vidro Bruto, Foco de Vidro Bruto, Veste de Linho; na bolsa Cajado de Aprendiz, Tônico de Vida Pequeno ×5
 
 | Habilidade | Nível | Mana | Recarga | Alcance | Efeito | Valor principal nos graus 1–5 | Marco |

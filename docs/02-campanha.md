@@ -42,14 +42,23 @@ Cena em tempo real, câmera elevada mais baixa que a de jogo, sem interface. O j
 
 ### Missão de tutorial — **Três do Outro Lado** (nível 1)
 
-- **NPC**: Mara Quintela.
-- **Objetivo**: atravessar pela estrada velha e trazer três pessoas (Bento, Ligia e o menino Caio) de volta ao Posto da Ponte.
-- **Ensina, em ordem**: (1) clicar no chão para andar até Bento; (2) clicar em um Rato de Sulco para atacar (o ataque básico); (3) usar a habilidade inicial da classe na barra (tecla 1) — Talho Profundo, Faísca de Vidro etc.; (4) Ligia está ferida: o jogador usa um Tônico de Vida (tecla 3) quando a vida cair; (5) o rato derrubou um saque individual brilhando no chão: clicar para coletar; (6) Caio está preso atrás de um besouro: combate com dois monstros; (7) **segundo toque** do sino: aviso visual e sonoro, o jogador precisa sair da faixa marcada da ponte (prévia das mecânicas do calabouço).
-- **Adaptação à classe**: o kit inicial vem equipado de acordo com a classe (Quebraferro com Machado de Lasca e Couraça de Ferro Batido, com um Machado de Lenhador de duas mãos na bolsa para experimentar; Tecelão com Varinha de Vidro Bruto, Foco de Vidro Bruto e Veste de Linho, com um Cajado de Aprendiz na bolsa etc.; ver `03-classes.md`). Classes à distância recebem a dica de manter distância; classes corpo a corpo, a de posicionar-se entre o monstro e o resgatado.
-- **Diálogo**: BENTO: "Você é da caravana? Então me tira daqui antes que o chão abra de novo." · LIGIA: "Minha perna não aguenta. Tem tônico aí?" · CAIO: "Ele não deixa eu passar!" (o besouro).
-- **Recompensa**: 60 XP, 3 Tônicos de Vida Pequenos, Mapa da Estrada Velha (abre o mapa).
+- **NPC**: Mara Quintela (Posto da Ponte). Antes de aceitar, a dica na tela diz para clicar nela.
+- **Objetivo**: trazer três pessoas (Bento, Ligia e o menino Caio), que ficaram do outro lado, até o círculo do Posto da Ponte. Cada uma, depois de solta, **anda atrás do jogador** enquanto ele está a até 14 m; mais longe, espera onde está e chama ("Espera! Não anda tão rápido."). Cada personagem tem os seus três, que só ele vê (D165). Dura uns 5 minutos.
+- **Ensina, em ordem** — sete passos guiados; o passo atual aparece como **dica na tela**, acima da barra de atalhos ("Passo 3 de 7"), e avança sozinho com o progresso da missão:
+  1. **andar até Bento**, preso no entulho a leste do posto: clicar no chão perto dele; ao chegar, ele levanta e segue;
+  2. **atacar um Rato de Sulco** (clicar nele: o ataque básico) — enquanto falta coletar o saque, todo abate deixa pelo menos uma Sucata de Condutor no chão;
+  3. **usar a habilidade da tecla 1**, a inicial da classe (Talho Profundo, Faísca de Vidro etc.; a dica diz o nome);
+  4. **Ligia está ferida** (chega com 35 de 100 de vida): beber um Tônico de Vida (**tecla 7**) a até 5 m dela — os dois dividem o gole e ela levanta; a quem está sem tônico, ela mesma passa um;
+  5. **coletar o saque** que o rato derrubou, brilhando no chão (só o jogador o vê);
+  6. **Caio está preso atrás de um besouro**: quando o jogador chega a 6 m, um Besouro-Brasa e um Rato de Sulco aparecem e batem no menino até alguém chamar a atenção deles — luta com dois monstros. Se ninguém os atrai, Caio cai, os bichos somem e ele volta a esperar, com a vida cheia;
+  7. **segundo toque do sino**: na volta, já com os três, a 24 m do posto o sino toca duas vezes e uma faixa vermelha de 4 m de largura acende no chão embaixo do jogador, na direção em que ele anda; em 3 s é preciso sair dela para o lado. Quem fica perde 15% da vida (nunca cai) e o sino toca de novo 4 s depois — a prévia das linhas do piso da Última Eclusa.
+
+  Por fim, entrar no círculo do posto com os três e falar com Mara.
+- **Adaptação à classe**: o kit inicial vem equipado de acordo com a classe (Quebraferro com Machado de Lasca e Couraça de Ferro Batido, com um Machado de Lenhador de duas mãos na bolsa para experimentar; Tecelão com Varinha de Vidro Bruto, Foco de Vidro Bruto e Veste de Linho, com um Cajado de Aprendiz na bolsa etc.; ver `03-classes.md`). No ataque ao rato e na luta por Caio, as classes à distância (Vigia, Andarilha, Cantora e Tecelão) recebem a dica de manter distância e as corpo a corpo (Quebraferro, Bastião, Lanceiro e Escudeiro), a de ficar entre o monstro e o resgatado.
+- **Diálogo**: BENTO: "Você é da caravana? Então me tira daqui antes que o chão abra de novo." · LIGIA: "Minha perna não aguenta. Tem tônico aí?" — depois do gole: "Ardeu, mas firmou. Eu vou atrás de você." · CAIO: "Ele não deixa eu passar!" (o besouro) — solto: "Eu não estava com medo. Só um pouco." Na chegada, um de cada vez: BENTO: "Posto da Ponte. Nunca achei que ia gostar tanto de ver essa fogueira." · LIGIA: "Obrigada. Diz pro Teodoro que eu ainda sei contar." · CAIO: "Chegamos! Posso contar pra todo mundo que eu ajudei?" As falas aparecem num balão sobre quem fala e no chat.
+- **Recompensa**: 60 XP, 3 Tônicos de Vida Pequenos e o **Mapa da Estrada Velha** — item de missão (não se vende, descarta, troca nem vai ao depósito): com ele, a tecla **M** abre o mapa de onde o jogador estiver, em qualquer área (D166).
 - **Pré-requisitos**: nenhum (criação de personagem).
-- **Condição de conclusão**: as três pessoas chegam vivas ao círculo do Posto da Ponte (servidor verifica a posição dos três NPCs escoltados).
+- **Condição de conclusão**: os sete passos feitos e as três pessoas **dentro do círculo do Posto da Ponte** — o servidor confere a posição das três entidades escoltadas; depois elas descansam no posto. Entrega a Mara.
 
 ---
 
@@ -61,7 +70,7 @@ Cada missão principal lista **NPC**, **objetivo**, **diálogo curto**, **recomp
 
 ## Capítulo 1 — **A Estrada Velha** (níveis 1–5)
 
-Área: **A Estrada Velha** (Posto da Ponte, Campo do Sulco, Encosta Morna, Curva dos Cães, Leito Seco, Campo de Cinza). As duas origens se encontram aqui desde o primeiro minuto: Pedrâmbar fica a oeste da estrada e Vau de Nácar a leste, com o Posto da Ponte no meio. Meta de XP de missões: ~580 (30% de 1.930).
+Área: **A Estrada Velha** (Posto da Ponte, Campo do Sulco, Encosta Morna, Curva dos Cães, Leito Seco, Campo de Cinza). As duas origens se encontram aqui desde o primeiro minuto: Pedrâmbar fica a oeste da estrada e Vau de Nácar a leste. O **Posto da Ponte**, onde todo personagem começa, fica na **ponta oeste** (17 m do portão de Pedrâmbar, 137 m da ponte de Vau de Nácar), porque a estrada fica mais perigosa de oeste para leste: ratos de nível 1 junto ao posto, javalis de nível 5 na trilha do Brejo. Quem é de Nácar atravessa a estrada inteira no nível 2 para a 1.3, e nenhum bando agressivo alcança a estrada (D164). Meta de XP de missões: ~580 (30% de 1.930).
 
 ### 1.1 Contar as Pessoas
 - **NPC**: Teodoro, o Condutor (Posto da Ponte).
@@ -81,7 +90,7 @@ Cada missão principal lista **NPC**, **objetivo**, **diálogo curto**, **recomp
 
 ### 1.3 O Mestre da Sua Arma
 - **NPC**: mestre de classe da sua origem (Pedrâmbar ou Vau de Nácar).
-- **Objetivo**: visitar o mestre, aprender a ler requisitos e distribuir os pontos de atributo pendentes.
+- **Objetivo**: visitar o mestre, aprender a ler requisitos e distribuir os pontos de atributo pendentes. Quem é de Vau de Nácar atravessa a Estrada Velha inteira pela estrada (uns 30 s a pé): os Cães de Ferrugem ficam na Curva dos Cães, ao sul, e os Javalis de Cinza na trilha do Brejo, longe do caminho.
 - **Diálogo** (Mestre Tarrasco, Quebraferro): "Machado não pergunta se você quer. Pergunta se você aguenta. Olha a descrição: o que estiver vermelho, você ainda não tem. Força vem de treino, não de anel." · (Mestre Otan, Tecelão): "Brasa sem Espírito é só fumaça. Cada ponto que você põe hoje é um item que você usa amanhã."
 - **Recompensa**: 100 XP, 1 grau extra de graça na habilidade de nível 1 (só se ainda estiver no grau 1).
 - **Pré-requisitos**: nível 2; 1.2.

@@ -5,6 +5,7 @@ extends CanvasLayer
 const Theme_ = preload("res://scripts/ui_theme.gd")
 const ItemText = preload("res://scripts/item_text.gd")
 const Social = preload("res://scripts/social.gd")
+const MapPanel = preload("res://scripts/map_panel.gd")
 
 var main
 var name_label: Label
@@ -58,6 +59,12 @@ var _channel_left := 0.0
 var ping_label: Label
 var ping_ms := -1.0          # ida e volta medida (média móvel), em ms
 var _ping_in := 0.5
+var map_panel                # mapa do lugar (tecla M, com o item de mapa na bolsa)
+var tut_panel: PanelContainer
+var tut_title: Label
+var tut_hint: Label
+var tut_tip: Label
+var tut_step := ""           # passo mostrado (para o som de "passo novo")
 
 func _ready() -> void:
 	layer = 5
@@ -76,13 +83,17 @@ func _ready() -> void:
 	_build_overlays(root)
 	_build_ping(root)
 	_build_channel(root)
+	_build_tutorial(root)
+	map_panel = MapPanel.new()
+	map_panel.main = main
+	root.add_child(map_panel)
 	social = Social.new()
 	social.build(self, root)
 	# o aviso de conexão perdida fica por cima de tudo (painéis de troca e convite não cobrem os botões)
 	disc_overlay.move_to_front()
 	refresh_char()
 	# som ao abrir e fechar painéis (tecla, botão Fechar ou Esc: todos passam por "visible")
-	for p in [inv_panel, sheet_panel, journal_panel, npc_panel, invite_panel]:
+	for p in [inv_panel, sheet_panel, journal_panel, npc_panel, invite_panel, map_panel]:
 		var panel: Control = p
 		panel.visibility_changed.connect(func(): Sfx.ui("ui_open" if panel.visible else "ui_close"))
 
@@ -119,7 +130,7 @@ func _build_status(root: Control) -> void:
 	mp_bar = _bar(v, Theme_.MP)
 	mp_text = _overlay_label(mp_bar)
 	var hint := Label.new()
-	hint.text = "I inventário · C ficha · J missões · 1-6 habilidades · 7-8 tônicos · Q/E gira · roda zoom"
+	hint.text = "I inventário · C ficha · J missões · M mapa · 1-6 habilidades · 7-8 tônicos · Q/E gira · roda zoom"
 	hint.add_theme_font_size_override("font_size", 10)
 	hint.add_theme_color_override("font_color", Theme_.MUTED)
 	v.add_child(hint)
@@ -364,6 +375,93 @@ func _build_channel(root: Control) -> void:
 	channel_bar = _bar(v, Color("#ffb347"), 320.0)
 	channel_bar.max_value = 1.0
 
+## Dica do tutorial: o passo atual de «Três do Outro Lado» acima da barra de atalhos, conduzido pelo
+## progresso da missão (o servidor manda a dica de cada objetivo, com a dica da classe em "tip").
+func _build_tutorial(root: Control) -> void:
+	tut_panel = PanelContainer.new()
+	tut_panel.add_theme_stylebox_override("panel", Theme_.panel_style(0.88))
+	tut_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	tut_panel.offset_left = -280.0
+	tut_panel.offset_right = 280.0
+	tut_panel.offset_top = -250.0
+	tut_panel.offset_bottom = -160.0
+	tut_panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	tut_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tut_panel.visible = false
+	root.add_child(tut_panel)
+	var v := VBoxContainer.new()
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tut_panel.add_child(v)
+	tut_title = Label.new()
+	tut_title.add_theme_color_override("font_color", Theme_.AMBER)
+	tut_title.add_theme_font_size_override("font_size", 13)
+	v.add_child(tut_title)
+	tut_hint = Label.new()
+	tut_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	tut_hint.custom_minimum_size = Vector2(540, 0)
+	tut_hint.add_theme_font_size_override("font_size", 14)
+	v.add_child(tut_hint)
+	tut_tip = Label.new()
+	tut_tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	tut_tip.custom_minimum_size = Vector2(540, 0)
+	tut_tip.add_theme_font_size_override("font_size", 12)
+	tut_tip.add_theme_color_override("font_color", Color("#9fd3d1"))
+	v.add_child(tut_tip)
+
+func refresh_tutorial() -> void:
+	if tut_panel == null:
+		return
+	var j: Dictionary = main.journal
+	var title := ""
+	var hint := ""
+	var tip := ""
+	var key := ""
+	for q in j.get("active", []):
+		var objs: Array = q.get("objectives", [])
+		var total := 0
+		for o in objs:
+			total = maxi(total, int(o.get("step", 0)))
+		if total == 0 and not objs.any(func(o): return o.has("hint")):
+			continue
+		if q.get("ready", false):
+			title = "%s — pronto!" % q["title"]
+			hint = "Fale com %s para entregar a missão." % q.get("turnInName", q.get("turnIn", ""))
+			key = "%s:ready" % q["id"]
+			break
+		for i in objs.size():
+			var o: Dictionary = objs[i]
+			if o.get("done", false) or not o.has("hint"):
+				continue
+			var step := int(o.get("step", 0))
+			title = ("Passo %d de %d · %s" % [step, total, q["title"]]) if step > 0 else q["title"]
+			hint = str(o["hint"])
+			tip = str(o.get("tip", ""))
+			key = "%s:%d" % [q["id"], i]
+			break
+		if key != "":
+			break
+	if key == "":
+		# ainda não aceitou: a dica de onde começar
+		for q in j.get("available", []):
+			if q.has("startHint"):
+				title = q["title"]
+				hint = str(q["startHint"])
+				key = "%s:start" % q["id"]
+				break
+	tut_panel.visible = key != ""
+	tut_title.text = title
+	tut_hint.text = hint
+	tut_tip.text = tip
+	tut_tip.visible = tip != ""
+	if key != tut_step and tut_step != "" and key != "":
+		Sfx.ui("ui_open", -6.0)   # passo novo
+	tut_step = key
+
+## Fala de quem você resgata (Bento, Ligia, Caio): no chat (o balão sobre a pessoa é do world.gd).
+func say(m: Dictionary) -> void:
+	var line := "%s: \"%s\"" % [str(m.get("name", "")), str(m.get("text", ""))]
+	chat_line("[color=#ffe39a]%s[/color]" % esc(line))
+
 func show_channel(text: String, ms: float) -> void:
 	_channel_total = maxf(ms / 1000.0, 0.1)
 	_channel_left = _channel_total
@@ -573,9 +671,28 @@ func _unhandled_input(event: InputEvent) -> void:
 				refresh_quests()
 		KEY_L:
 			social.toggle_clan()
+		KEY_M:
+			toggle_map()
 		_:
 			return
 	get_viewport().set_input_as_handled()
+
+## Tem um mapa na bolsa? (o Mapa da Estrada Velha, recompensa do tutorial, vale para todos os mapas)
+func has_map_item() -> bool:
+	for it in main.ch.get("items", []):
+		if main.defs.get("items", {}).get(it["defId"], {}).get("kind", "") == "map":
+			return true
+	return false
+
+## Tecla M: abre ou fecha o mapa do lugar; sem o item, só avisa.
+func toggle_map() -> void:
+	if map_panel.visible:
+		map_panel.visible = false
+		return
+	if not has_map_item():
+		system("Você ainda não tem um mapa.")
+		return
+	map_panel.open()
 
 ## Esc: fecha o painel aberto mais alto. Retorna false se não havia nenhum (o main abre o menu).
 func close_top_panel() -> bool:
@@ -584,7 +701,7 @@ func close_top_panel() -> bool:
 		return true
 	if social and social.close_top():
 		return true
-	for p in [invite_panel, npc_panel, journal_panel, inv_panel, sheet_panel]:
+	for p in [invite_panel, npc_panel, map_panel, journal_panel, inv_panel, sheet_panel]:
 		if p and p.visible:
 			p.visible = false
 			return true
@@ -738,9 +855,10 @@ func _bag_menu(inst: Dictionary) -> void:
 	title.text = ItemText.item_name(main.defs, inst)
 	title.add_theme_color_override("font_color", Theme_.AMBER)
 	v.add_child(title)
-	var usable: bool = d.get("kind", "") == "consumable" or d.get("slot", null) != null
+	var usable: bool = d.get("kind", "") in ["consumable", "map"] or d.get("slot", null) != null
 	if usable:
-		_menu_button(v, "Usar" if d.get("kind", "") == "consumable" else "Equipar", func(): _on_bag_menu(0, inst))
+		var verb := "Usar" if d.get("kind", "") == "consumable" else ("Abrir o mapa (M)" if d.get("kind", "") == "map" else "Equipar")
+		_menu_button(v, verb, func(): _on_bag_menu(0, inst))
 	if _merchant_open():
 		var label := "Vender%s a %s por %d de ouro" % [" (x%d)" % int(inst["qty"]) if int(inst.get("qty", 1)) > 1 else "", str(npc_open.get("name", "comerciante")).get_slice(",", 0), _sell_price(inst)]
 		_menu_button(v, label, func(): _on_bag_menu(1, inst))
@@ -831,6 +949,9 @@ func _bag_click(inst: Dictionary) -> void:
 	var d: Dictionary = main.defs["items"].get(inst["defId"], {})
 	if d.get("kind", "") == "consumable":
 		_use_item(inst["id"])
+	elif d.get("kind", "") == "map":
+		if not map_panel.visible:
+			toggle_map()
 	elif d.get("slot", null) != null:
 		Net.request("equip", {"instance": inst["id"]}, func(r):
 			if r["ok"]:
@@ -1168,6 +1289,7 @@ func show_npc(r: Dictionary) -> void:
 func refresh_quests() -> void:
 	if tracker == null:
 		return
+	refresh_tutorial()
 	var j: Dictionary = main.journal
 	var t := ""
 	for q in j.get("active", []):

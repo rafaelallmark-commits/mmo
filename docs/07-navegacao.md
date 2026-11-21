@@ -44,8 +44,8 @@ Da mais baixa para a mais alta. Uma camada de cima bloqueia o clique nas de baix
 | Camada | O que é | Abre / fecha |
 |---|---|---|
 | 1. Mundo 3D | câmera elevada, personagens, monstros, NPCs, portais | clique: andar, atacar, falar, coletar |
-| 2. HUD fixo | vida/mana/XP, barra de atalhos (1–8), alvo, rastreador de missões, painel de grupo, chat | sempre visível |
-| 3. Painéis | Inventário (**I**), Ficha (**C**), Missões (**J**), Clã (**L**) — podem ficar abertos juntos | tecla ou **Esc** |
+| 2. HUD fixo | vida/mana/XP, barra de atalhos (1–8), alvo, rastreador de missões, painel de grupo, chat; durante o tutorial, a dica do passo atual acima da barra de atalhos | sempre visível |
+| 3. Painéis | Inventário (**I**), Ficha (**C**), Missões (**J**), Clã (**L**), Mapa (**M**, com o Mapa da Estrada Velha na bolsa) — podem ficar abertos juntos | tecla ou **Esc** |
 | 4. Diálogos | NPC (missões, loja, prova de classe, ferreiro), convites (grupo, troca, clã, duelo), janela de troca, ações sobre outro jogador | clique no NPC ou no jogador / **Esc** (fechar a troca a cancela) |
 | 5. Menu de pausa | Continuar, Opções, Trocar de personagem, Sair para o título, Sair do jogo | **Esc** sem nada aberto |
 | 6. Avisos bloqueantes | Você caiu (voltar ao posto) · Conexão perdida (reconectar) | automático |
@@ -57,10 +57,10 @@ Da mais baixa para a mais alta. Uma camada de cima bloqueia o clique nas de baix
 ## 7.3 Mapa do mundo
 
 ```
- Pedrâmbar ═══ A Estrada Velha (1–5) ═══ Vau de Nácar
- (cidade Âmbar)        ║  Posto da Ponte    (cidade Nacre)
-                       ║ nível 5
-              Brejo das Bombas (5–9)
+ Pedrâmbar ══ ◎ Posto da Ponte ══ A Estrada Velha (1–5) ══ Vau de Nácar
+ (cidade Âmbar)  ponta oeste: todos               ║        (cidade Nacre)
+                 começam aqui                     ║ trilha do Brejo, nível 5
+              Brejo das Bombas (5–9) ═════════════╝
                        ║ nível 9
               Oficina Soterrada (9–12)
                        ║ nível 12 (M3)
@@ -73,7 +73,9 @@ Da mais baixa para a mais alta. Uma camada de cima bloqueia o clique nas de baix
  Mestres de classe (nas cidades) ──► Arena da Prova (instância solo, nível 10)
 ```
 
+- Todo personagem começa no **Posto da Ponte**, na ponta oeste da Estrada Velha (17 m do portão de Pedrâmbar, 137 m da ponte de Vau de Nácar); a estrada entre os dois é segura para quem tem nível 2 (D164).
 - Todo mapa tem um **posto de guarda** (zona segura e ponto de retorno ao cair).
+- **Mapa** (**M**): com o Mapa da Estrada Velha na bolsa (recompensa do tutorial), mostra o mapa onde você está, de cima e com o norte para cima — estradas, áreas bloqueadas, portais com o destino e o nível, NPCs com nome, posto de guarda, você (seta) e o grupo. Vale em todos os mapas; sem o item, a tecla avisa "Você ainda não tem um mapa." Clicar no item na bolsa também abre.
 - **Portais** ficam nas bordas, com o destino e o nível mínimo escritos acima; atravessar mostra a tela Carregando.
 - Quem sai do jogo volta ao mesmo mapa e posição; quem sai dentro de uma instância volta à porta dela.
 
@@ -90,7 +92,7 @@ Da mais baixa para a mais alta. Uma camada de cima bloqueia o clique nas de baix
 | Atalhos | 1–6 habilidades (a 6ª é a do nível 25; a barra mostra a recarga; depois de cada habilidade há 1 s de recarga global), 7–8 tônicos (o mais forte do seu nível) |
 | Conjuração | habilidades com tempo de conjuração mostram a barra "Conjurando…": fique parado; andar, atacar ou usar item interrompe sem gastar mana |
 | Vender e descartar | bolsa (**I**), botão direito no item: **Vender** (com loja, ferreiro ou armeiro aberto; metade do valor) ou **Descartar…** (pede confirmação) |
-| Painéis | I inventário, C ficha, J missões, L clã, Enter chat, Esc fechar/menu |
+| Painéis | I inventário, C ficha, J missões, L clã, M mapa (com o Mapa da Estrada Velha), Enter chat, Esc fechar/menu |
 | Chat | `/g` grupo · `/s Nome` sussurro · `/c` clã · `/convidar Nome` · `/troca Nome` · `/duelo Nome` · `/cla criar Nome SIGLA` · `/cla convidar Nome` · `/cla sair` · `/denunciar Nome motivo` · `/bug texto` (nome antigo com espaço entre aspas: `/s "Ana Maria" oi`) |
 
 ## 7.5 Direção gráfica: 3D estilizado com traço de anime
@@ -117,6 +119,7 @@ Da mais baixa para a mais alta. Uma camada de cima bloqueia o clique nas de baix
 - **Corpo**: a passada acompanha a distância percorrida (sem pés deslizando), troca de andar para correr com a velocidade, inclina para a frente ao arrancar, para trás ao frear e para dentro das curvas; vira devagar (até ~10 rad/s) para onde anda ou para o alvo. Pernas por curvas de ângulos de quadril, joelho e tornozelo medidas em gente andando e correndo, com o quadril na altura que mantém o pé de apoio no chão e os braços balançando opostos às pernas. Parado, fica com o peso numa perna (contrapposto), respira, troca o apoio de vez em quando e olha em volta. Em guarda (com alvo), pé esquerdo à frente, joelhos flexionados, tronco de lado para o oponente e a cabeça compensando o giro para não tirar os olhos dele.
 - **Armas na mão**: cada família tem empunhadura própria (mão certa — o arco vai na esquerda —, ponto do cabo na mão, cabo atravessando a palma na diagonal, gume alinhado com os nós dos dedos) e os dedos fecham no cabo. Lança, cajado, machado e espada de duas mãos, dardo, arco, varinha e cetro usam **poses guiadas pela arma**: a pose diz onde a arma fica e as mãos chegam até ela por cinemática inversa, com o cotovelo caindo naturalmente e o giro da mão dividido com o antebraço. Parado, a lança e o cajado ficam com o pé no chão e as armas de duas mãos descansam no ombro; correndo, a lança vai deitada ao lado do corpo; na guarda, a segunda mão pega no cabo. O arqueiro estende o braço do arco, puxa a corda até o queixo (a corda acompanha a mão) e solta; o dardo é arremessado por cima do ombro; a varinha aponta como um lápis.
 - **Capítulo 4**: interações com tempo mostram uma barra de canalização ("não se mova"); a carroça da escolta aparece com a vida em cima e as mensagens da escolta (marcos, emboscadas, quebra, chegada) vão para o chat e para o centro da tela; respostas de diálogo aparecem como botões no painel do NPC, e o título ganho aparece acima do nome e na ficha.
+- **Tutorial** («Três do Outro Lado»): Bento, Ligia e Caio aparecem como moradores (o menino menor), só para quem os resgata, com o nome e a situação em cima ("Ligia (ferida)", e a vida enquanto não está cheia); depois de soltos andam atrás do jogador, com passos próprios, e o que dizem sai num balão sobre a cabeça e no chat. O segundo toque soa com as duas batidas do sino e acende no relevo uma faixa vermelha sob o jogador, que estoura no fim do aviso.
 - **Combate**: quem apanha recua um pouco e se encolhe; monstros sem arma dão um bote; quem cai tomba e afunda no chão.
 - **NPCs** viram e olham para quem chega perto.
 - **Câmera** segue com mola amortecida, olha um pouco à frente de quem corre, suaviza zoom e giro e não entra nos morros.

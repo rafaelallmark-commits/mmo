@@ -60,7 +60,8 @@
   "ring": "Anel",
   "amulet": "Amuleto",
   "potion": "Tônico",
-  "material": "Material"
+  "material": "Material",
+  "map": "Mapa"
  },
  "items": {
   "axe_1h_t1": {
@@ -6094,6 +6095,20 @@
    "stack": 20,
    "value": 750,
    "description": "Usado no refino a partir de +4: se falhar, a peça não perde o grau. O selo é gasto mesmo assim."
+  },
+  "map_estrada_velha": {
+   "id": "map_estrada_velha",
+   "name": "Mapa da Estrada Velha",
+   "family": "map",
+   "kind": "map",
+   "slot": null,
+   "level": 1,
+   "rarity": "uncommon",
+   "classes": null,
+   "req": {},
+   "questItem": true,
+   "value": 1,
+   "description": "O mapa dobrado de Mara Quintela, cheio de anotações nas margens. Com ele, a tecla M mostra o mapa de onde você estiver."
   }
  }
 }

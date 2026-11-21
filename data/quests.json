@@ -1,5 +1,5 @@
 {
- "_doc": "Missões. npc/turnIn '@master' = mestre da classe do personagem. Objetivos: talk (falar com NPC), kill (abates com participação), collect (itens reais na bolsa, consumidos na entrega), questDrop (contador que sobe ao derrotar o monstro, com chance; não ocupa a bolsa), interact (objetos do mapa), level, allocated (sem pontos livres), equipLevel (arma equipada de nível mínimo), enterMap (entrar num mapa), trial (prova de classe), escort (a escolta do mapa chega ao fim com o jogador por perto) e choice (resposta escolhida num diálogo; grava a escolha e pode dar título; dialogueByChoice troca falas de missões seguintes). O servidor conta e valida tudo. XP somado por capítulo ≈ 30% do XP da faixa (ver docs/04).",
+ "_doc": "Missões. npc/turnIn '@master' = mestre da classe do personagem. Objetivos: talk (falar com NPC), kill (abates com participação), collect (itens reais na bolsa, consumidos na entrega), questDrop (contador que sobe ao derrotar o monstro, com chance; não ocupa a bolsa), interact (objetos do mapa), level, allocated (sem pontos livres), equipLevel (arma equipada de nível mínimo), enterMap (entrar num mapa), trial (prova de classe), escort (a escolta do mapa chega ao fim com o jogador por perto), choice (resposta escolhida num diálogo; grava a escolha e pode dar título; dialogueByChoice troca falas de missões seguintes) e, no tutorial, rescue (a pessoa \"who\" do bloco rescue do mapa foi solta), skill (habilidade da tecla \"slot\" usada), pickup (saques coletados; \"guarantee\": item que o abate garante enquanto falta coletar), bell (saiu da faixa no segundo toque) e arrive (as pessoas resgatadas dentro do círculo do posto). hint é a dica na tela de cada passo (step), com tipMelee/tipRanged por classe ({skill} = habilidade da tecla 1 da classe); startHint, a dica antes de aceitar. O servidor conta e valida tudo. XP somado por capítulo ≈ 30% do XP da faixa (ver docs/04).",
  "quests": {
   "tutorial": {
    "chapter": 0,
@@ -8,15 +8,66 @@
    "turnIn": "mara",
    "level": 1,
    "prereq": [],
+   "startHint": "Clique em Mara Quintela, no Posto da Ponte, para começar «Três do Outro Lado».",
    "objectives": [
     {
-     "type": "interact",
-     "objects": [
-      "rescue_bento",
-      "rescue_ligia",
-      "rescue_caio"
-     ],
-     "text": "Resgate Bento, Ligia e Caio"
+     "type": "rescue",
+     "who": "bento",
+     "step": 1,
+     "text": "Ande até Bento",
+     "hint": "Bento ficou preso no entulho a leste do posto. Clique no chão perto dele para andar até lá."
+    },
+    {
+     "type": "kill",
+     "monster": "furrow_rat",
+     "count": 1,
+     "step": 2,
+     "text": "Derrote um Rato de Sulco",
+     "hint": "Clique em um Rato de Sulco para atacar: o personagem vai até ele e golpeia sozinho (o ataque básico).",
+     "tipMelee": "Corpo a corpo: você precisa encostar no bicho para bater.",
+     "tipRanged": "À distância: você acerta de longe. Mantenha distância e deixe o bicho vir até você."
+    },
+    {
+     "type": "skill",
+     "slot": 1,
+     "step": 3,
+     "text": "Use a habilidade da tecla 1",
+     "hint": "Aperte 1 para usar {skill}, a habilidade inicial da sua classe. A barra embaixo mostra o custo em mana e a recarga."
+    },
+    {
+     "type": "rescue",
+     "who": "ligia",
+     "step": 4,
+     "text": "Divida um tônico com Ligia",
+     "hint": "Ligia está ferida e não consegue andar. Chegue perto dela e beba um Tônico de Vida (tecla 7): vocês dividem o gole. Lembre da tecla 7 quando a sua vida cair."
+    },
+    {
+     "type": "pickup",
+     "count": 1,
+     "guarantee": "mat_scrap",
+     "step": 5,
+     "text": "Colete o saque",
+     "hint": "O rato derrubou um saque brilhando no chão — só você o vê. Clique nele para coletar."
+    },
+    {
+     "type": "rescue",
+     "who": "caio",
+     "step": 6,
+     "text": "Liberte Caio",
+     "hint": "Caio está cercado: um besouro não o deixa passar. Chegue perto dele e derrote os dois bichos que aparecem. Vida abaixo da metade? Tecla 7.",
+     "tipMelee": "Corpo a corpo: fique entre os bichos e o Caio e bata neles — quem apanha larga o menino e vem atrás de você.",
+     "tipRanged": "À distância: acerte os bichos de longe para eles largarem o Caio e virem atrás de você; recue para manter distância."
+    },
+    {
+     "type": "bell",
+     "step": 7,
+     "text": "Saia da faixa no segundo toque",
+     "hint": "Volte com os três pela estrada até o posto. Quando o sino tocar a segunda vez, uma faixa vermelha acende no chão embaixo de você: saia dela para o lado antes que o sulco se abra."
+    },
+    {
+     "type": "arrive",
+     "text": "Leve os três ao círculo do Posto da Ponte",
+     "hint": "Entre no círculo do Posto da Ponte com Bento, Ligia e Caio. Quem fica longe espera por você: volte para buscar."
     }
    ],
    "rewards": {
@@ -26,13 +77,17 @@
      [
       "potion_hp_s",
       3
+     ],
+     [
+      "map_estrada_velha",
+      1
      ]
     ]
    },
    "dialogue": {
-    "offer": "Três ficaram do outro lado. Vai pela estrada velha. Se ouvir o segundo toque, sai da ponte.",
+    "offer": "Três ficaram do outro lado: Bento, Ligia e o menino Caio. A margem cedeu, então vai pela estrada velha. Se ouvir o segundo toque, sai da faixa.",
     "progress": "Ainda falta gente. Conta de novo.",
-    "complete": "Três de volta. Ninguém mais conta caixa hoje."
+    "complete": "Três de volta. Ninguém mais conta caixa hoje. Fica com o mapa: as anotações nas margens servem para a estrada inteira."
    }
   },
   "c1_count": {

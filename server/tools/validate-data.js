@@ -148,6 +148,64 @@ export function validate(data, builds) {
     for (const n of m.npcs || []) for (const it of n.shop || []) if (!data.items[it]) errors.push(`loja ${n.id}: item ${it}`);
   }
   for (const c of Object.keys(data.classes)) if (!npcIds.has(`master_${c}`)) errors.push(`falta mestre de classe para ${c}`);
+  // alcance máximo de um monstro agressivo do bando: raio do bando + passeio (1 + até 4 m, zone.tickMonster) + agressão
+  const aggroReach = (sp) => { const md = data.monsters[sp.monster]; return md?.aggro === 'aggressive' ? sp.radius + 1 + Math.min(4, sp.radius) + md.aggroRadius : null; };
+  // estrada segura (D164): nenhum agressivo alcança as faixas safeCorridor do mapa
+  for (const [mid, m] of Object.entries(data.maps)) {
+    const rects = m.safeCorridor?.rects ?? [];
+    if (m.safeCorridor && !rects.length) errors.push(`mapa ${mid}: safeCorridor sem faixas`);
+    for (const rc of rects) {
+      if (![rc.x0, rc.z0, rc.x1, rc.z1].every(Number.isFinite) || rc.x0 >= rc.x1 || rc.z0 >= rc.z1) { errors.push(`mapa ${mid}: faixa segura inválida ${JSON.stringify(rc)}`); continue; }
+      for (const sp of m.spawns ?? []) {
+        const reach = aggroReach(sp);
+        if (reach == null) continue;
+        const gap = Math.hypot(Math.max(rc.x0 - sp.x, 0, sp.x - rc.x1), Math.max(rc.z0 - sp.z, 0, sp.z - rc.z1));
+        if (gap <= reach) errors.push(`mapa ${mid}: ${data.monsters[sp.monster].name} em (${sp.x}, ${sp.z}) alcança a estrada segura (faixa x ${rc.x0}–${rc.x1}, z ${rc.z0}–${rc.z1}): ${gap.toFixed(1)} m para ${reach} m de alcance`);
+      }
+    }
+  }
+  // tutorial (D165): pessoas a resgatar do bloco rescue e o segundo toque
+  const LOOKS = ['man', 'woman', 'boy'], FREES = ['reach', 'tonic', 'guards'];
+  const people = new Set();
+  for (const [mid, m] of Object.entries(data.maps)) {
+    const r = m.rescue;
+    if (!r) continue;
+    const gp = m.guardPost;
+    if (!gp) errors.push(`mapa ${mid}: rescue sem posto de guarda (a chegada é no círculo do posto)`);
+    if (!(r.followRadius > 0)) errors.push(`mapa ${mid}: rescue.followRadius ausente`);
+    const inside = (x, z) => Number.isFinite(x) && Number.isFinite(z) && x > 0 && z > 0 && x < m.size[0] && z < m.size[1] && !(m.blocked ?? []).some((b) => x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1);
+    for (const [who, pd] of Object.entries(r.people ?? {})) {
+      const w = `mapa ${mid}: resgate ${who}`;
+      if (people.has(who)) errors.push(`${w} repetido em outro mapa`);
+      people.add(who);
+      if (typeof pd.name !== 'string' || !pd.name || typeof pd.trapped !== 'string') errors.push(`${w}: nome e situação (trapped) obrigatórios`);
+      if (!LOOKS.includes(pd.look)) errors.push(`${w}: look ${pd.look} (use ${LOOKS.join(', ')})`);
+      if (!FREES.includes(pd.free)) errors.push(`${w}: free ${pd.free} (use ${FREES.join(', ')})`);
+      if (!inside(pd.x, pd.z)) errors.push(`${w}: (${pd.x}, ${pd.z}) fora do mapa ou em área bloqueada`);
+      if (!(pd.radius > 0)) errors.push(`${w}: radius ausente`);
+      if (!Number.isInteger(pd.hp) || pd.hp < 1 || (pd.hpStart != null && (!Number.isInteger(pd.hpStart) || pd.hpStart < 1 || pd.hpStart > pd.hp))) errors.push(`${w}: hp/hpStart inválidos`);
+      if (!Array.isArray(pd.rest) || !inside(pd.rest[0], pd.rest[1]) || (gp && Math.hypot(pd.rest[0] - gp.x, pd.rest[1] - gp.z) > gp.safeRadius)) errors.push(`${w}: rest precisa ficar dentro do círculo do posto`);
+      if (pd.free === 'guards') {
+        if (!pd.guards?.length) errors.push(`${w}: free "guards" sem guards`);
+        for (const [mon, n] of pd.guards ?? []) if (!data.monsters[mon] || !Number.isInteger(n) || n < 1) errors.push(`${w}: guarda ${mon} ×${n} inválido`);
+      }
+      for (const [k, v] of Object.entries(pd.lines ?? {})) if (typeof v !== 'string' || !v) errors.push(`${w}: fala ${k} vazia`);
+      // quem resgata tem nível 1: nenhum agressivo alcança quem está perto da pessoa
+      for (const sp of m.spawns ?? []) {
+        const reach = aggroReach(sp);
+        if (reach != null && Math.hypot(sp.x - pd.x, sp.z - pd.z) <= reach + pd.radius + 2) errors.push(`${w}: ${data.monsters[sp.monster].name} em (${sp.x}, ${sp.z}) alcança quem vai buscá-lo`);
+      }
+    }
+    if (!people.size) errors.push(`mapa ${mid}: rescue sem pessoas`);
+    if (r.bell) {
+      for (const k of ['radius', 'warnMs', 'width', 'back', 'ahead', 'damagePct', 'retryMs']) if (!(r.bell[k] > 0)) errors.push(`mapa ${mid}: rescue.bell.${k} ausente`);
+      if (r.bell.damagePct >= 100) errors.push(`mapa ${mid}: o segundo toque não derruba ninguém (damagePct < 100)`);
+    }
+  }
+  for (const [id, d] of Object.entries(items)) {
+    // o mapa (tecla M) não se equipa e é do personagem: não vende, não descarta, não troca, não vai ao depósito
+    if (d.kind === 'map' && (d.slot != null || !d.questItem || d.stack)) errors.push(`item ${id}: mapa sem espaço de equipamento, não empilhável e com questItem`);
+  }
   const npcOk = (ref) => ref === '@master' || npcIds.has(ref);
   for (const [qid, q] of Object.entries(data.quests || {})) {
     if (!npcOk(q.npc) || !npcOk(q.turnIn)) errors.push(`missão ${qid}: NPC inexistente`);
@@ -157,7 +215,15 @@ export function validate(data, builds) {
       if (o.type === 'collect' && !data.items[o.item]) errors.push(`missão ${qid}: item ${o.item}`);
       if (o.type === 'interact') for (const ob of o.objects) if (!objIds.has(ob)) errors.push(`missão ${qid}: objeto ${ob}`);
       if (o.type === 'talk' && !npcOk(o.npc)) errors.push(`missão ${qid}: NPC ${o.npc}`);
+      // tutorial
+      if (o.type === 'rescue' && !people.has(o.who)) errors.push(`missão ${qid}: pessoa ${o.who} sem bloco rescue em nenhum mapa`);
+      if (o.type === 'skill' && !(Number.isInteger(o.slot) && o.slot >= 1 && o.slot <= data.skillRules.unlockLevels.length)) errors.push(`missão ${qid}: tecla de habilidade ${o.slot}`);
+      if (o.type === 'pickup' && (!Number.isInteger(o.count) || o.count < 1 || (o.guarantee != null && !data.items[o.guarantee]))) errors.push(`missão ${qid}: coleta (count/guarantee) inválida`);
+      if ((o.type === 'bell' || o.type === 'arrive') && !people.size) errors.push(`missão ${qid}: ${o.type} sem bloco rescue em nenhum mapa`);
+      if ((o.tipMelee || o.tipRanged || o.step != null) && typeof o.hint !== 'string') errors.push(`missão ${qid}: dica da classe ou passo sem hint`);
+      if (o.step != null && !Number.isInteger(o.step)) errors.push(`missão ${qid}: passo ${o.step}`);
     }
+    if (q.startHint != null && typeof q.startHint !== 'string') errors.push(`missão ${qid}: startHint`);
     for (const [it] of q.rewards.items || []) if (!data.items[it]) errors.push(`missão ${qid}: recompensa ${it}`);
   }
   const cum = data.xp.cumulative;

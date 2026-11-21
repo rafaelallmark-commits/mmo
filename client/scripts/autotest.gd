@@ -5,6 +5,9 @@ extends Node
 ##   godot --headless --path client -- --autotest --server=ws://127.0.0.1:7777 --account=bot --password=bot123 --class=breaker --name=Robo
 ## Com --transfer (servidor em várias zonas, --dev): em vez de lutar, atravessa o portal para um mapa de
 ## outra zona e confere que o cliente reconectou no endereço novo e está no mapa novo.
+## Com --m2: depois da coleta, faz o tutorial «Três do Outro Lado» pela interface (dica na tela de cada passo,
+## teclas 1 e 7, bichos de Caio, faixa do segundo toque, chegada dos três ao posto), entrega a Mara, abre o
+## mapa (tecla M) na Estrada e na cidade, forma grupo (--invite) e fala com o mestre da classe.
 
 var main
 var step := "connect"
@@ -15,8 +18,12 @@ var killed := false
 var settle_until := 0
 var fight_started := 0
 var zone_changed := ""
-var rescue_i := 0
 var wait_until := 0
+# --m2: tutorial «Três do Outro Lado» guiado pelo diário (os sete passos e a chegada ao posto)
+var tut_until := 0
+var tut_said := {}
+var tut_warn := {}       # último segundo toque (faixa a deixar)
+var tut_dodged := 0
 var log_lines := []
 # --transfer (várias zonas)
 var tr_url := ""
@@ -31,6 +38,8 @@ func say(s: String) -> void:
 func start(m) -> void:
 	main = m
 	t0 = Time.get_ticks_msec()
+	if main.args.has("m2"):
+		deadline_ms = maxi(deadline_ms, 330000)  # o tutorial inteiro em tempo real (uns 2 minutos)
 	main.account = main.args.get("account", "bot")
 	main.password = main.args.get("password", "bot123")
 	Net.connected.connect(_connected)
@@ -86,6 +95,10 @@ func _msg(m: Dictionary) -> void:
 		killed = true
 	if m.get("t", "") == "escort" and m.has("ambush"):
 		cap4_ambush = true
+	if m.get("t", "") == "warn" and m.get("kind", "") == "bell2":
+		tut_warn = m
+	if m.get("t", "") == "say":
+		say("%s diz: \"%s\"" % [m.get("name", "?"), m.get("text", "")])
 	if m.get("t", "") == "party_invite":
 		say("convite de grupo recebido de %s; aceitando" % m["from"])
 		Net.request("party_accept", {"from": int(m["fromId"])})
@@ -214,6 +227,11 @@ func _process(_d: float) -> void:
 							main.hud.inv_tip.text = main.hud.ItemText.describe(main.defs, it, main.ch, main.equipped_in(slot))
 				step = "panels")
 		"panels":
+			# sem o Mapa da Estrada Velha (recompensa do tutorial), a tecla M só avisa
+			main.hud.toggle_map()
+			if main.hud.map_panel.visible:
+				fail("o mapa abriu sem o item de mapa")
+				return
 			main.hud.inv_panel.visible = true
 			main.hud.sheet_panel.visible = true
 			main.hud.refresh_char()
@@ -244,16 +262,10 @@ func _process(_d: float) -> void:
 				Net.request("quest_accept", {"quest": "tutorial", "npc": "mara"}, func(r):
 					say("missão aceita: %s" % r.get("quest", {}).get("title", r.get("reason", "")))
 					main.hud.npc_panel.visible = false
-					rescue_i = 0
-					step = "m2_rescue")
+					step = "m2_tut")
 				step = "m2_wait"
-		"m2_rescue":
-			if rescue_i >= 3:
-				step = "m2_turnin"
-			elif main.world.pending_action.is_empty() and Time.get_ticks_msec() > wait_until:
-				_act("object", ["rescue_bento", "rescue_ligia", "rescue_caio"][rescue_i])
-				rescue_i += 1
-				wait_until = Time.get_ticks_msec() + 400
+		"m2_tut":
+			_tut_tick()
 		"m2_turnin":
 			if main.world.pending_action.is_empty() and Time.get_ticks_msec() > wait_until:
 				_act("npc", "mara")
@@ -267,8 +279,21 @@ func _process(_d: float) -> void:
 						return
 					say("tutorial entregue: XP agora %d" % int(r["char"]["xp"]))
 					main.hud.npc_panel.visible = false
-					step = "m2_party")
+					main.set_char(r["char"])
+					# recompensa: o Mapa da Estrada Velha abre o mapa pela tecla M
+					main.hud.toggle_map()
+					if not main.hud.map_panel.visible:
+						fail("o mapa não abriu com o Mapa da Estrada Velha na bolsa")
+						return
+					say("Mapa da Estrada Velha recebido: a tecla M abre o mapa de %s" % main.map_def().get("name", "?"))
+					wait_until = Time.get_ticks_msec() + 600
+					step = "m2_map_shot")
 				step = "m2_wait"
+		"m2_map_shot":
+			if Time.get_ticks_msec() > wait_until:
+				_shot("mapa")
+				main.hud.toggle_map()
+				step = "m2_party"
 		"m2_party":
 			if main.args.has("invite"):
 				Net.request("party_invite", {"name": main.args["invite"]}, func(r):
@@ -315,9 +340,145 @@ func _process(_d: float) -> void:
 		"m2_journal":
 			if Time.get_ticks_msec() > wait_until:
 				_shot("diario")
+				main.hud.journal_panel.visible = false
+				# o mesmo Mapa da Estrada Velha vale na cidade
+				main.hud.toggle_map()
+				if not main.hud.map_panel.visible:
+					fail("o mapa não abriu na cidade")
+					return
+				say("mapa aberto em %s" % main.map_def().get("name", "?"))
+				wait_until = Time.get_ticks_msec() + 500
+				step = "m2_city_map"
+		"m2_city_map":
+			if Time.get_ticks_msec() > wait_until:
+				_shot("mapa_cidade")
+				main.hud.toggle_map()
 				say("OK")
 				get_tree().quit(0)
 				step = "quitting"
+
+## Tutorial «Três do Outro Lado» pela interface: a cada 0,4 s olha o primeiro passo ainda aberto no diário
+## e age como um jogador (anda, clica no rato, aperta 1 e 7, coleta, luta pelos bichos de Caio, sai da faixa
+## do segundo toque, entra no círculo do posto). Confere que a dica na tela acompanha o passo.
+func _tut_quest() -> Dictionary:
+	for q in main.journal.get("active", []):
+		if q["id"] == "tutorial":
+			return q
+	return {}
+
+func _tut_person(name: String) -> Dictionary:
+	for eid in main.world.entities.keys():
+		var e: Dictionary = main.world.entities[eid]
+		if e["data"].get("k", "") == "e" and str(e["data"].get("n", "")).begins_with(name):
+			return e
+	return {}
+
+func _tut_nearest(pred: Callable, from: Vector3, max_d := 1e9) -> String:
+	var best := ""
+	var bd := max_d
+	for eid in main.world.entities.keys():
+		var e: Dictionary = main.world.entities[eid]
+		if e["data"].get("k", "") != "m" or not pred.call(eid, e):
+			continue
+		var d: float = Vector2(e["node"].position.x - from.x, e["node"].position.z - from.z).length()
+		if d < bd:
+			bd = d
+			best = eid
+	return best
+
+func _tut_fight(eid: String, use_skill: bool) -> void:
+	if eid == "":
+		return
+	if main.world.selected != eid or main.world.entities[eid]["data"].get("tgt", null) == null:
+		main.world.selected = eid
+		Net.request("attack", {"target": eid})
+	var skills: Array = main.class_skills()
+	if use_skill and not skills.is_empty() and main.hud._cd_left(str(skills[0])) <= 0.05:
+		main.hud._hotkey(0)   # tecla 1 (só com a recarga pronta, como um jogador)
+	var c: Dictionary = main.ch
+	if float(c.get("hp", 1)) < float(c.get("stats", {}).get("maxHp", 1)) * 0.5:
+		main.hud._hotkey(6)   # tecla 7: tônico de vida
+
+func _tut_tick() -> void:
+	if Time.get_ticks_msec() < tut_until:
+		return
+	tut_until = Time.get_ticks_msec() + 400
+	var q := _tut_quest()
+	if q.is_empty():
+		return
+	if q.get("ready", false):
+		say("tutorial pronto: Bento, Ligia e Caio no círculo do Posto da Ponte")
+		_shot("tutorial_chegada")
+		wait_until = Time.get_ticks_msec() + 300
+		step = "m2_turnin"
+		return
+	var objs: Array = q["objectives"]
+	var i := 0
+	while i < objs.size() and objs[i]["done"]:
+		i += 1
+	if i >= objs.size():
+		return
+	if not tut_said.has(i):
+		tut_said[i] = true
+		# a dica na tela é a do passo atual
+		if not main.hud.tut_panel.visible or main.hud.tut_hint.text != str(objs[i].get("hint", "")):
+			fail("a dica na tela não acompanha o passo %d (%s)" % [i + 1, objs[i]["text"]])
+			return
+		say("passo %d: %s — dica: %s" % [i + 1, objs[i]["text"], main.hud.tut_hint.text])
+		if i == 1:
+			_shot("tutorial_dica")
+	var me: Vector3 = main.world.my_pos()
+	match i:
+		0:  # andar até Bento
+			var b := _tut_person("Bento")
+			if not b.is_empty():
+				var bp: Vector3 = b["node"].position
+				main.world.request_move(bp.x - 2.0, bp.z + 1.0)
+		1, 2:  # atacar um Rato de Sulco; usar a habilidade da tecla 1
+			_tut_fight(_tut_nearest(func(_eid, e): return e["data"]["def"] == "furrow_rat", me), i == 2)
+		3:  # Ligia ferida: tônico (tecla 7) perto dela
+			var l := _tut_person("Ligia")
+			if l.is_empty():
+				return
+			var lp: Vector3 = l["node"].position
+			if Vector2(lp.x - me.x, lp.z - me.z).length() > 3.5:
+				main.world.request_move(lp.x + 1.5, lp.z - 1.0)
+			else:
+				main.hud._hotkey(6)
+		4:  # coletar o saque
+			if main.world.loots.is_empty():
+				_tut_fight(_tut_nearest(func(_eid, e): return e["data"]["def"] == "furrow_rat", me), false)
+			elif main.world.pending_pickup == "":
+				var lid: String = main.world.loots.keys()[0]
+				var lpos: Vector3 = main.world.loots[lid]["node"].position
+				main.world.pending_pickup = lid
+				main.world.request_move(lpos.x, lpos.z)
+		5:  # Caio cercado: os dois bichos que aparecem perto dele (em perseguição, batendo no menino ou em você)
+			var c := _tut_person("Caio")
+			if c.is_empty():
+				return
+			var cp: Vector3 = c["node"].position
+			var g := _tut_nearest(func(_eid, e): return str(e["data"].get("st", "")) == "chase", cp, 7.0)
+			if g != "":
+				_tut_fight(g, true)
+			elif Vector2(cp.x - me.x, cp.z - me.z).length() > 5.5:
+				main.world.request_move(cp.x - 4.0, cp.z + 2.0)
+		6:  # segundo toque: volta ao posto e sai da faixa quando ela acender
+			if not tut_warn.is_empty() and int(tut_warn.get("_seen", 0)) == 0:
+				tut_warn["_seen"] = 1
+				var yaw := float(tut_warn["yaw"])
+				var side := Vector2(cos(yaw), -sin(yaw)) * 4.0
+				tut_dodged += 1
+				say("segundo toque! faixa vermelha embaixo do personagem; saindo para o lado")
+				_shot("tutorial_faixa")
+				main.world.request_move(me.x + side.x, me.z + side.y, func(r):
+					if not r.get("ok", false):
+						main.world.request_move(me.x - side.x, me.z - side.y))
+			elif tut_warn.is_empty() and Vector2(me.x - 30.0, me.z - 50.0).length() > 1.5:
+				main.world.request_move(30.0, 50.0)
+		7:  # os três dentro do círculo do posto
+			if Vector2(me.x - 22.0, me.z - 50.0).length() > 1.0:
+				main.world.request_move(22.0, 50.0)
 
 ## Com --shots=pasta, salva capturas de tela (precisa de janela/GL; não funciona em --headless).
 func _shot(name: String) -> void:

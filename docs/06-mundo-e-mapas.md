@@ -26,7 +26,7 @@ Cidade de pedra cortada e vigas escuras, construída em terraços ao redor de um
 - **Pátio dos Mestres**: Mestre Tarrasco (Quebraferro), Mestra Ione do Bronze (Bastião), Sargento Bel do Fosso (Lanceiro), Vigia-Mor Cássia (Vigia).
 - **Forja do Gusmão**: ferreiro; ao lado, **Amaro**, o armeiro.
 - **Botica da Dona Resina**: tônicos.
-- **Portão Leste** → Estrada Velha (Posto da Ponte a 2 minutos de caminhada).
+- **Portão Leste** → Estrada Velha (o Posto da Ponte fica logo depois do portão, a 13 m).
 
 ### Vau de Nácar (Nacre) — leste
 
@@ -36,7 +36,7 @@ Cidade sobre pontes e plataformas acima de um rio, atravessada por condutores de
 - **Claustro dos Mestres**: Dama Aurélia (Escudeiro), Sina (Andarilha), Mãe Nívea (Cantora), Mestre Otan Cinzeiro (Tecelão).
 - **Oficina de Tiela Martelo-Fino**: ferreira; ao lado, **Inês**, a armeira.
 - **Boticário Lume**: tônicos.
-- **Ponte Oeste** → Estrada Velha.
+- **Ponte Oeste** → Estrada Velha (o Posto da Ponte fica na outra ponta da estrada, a 133 m, uns 30 s a pé pela estrada segura).
 
 ### Ferreiro (M3)
 
@@ -54,7 +54,7 @@ Cinco áreas na versão 1 e, no pós-v1, a sexta (A Cava Primeira, níveis 20–
 
 | Área | Níveis | Famílias | Caça solo | Caça em grupo | Rota de retorno | Motivo para voltar |
 |---|---|---|---|---|---|---|
-| **A Estrada Velha** | 1–5 | bestas (ratos, besouros, cães, lagartos, javalis) e uma máquina elite | Campo do Sulco, Encosta Morna, Leito Seco | Curva dos Cães (matilha), Capataz Rachado | Posto da Ponte no centro; cidades nas pontas | Capataz Rachado (arma de nível 5 da classe), Sucata de Condutor, família Bronze de Eclusa |
+| **A Estrada Velha** | 1–5 | bestas (ratos, besouros, cães, lagartos, javalis) e uma máquina elite | Campo do Sulco, Encosta Morna, Leito Seco | Curva dos Cães (matilha), Capataz Rachado | Posto da Ponte na ponta oeste, junto ao portão de Pedrâmbar; Vau de Nácar na ponta leste, pela estrada segura | Capataz Rachado (arma de nível 5 da classe), Sucata de Condutor, família Bronze de Eclusa |
 | **Brejo das Bombas** | 5–9 | bestas aquáticas, máquinas de pressão | Lagoa das Bombas, Margem Alta | Poço das Sanguessugas, Canal Raso, Bomba-Mestra | Acampamento da Comporta (posto) | Brasa Cristalizada, elite Bomba-Mestra, família Ferro Frio |
 | **Oficina Soterrada** | 9–12 | máquinas de trabalho | Galeria dos Escavadores | Arquivo (enxames), Sala do Supervisor | Boca da Oficina (posto) | Pó de Refino, Supervisor de Turno, família Aço da Vigília |
 | **Galerias do Eco** | 12–16 | espíritos sonoros, bestas térmicas, guardiões | Ninhos Térmicos | Salão dos Sinos (Ecoantes), Ponte dos Fios, Mãe do Eco | Estação Sonhada (posto) | Seda condutora para refino, Mãe do Eco, família Liga Rubra |
@@ -63,26 +63,43 @@ Cinco áreas na versão 1 e, no pós-v1, a sexta (A Cava Primeira, níveis 20–
 
 ### A Estrada Velha (implementada no M1)
 
-Mapa de 160 × 100 m. Coordenadas em `data/maps.json`.
+Mapa de 160 × 100 m. Coordenadas em `data/maps.json`. O mapa fica mais perigoso de oeste para leste, e por isso o **Posto da Ponte**, onde todo personagem nasce, fica na ponta oeste, a 17 m do portão de Pedrâmbar e a 137 m da ponte de Vau de Nácar: quem tem nível 1 começa ao lado dos ratos de nível 1, longe dos bandos de nível 3 a 5.
 
 ```
  z=0 ┌──────────────────────────────────────────────────────────────┐
-     │          Leito seco do rio (bloqueado)                         │
-     │                ▓                                               │
-     │        Besouros-Brasa (52,32)          Lagartos de Lastro      │
-     │                ▓                       (104,36)                │
- z=50│ Posto da   Ratos de Sulco      ▓▓ Ruínas da                    │
-     │ Ponte ◎    (44,50)             ▓▓ Estação Norte     Javalis de │
-     │ (20,50)  ════ estrada velha ═══▓▓══════════════════  Cinza     │
-     │                                                     (134,58)   │
-     │        Capataz Rachado (44,72)        Cães de Ferrugem          │
-     │        [elite]                        (88,68) [matilha]         │
+     │                       ▓ Leito seco do rio (bloqueado)        │
+     │                       ▓                                      │
+     │              Besouros-Brasa (52,32)      Lagartos de Lastro  │
+     │                     • Caio (54,38)       (104,36)            │
+     │            • Bento (36,44)  ▓▓ Ruínas da                     │
+z=50 │◄ ◎ Posto da Ponte (20,50)  ▓▓ Estação Norte    Vau de Nácar ►│
+     │══════════════ Ratos de Sulco (44,50) ═══ estrada velha ══════│
+     │           • Ligia (34,54)       ╲ trilha dos      ╲ trilha   │
+     │             ╲ Capataz Rachado    ╲ Cães            ╲ do Brejo│
+     │               (44,72) [elite]   Cães de Ferrugem  Javalis    │
+     │                                 (92,84) [matilha] de Cinza   │
+     │                                                   (142,84)   │
+     │                                                 ◆ Brejo, nv 5│
 z=100└──────────────────────────────────────────────────────────────┘
-     x=0                                                         x=160
+     x=0                                                        x=160
 ```
 
+| Lugar | Coordenadas | O que tem |
+|---|---|---|
+| **Posto da Ponte** | (20, 50), zona segura de 12 m | Ponto de retorno; Teodoro, Mara e a Sentinela Ruy; Portão de Pedrâmbar em (3, 50) |
+| **Campo do Sulco** | (44, 50), na estrada | Ratos de Sulco, nível 1, passivos (6) |
+| **Encosta Morna** | (52, 32) | Besouros-Brasa, nível 2, passivos (5) |
+| **Curva do Capataz** | (44, 72), no fim da trilha que sai do posto para o sul | Capataz Rachado, elite de nível 4, agressivo a 10 m |
+| **Ruínas da Estação Norte** | (70–76, 40–56), bloqueadas | A estrada contorna as ruínas pelo sul (ou pelo norte) |
+| **Leito Seco** | (104, 36) | Lagartos de Lastro, nível 4, passivos (4) |
+| **Curva dos Cães** | (92, 84), no fim da trilha que sai da estrada em (84, 52) | Cães de Ferrugem, nível 3, agressivos a 8 m, em matilha (5) |
+| **Campo de Cinza** | (142, 84), na trilha do Brejo | Javalis de Cinza, nível 5, agressivos a 8 m (4): guardam a Trilha do Brejo (portal de nível 5 em (150, 92)) |
+| **Ponte de Vau de Nácar** | (157, 50) | Portal para Vau de Nácar |
+
+- **Estrada segura** (D164): nenhum bando agressivo alcança a estrada entre o posto e a ponte de Vau de Nácar, com o desvio das ruínas — o centro do bando + o raio + o passeio (até 5 m) + a agressão fica a mais de 2 m do caminho. Quem é de Nácar atravessa no nível 2 para a missão 1.3 sem ser atacado (conferido em `server/test/estrada.test.js`, andando com a zona rodando, e pelo `npm run validate-data`, com as faixas `safeCorridor` do mapa).
 - **Solo**: ratos e besouros perto do posto (passivos, níveis 1–2), lagartos no leito seco (lentos, nível 4).
 - **Grupo**: Curva dos Cães (agressivos, chamam os vizinhos), Capataz Rachado (elite de nível 4: dois jogadores de nível 1–2 vencem com tônicos; um jogador de nível 5 vence sozinho).
+- **Tutorial**: Bento (36, 44), Ligia (34, 54) e Caio (54, 38) esperam resgate perto do posto, todos longe do Capataz e dos bandos agressivos (ver `02-campanha.md`).
 - **Retorno**: o Posto da Ponte é o ponto de retorno ao cair e a zona segura do mapa.
 
 ### A Cava Primeira (pós-v1, níveis 20–25)
@@ -132,7 +149,7 @@ z=160└────────────────────────
 
 - Câmera elevada com zoom (roda do mouse) e rotação (Q/E ou botão direito arrastando).
 - Clique no chão para andar; clique no monstro para selecionar e atacar (o servidor aproxima até o alcance da arma e ataca no intervalo dela).
-- Barra de atalhos: 1 e 2 para habilidades, 3 e 4 para tônicos. Habilidade com alvo fora do alcance: o cliente aproxima primeiro; o servidor revalida o alcance.
+- Barra de atalhos: 1 a 6 para habilidades, 7 e 8 para tônicos (vida e mana). Habilidade com alvo fora do alcance: o cliente aproxima primeiro; o servidor revalida o alcance.
 - Números de dano flutuantes (branco: seu dano; laranja: mágico; amarelo com "!": crítico; vermelho: dano recebido; "errou").
 - Anel de seleção amarelo sob o alvo; quadro do alvo com nome, nível, tipo (elite/chefe) e vida.
 - Áreas de efeito desenhadas no chão durante toda a duração; perigos de chefe sempre com aviso visual + sonoro antes do dano.
@@ -145,10 +162,12 @@ z=160└────────────────────────
 | Login | servidor, conta, senha, criar conta | M1 |
 | Seleção e criação de personagem | lista; nome + classe (com origem e papel) | M1 (2 classes), M2 (8) |
 | Ficha (C) | atributos permanentes e com itens, pontos livres com "+", confirmar/desfazer, redistribuir; estatísticas derivadas; habilidades com graus | M1 |
-| Barra de habilidades | 2 habilidades + 2 tônicos, com custo e nível de desbloqueio | M1 |
+| Barra de habilidades | 6 habilidades (teclas 1–6) + 2 tônicos (7–8), com custo, recarga e nível de desbloqueio | M1 (2 + 2), pós-v1 (6 + 2) |
 | Inventário e equipamentos (I) | espaços equipados, bolsa 30, caixa de recuperação; descrição com dano/defesa, raridade, nível, classe, atributos, empunhadura e espaço, requisitos pendentes em vermelho e comparação com o equipado | M1 |
 | Chat | canal local da zona | M1 |
 | Aviso de desconexão | motivo + "Reconectar" (refaz login e volta ao mesmo personagem) | M1 |
 | Diário de missões | missões ativas, objetivo, progresso | M2 |
 | Painel de grupo | membros, vida, mana, distância | M2 |
 | Ferreiro | custo, chance, prévia | M3 |
+| Dica do tutorial | passo atual de «Três do Outro Lado» acima da barra de atalhos ("Passo 3 de 7"), com a dica da classe; antes de aceitar, diz para falar com Mara | Auditoria (D165) |
+| Mapa (M) | o mapa de onde você está visto de cima: estradas, áreas bloqueadas, portais com o destino e o nível, NPCs com nome, posto de guarda, você e o grupo; exige o Mapa da Estrada Velha na bolsa (sem ele: "Você ainda não tem um mapa.") | Auditoria (D166) |

@@ -48,6 +48,8 @@ var _boss_phase := 0
 var _gate_prog := {}
 
 const ROLE_NAMES := {"quest": "missões", "master": "mestre de classe", "smith": "ferreiro", "shop": "tônicos", "storage": "depósito", "armorer": "armeiro"}
+## Entidades "e" que são gente (resgatados do tutorial, só o dono os vê): o corpo de morador de cada um.
+const PEOPLE := {"man": 1.3, "woman": 1.25, "boy": 1.0}
 ## Som: passos só de quem está a até STEP_HEAR m do jogador; chão de terra nestes mapas, pedra nos demais
 ## (ruas calçadas, trilhos, túneis e câmaras).
 const STEP_HEAR := 16.0
@@ -279,7 +281,10 @@ func apply_snapshot(snap: Dictionary) -> void:
 		else:
 			name = "%s  nv %d" % [main.defs["monsters"].get(d["def"], {}).get("name", d["def"]), int(d["lvl"])]
 		var frac := clampf(float(d["hp"]) / maxf(1.0, float(d["mhp"])), 0.0, 1.0)
-		e["label"].text = "%s\n%d / %d" % [name, int(d["hp"]), int(d["mhp"])]
+		if d["k"] == "e" and PEOPLE.has(str(d.get("def", ""))) and int(d["hp"]) >= int(d["mhp"]):
+			e["label"].text = name   # gente com a vida cheia: só o nome (e a situação: "preso no entulho"...)
+		else:
+			e["label"].text = "%s\n%d / %d" % [name, int(d["hp"]), int(d["mhp"])]
 		e["label"].visible = main.settings.get("show_names", true) or eid == selected
 		if d["k"] == "m":
 			e["label"].modulate = Color("#ffcf9a").lerp(Color("#ff4a3a"), 1.0 - frac)
@@ -327,17 +332,22 @@ func _stop_prediction() -> void:
 
 func _spawn_entity(d: Dictionary) -> Dictionary:
 	var root: Node3D
+	var person: bool = d["k"] == "e" and PEOPLE.has(str(d.get("def", "")))
 	if d["k"] == "p":
 		root = Art.character(d.get("cls", ""), _weapon_family(d.get("w")), false, Color("#c9b07a"), 0, _weapon_family(d.get("oh")) if d.has("oh") else "?")
+	elif person:
+		# Bento, Ligia, Caio: moradores com corpo e cor fixos pelo nome (sem a situação entre parênteses)
+		var base := str(d.get("n", "")).get_slice(" (", 0)
+		root = Art.character("", "", true, Color.from_hsv(float(hash(base) % 360) / 360.0, 0.4, 0.78), hash(base), "?", str(d["def"]))
 	elif d["k"] == "e":
 		root = Art.cart()
 	else:
 		var md: Dictionary = main.defs["monsters"].get(d["def"], {}).duplicate()
 		md["id"] = d["def"]
 		root = Art.monster(md)
-	root.scale = Vector3.ONE * (1.3 if d["k"] == "p" else (1.0 if d["k"] == "e" else 1.15))
+	root.scale = Vector3.ONE * (1.3 if d["k"] == "p" else (float(PEOPLE[str(d["def"])]) if person else (1.0 if d["k"] == "e" else 1.15)))
 	add_child(root)
-	var label := _label("", 34, Color("#f2ead8") if d["k"] == "p" else (Color("#9fe3ff") if d["k"] == "e" else Color("#ffcf9a")))
+	var label := _label("", 34, Color("#f2ead8") if d["k"] == "p" else (Color("#ffe39a") if person else (Color("#9fe3ff") if d["k"] == "e" else Color("#ffcf9a"))))
 	label.position.y = 2.1 if d["k"] == "p" else (2.5 if d["k"] == "e" else 1.8)
 	root.add_child(label)
 	var x := float(d["x"])
@@ -357,6 +367,10 @@ func _spawn_entity(d: Dictionary) -> Dictionary:
 func _sound_profile(d: Dictionary) -> Dictionary:
 	if d["k"] == "p":
 		return {"fam": "player", "step": _step_surface, "step_pitch": 1.0, "step_db": 0.0, "voice": 1.0}
+	if d["k"] == "e" and PEOPLE.has(str(d.get("def", ""))):
+		# gente escoltada: passos de gente (o menino, mais leves)
+		var kid: bool = str(d["def"]) == "boy"
+		return {"fam": "person", "step": _step_surface, "step_pitch": 1.25 if kid else 1.05, "step_db": -5.0 if kid else -3.0, "voice": 1.3 if kid else 1.0}
 	if d["k"] != "m":
 		# outras entidades do servidor (objetos que andam ou apanham): sem passos nem voz
 		return {"fam": "object", "step": "", "step_pitch": 1.0, "step_db": 0.0, "voice": 1.0}
@@ -469,8 +483,8 @@ func _process(delta: float) -> void:
 			knock *= exp(-delta * 9.0)
 			e["knock"] = knock
 		n.position = _gpos(pos2.x + knock.x, pos2.y + knock.y)
-		# caído: deita no chão (e levanta ao renascer)
-		var lying: bool = e["data"].get("dead", false)
+		# caído: deita no chão (e levanta ao renascer); o Caio derrubado pelos bichos também
+		var lying: bool = e["data"].get("dead", false) or str(e["data"].get("st", "")) == "down"
 		n.rotation.x = lerpf(n.rotation.x, -1.45 if lying else 0.0, clampf(delta * 6.0, 0.0, 1.0))
 		# velocidade e aceleração suavizadas (para a animação)
 		var speed := vel.length()
@@ -841,14 +855,34 @@ func _hit_voice(m: Dictionary, dst: Dictionary) -> void:
 	var at: Vector3 = dst["node"].position
 	if m["dst"] == my_eid:
 		Sfx.play("player_hurt", null, 2.0 if crit else 0.0)
-	elif dst["data"]["k"] == "p":
-		Sfx.play("player_hurt", at, -4.0)
+	elif dst["data"]["k"] == "p" or dst["snd"]["fam"] == "person":
+		Sfx.play("player_hurt", at, -4.0, float(dst["snd"]["voice"]))
 	elif dst["snd"]["fam"] != "object" and (crit or randf() < 0.55):
 		var snd: Dictionary = dst["snd"]
 		if snd["fam"] == "machine":
 			Sfx.play("hit_blunt", at, -3.0, float(snd["voice"]) * 0.8)
 		else:
 			Sfx.play("monster_hurt", at, 0.0, float(snd["voice"]))
+
+## Balão de fala sobre quem fala (resgatados do tutorial): some depois de alguns segundos.
+func on_say(m: Dictionary) -> void:
+	var e: Dictionary = entities.get(str(m.get("eid", "")), {})
+	if e.is_empty():
+		return
+	var node: Node3D = e["node"]
+	var old = e.get("bubble")
+	if old != null and is_instance_valid(old):
+		old.queue_free()
+	var b := _label(str(m.get("text", "")), 30, Color("#fff4d6"))
+	b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	b.width = 520.0
+	b.position = Vector3(0, 2.75, 0)
+	node.add_child(b)
+	e["bubble"] = b
+	var tw := b.create_tween()
+	tw.tween_interval(4.5)
+	tw.tween_property(b, "modulate:a", 0.0, 0.6)
+	tw.tween_callback(b.queue_free)
 
 ## Efeito na posição de uma entidade visível (nível de outro jogador, queda etc.).
 func sound_at(eid: String, snd: String, volume_db := 0.0) -> void:

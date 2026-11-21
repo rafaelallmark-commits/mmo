@@ -11,6 +11,12 @@ export class QuestEngine {
     // nome de exibição de cada NPC (o diário mostrava o id interno: "fale com master_veilsinger")
     this.npcNames = new Map();
     for (const m of Object.values(data.maps ?? {})) for (const n of m?.npcs ?? []) if (!this.npcNames.has(n.id)) this.npcNames.set(n.id, n.name);
+    // dicas do tutorial por classe: à distância (arma inicial com "ranged") ou corpo a corpo
+    this.rangedClass = new Map();
+    for (const [cid, c] of Object.entries(data.classes ?? {})) {
+      const w = (c.startingKit?.equip ?? []).map((id) => data.items?.[id]).find((d) => d?.slot === 'weapon');
+      this.rangedClass.set(cid, !!w?.ranged);
+    }
   }
 
   load(char) {
@@ -66,8 +72,28 @@ export class QuestEngine {
       case 'trial': return { done: !!pr || !!char.trialDone, cur: pr || char.trialDone ? 1 : 0, need: 1 };
       case 'escort': return { done: !!pr, cur: pr ? 1 : 0, need: 1 };
       case 'choice': return { done: !!pr, cur: pr ? 1 : 0, need: 1 };
+      // tutorial: pessoa solta, habilidade da tecla N usada, faixa do segundo toque, chegada ao posto
+      case 'rescue': case 'skill': case 'bell': case 'arrive': return { done: pr === true, cur: pr === true ? 1 : 0, need: 1 };
+      case 'pickup': return { done: (pr || 0) >= o.count, cur: Math.min(pr || 0, o.count), need: o.count };
       default: return { done: false, cur: 0, need: 1 };
     }
+  }
+
+  // Dica na tela de um objetivo (tutorial): o texto geral e a dica da classe (à distância ou corpo a corpo).
+  hintFor(char, o) {
+    if (!o.hint) return {};
+    const cls = this.data.classes?.[char.classId];
+    const skill = this.data.skills?.[cls?.skills?.[(o.slot ?? 1) - 1] ?? cls?.skills?.[0]]?.name ?? 'a habilidade da tecla 1';
+    const tip = this.rangedClass.get(char.classId) ? o.tipRanged : o.tipMelee;
+    return { hint: o.hint.replaceAll('{skill}', skill), ...(tip ? { tip } : {}), ...(o.step ? { step: o.step } : {}) };
+  }
+
+  // O objetivo deste tipo (e que satisfaz pred) já foi cumprido numa missão ativa?
+  objectiveDone(char, questId, type, pred = () => true) {
+    const st = char.quests.get(questId);
+    if (!st || st.state !== 'active') return false;
+    const q = this.quests[questId];
+    return q.objectives.some((o, i) => o.type === type && pred(o) && this.objectiveStatus(char, q, st, i).done);
   }
 
   // Falas que mudam conforme escolhas anteriores (dialogueByChoice: { chave: { opção: { offer?, progress?, complete? } } }).
@@ -83,9 +109,9 @@ export class QuestEngine {
   view(char, id) {
     const q = this.quests[id];
     const st = char.quests.get(id) ?? { state: 'available', progress: {} };
-    const objectives = q.objectives.map((o, i) => ({ text: o.text, ...this.objectiveStatus(char, q, st, i) }));
+    const objectives = q.objectives.map((o, i) => ({ text: o.text, ...this.objectiveStatus(char, q, st, i), ...this.hintFor(char, o) }));
     return {
-      id, title: q.title, chapter: q.chapter, state: st.state, level: q.level,
+      id, title: q.title, chapter: q.chapter, state: st.state, level: q.level, ...(q.startHint ? { startHint: q.startHint } : {}),
       npc: this.npcLabel(char, q.npc), turnIn: this.npcLabel(char, q.turnIn), objectives,
       npcName: this.npcNames.get(this.npcLabel(char, q.npc)) ?? this.npcLabel(char, q.npc),
       turnInName: this.npcNames.get(this.npcLabel(char, q.turnIn)) ?? this.npcLabel(char, q.turnIn),
@@ -200,6 +226,29 @@ export class QuestEngine {
 
   onTrial(char) {
     return this.bump(char, (o) => o.type === 'trial', (o, pr) => (pr ? null : true));
+  }
+
+  // ---------- tutorial (server/src/tutorial.js) ----------
+  onRescue(char, who) {
+    return this.bump(char, (o) => o.type === 'rescue' && o.who === who, (o, pr) => (pr ? null : true));
+  }
+
+  // habilidade da tecla "slot" da barra (as habilidades da classe na ordem de data/classes.json)
+  onSkill(char, skillId) {
+    const skills = this.data.classes?.[char.classId]?.skills ?? [];
+    return this.bump(char, (o) => o.type === 'skill' && skills[(o.slot ?? 1) - 1] === skillId, (o, pr) => (pr ? null : true));
+  }
+
+  onPickup(char) {
+    return this.bump(char, (o) => o.type === 'pickup', (o, pr) => ((pr || 0) >= o.count ? null : (pr || 0) + 1));
+  }
+
+  onBell(char) {
+    return this.bump(char, (o) => o.type === 'bell', (o, pr) => (pr ? null : true));
+  }
+
+  onArrive(char) {
+    return this.bump(char, (o) => o.type === 'arrive', (o, pr) => (pr ? null : true));
   }
 
   bump(char, match, next) {
