@@ -1,0 +1,240 @@
+# Integração contínua de CINZAS DO MERIDIANO (docs/08-operacao.md §8.8):
+#   servidor           - valida os dados do jogo e roda todas as suítes de teste (Node 22, SQLite)
+#   servidor-postgres  - as mesmas suítes no PostgreSQL 17 (contêiner de serviço do job)
+#   cliente   - importa o projeto Godot 4.3 em modo headless (falha com qualquer erro de script) e roda o
+#               --autotest do cliente contra um servidor de verdade (critério 9 do Marco 1)
+#   docker    - constrói a imagem do servidor (sem publicar) e faz o teste rápido do contêiner
+#               (deploy/teste-conteiner.sh, o mesmo que a release roda antes de publicar a imagem)
+# A release (release.yml) chama este mesmo arquivo (workflow_call) com a versão da tag: nada é publicado sem
+# estes quatro jobs verdes. Por isso o push de tag não dispara o CI de novo aqui.
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      versao:
+        description: Versão da release (tag sem o "v"); a imagem é construída com ela e o hello tem que trazê-la
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+# Chamado pela release, github.workflow é o nome de quem chamou ("Release"): o grupo fica diferente do da
+# própria release (nomes de grupo não diferenciam maiúsculas) e do CI de um push no mesmo ramo.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+# "shell: bash" explícito = bash --noprofile --norc -eo pipefail. Sem ele o GitHub usa "bash -e" (sem pipefail)
+# e o "godot ... | tee arquivo.log || status=$?" pegaria o código do tee, não o do Godot: um Godot que nem abre
+# (biblioteca faltando, falha ao iniciar) passaria no CI. Um job que tem "defaults.run" próprio substitui este
+# bloco inteiro, por isso o job servidor repete "shell: bash".
+defaults:
+  run:
+    shell: bash
+
+env:
+  GODOT_VERSION: 4.3-stable
+  # SHA-512 publicado pelo Godot em .../releases/download/4.3-stable/SHA512-SUMS.txt
+  GODOT_ZIP_SHA512: fd52bb4ba8acc30ca5accd1c566d470ad7282f891ccc0995dfafabcf92bcf76280ce182bf9d80ebd885f3ed2165d01e1fc3f2928436b15498dfbd98656c2a45a
+
+jobs:
+  servidor:
+    name: Servidor (dados e testes)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci --no-audit --no-fund
+
+      - name: Validar os dados do jogo (data/*.json)
+        run: npm run validate-data
+
+      - name: Testes (todas as suítes, ~3 min)
+        run: npm test
+
+  servidor-postgres:
+    name: Servidor no PostgreSQL (testes)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+        working-directory: server
+    services:
+      # banco descartável deste job, só em localhost (a senha não é segredo de nada)
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: cinzas
+          POSTGRES_PASSWORD: cinzas-ci
+          POSTGRES_DB: cinzas
+          POSTGRES_INITDB_ARGS: --encoding=UTF8 --locale=C.UTF-8
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U cinzas -d cinzas"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci --no-audit --no-fund
+
+      # CINZAS_TEST_PG: cada banco que os testes pedem vira um esquema isolado nesse servidor (src/db.js),
+      # como no "npm run test:pg" local, que sobe um PostgreSQL temporário em vez deste contêiner
+      - name: Testes no PostgreSQL (todas as suítes)
+        env:
+          CINZAS_TEST_PG: postgresql://cinzas:cinzas-ci@localhost:5432/cinzas
+        run: npm test
+
+  cliente:
+    name: Cliente Godot (importação e autotest contra o servidor)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Cache do Godot
+        id: cache-godot
+        uses: actions/cache@v6
+        with:
+          path: ~/godot
+          key: godot-${{ env.GODOT_VERSION }}-linux-x86_64
+
+      - name: Baixar o Godot ${{ env.GODOT_VERSION }} (só sem cache)
+        if: steps.cache-godot.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/godot "$RUNNER_TEMP/godot-dl"
+          cd "$RUNNER_TEMP/godot-dl"
+          curl -fsSL --retry 3 -o godot.zip \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+          echo "${GODOT_ZIP_SHA512}  godot.zip" | sha512sum -c -
+          unzip -q godot.zip
+          mv "Godot_v${GODOT_VERSION}_linux.x86_64" ~/godot/godot
+          chmod +x ~/godot/godot
+
+      # o servidor do autotest (Node 22 e as dependências de server/)
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Instalar as dependências do servidor
+        working-directory: server
+        run: npm ci --no-audit --no-fund
+
+      - name: Importar o projeto
+        run: |
+          # O Godot sai com código 0 mesmo com erro de script; quem decide é o texto da saída.
+          # ("Parameter "m" is null" e "Global uniform ... does not exist" vêm do renderizador
+          # dummy do modo headless e são inofensivos.)
+          status=0
+          ~/godot/godot --headless --path client --import 2>&1 | tee importacao.log || status=$?
+          if grep -nE 'SCRIPT ERROR|Parse Error' importacao.log; then
+            echo "::error title=Cliente Godot::a importação encontrou erros de script (linhas acima)"
+            exit 1
+          fi
+          if [ "$status" -ne 0 ]; then
+            echo "::error title=Cliente Godot::o Godot saiu com código $status"
+            exit "$status"
+          fi
+          echo "Importação sem erros de script."
+
+      # Critério 9 do Marco 1 (docs/05-arquitetura.md): o cliente de verdade, headless, contra um servidor de
+      # verdade (--dev, banco descartável). O autotest conecta, cria a conta e o personagem, entra no mundo pela
+      # rotina da interface, anda, derrota um Rato de Sulco, coleta o saque e sai com "[autotest] OK" e código 0
+      # (client/scripts/autotest.gd); qualquer falha sai com código 1, e o próprio autotest desiste em 150 s.
+      - name: Autotest do cliente contra um servidor
+        run: |
+          porta=7777
+          node --disable-warning=ExperimentalWarning server/src/main.js --dev --host 127.0.0.1 --port "$porta" \
+            --db "$RUNNER_TEMP/autotest.db" > servidor-autotest.log 2>&1 &
+          servidor=$!
+          # em qualquer saída do passo o servidor recebe Ctrl+C (salva e sai)
+          trap 'kill -INT "$servidor" 2> /dev/null || true' EXIT
+          for _ in $(seq 1 120); do
+            grep -q "servidor ouvindo" servidor-autotest.log && break
+            kill -0 "$servidor" 2> /dev/null || break
+            sleep 0.5
+          done
+          if ! grep -q "servidor ouvindo" servidor-autotest.log; then
+            cat servidor-autotest.log
+            echo "::error title=Autotest do cliente::o servidor não subiu em 60 s"
+            exit 1
+          fi
+          status=0
+          timeout 300 ~/godot/godot --headless --path client -- --autotest --server="ws://127.0.0.1:$porta" \
+            --account=robo --password=robo123 --class=breaker --name=Robo > autotest-cliente.log 2>&1 || status=$?
+          kill -INT "$servidor" 2> /dev/null || true
+          wait "$servidor" || true
+          grep -E '^\[autotest\]' autotest-cliente.log || true
+          if grep -nE 'SCRIPT ERROR|Parse Error' autotest-cliente.log; then
+            echo "::error title=Autotest do cliente::erros de script durante o autotest (linhas acima)"
+            exit 1
+          fi
+          if [ "$status" -ne 0 ] || ! grep -qx '\[autotest\] OK' autotest-cliente.log; then
+            tail -n 40 autotest-cliente.log
+            tail -n 20 servidor-autotest.log
+            echo "::error title=Autotest do cliente::o autotest não terminou com sucesso (código $status; 124 = passou de 5 min)"
+            exit 1
+          fi
+          echo "Autotest do cliente: ok"
+
+      - name: Guardar os registros da importação e do autotest
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: registros-cliente
+          path: |
+            importacao.log
+            autotest-cliente.log
+            servidor-autotest.log
+          retention-days: 7
+          if-no-files-found: ignore
+
+  docker:
+    name: Imagem do servidor (build e teste rápido, sem publicar)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      # Chamado pela release, constrói com a versão da tag (CINZAS_VERSION); num push comum, sem ela (o hello
+      # traz a do package.json).
+      - name: Construir a imagem
+        env:
+          VERSAO: ${{ inputs.versao }}
+        run: docker build -f deploy/Dockerfile --build-arg "CINZAS_VERSION=${VERSAO}" -t cinzas-servidor:ci .
+
+      - name: Teste rápido do contêiner (saúde, usuário, hello com a versão, backup, parada graciosa)
+        env:
+          VERSAO: ${{ inputs.versao }}
+        run: bash deploy/teste-conteiner.sh cinzas-servidor:ci "$VERSAO"

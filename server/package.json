@@ -1,0 +1,37 @@
+{
+  "name": "cinzas-do-meridiano-server",
+  "version": "0.1.0",
+  "description": "Servidor autoritativo de zona de CINZAS DO MERIDIANO.",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/main.js",
+    "dev": "node --disable-warning=ExperimentalWarning src/main.js --dev",
+    "test": "node --disable-warning=ExperimentalWarning --test --test-reporter=spec test/*.test.js",
+    "test:acceptance": "node --disable-warning=ExperimentalWarning --test --test-reporter=spec test/acceptance.test.js",
+    "test:pg": "node --disable-warning=ExperimentalWarning tools/test-pg.mjs",
+    "pg-temp": "node --disable-warning=ExperimentalWarning tools/pg-temp.mjs",
+    "validate-data": "node --disable-warning=ExperimentalWarning tools/validate-data.js",
+    "gen-docs": "node --disable-warning=ExperimentalWarning tools/gen-docs.js",
+    "create-character": "node --disable-warning=ExperimentalWarning tools/create-character.js",
+    "gen-scenery": "node --disable-warning=ExperimentalWarning tools/gen-scenery.js",
+    "carga": "node --disable-warning=ExperimentalWarning tools/carga.mjs",
+    "cenarios": "node --disable-warning=ExperimentalWarning tools/cenarios.mjs",
+    "telemetria": "node --disable-warning=ExperimentalWarning tools/telemetria.mjs",
+    "backup": "node --disable-warning=ExperimentalWarning tools/backup.mjs",
+    "sqlite-para-pg": "node --disable-warning=ExperimentalWarning tools/sqlite-para-pg.mjs",
+    "contas": "node --disable-warning=ExperimentalWarning src/contas-main.js",
+    "conta": "node --disable-warning=ExperimentalWarning tools/conta.mjs",
+    "simular-progressao": "node --disable-warning=ExperimentalWarning tools/simular-progressao.mjs",
+    "mundo": "node --disable-warning=ExperimentalWarning src/world-main.js",
+    "multizona": "node --disable-warning=ExperimentalWarning tools/multizona.mjs",
+    "medir-caminhos": "node --disable-warning=ExperimentalWarning tools/medir-caminhos.mjs"
+  },
+  "dependencies": {
+    "pg": "8.23.1",
+    "ws": "8.18.3"
+  }
+}

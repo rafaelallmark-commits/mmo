@@ -1,0 +1,442 @@
+{
+  "attributes": {
+    "str": {
+      "name": "Força",
+      "gender": "f",
+      "description": "Dano de armas pesadas; requisito de armaduras pesadas e armas físicas."
+    },
+    "spi": {
+      "name": "Espírito",
+      "gender": "m",
+      "description": "Mana, dano mágico, cura; requisito de itens mágicos."
+    },
+    "tal": {
+      "name": "Talento",
+      "gender": "m",
+      "description": "Requisitos técnicos, precisão física e chance crítica."
+    },
+    "agi": {
+      "name": "Agilidade",
+      "gender": "f",
+      "description": "Precisão à distância, evasão; requisito de arcos, azagaias e armaduras leves."
+    },
+    "vit": {
+      "name": "Vitalidade",
+      "gender": "f",
+      "description": "Vida, defesa e resistência a controle."
+    }
+  },
+  "pointsPerLevel": 5,
+  "skillPointsPerLevel": 1,
+  "levelCap": 25,
+  "classes": {
+    "breaker": {
+      "name": "Quebraferro",
+      "origin": "amber",
+      "role": "Dano físico corpo a corpo com golpes fortes.",
+      "weaponFamilies": [
+        "axe_1h",
+        "axe_2h"
+      ],
+      "offhandFamilies": [],
+      "armorWeight": "heavy",
+      "start": {
+        "str": 17,
+        "spi": 5,
+        "tal": 11,
+        "agi": 10,
+        "vit": 17
+      },
+      "hpBase": 60,
+      "hpPerVit": 3,
+      "hpPerLevel": 9,
+      "mpBase": 12,
+      "mpPerSpi": 1.5,
+      "mpPerLevel": 2,
+      "skills": [
+        "deep_cut",
+        "momentum",
+        "rupture",
+        "gravel_carapace",
+        "seismic_rift",
+        "bottomless_cut"
+      ],
+      "startingKit": {
+        "equip": [
+          "axe_1h_t1",
+          "heavy_armor_t1"
+        ],
+        "bag": [
+          [
+            "axe_2h_t1",
+            1
+          ],
+          [
+            "potion_hp_s",
+            5
+          ]
+        ]
+      },
+      "implementedIn": "M1"
+    },
+    "bastion": {
+      "name": "Bastião de Bronze",
+      "origin": "amber",
+      "role": "Defesa física, controle e proteção do grupo.",
+      "weaponFamilies": [
+        "claw",
+        "hammer_1h"
+      ],
+      "offhandFamilies": [
+        "shield"
+      ],
+      "armorWeight": "heavy",
+      "start": {
+        "str": 16,
+        "spi": 6,
+        "tal": 12,
+        "agi": 8,
+        "vit": 18
+      },
+      "hpBase": 70,
+      "hpPerVit": 3.2,
+      "hpPerLevel": 10,
+      "mpBase": 14,
+      "mpPerSpi": 1.5,
+      "mpPerLevel": 2,
+      "skills": [
+        "dynamic_plate",
+        "pull_pulse",
+        "field_reinforcement",
+        "locked_gear",
+        "living_bastille",
+        "bronze_toll"
+      ],
+      "startingKit": {
+        "equip": [
+          "hammer_1h_t1",
+          "shield_t1",
+          "heavy_armor_t1"
+        ],
+        "bag": [
+          [
+            "claw_t1",
+            1
+          ],
+          [
+            "potion_hp_s",
+            5
+          ]
+        ]
+      },
+      "implementedIn": "M2"
+    },
+    "pikeman": {
+      "name": "Lanceiro do Fosso",
+      "origin": "amber",
+      "role": "Dano físico explosivo, alcance corpo a corpo e ataques em linha.",
+      "weaponFamilies": [
+        "spear_2h"
+      ],
+      "offhandFamilies": [],
+      "armorWeight": "heavy",
+      "start": {
+        "str": 16,
+        "spi": 5,
+        "tal": 13,
+        "agi": 11,
+        "vit": 15
+      },
+      "hpBase": 58,
+      "hpPerVit": 3,
+      "hpPerLevel": 9,
+      "mpBase": 12,
+      "mpPerSpi": 1.5,
+      "mpPerLevel": 2,
+      "skills": [
+        "long_thrust",
+        "split_line",
+        "moat_charge",
+        "firm_haft",
+        "pike_wall",
+        "moat_wheel"
+      ],
+      "startingKit": {
+        "equip": [
+          "spear_2h_t1",
+          "heavy_armor_t1"
+        ],
+        "bag": [
+          [
+            "potion_hp_s",
+            5
+          ]
+        ]
+      },
+      "implementedIn": "M2"
+    },
+    "warden": {
+      "name": "Vigia do Espinhal",
+      "origin": "amber",
+      "role": "Dano físico à distância, precisão e vários alvos.",
+      "weaponFamilies": [
+        "bow"
+      ],
+      "offhandFamilies": [
+        "quiver"
+      ],
+      "armorWeight": "light",
+      "start": {
+        "str": 9,
+        "spi": 7,
+        "tal": 13,
+        "agi": 18,
+        "vit": 13
+      },
+      "hpBase": 50,
+      "hpPerVit": 2.6,
+      "hpPerLevel": 7,
+      "mpBase": 16,
+      "mpPerSpi": 1.6,
+      "mpPerLevel": 2,
+      "skills": [
+        "trail_mark",
+        "passage_arrow",
+        "thorn_rain",
+        "recoil_step",
+        "spinal_shot",
+        "bell_arrow"
+      ],
+      "startingKit": {
+        "equip": [
+          "bow_t1",
+          "quiver_t1",
+          "light_armor_t1"
+        ],
+        "bag": [
+          [
+            "potion_hp_s",
+            5
+          ]
+        ]
+      },
+      "implementedIn": "M2"
+    },
+    "dawnshield": {
+      "name": "Escudeiro do Alvorecer",
+      "origin": "nacre",
+      "role": "Dano físico com reforço sagrado, defesa e auxílio aos aliados próximos.",
+      "weaponFamilies": [
+        "sword_1h",
+        "sword_2h"
+      ],
+      "offhandFamilies": [
+        "shield"
+      ],
+      "armorWeight": "heavy",
+      "start": {
+        "str": 15,
+        "spi": 11,
+        "tal": 9,
+        "agi": 9,
+        "vit": 16
+      },
+      "hpBase": 62,
+      "hpPerVit": 3,
+      "hpPerLevel": 9,
+      "mpBase": 18,
+      "mpPerSpi": 1.8,
+      "mpPerLevel": 3,
+      "skills": [
+        "solar_cut",
+        "dawn_guard",
+        "oath",
+        "noon_blade",
+        "daybreak",
+        "dawn_sentence"
+      ],
+      "startingKit": {
+        "equip": [
+          "sword_1h_t1",
+          "shield_t1",
+          "heavy_armor_t1"
+        ],
+        "bag": [
+          [
+            "sword_2h_t1",
+            1
+          ],
+          [
+            "potion_hp_s",
+            5
+          ]
+        ]
+      },
+      "implementedIn": "M2"
+    },
+    "windwalker": {
+      "name": "Andarilha do Vento",
+      "origin": "nacre",
+      "role": "Dano físico à distância, mobilidade e fortalecimento ofensivo do grupo.",
+      "weaponFamilies": [
+        "javelin"
+      ],
+      "offhandFamilies": [
+        "light_shield"
+      ],
+      "armorWeight": "light",
+      "start": {
+        "str": 10,
+        "spi": 8,
+        "tal": 12,
+        "agi": 17,
+        "vit": 13
+      },
+      "hpBase": 52,
+      "hpPerVit": 2.7,
+      "hpPerLevel": 8,
+      "mpBase": 16,
+      "mpPerSpi": 1.6,
+      "mpPerLevel": 2,
+      "skills": [
+        "return_throw",
+        "side_step",
+        "tailwind",
+        "cutting_gust",
+        "eye_of_storm",
+        "ash_whirl"
+      ],
+      "startingKit": {
+        "equip": [
+          "javelin_t1",
+          "light_shield_t1",
+          "light_armor_t1"
+        ],
+        "bag": [
+          [
+            "potion_hp_s",
+            5
+          ]
+        ]
+      },
+      "implementedIn": "M2"
+    },
+    "veilsinger": {
+      "name": "Cantora do Véu",
+      "origin": "nacre",
+      "role": "Cura, proteção e dano sagrado à distância.",
+      "weaponFamilies": [
+        "wand",
+        "scepter",
+        "staff_2h"
+      ],
+      "offhandFamilies": [
+        "focus"
+      ],
+      "armorWeight": "robe",
+      "start": {
+        "str": 7,
+        "spi": 19,
+        "tal": 12,
+        "agi": 9,
+        "vit": 13
+      },
+      "hpBase": 46,
+      "hpPerVit": 2.5,
+      "hpPerLevel": 7,
+      "mpBase": 24,
+      "mpPerSpi": 2.2,
+      "mpPerLevel": 4,
+      "skills": [
+        "sustain_chant",
+        "clear_note",
+        "veil_seal",
+        "shared_light",
+        "renewal_choir",
+        "vigil_chant"
+      ],
+      "startingKit": {
+        "equip": [
+          "scepter_t1",
+          "focus_t1",
+          "robe_t1"
+        ],
+        "bag": [
+          [
+            "staff_2h_t1",
+            1
+          ],
+          [
+            "potion_hp_s",
+            5
+          ]
+        ]
+      },
+      "implementedIn": "M2"
+    },
+    "emberweaver": {
+      "name": "Tecelão da Brasa",
+      "origin": "nacre",
+      "role": "Magia elemental, dano em área e controle de grupos de monstros.",
+      "weaponFamilies": [
+        "wand",
+        "staff_2h"
+      ],
+      "offhandFamilies": [
+        "focus"
+      ],
+      "armorWeight": "robe",
+      "start": {
+        "str": 7,
+        "spi": 20,
+        "tal": 12,
+        "agi": 9,
+        "vit": 12
+      },
+      "hpBase": 44,
+      "hpPerVit": 2.5,
+      "hpPerLevel": 7,
+      "mpBase": 24,
+      "mpPerSpi": 2.2,
+      "mpPerLevel": 4,
+      "skills": [
+        "glass_spark",
+        "ember_ground",
+        "soot_circle",
+        "heat_veil",
+        "furnace_heart",
+        "incandescent_thread"
+      ],
+      "startingKit": {
+        "equip": [
+          "wand_t1",
+          "focus_t1",
+          "robe_t1"
+        ],
+        "bag": [
+          [
+            "staff_2h_t1",
+            1
+          ],
+          [
+            "potion_hp_s",
+            5
+          ]
+        ]
+      },
+      "implementedIn": "M1"
+    }
+  },
+  "origins": {
+    "amber": {
+      "name": "Âmbar",
+      "city": "Pedrâmbar",
+      "description": "Cidade de pedra, madeira e rotas de superfície."
+    },
+    "nacre": {
+      "name": "Nacre",
+      "city": "Vau de Nácar",
+      "description": "Cidade de condutores que atravessam montanhas e rios."
+    }
+  }
+}

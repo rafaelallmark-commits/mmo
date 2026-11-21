@@ -1,0 +1,100 @@
+// Queda de conexão durante a morte: o servidor grava "caído" e, ao voltar, restaura o
+// personagem no posto de guarda com 50% de vida.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { GameServer } from '../src/server.js';
+import { SimClient } from './helpers/client.js';
+
+test('personagem que cai e desconecta volta no posto com 50% de vida', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cinzas-death-'));
+  const server = new GameServer({ port: 0, host: '127.0.0.1', dbPath: join(dir, 'd.db'), log: false, seed: 7 });
+  const port = await server.start();
+  try {
+    const c = new SimClient('D');
+    await c.connect(`ws://127.0.0.1:${port}`);
+    await c.request('register', { account: 'morte', password: 'senha123' });
+    await c.request('login', { account: 'morte', password: 'senha123' });
+    const { char } = await c.request('create_char', { name: 'Caido', classId: 'breaker' });
+    const enter = await c.request('enter', { charId: char.id });
+    // move para longe do posto e morre ali (simula o golpe final de um monstro)
+    const p = server.zone.players.get(char.id);
+    p.char.x = 100; p.char.z = 40;
+    server.zone.killPlayer(p);
+    const dead = await c.waitFor((m) => m.t === 'snap' && m.ents.find((e) => e.id === enter.char.eid)?.dead === true, 3000, 'snapshot caído');
+    assert.ok(dead);
+    await c.close(); // conexão cai enquanto está caído
+    await new Promise((r) => setTimeout(r, 100));
+    assert.equal(server.store.loadCharacter(char.id).dead, true, 'estado caído gravado');
+
+    const c2 = new SimClient('D2');
+    await c2.connect(`ws://127.0.0.1:${port}`);
+    await c2.request('login', { account: 'morte', password: 'senha123' });
+    const back = await c2.request('enter', { charId: char.id });
+    assert.equal(back.ok, true);
+    assert.equal(back.restoredFromDeath, true);
+    assert.equal(back.char.dead, false);
+    const gp = server.data.maps.estrada_velha.guardPost;
+    assert.ok(Math.hypot(back.char.x - gp.x, back.char.z - gp.z) < 4, 'no posto de guarda');
+    assert.equal(back.char.hp, Math.round(back.char.stats.maxHp * 0.5));
+    await c2.close();
+  } finally {
+    await server.stop();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('qualquer aliado levanta um caído canalizando 5 s fora de combate (20% de vida); sem ajuda, volta sozinho ao posto', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cinzas-revive-'));
+  const server = new GameServer({ port: 0, host: '127.0.0.1', dbPath: join(dir, 'r.db'), log: false, seed: 8 });
+  const port = await server.start();
+  try {
+    const enter = async (acc, name, classId) => {
+      const c = new SimClient(acc);
+      await c.connect(`ws://127.0.0.1:${port}`);
+      await c.request('register', { account: acc, password: 'senha123' });
+      await c.request('login', { account: acc, password: 'senha123' });
+      const { char } = await c.request('create_char', { name, classId });
+      await c.request('enter', { charId: char.id });
+      return { c, p: server.zone.players.get(char.id) };
+    };
+    const { p: caido } = await enter('rv_caido', 'Tombado', 'breaker');
+    const { c: amigo, p: pa } = await enter('rv_amigo', 'Socorro', 'warden'); // nem precisa ser do grupo
+    caido.char.x = 60; caido.char.z = 50; pa.char.x = 61.5; pa.char.z = 50; pa.dest = null;
+    server.zone.killPlayer(caido);
+    // longe demais
+    pa.char.x = 70;
+    assert.equal((await amigo.request('revive_ally', { name: 'Tombado' })).code, 'too_far');
+    pa.char.x = 61.5;
+    // em combate
+    pa.lastCombatAt = server.zone.now;
+    assert.equal((await amigo.request('revive_ally', { name: 'Tombado' })).code, 'in_combat');
+    pa.lastCombatAt = -1e9;
+    // ser atingido interrompe
+    let r = await amigo.request('revive_ally', { name: 'Tombado' });
+    assert.equal(r.ok, true, r.reason);
+    assert.equal(r.channel.ms, 5000);
+    pa.lastHitAt = server.zone.now + 1;
+    const cut = await amigo.waitFor((m) => m.t === 'channel_end' && !m.ok, 3000, 'interrompido');
+    assert.match(cut.reason, /atingido/);
+    assert.equal(caido.char.dead, true);
+    // canalização completa: levanta com 20% da vida
+    pa.lastHitAt = -1;
+    r = await amigo.request('revive_ally', { name: 'Tombado' });
+    assert.equal(r.ok, true, r.reason);
+    await amigo.waitFor((m) => m.t === 'channel_end' && m.ok, 8000, 'canalização concluída');
+    assert.equal(caido.char.dead, false, 'levantado');
+    assert.equal(caido.char.hp, Math.round(caido.stats.maxHp * 0.2));
+    assert.ok(Math.hypot(caido.char.x - 60, caido.char.z - 50) < 0.5, 'levanta onde caiu, não no posto');
+    assert.equal((await amigo.request('revive_ally', { name: 'Tombado' })).code, 'not_dead');
+    // sem ajuda: volta sozinho ao posto depois de death.corpseTimeoutMs
+    server.zone.killPlayer(caido);
+    server.zone.now += server.data.formulas.death.corpseTimeoutMs;
+    server.zone.tick(100);
+    assert.equal(caido.char.dead, false, 'voltou sozinho');
+    const gp = server.data.maps.estrada_velha.guardPost;
+    assert.ok(Math.hypot(caido.char.x - gp.x, caido.char.z - gp.z) < 4, 'no posto de guarda');
+  } finally { await server.stop(); rmSync(dir, { recursive: true, force: true }); }
+});

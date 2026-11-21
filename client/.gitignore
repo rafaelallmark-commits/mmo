@@ -1,0 +1,10 @@
+# .godot/ também guarda export_credentials.cfg (senhas e certificados de assinatura do editor): nunca versionar.
+.godot/
+*.import
+# export_presets.cfg É versionado (o CI exporta com ele). Não tem segredos: no Godot 4.3 as opções secretas
+# ficam em .godot/export_credentials.cfg, e a assinatura é feita pelo CI depois da exportação.
+# saídas da exportação (export_path dos presets)
+build/
+# texturas extraídas pelo importador do Godot a partir dos .glb (recriadas na importação)
+assets/characters/*.png
+assets/characters/*.png.import

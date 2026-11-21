@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- Ícone de CINZAS DO MERIDIANO (original, feito para o jogo; docs/CREDITOS.md): o sino de bronze que volta
+       a tocar debaixo da terra, rachado pelo sulco vermelho que se abre entre as pedras na abertura, brilhando
+       como brasa, sobre fundo de fuligem com cinzas no ar. Os PNG e o .ico saem daqui com
+       tools/icone/gerar_icone.gd (rasterizador SVG do próprio Godot). -->
+  <defs>
+    <radialGradient id="fundo" cx="128" cy="112" r="150" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#43291b"/>
+      <stop offset="0.5" stop-color="#231915"/>
+      <stop offset="1" stop-color="#0e0a08"/>
+    </radialGradient>
+    <linearGradient id="bronze" x1="70" y1="0" x2="186" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6e3f17"/>
+      <stop offset="0.3" stop-color="#d9973f"/>
+      <stop offset="0.52" stop-color="#ffd9a0"/>
+      <stop offset="0.75" stop-color="#c98232"/>
+      <stop offset="1" stop-color="#5e3412"/>
+    </linearGradient>
+    <linearGradient id="borda" x1="52" y1="0" x2="204" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5e3412"/>
+      <stop offset="0.45" stop-color="#e3a548"/>
+      <stop offset="1" stop-color="#4f2b0f"/>
+    </linearGradient>
+  </defs>
+
+  <!-- fundo de fuligem -->
+  <rect x="8" y="8" width="240" height="240" rx="46" fill="url(#fundo)"/>
+  <rect x="8" y="8" width="240" height="240" rx="46" fill="none" stroke="#5a4a36" stroke-width="4"/>
+
+  <!-- brilho da brasa atrás do sino -->
+  <ellipse cx="128" cy="214" rx="86" ry="18" fill="#ff4a2f" fill-opacity="0.22"/>
+
+  <!-- sino -->
+  <path d="M112 64 C112 38 144 38 144 64" fill="none" stroke="#2a1608" stroke-width="18" stroke-linecap="round"/>
+  <path d="M112 64 C112 38 144 38 144 64" fill="none" stroke="url(#bronze)" stroke-width="9" stroke-linecap="round"/>
+  <path d="M128 58 C101 58 91 79 89 106 C87 137 80 157 60 172 C53 177 54 186 63 186 L193 186 C202 186 203 177 196 172 C176 157 169 137 167 106 C165 79 155 58 128 58 Z"
+        fill="url(#bronze)" stroke="#2a1608" stroke-width="6" stroke-linejoin="round"/>
+  <path d="M103 92 C106 76 114 68 124 66" fill="none" stroke="#fff0d2" stroke-opacity="0.55" stroke-width="5" stroke-linecap="round"/>
+  <rect x="50" y="177" width="156" height="18" rx="9" fill="url(#borda)" stroke="#2a1608" stroke-width="6"/>
+  <circle cx="128" cy="210" r="12" fill="#d9973f" stroke="#2a1608" stroke-width="6"/>
+
+  <!-- o sulco vermelho: a fenda que racha o sino de alto a baixo, brilhando como brasa -->
+  <path d="M131 30 L124 56 L135 84 L122 118 L137 150 L124 180 L133 204 L128 232"
+        fill="none" stroke="#ff3b24" stroke-opacity="0.28" stroke-width="24" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M131 30 L124 56 L135 84 L122 118 L137 150 L124 180 L133 204 L128 232"
+        fill="none" stroke="#2a0804" stroke-width="13" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M131 30 L124 56 L135 84 L122 118 L137 150 L124 180 L133 204 L128 232"
+        fill="none" stroke="#ff4a2f" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M131 30 L124 56 L135 84 L122 118 L137 150 L124 180 L133 204 L128 232"
+        fill="none" stroke="#ffc49a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+
+  <!-- cinzas no ar -->
+  <circle cx="54" cy="58" r="3.5" fill="#b8ad98" fill-opacity="0.55"/>
+  <circle cx="200" cy="44" r="2.5" fill="#b8ad98" fill-opacity="0.45"/>
+  <circle cx="206" cy="112" r="3" fill="#b8ad98" fill-opacity="0.4"/>
+  <circle cx="44" cy="132" r="2.5" fill="#b8ad98" fill-opacity="0.4"/>
+  <circle cx="186" cy="74" r="2" fill="#ff8a5c" fill-opacity="0.7"/>
+  <circle cx="70" cy="96" r="2" fill="#ff8a5c" fill-opacity="0.6"/>
+</svg>

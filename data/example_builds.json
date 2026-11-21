@@ -1,0 +1,85 @@
+{
+  "_doc": "Planos de distribuição usados nos exemplos de evolução (docs/04). Cada entrada é a distribuição dos 5 pontos ganhos naquele nível. O validador (npm run validate-data) confere passo a passo que o plano gasta exatamente os pontos disponíveis e alcança os requisitos do conjunto de itens de cada faixa.",
+  "builds": {
+    "breaker_physical": {
+      "title": "Quebraferro de machado de uma mão (exemplo físico)",
+      "classId": "breaker",
+      "kitByTier": {
+        "1": ["axe_1h_t1", "heavy_armor_t1", "heavy_helm_t1", "heavy_gloves_t1", "heavy_boots_t1"],
+        "5": ["axe_1h_t5", "heavy_armor_t5", "heavy_helm_t5", "heavy_gloves_t5", "heavy_boots_t5"],
+        "9": ["axe_1h_t9", "heavy_armor_t9", "heavy_helm_t9", "heavy_gloves_t9", "heavy_boots_t9"],
+        "13": ["axe_1h_t13", "heavy_armor_t13", "heavy_helm_t13", "heavy_gloves_t13", "heavy_boots_t13"],
+        "17": ["axe_1h_t17", "heavy_armor_t17", "heavy_helm_t17", "heavy_gloves_t17", "heavy_boots_t17"],
+        "20": ["axe_1h_t20", "heavy_armor_t20", "heavy_helm_t20", "heavy_gloves_t20", "heavy_boots_t20"],
+        "21": ["axe_1h_t21", "heavy_armor_t21", "heavy_helm_t21", "heavy_gloves_t21", "heavy_boots_t21"],
+        "25": ["axe_1h_t25", "heavy_armor_t25", "heavy_helm_t25", "heavy_gloves_t25", "heavy_boots_t25"]
+      },
+      "perLevel": {
+        "2": { "str": 3, "tal": 2 },
+        "3": { "str": 2, "tal": 1, "vit": 2 },
+        "4": { "vit": 5 },
+        "5": { "str": 3, "tal": 2 },
+        "6": { "str": 3, "tal": 2 },
+        "7": { "str": 2, "tal": 2, "vit": 1 },
+        "8": { "vit": 3, "agi": 2 },
+        "9": { "str": 3, "vit": 2 },
+        "10": { "str": 3, "tal": 2 },
+        "11": { "vit": 5 },
+        "12": { "vit": 3, "agi": 2 },
+        "13": { "str": 3, "tal": 2 },
+        "14": { "str": 3, "tal": 2 },
+        "15": { "str": 2, "vit": 3 },
+        "16": { "vit": 5 },
+        "17": { "str": 3, "tal": 2 },
+        "18": { "str": 3, "vit": 2 },
+        "19": { "vit": 5 },
+        "20": { "agi": 3, "vit": 2 },
+        "21": { "str": 1, "tal": 1, "vit": 3 },
+        "22": { "str": 3, "tal": 2 },
+        "23": { "vit": 5 },
+        "24": { "str": 2, "tal": 1, "vit": 2 },
+        "25": { "str": 2, "vit": 3 }
+      }
+    },
+    "emberweaver_magic": {
+      "title": "Tecelão da Brasa de varinha e foco (exemplo mágico)",
+      "classId": "emberweaver",
+      "kitByTier": {
+        "1": ["wand_t1", "focus_t1", "robe_t1", "robe_circlet_t1", "robe_gloves_t1", "robe_sandals_t1"],
+        "5": ["wand_t5", "focus_t5", "robe_t5", "robe_circlet_t5", "robe_gloves_t5", "robe_sandals_t5"],
+        "9": ["wand_t9", "focus_t9", "robe_t9", "robe_circlet_t9", "robe_gloves_t9", "robe_sandals_t9"],
+        "13": ["wand_t13", "focus_t13", "robe_t13", "robe_circlet_t13", "robe_gloves_t13", "robe_sandals_t13"],
+        "17": ["wand_t17", "focus_t17", "robe_t17", "robe_circlet_t17", "robe_gloves_t17", "robe_sandals_t17"],
+        "20": ["staff_2h_t20", "robe_t20", "robe_circlet_t20", "robe_gloves_t20", "robe_sandals_t20"],
+        "21": ["wand_t21", "focus_t21", "robe_t21", "robe_circlet_t21", "robe_gloves_t21", "robe_sandals_t21"],
+        "25": ["wand_t25", "focus_t25", "robe_t25", "robe_circlet_t25", "robe_gloves_t25", "robe_sandals_t25"]
+      },
+      "perLevel": {
+        "2": { "spi": 3, "tal": 2 },
+        "3": { "spi": 2, "vit": 3 },
+        "4": { "vit": 3, "tal": 1, "agi": 1 },
+        "5": { "spi": 3, "tal": 2 },
+        "6": { "spi": 3, "vit": 2 },
+        "7": { "vit": 5 },
+        "8": { "spi": 3, "tal": 2 },
+        "9": { "spi": 4, "tal": 1 },
+        "10": { "vit": 5 },
+        "11": { "spi": 3, "tal": 2 },
+        "12": { "spi": 4, "tal": 1 },
+        "13": { "tal": 1, "vit": 4 },
+        "14": { "vit": 5 },
+        "15": { "spi": 5 },
+        "16": { "spi": 3, "tal": 2 },
+        "17": { "spi": 2, "tal": 2, "vit": 1 },
+        "18": { "vit": 5 },
+        "19": { "vit": 3, "agi": 2 },
+        "20": { "vit": 5 },
+        "21": { "vit": 5 },
+        "22": { "spi": 2, "tal": 2, "vit": 1 },
+        "23": { "vit": 5 },
+        "24": { "spi": 2, "tal": 2, "agi": 1 },
+        "25": { "vit": 3, "agi": 2 }
+      }
+    }
+  }
+}

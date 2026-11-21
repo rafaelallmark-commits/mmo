@@ -1,0 +1,123 @@
+# Alertas do teste público (docs/08-operacao.md §8.3). O Prometheus avalia a cada 30 s e manda os que
+# disparam para o Alertmanager (alertmanager.yml), que avisa a equipe por e-mail, Telegram ou Discord; sem
+# canal configurado, eles aparecem na página "Alerts" do Prometheus, no Alertmanager e no painel do Grafana.
+# Contador (_total) entra sempre por rate() ou increase(): o valor bruto só cresce desde a subida do processo.
+groups:
+  - name: cinzas
+    rules:
+      - alert: ServidorForaDoAr
+        expr: up{job="cinzas-zona"} == 0
+        for: 1m
+        labels: { gravidade: critica }
+        annotations:
+          resumo: "O servidor de zona não responde às métricas há 1 minuto (processo parado ou laço de eventos travado)."
+      - alert: LacoDoJogoParado
+        expr: cinzas_last_tick_age_seconds > 5
+        for: 30s
+        labels: { gravidade: critica }
+        annotations:
+          resumo: "O laço do jogo está sem tick há {{ $value | printf \"%.0f\" }} s: /health responde 503 e o Docker marca o contêiner como unhealthy (reinicie: docker compose restart servidor)."
+      - alert: TickLento
+        expr: cinzas_tick_ms_p99 > 30
+        for: 5m
+        labels: { gravidade: aviso }
+        annotations:
+          resumo: "p99 do tick acima de 30 ms por 5 minutos ({{ $value | printf \"%.1f\" }} ms)."
+      - alert: TicksAcimaDe50ms
+        expr: increase(cinzas_slow_ticks_total[10m]) > 5
+        labels: { gravidade: aviso }
+        annotations:
+          resumo: "Mais de 5 ticks acima de 50 ms nos últimos 10 minutos ({{ $value | printf \"%.0f\" }})."
+      - alert: CPUAlta
+        expr: rate(cinzas_cpu_seconds_total[5m]) > 0.8
+        for: 10m
+        labels: { gravidade: aviso }
+        annotations:
+          resumo: "O processo da zona usa {{ $value | humanizePercentage }} de um núcleo há 10 minutos (o laço do jogo roda num núcleo só)."
+      - alert: MemoriaCrescendo
+        expr: deriv(cinzas_rss_mb[1h]) > 0.05 and cinzas_rss_mb > 600
+        for: 30m
+        labels: { gravidade: aviso }
+        annotations:
+          resumo: "Memória acima de 600 MB e crescendo sem parar há 30 minutos (possível vazamento)."
+      # denúncia de jogador gravada (a equipe on-line também recebe um aviso no jogo); o alerta fica ativo por
+      # 10 minutos depois da última. Os relatos de /bug contam em cinzas_bug_reports_total (sem alerta).
+      - alert: DenunciaNova
+        expr: increase(cinzas_reports_total[10m]) > 0
+        labels: { gravidade: aviso }
+        annotations:
+          resumo: "Denúncia nova de jogador nos últimos 10 minutos: npm run conta -- --db ... --denuncias."
+      - alert: ServidorCheio
+        expr: increase(cinzas_server_full_total[15m]) > 0
+        labels: { gravidade: aviso }
+        annotations:
+          resumo: "Entradas recusadas com o servidor cheio nos últimos 15 minutos: o teto de jogadores (CINZAS_MAX_PLAYERS) foi atingido."
+      - alert: BancoLento
+        expr: rate(cinzas_db_wait_seconds_total[5m]) > 0.05 or cinzas_db_call_ms_p99 > 5
+        for: 5m
+        labels: { gravidade: aviso }
+        annotations:
+          resumo: "PostgreSQL lento há 5 minutos: o laço do jogo passa mais de 50 ms por segundo esperando o banco, ou o p99 de uma chamada passa de 5 ms."
+
+  - name: contas
+    rules:
+      - alert: ServicoDeContasForaDoAr
+        expr: up{job="cinzas-contas"} == 0
+        for: 2m
+        labels: { gravidade: critica }
+        annotations:
+          resumo: "O serviço de contas não responde às métricas há 2 minutos: ninguém cria conta nem entra no jogo."
+      - alert: FalhaNoEnvioDeEmail
+        expr: increase(cinzas_accounts_email_failures_total[15m]) > 0
+        labels: { gravidade: aviso }
+        annotations:
+          resumo: "Envio de e-mail falhou nos últimos 15 minutos ({{ $value | printf \"%.0f\" }}): códigos de confirmação e de troca de senha não chegam (docker compose logs contas)."
+
+  - name: maquina-e-backup
+    rules:
+      - alert: MonitorDaMaquinaForaDoAr
+        expr: up{job="maquina"} == 0
+        for: 5m
+        labels: { gravidade: aviso }
+        annotations:
+          resumo: "O node-exporter não responde: sem ele não há alerta de disco nem de backup."
+      - alert: DiscoQuaseCheio
+        expr: |
+          node_filesystem_avail_bytes{fstype!~"tmpfs|ramfs"} / node_filesystem_size_bytes{fstype!~"tmpfs|ramfs"} < 0.10
+            and node_filesystem_readonly == 0
+        for: 5m
+        labels: { gravidade: critica }
+        annotations:
+          resumo: "Menos de 10% livre em {{ $labels.mountpoint }} ({{ $value | humanizePercentage }}): com o disco cheio o banco e os backups param de gravar."
+      - alert: BackupAtrasado
+        expr: time() - max(cinzas_backup_last_success_timestamp_seconds) > 7200
+        labels: { gravidade: critica }
+        annotations:
+          resumo: "O último backup conferido tem mais de 2 horas ({{ $value | humanizeDuration }}): veja docker compose logs backup (ou backup-banco, no PostgreSQL)."
+      - alert: BackupFalhou
+        expr: cinzas_backup_last_failure_timestamp_seconds > cinzas_backup_last_success_timestamp_seconds
+        labels: { gravidade: aviso }
+        annotations:
+          resumo: "A última tentativa de backup ({{ $labels.db }}) falhou; as cópias antigas continuam guardadas."
+      - alert: SemMetricaDeBackup
+        expr: absent(cinzas_backup_last_success_timestamp_seconds) and on() up{job="maquina"} == 1
+        for: 30m
+        labels: { gravidade: critica }
+        annotations:
+          resumo: "Nenhum serviço de backup gravou a métrica (serviço backup parado ou volume metricas fora do node-exporter)."
+      - alert: MetricaDeBackupIlegivel
+        expr: node_textfile_scrape_error > 0
+        for: 15m
+        labels: { gravidade: aviso }
+        annotations:
+          resumo: "O node-exporter não consegue ler um arquivo .prom do volume metricas: os alertas de backup ficam cegos."
+      - alert: CopiaMaisVelhaQue14Dias
+        expr: time() - min(cinzas_backup_oldest_copy_timestamp_seconds > 0) > 14 * 86400 + 7200
+        labels: { gravidade: aviso }
+        annotations:
+          resumo: "Há cópia de backup com mais de 14 dias: a política de privacidade promete cópias substituídas em até 14 dias (confira a rotação)."
+      - alert: CopiaExternaAtrasada
+        expr: time() - cinzas_offsite_copy_last_success_timestamp_seconds > 3 * 3600
+        labels: { gravidade: aviso }
+        annotations:
+          resumo: "A cópia para fora da máquina não termina bem há mais de 3 horas (docker compose logs copia-externa)."
