@@ -47,7 +47,13 @@ receivers:
         auth_username: ${ALERTA_SMTP_USUARIO}
         auth_password: ${ALERTA_SMTP_SENHA}
 #@fim
-        require_tls: true
+# a entrada liga uma das duas pela porta do ALERTA_SMTP_SERVIDOR
+#@se ALERTA_SMTP_STARTTLS
+        require_tls: true    # 587: STARTTLS obrigatório antes de autenticar
+#@fim
+#@se ALERTA_SMTP_TLS_DIRETO
+        require_tls: false   # 465: TLS direto (a conexão já nasce cifrada; o servidor não anuncia STARTTLS)
+#@fim
         send_resolved: true
         headers:
           Subject: '[Cinzas] {{ if eq .Status "firing" }}ALERTA{{ else }}RESOLVIDO{{ end }}: {{ .CommonLabels.alertname }}'

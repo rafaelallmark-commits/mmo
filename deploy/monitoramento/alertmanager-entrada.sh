@@ -15,6 +15,17 @@
 set -eu
 MODELO=${ALERTA_MODELO:-/etc/alertmanager/modelo.yml}
 SAIDA=${ALERTA_SAIDA:-/tmp/alertmanager.yml}
+
+# TLS do e-mail pela porta de ALERTA_SMTP_SERVIDOR (o modelo escolhe o bloco pelas duas variáveis abaixo): na 465
+# a conexão já nasce cifrada (TLS direto, com o certificado conferido) e o servidor não anuncia STARTTLS, então
+# require_tls fica desligado — ligado, o Alertmanager recusa todo envio; nas outras portas (587) o STARTTLS é
+# obrigatório antes de autenticar.
+case "${ALERTA_SMTP_SERVIDOR:-}" in
+  *:465) ALERTA_SMTP_TLS_DIRETO=sim; ALERTA_SMTP_STARTTLS='' ;;
+  *) ALERTA_SMTP_TLS_DIRETO=''; ALERTA_SMTP_STARTTLS=sim ;;
+esac
+export ALERTA_SMTP_TLS_DIRETO ALERTA_SMTP_STARTTLS
+
 PROGRAMA=$(mktemp)
 trap 'rm -f "$PROGRAMA"' EXIT
 

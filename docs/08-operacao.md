@@ -132,6 +132,9 @@ páginas. Ligue um ou mais canais:
   ALERTA_SMTP_USUARIO=...                                  # se o servidor pedir login
   ALERTA_SMTP_SENHA=...
   ```
+  A porta decide o TLS: na 587 o Alertmanager exige STARTTLS antes do login; na 465 a conexão já nasce cifrada (com o
+  certificado conferido) e a entrada desliga o `require_tls`, que nessa porta faria o Alertmanager recusar todo envio
+  (o servidor não anuncia STARTTLS numa conexão que já é TLS).
 - **Telegram** — no Telegram, fale com o **@BotFather**, mande `/newbot` e guarde o token. Ponha o robô no grupo da
   equipe (ou mande qualquer mensagem para ele), abra `https://api.telegram.org/bot<TOKEN>/getUpdates` no navegador e
   copie o `chat.id` (o de grupo começa com `-`):
@@ -348,6 +351,9 @@ docker compose logs -f servidor
 
   Uma cópia que está fora da máquina entra no volume assim (depois use `/data/backups/restaurar.db` no `cp` acima):
   `docker compose run --rm -T --no-deps servidor sh -c 'cat > /data/backups/restaurar.db' < cinzas-AAAA-MM-DDTHH-MM-SS.db`.
+  Depois da troca, apague-a (`docker compose run --rm --no-deps servidor rm /data/backups/restaurar.db`): fora do
+  padrão de nomes dos backups, ela não entra na rotação de 14 dias nem na cópia para fora da máquina e ficaria ali
+  para sempre, com os dados de quem já excluiu a conta.
 - **Serviço de contas** (`contas`): mesma imagem, mesmo volume e mesmo banco; o Caddy repassa
   `https://DOMINIO/contas/*` para ele (o cliente usa essa base quando o servidor é `wss://`). O servidor de zona sobe com
   `CINZAS_AUTH=token`: cadastro e senha só pelo serviço de contas. `deploy/.env` precisa de `DOMINIO`,
@@ -388,7 +394,9 @@ imagem `postgres:17`: `pg_dump -Fc` conferido com `pg_restore --list`), e o `bac
 `copia-externa` sobe o serviço `copia-externa` (`rclone/rclone`, `deploy/copia-externa.sh`), que de hora em hora faz
 `rclone sync` de `/data/backups` para um armazenamento compatível com S3 (Backblaze B2, Cloudflare R2, Wasabi, AWS S3,
 MinIO...). O **sync espelha** a pasta: o que a rotação apaga aqui some lá também, então o destino também fica nos 14
-dias. Crie o balde e uma chave de acesso só para ele no provedor e ponha no `deploy/.env`:
+dias. Só vão as cópias com o nome que os backups dão (`<banco>-AAAA-MM-DDTHH-MM-SS.db` ou `.dump`, as mesmas que a
+rotação apaga): o `.parcial` de um backup em andamento, a cópia trazida para um ensaio de restauração e qualquer outro
+arquivo da pasta ficam na máquina. Crie o balde e uma chave de acesso só para ele no provedor e ponha no `deploy/.env`:
 
 ```bash
 COMPOSE_PROFILES=copia-externa                        # junte com os outros perfis: postgres,monitoramento,copia-externa
@@ -447,8 +455,10 @@ máquina de verdade tem: o volume, as permissões e as cópias reais.
    ```
    Para comparar com o banco do jogo, rode o `psql` com `-d cinzas`.
 4. **Cópia de fora** (perfil `copia-externa`): traga uma cópia com `baixar` (seção anterior), ponha no volume com o
-   `cat > /data/backups/restaurar.db` de "Restaurar" e repita o passo 2 ou 3 com ela — é o caminho de um desastre de
-   verdade, com a senha da cifra vindo de fora da máquina.
+   `cat > /data/backups/restaurar.db` (ou `restaurar.dump`) de "Restaurar" e repita o passo 2 ou 3 com ela — é o
+   caminho de um desastre de verdade, com a senha da cifra vindo de fora da máquina. No fim, apague-a
+   (`docker compose run --rm --no-deps servidor rm /data/backups/restaurar.db`): fora do padrão de nomes dos backups,
+   ela não entra na rotação de 14 dias.
 5. Anote a data, a cópia usada, as contagens e quanto tempo levou. Para restaurar de verdade, siga "Restaurar" acima
    (SQLite) ou §8.11 (PostgreSQL).
 
@@ -499,7 +509,9 @@ systemctl status cinzas; journalctl -u cinzas -f; systemctl list-timers backup.t
   de 14 dias). Leve cópias para fora da máquina (o `deploy/copia-externa.sh` roda com o `rclone` da máquina:
   `COPIA_ORIGEM=/var/lib/cinzas/backups`, `COPIA_DESTINO` e as variáveis `RCLONE_CONFIG_EXTERNO_*`): um disco perdido
   leva o banco e os backups juntos. Com um node-exporter na máquina, `--metrica` grava a métrica do backup num arquivo
-  `.prom` da pasta do coletor *textfile* dele (o arquivo precisa ficar legível para o usuário do node-exporter).
+  `.prom` da pasta do coletor *textfile* dele (o arquivo precisa ficar legível para o usuário do node-exporter). O
+  node-exporter escuta por padrão na porta 9100, a mesma das métricas da zona no `cinzas.service`: suba-o em outra
+  (`--web.listen-address=127.0.0.1:9102`), senão um dos dois não sobe.
 - **Restaurar** (como o usuário `cinzas`, para o arquivo continuar dele):
   `sudo systemctl stop cinzas`, depois
   `sudo -u cinzas cp /var/lib/cinzas/backups/cinzas-AAAA-MM-DDTHH-MM-SS.db /var/lib/cinzas/cinzas.db`,
@@ -722,9 +734,18 @@ docker compose logs servidor | grep banco:          # "banco: PostgreSQL cinzas@
   rotação de 14 dias e a métrica do último backup. Um dump na hora, fora do agendado:
   `docker compose exec -T banco pg_dump -U cinzas -Fc cinzas > cinzas-$(date +%F-%H%M).dump`. Ensaio de restauração:
   §8.8.
-- **Restaurar**: `docker compose stop servidor contas`, depois
-  `docker compose exec -T banco pg_restore -U cinzas -d cinzas --clean --if-exists --no-owner < backups/arquivo.dump`
-  e `docker compose start servidor contas`.
+- **Restaurar** (os dumps do `backup-banco` ficam no volume `dados`, que o contêiner dele monta): pare quem usa o
+  banco e o próprio backup, para nenhum dump fotografar o banco no meio da troca, e restaure por um contêiner
+  avulso do `backup-banco`, que já tem a conexão, a senha e o volume:
+
+  ```bash
+  docker compose stop servidor contas backup-banco
+  docker compose run --rm --no-deps --entrypoint sh backup-banco -c 'PGPASSWORD="$(cat /run/secrets/senha_banco)" pg_restore -d cinzas --clean --if-exists --no-owner /data/backups/cinzas-AAAA-MM-DDTHH-MM-SS.dump'
+  docker compose start servidor contas backup-banco
+  ```
+
+  Um dump que está fora da máquina entra no volume como no SQLite (§8.8, "Restaurar"), com o nome
+  `/data/backups/restaurar.dump`; apague-o depois da troca.
 - **Levar o SQLite que já existe** (volume `dados`) para o PostgreSQL, com a zona parada:
   `docker compose stop servidor contas && docker compose up -d banco`, depois
   `docker compose run --rm --no-deps servidor npm run sqlite-para-pg -- --de /data/cinzas.db` (o destino é o
