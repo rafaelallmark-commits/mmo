@@ -13,7 +13,7 @@ import { loadGameData } from '../src/data.js';
 import { createStore } from '../src/db.js';
 import { Zone } from '../src/zone.js';
 import { makeRng } from '../src/rng.js';
-import { missionXpByBand, MISSION_XP_CAP } from '../src/quests.js';
+import { missionXpByBand, MISSION_XP_CAP, QuestEngine } from '../src/quests.js';
 import { validate, loadBuilds, itemSources } from '../tools/validate-data.js';
 import { SimClient, sleep } from './helpers/client.js';
 
@@ -157,7 +157,7 @@ test('validador: dados válidos, todo item com fonte e XP de missões até 55% d
   assert.ok(validate(heavy, loadBuilds()).errors.some((e) => /faixa 1–5: missões somam/.test(e)));
 });
 
-test('Custódio: arma única da família equipada, peça única de armadura da classe em toda vitória; cetro e machado incomum com fonte', () => {
+test('Custódio: arma única da família equipada, cada peça única de armadura da classe uma vez por personagem (uma por vitória); cetro e machado incomum com fonte', () => {
   const store = createStore(':memory:');
   const acc = store.createAccount('cus', 'senha');
   const zone = new Zone({ mapId: 'ultima_eclusa', data, store, rng: makeRng(5), send: () => {}, broadcast: () => {} });
@@ -179,10 +179,23 @@ test('Custódio: arma única da família equipada, peça única de armadura da c
   assert.ok(got.includes('axe_1h_t20'), got.join(','));
   assert.ok(got.some((d) => ['heavy_armor_t20', 'heavy_helm_t20', 'heavy_gloves_t20', 'heavy_boots_t20'].includes(d)), 'peça pesada única');
   assert.ok(got.some((d) => ['ring_t20', 'amulet_t20'].includes(d)), 'joia única');
-  // segunda vitória: sem arma nem joia (uma vez por personagem), mas a peça de armadura sai de novo
-  got = ids(zone.rollLoot(boss, one));
-  assert.ok(!got.some((d) => /_t20$/.test(d) && data.items[d].kind !== 'armor'), `sem arma e joia de novo: ${got}`);
-  assert.equal(got.filter((d) => data.items[d].kind === 'armor').length, 1, 'armadura em toda vitória');
+  // vitórias seguintes: sem arma nem joia (uma vez por personagem); a cada uma, uma peça de armadura que ele
+  // ainda não ganhou, até fechar o conjunto (4 peças pesadas); depois, nenhuma — só ouro e materiais (D160)
+  const heavy = new Set(got.filter((d) => data.items[d].kind === 'armor'));
+  for (let win = 2; win <= 4; win++) {
+    got = ids(zone.rollLoot(boss, one));
+    assert.ok(!got.some((d) => /_t20$/.test(d) && data.items[d].kind !== 'armor'), `sem arma e joia de novo: ${got}`);
+    const pieces = got.filter((d) => data.items[d].kind === 'armor');
+    assert.equal(pieces.length, 1, `vitória ${win}: uma peça de armadura`);
+    assert.ok(!heavy.has(pieces[0]), `vitória ${win}: ${pieces[0]} repetida`);
+    heavy.add(pieces[0]);
+  }
+  assert.deepEqual([...heavy].sort(), ['heavy_armor_t20', 'heavy_boots_t20', 'heavy_gloves_t20', 'heavy_helm_t20']);
+  for (let win = 5; win <= 8; win++) {
+    got = ids(zone.rollLoot(boss, one));
+    assert.ok(!got.some((d) => data.items[d].rarity === 'unique'), `vitória ${win}, conjunto completo: nenhuma única (${got})`);
+    assert.ok(got.includes('mat_refine_sup'), 'ouro e materiais continuam');
+  }
   const two = mk('Duas', 'breaker');
   wield(two, 'axe_2h_t1');
   assert.ok(ids(zone.rollLoot(boss, two)).includes('axe_2h_t20'));
@@ -194,9 +207,13 @@ test('Custódio: arma única da família equipada, peça única de armadura da c
   // Tecelão de varinha → Varinha da Faísca Primeira
   const weave = mk('Tece', 'emberweaver');
   assert.ok(ids(zone.rollLoot(boss, weave)).includes('wand_t20'));
-  // Bastião de martelo (kit) → Martelo da Comporta Selada; com escudo único possível
+  // Bastião de martelo (kit) → Martelo da Comporta Selada; o conjunto dele tem 5 peças (com o escudo único)
   const bas = mk('Bast', 'bastion');
-  assert.ok(ids(zone.rollLoot(boss, bas)).includes('hammer_1h_t20'));
+  const basLoot = [];
+  for (let win = 1; win <= 7; win++) basLoot.push(...ids(zone.rollLoot(boss, bas)));
+  assert.equal(basLoot.filter((d) => d === 'hammer_1h_t20').length, 1, 'arma única uma vez');
+  const basSet = basLoot.filter((d) => ['armor', 'offhand'].includes(data.items[d].kind) && data.items[d].rarity === 'unique');
+  assert.deepEqual(basSet.sort(), ['heavy_armor_t20', 'heavy_boots_t20', 'heavy_gloves_t20', 'heavy_helm_t20', 'shield_t20'], 'cada peça uma vez, em 5 vitórias');
   // Capataz: o machado incomum só para o Quebraferro; Fragmento: o Cetro do Sino Mudo só para a Cantora
   const foreman = { def: data.monsters.cracked_foreman, defId: 'cracked_foreman' };
   const shard = { def: data.monsters.custodian_shard, defId: 'custodian_shard' };
@@ -271,6 +288,17 @@ test('Ninho Morno: carapaça só cai com a missão ativa, sai toda da bolsa na e
     log(`Ninho Morno: 10 carapaças em ${kills} abates, entregue (+${data.quests.s_warm_nest.rewards.xp} XP, 5 tônicos); carapaça perdida descartada na coleta`);
     await c.close();
   });
+});
+
+test('diária: o tempo até a volta (00:00 UTC) sai em horas e minutos inteiros', () => {
+  const qe = new QuestEngine({ data, store: { saveQuest() {} } });
+  const midnight = Math.floor(Date.now() / DAY) * DAY + DAY;
+  const wait = (s) => { qe.now = () => midnight - s * 1000; return qe.waitText(); };
+  assert.equal(wait(7199), 'em 2 h 0 min', 'nunca "em 1 h 60 min"');
+  assert.equal(wait(3601), 'em 1 h 1 min');
+  assert.equal(wait(3600), 'em 1 h 0 min');
+  assert.equal(wait(59), 'em 1 min');
+  assert.equal(wait(DAY / 1000 - 1), 'em 24 h 0 min');
 });
 
 test('diária: Recibo do Capataz volta no dia seguinte (UTC) e o diário e o quadro dizem quando', async () => {
@@ -500,6 +528,33 @@ test('2.2 O Teste de Pressão: Joca cai e recomeça em 30 s; vencido o cronômet
   });
 });
 
+test('2.2 aceita antes da defesa (abates antigos gravados no objetivo): a válvula abre e a missão conclui', async () => {
+  await withServer(async (server, url) => {
+    const pre = ['tutorial', 'c1_count', 'c1_rats', 'c1_master', 'c1_route', 'c1_foreman', 'c2_water'];
+    const c = await hero(server, url, 'jocaold', 'pikeman', 7, pre);
+    await toNpc(server, c, 'joca', 'brejo_bombas');
+    assert.equal((await c.request('quest_accept', { quest: 'c2_pressure', npc: 'joca' })).ok, true);
+    // banco de antes da defesa: o objetivo 0 era "Detenha as Válvulas Errantes" e guardava a contagem
+    assert.equal((await c.request('gm', { cmd: 'quest_progress', quest: 'c2_pressure', index: 0, value: 6 })).ok, true);
+    assert.equal((await quest(c, 'c2_pressure')).objectives[0].done, false, 'a contagem antiga não conclui a defesa');
+    await toObject(server, c, 'main_valve', 'brejo_bombas');
+    const st = await c.request('interact', { object: 'main_valve' });
+    assert.equal(st.ok, true, `a válvula precisa abrir para quem tinha abates gravados: ${st.reason}`);
+    assert.equal(st.defense, true);
+    const zone = P(server, c).zone;
+    const def = zone.escorts.get(st.escort);
+    for (const m of [...zone.monsters.values()]) if (m.escortTarget === def.eid) zone.damageMonster(m, P(server, c).char.id, m.hp + 999);
+    def.wave = def.def.waves.length;
+    def.startedAt = zone.now - def.def.durationMs + 300;
+    await c.waitFor((m) => m.t === 'quest_update' && m.quests.some((q) => q.id === 'c2_pressure' && q.ready), 8000, 'defesa vencida');
+    await toNpc(server, c, 'joca', 'brejo_bombas');
+    const t = await c.request('quest_turnin', { quest: 'c2_pressure', npc: 'joca' });
+    assert.equal(t.ok, true, t.reason);
+    log('2.2 com 6 abates antigos no objetivo: válvula aberta, defesa vencida e missão entregue');
+    await c.close();
+  });
+});
+
 // ---------------------------------------------------------------- quadro de missões
 test('quadro de missões: Pedrâmbar e Vau de Nácar mostram o que dá para aceitar no mundo, com nível, NPC e mapa', async () => {
   await withServer(async (server, url) => {
@@ -559,11 +614,19 @@ test('Esteira Desgovernada: a esteira só liga com a missão; atingido por ela, 
     const x = w.yaw === 0 ? w.x : w.x + w.length / 2, z = w.yaw === 0 ? w.z + w.length / 2 : w.z;
     const p = P(server, c);
     p.char.x = x; p.char.z = z;
+    // quem caça ali sem a missão fica na mesma faixa: a esteira é só de quem está com a missão
+    const po = P(server, other);
+    po.char.x = w.yaw === 0 ? x : x + 2; po.char.z = w.yaw === 0 ? z + 2 : z;
+    const hpOther = po.char.hp;
     const hp0 = p.char.hp;
     const hit = await c.waitFor((m) => m.t === 'hit' && m.skill === 'hazard' && m.dst === p.eid, 5000, 'varrida da esteira');
     assert.ok(hit.dmg > 0);
     await c.request('ping');
     assert.ok(p.char.hp < hp0 || p.char.dead, 'a varrida machuca');
+    await other.request('ping');
+    assert.equal(other.events.filter((m) => m.t === 'warn' && m.hazard === 'belt_sweep').length, 0, 'sem a missão, nenhum aviso (nem o sino)');
+    assert.ok(!other.events.some((m) => m.t === 'hit' && m.skill === 'hazard' && m.dst === po.eid), 'sem a missão, a esteira não varre');
+    assert.equal(po.char.hp, hpOther, 'sem a missão, nenhum dano');
     const st = await quest(c, 's_runaway_belt');
     assert.equal(st.objectives[0].cur, 0, 'a contagem voltou a zero');
     assert.ok(c.events.some((m) => m.t === 'system' && /esteira te pegou/.test(m.text)));

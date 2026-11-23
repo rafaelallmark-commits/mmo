@@ -219,7 +219,9 @@ Clique num monstro: o quadro do alvo, no alto da tela, diz numa linha o que ele 
 Pedrâmbar e Vau de Nácar (cidades) → **A Estrada Velha** (níveis 1–5) → **Brejo das Bombas** (5–9) →
 **Oficina Soterrada** (9–12) → **Galerias do Eco** (12–16) → **Canais da Eclusa** (16–20), com o calabouço
 **A Última Eclusa** (2 a 5 jogadores) → no nível 20, o **Poço de Inspeção** dos Canais desce para **A Cava Primeira**
-(20–25). Os portais mostram o nível mínimo.
+(20–25). Os portais mostram o nível mínimo. O Custódio, chefe da Eclusa, dá a arma e a joia únicas de nível 20 uma
+vez por personagem e, a cada vitória, uma peça única de armadura ou de mão secundária que você ainda não ganhou dele,
+até fechar o conjunto (4 ou 5 vitórias); depois, só ouro e materiais.
 
 ## 8. Junto com os outros
 

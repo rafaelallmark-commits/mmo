@@ -8,7 +8,8 @@ extends Node
 ## Com --board (servidor --dev): depois do fluxo normal, vai a Pedrâmbar e abre o quadro de missões da praça
 ## pelo mesmo clique da interface, conferindo que ele lista missões. Com --defense (servidor --dev): aceita
 ## "O Teste de Pressão" com Joca e abre a válvula, conferindo que o Joca da defesa (com vida e cronômetro)
-## toma o lugar do NPC parado e que a ficha mostra o seletor de título.
+## toma o lugar do NPC parado e que a ficha mostra o seletor de título; depois sai do Brejo e confere que o
+## cronômetro da válvula não fica preso na tela.
 ## Com --m2: depois da coleta, faz o tutorial «Três do Outro Lado» pela interface (dica na tela de cada passo,
 ## teclas 1 e 7, bichos de Caio, faixa do segundo toque, chegada dos três ao posto), entrega a Mara, abre o
 ## mapa (tecla M) na Estrada e na cidade, forma grupo (--invite) e fala com o mestre da classe.
@@ -373,11 +374,23 @@ func _process(_d: float) -> void:
 				say("títulos na ficha: %s" % ", ".join(titles))
 				_shot("defesa")
 				main.hud.sheet_panel.visible = false
+				# sai do Brejo no meio da defesa: o cronômetro da válvula não pode ficar preso na tela
+				zone_changed = ""
+				step = "def_wait_leave"
+				Net.request("gm", {"cmd": "teleport", "mapId": "pedrambar", "x": 37.0, "z": 26.0}, func(r):
+					if not r["ok"]:
+						fail("teleporte para Pedrâmbar recusado: %s" % r.get("reason", "")))
+			elif Time.get_ticks_msec() > wait_until:
+				fail("a defesa não apareceu (entidade %s, NPC visível %s)" % [joca_e, str((main.world.npc_nodes["joca"]["node"] as Node3D).visible)])
+		"def_wait_leave":
+			if zone_changed == "pedrambar" and main.world and not main.world.me().is_empty():
+				if main.hud.defense_label.visible:
+					fail("o cronômetro da defesa ficou preso na tela depois de sair do Brejo (%s)" % main.hud.defense_label.text)
+					return
+				say("fora do Brejo: o cronômetro da válvula saiu da tela")
 				say("OK")
 				get_tree().quit(0)
 				step = "quitting"
-			elif Time.get_ticks_msec() > wait_until:
-				fail("a defesa não apareceu (entidade %s, NPC visível %s)" % [joca_e, str((main.world.npc_nodes["joca"]["node"] as Node3D).visible)])
 		# ---------------- M2 ----------------
 		"m2_talk":
 			_act("npc", "mara")

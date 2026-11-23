@@ -1,5 +1,5 @@
 {
- "_doc": "Tabelas de saque. Cada participante elegível rola a tabela inteira separadamente (saque individual). Tipos: gold, item, pool (um item aleatório da lista), classDrop (item conforme a classe de quem recebe; com uma lista de itens para a classe, vale o da família da arma equipada, senão um sorteado) e classPool (um item sorteado da lista da classe). Materiais de coleta das missões não ficam aqui: caem pelo objetivo collect com drop (quests.json), só com a missão ativa.",
+ "_doc": "Tabelas de saque. Cada participante elegível rola a tabela inteira separadamente (saque individual). Tipos: gold, item, pool (um item aleatório da lista), classDrop (item conforme a classe de quem recebe; com uma lista de itens para a classe, vale o da família da arma equipada, senão um sorteado) e classPool (um item sorteado da lista da classe; na tabela de um chefe, cada item da lista sai uma única vez por personagem). Materiais de coleta das missões não ficam aqui: caem pelo objetivo collect com drop (quests.json), só com a missão ativa.",
  "tables": {
   "lt_tier_1": {
    "entries": [
@@ -1052,7 +1052,7 @@
    ]
   },
   "lt_lock_custodian": {
-   "_doc": "Chefe da Última Eclusa: a arma única da classe (da família da arma equipada, quando a classe usa mais de uma) e o Anel do Meridiano ou o Amuleto da Resposta saem uma única vez por personagem (D60); a peça única de armadura ou de mão secundária da classe (classPool) sai em toda vitória, junto com ouro e materiais.",
+   "_doc": "Chefe da Última Eclusa: a arma única da classe (da família da arma equipada, quando a classe usa mais de uma) e o Anel do Meridiano ou o Amuleto da Resposta saem uma única vez por personagem (D60); a cada vitória, uma peça única de armadura ou de mão secundária da classe (classPool) que o personagem ainda não ganhou do Custódio, até fechar o conjunto (4 peças, ou 5 com a mão secundária; D160). Ouro e materiais saem sempre.",
    "entries": [
     {
      "type": "gold",

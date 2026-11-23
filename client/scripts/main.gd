@@ -1241,10 +1241,12 @@ func _on_zone(m: Dictionary) -> void:
 	map_id = m["mapId"]
 	snap_cache = {}
 	# troca de mapa: avisos de outro mapa não ficam presos (morte na prova de classe volta ao mestre de
-	# pé, sem evento 'respawn'; o painel do Custódio fica para trás ao sair da Eclusa)
+	# pé, sem evento 'respawn'; o painel do Custódio fica para trás ao sair da Eclusa; o cronômetro da
+	# defesa do Joca fica para trás ao sair do Brejo)
 	if hud:
 		hud.clear_boss()
 		hud.clear_debuffs()  # os efeitos negativos ficam na zona de onde se saiu (o servidor também os tira)
+		hud.clear_defense()
 		if not m["char"].get("dead", false):
 			hud.hide_death()
 	show_loading(map_def().get("name", map_id))

@@ -341,7 +341,9 @@ Faixas nos níveis 1, 5, 9, 13, 17, 21 e 25, com recompensas únicas no 20. Todo
 | Anel de Liga Rubra | Anel | Anel | — | +5 Vit | nv 17; — | todas |
 | Amuleto Rubro | Amuleto | Amuleto | — | res. mág. 12, mana +32 | nv 17; — | todas |
 
-### Faixa 20 — recompensas especiais (chefe da Eclusa e prova final)
+### Faixa 20 — recompensas do Custódio (chefe da Última Eclusa)
+
+Tudo nesta faixa sai do **Custódio da Eclusa** (calabouço A Última Eclusa, grupo de 2 a 5), em saque individual. A **arma** (a da família da arma equipada, quando a classe usa mais de uma) e o **anel ou o amuleto** saem uma única vez por personagem (D60). A cada vitória sai também **uma peça de armadura ou de mão secundária** da classe que o personagem ainda não ganhou do Custódio, até fechar o conjunto (4 ou 5 vitórias, conforme a classe usa mão secundária); depois disso, só ouro e materiais (D160).
 
 | Arma | Família | Empunhadura | Dano | Intervalo | Alcance | Poder mág. | Requisitos | Classes | Raridade |
 |---|---|---|---|---|---|---|---|---|---|

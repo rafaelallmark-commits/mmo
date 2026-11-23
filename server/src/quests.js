@@ -271,11 +271,15 @@ export class QuestEngine {
     return false;
   }
 
+  // Objetivo deste tipo ainda por fazer, pela mesma regra do diário (objectiveStatus): escolta e defesa só
+  // contam com o "true" gravado na chegada, então a contagem de abates que a 2.2 guardava antes de virar
+  // defesa não fecha a válvula para sempre.
   hasPending(char, type, pred = () => true) {
     for (const [id, st] of char.quests) {
       if (st.state !== 'active') continue;
       const q = this.quests[id];
-      if (q.objectives.some((o, i) => o.type === type && pred(o) && !st.progress[i])) return id;
+      if (!q) continue;
+      if (q.objectives.some((o, i) => o.type === type && pred(o) && !this.objectiveStatus(char, q, st, i).done)) return id;
     }
     return null;
   }
@@ -386,10 +390,11 @@ export class QuestEngine {
     return { ok: true, quest: this.view(char, id, npcId) };
   }
 
-  // "em 5 h 12 min" até a virada do dia UTC
+  // "em 5 h 12 min" até a virada do dia UTC (minutos arredondados para cima antes de separar as horas:
+  // "em 2 h 0 min", nunca "em 1 h 60 min")
   waitText() {
-    const s = this.secondsToReset();
-    const h = Math.floor(s / 3600), m = Math.ceil((s % 3600) / 60);
+    const total = Math.ceil(this.secondsToReset() / 60);
+    const h = Math.floor(total / 60), m = total % 60;
     return h > 0 ? `em ${h} h ${m} min` : `em ${m} min`;
   }
 

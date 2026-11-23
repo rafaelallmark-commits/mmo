@@ -186,9 +186,13 @@ function progressionDoc() {
   // equipamento
   out.push('\n## 4.4 Equipamento por faixa\n');
   out.push('Faixas nos níveis 1, 5, 9, 13, 17, 21 e 25, com recompensas únicas no 20. Todo item tem nível mínimo explícito. O comum de cada faixa sustenta a evolução; incomum, raro e único têm destaque visual crescente (cinza claro, verde, azul, laranja). "Duas mãos" ocupa também a mão secundária até ser desequipada. Itens podem ser carregados e guardados antes do nível. As faixas 21 e 25 (pós-v1) seguem as mesmas curvas; a 21 fica logo abaixo da única do 20 no atributo principal, para a recompensa do Custódio continuar valendo até o 25.\n');
-  const tierNote = { 20: ' — recompensas especiais (chefe da Eclusa e prova final)', 21: ' — A Cava Primeira (pós-v1)', 25: ' — teto de nível (pós-v1)' };
+  const tierNote = { 20: ' — recompensas do Custódio (chefe da Última Eclusa)', 21: ' — A Cava Primeira (pós-v1)', 25: ' — teto de nível (pós-v1)' };
+  // de onde vêm as únicas do 20: a tabela do Custódio (arma e joia uma vez; armadura/mão secundária peça a peça)
+  const custodian = data.lootTables[data.monsters.lock_custodian.lootTable];
+  const setSizes = [...new Set(Object.values(custodian.entries.find((e) => e.type === 'classPool')?.byClass ?? {}).map((l) => l.length))].sort((a, b) => a - b);
   for (const t of TIERS) {
     out.push(`\n### Faixa ${t}${tierNote[t] ?? ''}\n`);
+    if (t === 20) out.push(`Tudo nesta faixa sai do **Custódio da Eclusa** (calabouço A Última Eclusa, grupo de 2 a 5), em saque individual. A **arma** (a da família da arma equipada, quando a classe usa mais de uma) e o **anel ou o amuleto** saem uma única vez por personagem (D60). A cada vitória sai também **uma peça de armadura ou de mão secundária** da classe que o personagem ainda não ganhou do Custódio, até fechar o conjunto (${setSizes.join(' ou ')} vitórias, conforme a classe usa mão secundária); depois disso, só ouro e materiais (D160).\n`);
     const w = WEAPON_FAMILIES.map((f) => data.items[`${f}_t${t}`]);
     out.push(table(['Arma', 'Família', 'Empunhadura', 'Dano', 'Intervalo', 'Alcance', 'Poder mág.', 'Requisitos', 'Classes', 'Raridade'], w.map((d) => [d.name, fam(d.family), d.hands === 2 ? 'duas mãos' : 'uma mão', `${d.damage[0]}–${d.damage[1]} ${d.damageType === 'magic' ? 'mág.' : 'fís.'}`, `${n1(d.attackIntervalMs / 1000)} s`, `${d.range} m`, d.magicPower ?? '—', `nv ${d.level}; ${reqStr(d.req)}`, d.classes.map(cname).join(', '), rar(d.rarity)])));
     out.push('');
