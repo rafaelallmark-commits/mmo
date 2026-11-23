@@ -638,6 +638,7 @@ var trial_step := 0
 var trial_done := false
 var trial_until := 0
 var trial_casts := 0
+var trial_esc := false
 
 func _trial_tick() -> void:
 	if Time.get_ticks_msec() < trial_until:
@@ -738,6 +739,35 @@ func _trial_tick() -> void:
 				var tag := "91_%s_luta_%d" % [str(main.ch["classId"]), (trial_step - 6) / 2]
 				get_tree().create_timer(0.25).timeout.connect(func(): _scene_shot(tag))
 		13:
+			# Esc com um alvo selecionado e o personagem batendo nele: tira a seleção e para o ataque automático
+			# (main.gd _unhandled_input manda "stop"). Na Vigília da Cantora não há monstro: pula
+			var alvo := ""
+			for eid in main.world.entities.keys():
+				var e: Dictionary = main.world.entities[eid]
+				if e["data"]["k"] == "m" and not e["data"].get("dead", false):
+					alvo = eid
+					break
+			if alvo == "" or main.map_def().get("id", "") != "arena_prova":
+				trial_step = 15
+				return
+			main.world.selected = alvo
+			Net.request("attack", {"target": alvo})
+			wait = 1200
+		14:
+			if main.world.selected != "" and str(main.world.me().get("data", {}).get("tgt", "")) == main.world.selected:
+				var esc := InputEventKey.new()
+				esc.keycode = KEY_ESCAPE
+				esc.pressed = true
+				Input.parse_input_event(esc)
+				trial_esc = true
+			wait = 1200
+		15:
+			if trial_esc:
+				var tgt = main.world.me().get("data", {}).get("tgt", null)
+				if main.world.selected != "" or tgt != null:
+					fail("Esc não tirou a seleção ou não parou o ataque (seleção %s, alvo no servidor %s)" % [main.world.selected, str(tgt)])
+					return
+				say("Esc tirou a seleção e parou o ataque automático")
 			say("prova vista no cliente: %d habilidades usadas, mapa %s" % [trial_casts, main.map_def().get("id", "")])
 			trial_done = true
 			scene_i = SCENE_SPOTS.size()

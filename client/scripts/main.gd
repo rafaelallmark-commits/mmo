@@ -1084,7 +1084,11 @@ func _unhandled_input(event: InputEvent) -> void:
 				pass
 			elif world and world.selected != "":
 				# Esc tira a seleção do alvo antes de abrir o menu: sem alvo, golpes em cone ou em linha (Ruptura,
-				# Linha Partida...) saem para onde o cursor aponta
+				# Linha Partida...) saem para onde o cursor aponta. Se o personagem estava batendo nele, para também:
+				# o servidor seguiria atacando (e indo atrás de) um alvo que a tela já não mostra
+				var mine: Dictionary = world.me()
+				if not mine.is_empty() and str(mine["data"].get("tgt", "")) == world.selected:
+					Net.request("stop")
 				world.selected = ""
 				world.pending_cast = {}
 				if hud:

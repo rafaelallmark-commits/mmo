@@ -552,7 +552,7 @@ const KINDS = {
             s.monsters.push(m);
           }
         }
-        if (amb) { t.say(`Emboscada no marco ${pt.mark}! Protejam ${a.char.name}.`); t.warnNow(`Emboscada no marco ${pt.mark}!`, 2500); }
+        if (amb) { t.say(`Emboscada no marco ${pt.mark}! Proteja ${a.char.name}.`); t.warnNow(`Emboscada no marco ${pt.mark}!`, 2500); }
       }
       if (r.next >= r.points.length) return { success: true, message: `${a.char.name} atravessou a arena. Prova vencida!` };
       return null;
@@ -618,8 +618,11 @@ const KINDS = {
     },
     tick(t) {
       const z = t.zone, c = t.cfg, s = t.s;
-      const fallen = s.allies.find((a) => a.char.dead);
-      if (fallen) return { success: false, message: `${fallen.char.name} caiu. Fale com o mestre para tentar de novo.` };
+      const lost = () => {
+        const fallen = s.allies.find((a) => a.char.dead);
+        return fallen ? { success: false, message: `${fallen.char.name} caiu. Fale com o mestre para tentar de novo.` } : null;
+      };
+      if (lost()) return lost();
       if (z.now >= s.sootAt) {
         s.sootAt += c.soot.everyMs;
         for (const a of s.allies) t.hurt(a, c.soot.damage, 'soot');
@@ -630,7 +633,7 @@ const KINDS = {
         s.jet = { ally: a, at: z.now + c.jets.warnMs };
         s.jetAt += c.jets.everyMs;
         t.warnCircle(a.char.x, a.char.z, c.jets.radius, c.jets.warnMs, 'steam');
-        t.warnNow(`Jato de vapor em ${a.char.name} em ${secs(c.jets.warnMs)} s: Selo do Véu nele!`, c.jets.warnMs);
+        t.warnNow(`Jato de vapor em ${a.char.name} em ${secs(c.jets.warnMs)} s: Selo do Véu ${a.def.fem ? 'nela' : 'nele'}!`, c.jets.warnMs);
         t.say(`O vapor vai estourar em ${a.char.name}!`);
       }
       if (s.jet && z.now >= s.jet.at) {
@@ -639,7 +642,9 @@ const KINDS = {
         t.hurt(a, c.jets.damage, 'steam');
         t.dirty = true;
       }
-      return null;
+      // a fuligem e o jato deste passo também derrubam: conferir antes do fim do tempo (a fuligem dos 70 s
+      // que derrubasse um aprendiz contava como vitória)
+      return lost();
     },
     timeout() { return { success: true, message: 'Os três aprendizes resistiram à fuligem. Prova vencida!' }; },
     status(t) {

@@ -749,7 +749,8 @@ func _click(screen_pos: Vector2) -> void:
 		var ae: Dictionary = entities[eid]
 		if ae["data"]["k"] == "a" and not ae["data"].get("dead", false) and _flat_dist(ae["node"].position, gp) < 1.2:
 			ally_selected = eid
-			main.hud.system("Aliado selecionado: %s (curas e escudos vão para ele)" % str(ae["data"].get("n", "")))
+			var fem: bool = ae["data"].get("fem", false)
+			main.hud.system("%s: %s (curas e escudos vão para %s)" % ["Aliada selecionada" if fem else "Aliado selecionado", str(ae["data"].get("n", "")), "ela" if fem else "ele"])
 			return
 	for eid in entities.keys():
 		var pe: Dictionary = entities[eid]

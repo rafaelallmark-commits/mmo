@@ -738,8 +738,12 @@ export class Zone {
           brake(c, dt, this.mv.decel * 1.5);
           if (this.now >= p.nextAttackAt) {
             p.nextAttackAt = this.now + p.stats.attackIntervalMs;
+            const wasCombatAt = p.lastCombatAt;
             p.lastCombatAt = this.now;
-            this.hitMonster(p, t, null, null);
+            // golpe que a peça da prova recusa (pilar blindado, sino apagado, tiro de fora do posto) não causa
+            // dano: não prende em combate ("5 s sem causar ou receber dano", docs/04) — quem espera a mana da
+            // Ruptura batendo na blindagem recupera no ritmo de fora de combate
+            if (this.hitMonster(p, t, null, null).immune) p.lastCombatAt = wasCombatAt;
             const pierce = this.buffMod(p, 'basicPierce');
             if (pierce > 0) {
               // a estocada atravessa: atinge até N monstros logo atrás do alvo

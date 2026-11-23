@@ -52,10 +52,10 @@ export function prepararProva({ classId, faixa = 1, seed = 1, nivel = 10, server
   return { server, cli, eid: e.char.eid, data, mestre: mestre.id };
 }
 
-// Roda a prova inteira com o piloto. opcoes: { semHabilidade, miraNoAlvo, reacaoMs, maxS, aoPasso(v), manter } —
+// Roda a prova inteira com o piloto. opcoes: { semHabilidade, miraNoAlvo, bateNaBlindagem, reacaoMs, maxS, aoPasso(v), manter } —
 // reacaoMs: o piloto só decide a cada tantos ms (100 = todo passo; 300 a 500 lembra um jogador humano);
 // manter: devolve o servidor aberto (server, cli, mestre) para o chamador seguir (ex.: entregar a missão).
-export function rodarProva({ classId, faixa = 1, seed = 1, semHabilidade = false, miraNoAlvo = false, reacaoMs = 100, maxS = 200, aoPasso = null, manter = false }) {
+export function rodarProva({ classId, faixa = 1, seed = 1, semHabilidade = false, miraNoAlvo = false, bateNaBlindagem = false, reacaoMs = 100, maxS = 200, aoPasso = null, manter = false }) {
   const { server, cli, eid, data, mestre } = prepararProva({ classId, faixa, seed });
   const prova = { iniciada: null, status: null, fim: null };
   const avisos = [];
@@ -76,7 +76,7 @@ export function rodarProva({ classId, faixa = 1, seed = 1, semHabilidade = false
   char = cli.pedir('char').char;
   const inicio = cli.pedir('trial_start', { npc: mestre });
   if (!inicio.ok) throw new Error(`trial_start: ${inicio.reason}`);
-  const piloto = criarPiloto(classId, data, { semHabilidade, miraNoAlvo });
+  const piloto = criarPiloto(classId, data, { semHabilidade, miraNoAlvo, bateNaBlindagem });
   let decideEm = 0;
   // ações (uma por tipo por passo; recargas conferidas pelas respostas do servidor)
   const cd = {};

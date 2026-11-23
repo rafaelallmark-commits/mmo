@@ -11,6 +11,7 @@ import { Zone } from '../src/zone.js';
 import { makeRng } from '../src/rng.js';
 import { TrialAlly } from '../src/trial.js';
 import { rodarProva, prepararProva } from '../tools/lib/provas/bancada.mjs';
+import { validateTrials } from '../tools/validate-data.js';
 
 const data = loadGameData();
 const log = (...a) => console.log('   ·', ...a);
@@ -55,12 +56,20 @@ test('provas com reação de jogador: uma decisão a cada 400 ms, kit inicial, t
     log(`${data.classes[classId].name}: ${r.message} (${r.segundos} s)`);
   }
   // Quebraferro que não descobriu o cone sem alvo: Ruptura com o pilar selecionado, um pilar por vez, esperando
-  // a mana sem bater na blindagem — ainda dá tempo (a dica aparece depois da primeira)
+  // a mana parado — ainda dá tempo (a dica aparece depois da primeira)
   const ing = rodarProva({ classId: 'breaker', faixa: 1, seed: 21, reacaoMs: 400, miraNoAlvo: true });
   assert.equal(ing.success, true, ing.message);
   assert.equal(ing.usadas.rupture, 3, 'uma Ruptura por pilar');
   assert.ok(ing.eventos.some((m) => m.t === 'system' && /^Dica: a mana não dá/.test(m.text)), 'a dica do cone aparece');
   log(`Quebraferro mirando um pilar por vez: ${ing.message} (${ing.segundos} s)`);
+  // e o que espera a terceira Ruptura batendo no pilar blindado (como faz quem clica nele): o golpe recusado não
+  // prende em combate, então a mana volta no mesmo ritmo — antes, ele nunca juntava os 20 em 90 s
+  for (const faixa of [1, 5]) {
+    const bate = rodarProva({ classId: 'breaker', faixa, seed: 21, reacaoMs: 400, miraNoAlvo: true, bateNaBlindagem: true });
+    assert.equal(bate.success, true, `faixa ${faixa}, batendo na blindagem: ${bate.message}`);
+    assert.equal(bate.usadas.rupture, 3);
+    log(`Quebraferro batendo na blindagem enquanto espera a mana (faixa ${faixa}): ${bate.message} (${bate.segundos} s)`);
+  }
 });
 
 test('prova: habilidade emprestada, mensagens, peças e aliados vistos pelo protocolo', { timeout: 60000 }, () => {
@@ -224,6 +233,37 @@ test('prova: a pedra do teto que derruba o Quebraferro encerra a prova no mesmo 
   log('Quebraferro derrubado por uma pedra: a prova acaba no mesmo passo e o "respawn" não a retoma');
 });
 
+test('prova: a fuligem do último instante que derruba um aprendiz da Cantora é derrota, não vitória', { timeout: 60000 }, () => {
+  // a fuligem e o jato caem dentro do passo da prova; a queda era vista só no passo seguinte, e a fuligem dos
+  // 70 s (o mesmo passo em que o tempo acaba) contava como "os três aprendizes resistiram"
+  const { server, cli, mestre } = prepararProva({ classId: 'veilsinger', seed: 3 });
+  const ev = [];
+  cli.aoEvento = (m) => ev.push(m);
+  assert.equal(cli.pedir('trial_start', { npc: mestre }).ok, true);
+  const key = [...server.trials.keys()][0];
+  const zone = server.zones.get(key);
+  const trial = server.trials.get(key);
+  const aprendizes = [...zone.allies.values()];
+  let fim = null;
+  for (let i = 0; i < 800 && !fim; i++) {
+    // todos inteiros e com escudo até o último passo; nele, Lia fica com 2 de vida e sem escudo
+    for (const a of aprendizes) { a.char.hp = a.stats.maxHp; a.shield = { amount: 999, until: zone.now + 5000, by: 0 }; }
+    if (trial.elapsed + 100 >= trial.timeMs) { aprendizes[0].char.hp = 2; aprendizes[0].shield = null; }
+    server.step(100);
+    fim = ev.find((m) => m.t === 'trial' && (m.state === 'success' || m.state === 'failed'));
+  }
+  assert.equal(aprendizes[0].char.dead, true, 'a fuligem dos 70 s derrubou Lia');
+  assert.equal(fim?.state, 'failed', fim?.message);
+  assert.match(fim.message, /Aprendiz Lia caiu/);
+  // o aviso do jato concorda com quem vai levar (fem nos dados): "nela" para Lia, "nele" para Duarte
+  const alertas = ev.filter((m) => m.t === 'trial' && m.state === 'status' && m.alert).map((m) => m.alert);
+  assert.ok(alertas.some((a) => /^Jato de vapor em Aprendiz Lia .*Selo do Véu nela!$/.test(a)), 'Lia: "nela"');
+  assert.ok(alertas.some((a) => /^Jato de vapor em Aprendiz Duarte .*Selo do Véu nele!$/.test(a)), 'Duarte: "nele"');
+  assert.equal(cli.pedir('char').char.trialDone, false);
+  server.store.close();
+  log('Cantora: a fuligem dos 70 s que derruba um aprendiz encerra a prova como derrota');
+});
+
 test('prova: o peregrino espera parado enquanto a emboscada estiver de pé', { timeout: 60000 }, () => {
   const { server, cli, mestre } = prepararProva({ classId: 'dawnshield', seed: 6 });
   const ev = [];
@@ -243,9 +283,26 @@ test('prova: o peregrino espera parado enquanto a emboscada estiver de pé', { t
   assert.ok(p1.hp < p1.mhp, 'os construtos vão nele');
   const st = ev.filter((m) => m.t === 'trial' && m.state === 'status').at(-1);
   assert.match(st.sub, /parado até a emboscada acabar/);
-  assert.match(ev.find((m) => m.t === 'system' && /Emboscada/.test(m.text))?.text ?? '', /Emboscada no marco 1! Protejam Peregrino Odilon\./);
+  assert.match(ev.find((m) => m.t === 'system' && /Emboscada/.test(m.text))?.text ?? '', /Emboscada no marco 1! Proteja Peregrino Odilon\./);
   server.store.close();
   log('Escudeiro: o peregrino para no marco 1 até a emboscada acabar');
+});
+
+test('validate-data: a prova de cada classe é conferida (perseguidores, jato, corpo dos aliados, cone, classe sem prova)', () => {
+  assert.deepEqual(validateTrials(data), [], 'os dados de hoje passam');
+  // uma cópia da prova com um defeito por vez: cada um precisa aparecer na lista de erros
+  const comDefeito = (fn) => {
+    const trial = structuredClone(data.maps.arena_prova.trial);
+    fn(trial.classes);
+    return validateTrials({ ...data, maps: { ...data.maps, arena_prova: { ...data.maps.arena_prova, trial } } }).join('\n');
+  };
+  // a dica da Andarilha promete que os perseguidores nunca correm mais que ela (5 m/s)
+  assert.match(comDefeito((c) => { c.windwalker.chasers.speedBase = 4.6; }), /perseguidores chegam a 5\.50 m\/s/);
+  // o jato da Cantora precisa passar da vida cheia do aprendiz (senão o Selo do Véu não é preciso)
+  assert.match(comDefeito((c) => { c.veilsinger.jets.damage = 100; }), /o jato \(100\) precisa passar da vida cheia/);
+  assert.match(comDefeito((c) => { delete c.bastion.ally.fem; }), /sem "fem"/);
+  assert.match(comDefeito((c) => { c.breaker.pillars = [[4, 25], [18, 27.5], [32, 25]]; }), /nenhum par de pilares cabe no cone/);
+  assert.match(comDefeito((c) => { delete c.emberweaver; }), /não tem prova/);
 });
 
 // ---------------------------------------------------------------- ganchos da zona
@@ -286,6 +343,27 @@ test('zona: peça parada não anda nem bate, recusa golpe pelo motivo, sem XP ne
   assert.equal(m.state, 'dead');
   assert.equal(p.char.xp, xp0, 'sem XP');
   assert.equal(sent.filter((x) => x.t === 'loot').length, 0, 'sem saque');
+});
+
+test('zona: golpe recusado pela peça (blindagem) não prende em combate; golpe que entra, sim', () => {
+  const { zone, mk } = arena();
+  const p = mk('breaker', 'Tcombate', 18, 20);
+  const m = zone.spawnMonster({ monster: 'trial_pillar', x: 18, z: 21.5, radius: 0 }, { noRespawn: true });
+  m.inert = true; m.noReward = true;
+  let aberto = false;
+  m.shieldHit = () => (aberto ? null : 'blindado');
+  p.char.mp = 0;
+  const desde = p.lastCombatAt; // recém-chegado: fora de combate
+  zone.cmdAttack(p, m.eid);
+  for (let i = 0; i < 80; i++) zone.tick(100); // 8 s batendo na blindagem
+  assert.equal(p.lastCombatAt, desde, 'nenhum golpe recusado conta como combate');
+  // fora de combate: 1,5% da mana máxima por segundo + 0,05 por ponto de Espírito (docs/04)
+  const r = zone.f.regen;
+  const porSeg = (p.stats.maxMp * r.mpPctPerSec) / 100 + p.stats.attrs.spi * r.mpPerSpiPerSec;
+  assert.ok(p.char.mp >= porSeg * 7.9, `a mana voltou no ritmo de fora de combate (${p.char.mp.toFixed(1)} de ${(porSeg * 8).toFixed(1)})`);
+  aberto = true; // rachou: agora o golpe entra e prende em combate
+  for (let i = 0; i < 20; i++) zone.tick(100);
+  assert.ok(zone.now - p.lastCombatAt <= 2000, 'golpe que entra conta como combate');
 });
 
 test('zona: aliado da prova leva dano pelo escudo e pelo Juramento, cai sem ir ao banco', () => {

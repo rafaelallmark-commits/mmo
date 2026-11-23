@@ -4,9 +4,10 @@
 // de progressão. Não lê o estado interno da zona.
 //
 // Interface:
-//   const piloto = criarPiloto(classId, data, { semHabilidade, miraNoAlvo })
+//   const piloto = criarPiloto(classId, data, { semHabilidade, miraNoAlvo, bateNaBlindagem })
 //     semHabilidade: nunca usa a do nível 10; miraNoAlvo: a Ruptura vai com o pilar selecionado (um por vez),
-//     como faria quem não descobriu o cone sem alvo
+//     como faria quem não descobriu o cone sem alvo; bateNaBlindagem (com miraNoAlvo): esperando a mana, segue
+//     batendo no pilar blindado em vez de ficar parado
 //   piloto.decidir(v, a)
 //     v: { agora, eu: entidade do snapshot, ents: Map, char, prova: { iniciada, status }, avisos: [{x, z, radius, ate, kind}] }
 //     a: { mover(x, z), atacar(eid), parar(), lancar(skill, { target, x, z, ally }) -> resposta, tonico(), pronta(skill) }
@@ -61,10 +62,12 @@ const REGRAS = {
     if (!blindados.length) return;
     if (o.miraNoAlvo && !o.semHabilidade) {
       // como quem clica no pilar e usa a Ruptura com ele selecionado: o cone sai na direção do alvo e racha um
-      // pilar por vez; esperando a mana, fica parado (bater na blindagem prende a mana em combate)
+      // pilar por vez; esperando a mana, fica parado — ou, com bateNaBlindagem, segue batendo na blindagem (o
+      // golpe recusado não prende em combate: a mana volta no mesmo ritmo)
       const p = perto(v, blindados, v.eu)[0];
       if (dist(v.eu, p) > 2.4) { const d = norm(v.eu.x - p.x, v.eu.z - p.z); const q = dentro({ x: p.x + d.x * 2.1, z: p.z + d.z * 2.1 }); a.mover(q.x, q.z); return; }
       if (a.pronta('rupture') && mp >= 20) a.lancar('rupture', { target: p.id });
+      else if (o.bateNaBlindagem) a.atacar(p.id);
       return;
     }
     // posição para pegar dois blindados no cone (ponto a 2,3 m do meio do par, do lado de cá)
@@ -88,7 +91,7 @@ const REGRAS = {
     }
     if (o.semHabilidade) { a.atacar(perto(v, blindados, v.eu)[0].id); return; } // sem a Ruptura, só resta bater na blindagem
     if (dist(v.eu, melhor.ponto) > 0.45) { a.mover(melhor.ponto.x, melhor.ponto.z); return; }
-    // parado (sem bater na blindagem, que segura a mana em combate) até ter mana para a Ruptura
+    // parado até ter mana para a Ruptura (bater na blindagem não adianta: só a Ruptura racha)
     if (a.pronta('rupture') && mp >= 20) a.lancar('rupture', { x: melhor.mira.x, z: melhor.mira.z });
   },
 

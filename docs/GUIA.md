@@ -59,7 +59,7 @@ O **escudo** (Bastião e Escudeiro) tem chance de **bloqueio** contra golpes de 
 | Habilidades | **1–6** (a barra mostra a recarga; depois de cada habilidade há 1 s de recarga global) |
 | Tônicos | **7** vida, **8** mana (o mais forte que você pode usar) |
 | Câmera | **Q/E** ou botão direito arrastando giram; a roda aproxima |
-| Painéis | **I** bolsa, **C** ficha (atributos e habilidades), **J** missões, **L** clã, **Enter** chat, **Esc** fecha o painel aberto (sem painel, tira a seleção do alvo; sem alvo, abre o menu) |
+| Painéis | **I** bolsa, **C** ficha (atributos e habilidades), **J** missões, **L** clã, **Enter** chat, **Esc** fecha o painel aberto (sem painel, tira a seleção do alvo e o personagem para de bater nele; sem alvo, abre o menu) |
 
 Habilidades com **tempo de conjuração** mostram a barra "Conjurando…": fique parado até o fim — andar, atacar
 ou usar um item interrompe (sem gastar mana).

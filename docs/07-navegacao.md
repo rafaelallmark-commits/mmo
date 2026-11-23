@@ -85,7 +85,7 @@ Da mais baixa para a mais alta. Uma camada de cima bloqueia o clique nas de baix
 | Atacar / selecionar | clique no monstro |
 | Falar, usar objeto, atravessar portal | clique no NPC, objeto ou anel do portal |
 | Selecionar aliado (curas) e abrir as ações (Trocar, Duelar, Grupo, Clã, Sussurrar) | clique em outro jogador; na prova de classe, clique no aprendiz ou no peregrino para escolhê-lo como alvo das curas, escudos e do Juramento |
-| Tirar a seleção do alvo | **Esc** (com um alvo selecionado, antes de abrir o menu); sem alvo, golpes em cone ou em linha (Ruptura, Linha Partida, Flecha de Passagem...) saem para onde o cursor aponta |
+| Tirar a seleção do alvo | **Esc** (com um alvo selecionado, antes de abrir o menu; se o personagem estava batendo nele, para); sem alvo, golpes em cone ou em linha (Ruptura, Linha Partida, Flecha de Passagem...) saem para onde o cursor aponta |
 | Atacar o oponente num duelo | clique nele (fora de duelo, jogador não é alvo) |
 | Câmera | botão direito arrastando ou Q/E gira; roda aproxima |
 | Atalhos | 1–6 habilidades (a 6ª é a do nível 25; a barra mostra a recarga; depois de cada habilidade há 1 s de recarga global), 7–8 tônicos (o mais forte do seu nível) |
