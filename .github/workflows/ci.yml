@@ -362,6 +362,14 @@ jobs:
           Stop-Process -Id $srv.Id -ErrorAction SilentlyContinue
           Get-ChildItem $dir | Format-Table Name, Length
           if (-not (Test-Path (Join-Path $dir '07_mundo.png'))) { throw 'sem a captura do mundo' }
+          # miniatura da captura do mundo no próprio registro (para conferir o visual sem baixar o artefato)
+          Add-Type -AssemblyName System.Drawing
+          $img = [System.Drawing.Image]::FromFile((Join-Path $dir '07_mundo.png'))
+          $bmp = New-Object System.Drawing.Bitmap 480, 270
+          $g = [System.Drawing.Graphics]::FromImage($bmp); $g.DrawImage($img, 0, 0, 480, 270); $g.Dispose()
+          $ms = New-Object System.IO.MemoryStream; $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Jpeg)
+          Write-Output 'MINIATURA-WINDOWS-INICIO'; Write-Output ([Convert]::ToBase64String($ms.ToArray())); Write-Output 'MINIATURA-WINDOWS-FIM'
+          Select-String -Path capturas-windows.log -Pattern 'OpenGL|ANGLE|Direct3D|Vulkan|Metal|driver' | Select-Object -First 5 | ForEach-Object { $_.Line }
 
       - name: Guardar registros e capturas do Windows
         if: always()
@@ -448,6 +456,10 @@ jobs:
           tail -n 30 capturas-macos.log
           ls -la capturas-macos
           test -s capturas-macos/07_mundo.png
+          # miniatura da captura do mundo no próprio registro (para conferir o visual sem baixar o artefato)
+          sips -s format jpeg -Z 480 capturas-macos/07_mundo.png --out miniatura.jpg > /dev/null
+          echo MINIATURA-MACOS-INICIO; base64 -i miniatura.jpg | tr -d '\n'; echo; echo MINIATURA-MACOS-FIM
+          grep -E 'OpenGL|ANGLE|Metal|Vulkan|driver' capturas-macos.log | head -5 || true
 
       - name: Guardar registros e capturas do macOS
         if: always()
