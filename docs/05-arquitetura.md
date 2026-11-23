@@ -51,6 +51,8 @@ mmo/
 │   ├── copia-externa.sh           cópia dos backups para fora da máquina (rclone sync, cifrada)
 │   ├── monitoramento/             prometheus.yml, alertas.yml, modelo do Alertmanager, painel do Grafana
 │   ├── cinzas.service             systemd sem Docker (endurecido)
+│   ├── cinzas-contas.service      systemd do serviço de contas (mesmo arquivo de ambiente)
+│   ├── cinzas.env.exemplo         variáveis do serviço (segredos, e-mail, teto de jogadores, versão)
 │   └── backup.service/.timer      backup a quente de hora em hora
 ├── .dockerignore                  contexto da imagem: só server/ e data/
 ├── data/                          dados do jogo (fonte de verdade, editáveis)
@@ -59,6 +61,7 @@ mmo/
 │   ├── items.json                 262 definições de item (faixas 1–25, raridades, espaços, famílias)
 │   ├── monsters.json              36 monstros (6 áreas, provas, chefe) e a mecânica de cada espécie
 │   ├── loot_tables.json           tabelas de saque (normal, elite, chefe, por classe)
+│   ├── quests.json                49 missões (capítulos 0–6, secundárias e diárias): objetivos, falas e recompensas
 │   ├── maps.json                  mapas (+ estradas, peças com colisão e casas geradas por gen-scenery)
 │   ├── xp_table.json              XP acumulada 1–25 e metas de tempo
 │   ├── formulas.json              constantes de dano, defesa, precisão, crítico, XP
@@ -106,7 +109,7 @@ mmo/
 │   │   ├── db.test.js             contrato do banco nos dois backends (SQLite e PostgreSQL)
 │   │   ├── death.test.js          queda de conexão durante a morte
 │   │   ├── nav.test.js            caminhos, desvios, destinos inalcançáveis, aceleração e mapas reais
-│   │   ├── skills.test.js         as 48 habilidades numa zona real
+│   │   ├── skills.test.js         as 40 habilidades dos níveis 1–20 numa zona real (as 8 do 25: nivel25.test.js)
 │   │   ├── mechanics.test.js      mecânicas dos monstros: golpes avisados, explosão, puxão, drenagem, eco, reforços, território
 │   │   ├── m2.test.js             aceitação do Marco 2 (grupo de 5, prova de classe, missões)
 │   │   ├── m3.test.js             aceitação do Marco 3 (refino, depósito, elite diária, Custódio com bots)
@@ -142,6 +145,16 @@ mmo/
 │       ├── gen-scenery.js         gera estradas, peças e casas de cada mapa (semente fixa)
 │       ├── partner.mjs            parceiro simulado para ver o calabouço no cliente
 │       ├── multizona.mjs          sobe o mundo + N zonas localmente (npm run multizona -- --zonas 2)
+│       ├── conta.mjs              conta pela linha de comando: papel, suspensão, denúncias, liberar limites
+│       ├── backup.mjs             backup a quente com integridade conferida, rotação e modo agendado
+│       ├── sqlite-para-pg.mjs     importa um banco SQLite para o PostgreSQL
+│       ├── carga.mjs              teste de carga com clientes simulados (relatório de carga)
+│       ├── simular-progressao.mjs simulação de progressão 1–25 por classe (relatório de progressão)
+│       ├── cenarios.mjs           roda as suítes de aceitação e as cargas (relatório de cenários)
+│       ├── telemetria.mjs         relatório da telemetria do teste a partir da auditoria
+│       ├── medir-caminhos.mjs     mede e compara a busca de caminho em todos os mapas
+│       ├── parceiro-social.mjs    parceiro simulado para conferir troca, clã e duelo no cliente
+│       ├── test-pg.mjs · pg-temp.mjsnpm run test:pg: sobe um PostgreSQL temporário e roda a suíte
 │       └── create-character.js    cria contas/personagens de teste no banco
 ├── tools/poses/                   modelo do braço e gerador da tabela WPOSES (poses guiadas pela arma)
 ├── tools/audio/gerar_sons.py      síntese de todos os sons e blocos de música (Python + numpy, determinístico)
@@ -182,12 +195,12 @@ mmo/
 | Classe | `data/classes.json` | atributos iniciais, famílias de arma, mão secundária, peso de armadura, vida/mana, habilidades, kit |
 | Habilidade | `data/skills.json` | classe, nível de desbloqueio, alvo, mana(+/grau), recarga, alcance, efeito parametrizado |
 | Definição de item | `data/items.json` | id, família, espaço, empunhadura, nível, raridade, classes, requisitos, dano/defesa/etc. |
-| **Instância de item** | SQLite `item_instances` | **UUID único**, personagem, `def_id`, quantidade, refino, localização (`bag`/`equip`/`recovery`/`storage`), espaço, origem (`kit`, `loot:<id>`, `gm`) |
+| **Instância de item** | banco: `item_instances` | **UUID único**, personagem, `def_id`, quantidade, refino, localização (`bag`/`equip`/`recovery`/`storage`), espaço, origem (`kit`, `loot:<id>`, `gm`) |
 | Monstro | `data/monsters.json` | nível, família, tipo, vida, dano, defesa, agressão, coleira, reaparecimento, XP, tabela de saque |
 | Mapa | `data/maps.json` | tamanho, posto de guarda, áreas bloqueadas, pontos de surgimento |
-| Personagem | SQLite `characters` | conta, nome, classe, nível, XP, pontos distribuídos (JSON), pontos livres, graus de habilidade (JSON), vida, mana, ouro, mapa, posição, caído |
-| Saque | SQLite `loot_drops` | UUID, dono, definição ou ouro, posição, abate de origem, validade, **reivindicado em / instância criada** |
-| Missão | SQLite `quest_progress` (tabela criada no M1, usada no M2) | personagem, missão, estado, progresso (JSON) |
+| Personagem | banco: `characters` | conta, nome, classe, nível, XP, pontos distribuídos (JSON), pontos livres, graus de habilidade (JSON), vida, mana, ouro, mapa, posição, caído |
+| Saque | banco: `loot_drops` | UUID, dono, definição ou ouro, posição, abate de origem, validade, **reivindicado em / instância criada** |
+| Missão | banco: `quest_progress` | personagem, missão, estado, progresso (JSON) |
 | Grupo (M2) | memória do servidor de zona | líder, membros (até 5), regra de saque individual, raio de XP |
 
 Um índice único `(char_id, slot) WHERE loc='equip'` garante no banco que dois itens nunca ocupem o mesmo espaço.
@@ -438,11 +451,11 @@ cliente           zona A (origem)            mundo                      zona B (
   cada uma entrega aos seus membros. Troca e duelo continuam na mesma zona; a transferência cancela os dois.
 - **Moderação**: suspensão e silêncio valem também na chegada por transferência; expulsão, suspensão e
   silêncio de mestre seguem a conta para qualquer zona; "onde está" pergunta ao mundo; o anúncio sai em todas.
-- **Banco**: todos os processos usam o mesmo arquivo (WAL, espera pela trava); com posse única, duas zonas
-  nunca escrevem o mesmo personagem. Saque e inventário continuam em transações.
+- **Banco**: todos os processos usam o mesmo banco — o PostgreSQL central em produção; no desenvolvimento, o mesmo
+  arquivo SQLite (WAL, espera pela trava); com posse única, duas zonas nunca escrevem o mesmo personagem. Saque e inventário continuam em transações.
 - **Cliente**: `transfer` mostra a tela Carregando, abre a conexão da outra zona, faz `login_transfer` e
   segue pelo mesmo caminho do `enter` (chat e opções continuam); se falhar, volta à lista de personagens
   com o motivo.
 
-Ainda falta para muitas zonas em produção: PostgreSQL no lugar do arquivo (em preparo), instâncias como
-zonas efêmeras sob demanda, barramento de mensagens externo se o mundo virar gargalo e grupos persistentes.
+Em produção, várias zonas usam o PostgreSQL central (§8.11 do 08; a suíte multizona passa nele). Ainda falta para
+muitas zonas: instâncias como zonas efêmeras sob demanda, barramento de mensagens externo se o mundo virar gargalo e grupos persistentes.

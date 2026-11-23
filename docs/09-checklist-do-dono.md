@@ -96,6 +96,12 @@ guardando as cópias dos últimos 14 dias na própria máquina (D148). Falta o q
 - [ ] **Redistribuir atributos**: continua grátis durante o teste (D155) ou passa a custar um item (D22)?
 - [ ] **Poderes de mestre voluntário**: hoje o papel `gm` modera e só `admin` cria ouro, itens e níveis
       (D138). Mudar isso é uma linha em `server/src/server.js`.
+- [ ] **Confirmação de conta travada de propósito**: quem souber o nome de uma conta ainda não confirmada pode gastar as
+      20 tentativas de código dela em 24 h (D142). Se um testador reclamar, `npm run conta -- --conta nome
+      --liberar-limites` destrava na hora; decida se o limite deve passar a contar só por endereço de IP.
+- [ ] **Conta suspensa e os próprios dados**: a conta suspensa não chega à tela de personagens, então não baixa nem
+      exclui os dados pelo jogo; continua podendo pelo serviço de contas (`POST /contas/dados` e `/contas/excluir`) e
+      pelo contato da equipe. Confirme na revisão jurídica se isso basta (LGPD).
 - [ ] **Arte definitiva** (D5): os monstros são montados por código e os personagens usam dois corpos VRM de
       exemplo. É investimento, não bloqueia o teste.
 

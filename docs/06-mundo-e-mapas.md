@@ -180,7 +180,9 @@ z=160└────────────────────────
 | **Poço Quente** e sul das ruínas | (184, 122) e (118, 130) | Toupeiras de Basalto, nível 24, agressivas (6 + 5): ponto de grupo |
 | **Porta Funda** | ruínas em x 212–220, z 70–90 | Selador da Porta Funda (elite 24, diária) em (202, 80); três selos e o tubo de resposta (capítulo 6.4 e 6.5) |
 
-- **Solo**: Salamandras (passivas) e Vozes puxadas uma por vez; os Sineiros chamam o bando inteiro quando um é atingido.
+- **Solo**: Salamandras (passivas, mas mordem quem pisa na margem). As Vozes são agressivas e, como toda espécie
+  agressiva, chamam as iguais paradas a até 8 m quando uma é atingida: puxe pela borda da galeria. Os Sineiros chamam
+  o bando inteiro quando um é atingido.
 - **Grupo**: Toupeiras no Poço Quente e o Selador (elite diária: XP em dobro e saque extra no primeiro abate do dia, como a Mãe do Eco e o Fragmento do Custódio). Os selos e o tubo de resposta ficam a ~15–20 m do Selador, fora do raio de agressão de 10 m.
 - **Saque**: todos os monstros normais rolam a faixa 21 (4%), a 25 (0,4%) e Pó de Refino Superior (2%, os únicos monstros normais com ele); o Selador, a 21 (60%), a 25 (12%), Pó de Refino Superior ×2–4 e Selo de Proteção (10%) — material para o refino +4..+6 de quem já está no teto. Os Canais da Eclusa e o Fragmento do Custódio passaram a ter chance pequena de faixa 21 (0,4% e 10%), seguindo o padrão de "próxima faixa" das outras áreas.
 - **Visual**: famílias de monstro já existentes (bestas, máquinas, espíritos) com cores próprias; céu e névoa ocre-avermelhados, chão de terra aquecida, pouca vegetação e brasas subindo no ar (`client/scripts/scenery.gd`).

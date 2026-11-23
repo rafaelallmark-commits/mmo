@@ -80,7 +80,7 @@ Da mais baixa para a mais alta. Uma camada de cima bloqueia o clique nas de baix
               Oficina Soterrada (9–12)
                        ║ nível 12 (M3)
               Galerias do Eco (12–16)
-                       ║ nível 16 (M3)
+                       ║ nível 15 (M3)
               Canais da Eclusa (16–20) ──► A Última Eclusa (calabouço, 2–5 jogadores)
                        ║ nível 20 (Poço de Inspeção, pós-v1)
               A Cava Primeira (20–25)
