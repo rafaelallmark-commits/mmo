@@ -238,6 +238,11 @@ func _process(_d: float) -> void:
 			# mecânicas dos monstros: os mesmos eventos que o servidor manda, desenhados no lugar do personagem
 			speed_before = float(main.ch.get("stats", {}).get("moveSpeed", 5.0))
 			_mech_fx()
+			# Atolado: o evento "speed" muda a velocidade na ficha e na previsão na hora. Conferido já: a ficha de
+			# verdade do servidor (sem o efeito, que aqui é de mentira) pode chegar logo depois e substituir a da tela.
+			if absf(main.world.pred.max_speed - speed_before * 0.6) > 0.01 or absf(float(main.ch["stats"]["moveSpeed"]) - speed_before * 0.6) > 0.01:
+				fail("a velocidade do Atolado não chegou à previsão (%.2f)" % main.world.pred.max_speed)
+				return
 			mech_until = Time.get_ticks_msec() + 700
 			step = "mech_check"
 		"mech_check":
@@ -249,10 +254,6 @@ func _process(_d: float) -> void:
 				return
 			if main.world.vfx._warns.has("auto-cancelado"):
 				fail("o aviso cancelado continuou desenhado")
-				return
-			# Atolado: o servidor manda a velocidade nova e a previsão do movimento passa a usá-la
-			if absf(main.world.pred.max_speed - speed_before * 0.6) > 0.01 or absf(float(main.ch["stats"]["moveSpeed"]) - speed_before * 0.6) > 0.01:
-				fail("a velocidade do Atolado não chegou à previsão (%.2f)" % main.world.pred.max_speed)
 				return
 			main._on_message({"t": "cleanse", "eid": main.ch["eid"], "id": "disoriented"})
 			main._on_message({"t": "speed", "moveSpeed": speed_before})
