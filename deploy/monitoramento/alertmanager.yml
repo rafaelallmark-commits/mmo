@@ -4,8 +4,8 @@
 # Este arquivo é um MODELO e não guarda segredo nenhum. Ao subir, monitoramento/alertmanager-entrada.sh troca
 # cada ${NOME} pelo valor da variável NOME, que o compose traz do deploy/.env (fora do git), e só mantém o
 # bloco de um canal ("#@se NOME" ... "#@fim") quando a variável NOME está preenchida. Para ligar um canal,
-# preencha as variáveis dele no deploy/.env e recrie o serviço (docker compose --profile monitoramento up -d);
-# passo a passo em docs/08-operacao.md §8.3.
+# preencha as variáveis dele no deploy/.env e recrie o serviço (com COMPOSE_PROFILES=...monitoramento no .env,
+# docker compose up -d alertmanager); passo a passo em docs/08-operacao.md §8.3.
 #
 #   E-mail (SMTP)  ALERTA_EMAIL_PARA (um ou mais endereços separados por vírgula), ALERTA_SMTP_SERVIDOR
 #                  (host:porta — 587 = STARTTLS, 465 = TLS direto), ALERTA_SMTP_DE (remetente) e, se o

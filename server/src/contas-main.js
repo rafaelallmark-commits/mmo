@@ -9,6 +9,7 @@
 // parte, que o proxy não repassa, e só para endereços internos (loopback e redes privadas).
 // O servidor de zona precisa do mesmo segredo (--token-secret ou CINZAS_TOKEN_SECRET) e de --auth token.
 import { AccountsService } from './contas.js';
+import { openWhenDbReady } from './db.js';
 import { mailConfig, mailProblems, mailSummary, mailWarning } from './mailcfg.js';
 import { checkSecrets } from './segredo.js';
 
@@ -31,7 +32,8 @@ if (metricsPort != null && !/^\d{1,5}$/.test(String(metricsPort))) { console.err
 const metricsHost = arg('metrics-host', '127.0.0.1');
 if (metricsHost === true) { console.error('--metrics-host precisa de um endereço (ex.: 127.0.0.1, ou 0.0.0.0 na rede interna do contêiner).'); process.exit(2); }
 
-const svc = new AccountsService({
+// PostgreSQL ainda subindo ou desligando (reinício da pilha ou do VPS): espera até 90 s em vez de sair na hora
+const svc = await openWhenDbReady(() => new AccountsService({
   port: Number(arg('port', process.env.CINZAS_CONTAS_PORT ?? 7780)),
   host: arg('host', '0.0.0.0'),
   dbPath: arg('db', process.env.CINZAS_DB ?? 'cinzas.db'),
@@ -41,7 +43,7 @@ const svc = new AccountsService({
   ...(arg('docs-dir', process.env.CINZAS_DOCS_DIR ?? null) ? { docsDir: arg('docs-dir', process.env.CINZAS_DOCS_DIR) } : {}),
   metricsPort,
   metricsHost,
-});
+}));
 await svc.start();
 svc.log(mailSummary(mail));
 const stop = async () => { await svc.stop(); process.exit(0); };

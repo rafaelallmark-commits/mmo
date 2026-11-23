@@ -132,9 +132,10 @@ uma_rodada() {
   saida="$DIR/$PREFIXO-$(date -u +%Y-%m-%dT%H-%M-%S).dump"
   parcial="$saida.parcial"
   mkdir -p "$DIR" || { falhou "não deu para criar a pasta $DIR"; return 1; }
-  # ${ESQUEMA:+...} sem aspas de propósito: sem esquema, nenhum argumento
+  # ${ESQUEMA:+...} sem aspas de propósito: sem esquema, nenhum argumento. umask 077: a cópia (e-mails, resumos de
+  # senha) fica só do dono; rodando por "docker compose exec" a máscara herdada é 000 e o arquivo saía 0666.
   # shellcheck disable=SC2086
-  if ! pg_dump --format=custom --file "$parcial" ${ESQUEMA:+--schema "$ESQUEMA"}; then
+  if ! (umask 077 && pg_dump --format=custom --file "$parcial" ${ESQUEMA:+--schema "$ESQUEMA"}); then
     rm -f "$parcial"
     falhou "pg_dump do banco $BANCO (${PGHOST:-local}) não terminou (acima); nenhuma cópia antiga foi apagada"
     return 1

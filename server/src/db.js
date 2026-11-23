@@ -28,6 +28,33 @@ export function createStore(target = ':memory:', opts = {}) {
   return new Store(target);
 }
 
+// Erros de "o banco ainda não aceita conexões": PostgreSQL subindo ou desligando (57P03), contêiner do banco
+// parado ou sem nome na rede ainda, prazo de conexão. Senha errada, banco inexistente e afins não entram: esses
+// têm que parar a subida na hora.
+const DB_NOT_READY = new Set(['57P03', '08001', '08006', 'ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'ECONNRESET', 'CINZAS_PG_TIMEOUT']);
+export const isDbNotReady = (e) => DB_NOT_READY.has(e?.code);
+
+// Abre o banco com fn() e, enquanto o erro for de banco ainda não pronto, tenta de novo a cada stepMs até waitS
+// segundos (depois lança o último erro). O serviço de contas sobe por aqui: no "docker compose restart" ele
+// reinicia na hora, enquanto o banco espera a zona gravar (desligamento "smart", D177), e sair a cada tentativa
+// o jogava no recuo crescente de reinícios do Docker — fora do ar até ~1 min depois de o banco voltar.
+export async function openWhenDbReady(fn, { waitS = 90, stepMs = 2000, log = (m) => console.error(m) } = {}) {
+  const until = Date.now() + waitS * 1000;
+  let warnedAt = 0;
+  for (;;) {
+    try {
+      return fn();
+    } catch (e) {
+      if (!isDbNotReady(e) || Date.now() + stepMs > until) throw e;
+      if (Date.now() - warnedAt >= 10_000) {
+        warnedAt = Date.now();
+        log(`banco ainda indisponível (${e.message}); tentando de novo por até ${Math.ceil((until - Date.now()) / 1000)} s`);
+      }
+      await new Promise((r) => setTimeout(r, stepMs));
+    }
+  }
+}
+
 // Senha do PostgreSQL configurada (perfil "postgres" do Docker Compose) com o banco no SQLite: quase
 // sempre é CINZAS_DB que faltou — sem o aviso, o jogo rodaria no SQLite com o PostgreSQL parado ao lado.
 function warnUnusedPassword(target) {

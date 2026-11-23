@@ -24,7 +24,8 @@ fumaça, administrador, backups e problemas comuns), está em **[10-subir-no-vps
 - [ ] Uma máquina Linux com IP público, Docker 25+ (ou systemd) e as portas 80 e 443 abertas. Medido: 100
       jogadores numa zona usam ~7% de um núcleo e 144 MB; 1–2 vCPU e 2 GB sobram. De preferência perto dos
       testadores.
-- [ ] Um domínio com registro A/AAAA apontando para ela.
+- [ ] Um domínio com **registro A** (IPv4) apontando para ela, **sem AAAA**: pelo IPv6 o Docker troca o endereço
+      do jogador pelo da rede interna e os limites por endereço valeriam para todos juntos (D176).
 - [ ] `deploy/.env` com `DOMINIO`, `CINZAS_TOKEN_SECRET` (`openssl rand -hex 32`) e `CINZAS_EMAIL=smtp` — o
       compose não sobe sem os três, e zona e contas recusam segredo curto ou de exemplo. Descomente o e-mail
       de aviso do certificado no `deploy/Caddyfile`.
@@ -64,8 +65,9 @@ para o teste aberto, um provedor transacional:
 
 - [ ] Escolher o canal dos alertas (e-mail, Telegram ou Discord) e preencher as variáveis `ALERTA_*` no
       `deploy/.env` (`ALERTA_SMTP_*` e `ALERTA_EMAIL_PARA`, `ALERTA_TELEGRAM_TOKEN`/`_CHAT` ou
-      `ALERTA_DISCORD_WEBHOOK`) para o Alertmanager do perfil `monitoramento`; subir com
-      `docker compose --profile monitoramento up -d` e mandar o **alerta de teste** do guia
+      `ALERTA_DISCORD_WEBHOOK`) para o Alertmanager do perfil `monitoramento`; ligar o perfil em
+      `COMPOSE_PROFILES` no `deploy/.env` (com os outros, separados por vírgula), subir com `docker compose up -d`
+      e mandar o **alerta de teste** do guia
       ([08-operacao §8.3, "Alertas que chegam a alguém"](08-operacao.md#alertas-que-chegam-a-alguém)).
 - [ ] Um monitor externo de disponibilidade (UptimeRobot, Better Stack, Healthchecks.io ou um Uptime Kuma em
       outra máquina) apontando para `https://seu-dominio/contas/saude`, esperando `200`: se a máquina cair, o
