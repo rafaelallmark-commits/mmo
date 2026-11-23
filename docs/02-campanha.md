@@ -46,7 +46,7 @@ Cena em tempo real, câmera elevada mais baixa que a de jogo, sem interface. O j
 - **Objetivo**: trazer três pessoas (Bento, Ligia e o menino Caio), que ficaram do outro lado, até o círculo do Posto da Ponte. Cada uma, depois de solta, **anda atrás do jogador** enquanto ele está a até 14 m; mais longe, espera onde está e chama ("Espera! Não anda tão rápido."). Cada personagem tem os seus três, que só ele vê (D165). Dura uns 5 minutos.
 - **Ensina, em ordem** — sete passos guiados; o passo atual aparece como **dica na tela**, acima da barra de atalhos ("Passo 3 de 7"), e avança sozinho com o progresso da missão:
   1. **andar até Bento**, preso no entulho a leste do posto: clicar no chão perto dele; ao chegar, ele levanta e segue;
-  2. **atacar um Rato de Sulco** (clicar nele: o ataque básico) — enquanto falta coletar o saque, todo abate deixa pelo menos uma Sucata de Condutor no chão;
+  2. **atacar um Rato de Sulco** (clicar nele: o ataque básico) — o rato sempre deixa saque no chão (ao menos algumas moedas; enquanto falta coletar, um abate sem nada deixa uma Sucata de Condutor);
   3. **usar a habilidade da tecla 1**, a inicial da classe (Talho Profundo, Faísca de Vidro etc.; a dica diz o nome);
   4. **Ligia está ferida** (chega com 35 de 100 de vida): beber um Tônico de Vida (**tecla 7**) a até 5 m dela — os dois dividem o gole e ela levanta; a quem está sem tônico, ela mesma passa um;
   5. **coletar o saque** que o rato derrubou, brilhando no chão (só o jogador o vê);
@@ -70,7 +70,7 @@ Cada missão principal lista **NPC**, **objetivo**, **diálogo curto**, **recomp
 
 ## Capítulo 1 — **A Estrada Velha** (níveis 1–5)
 
-Área: **A Estrada Velha** (Posto da Ponte, Campo do Sulco, Encosta Morna, Curva dos Cães, Leito Seco, Campo de Cinza). As duas origens se encontram aqui desde o primeiro minuto: Pedrâmbar fica a oeste da estrada e Vau de Nácar a leste. O **Posto da Ponte**, onde todo personagem começa, fica na **ponta oeste** (17 m do portão de Pedrâmbar, 137 m da ponte de Vau de Nácar), porque a estrada fica mais perigosa de oeste para leste: ratos de nível 1 junto ao posto, javalis de nível 5 na trilha do Brejo. Quem é de Nácar atravessa a estrada inteira no nível 2 para a 1.3, e nenhum bando agressivo alcança a estrada (D164). Meta de XP de missões: ~580 (30% de 1.930).
+Área: **A Estrada Velha** (Posto da Ponte, Campo do Sulco, Encosta Morna, Curva dos Cães, Leito Seco, Campo de Cinza). As duas origens se encontram aqui desde o primeiro minuto: Pedrâmbar fica a oeste da estrada e Vau de Nácar a leste. O **Posto da Ponte**, onde todo personagem começa, fica na **ponta oeste** (17 m do portão de Pedrâmbar, 137 m da ponte de Vau de Nácar), porque a estrada fica mais perigosa de oeste para leste: ratos de nível 1 junto ao posto, javalis de nível 5 no Campo de Cinza, a sudeste. Quem é de Nácar atravessa a estrada inteira no nível 2 para a 1.3, e nenhum bando agressivo alcança a estrada nem o lugar onde se chega pelos portais (D164). Meta de XP de missões: ~580 (30% de 1.930).
 
 ### 1.1 Contar as Pessoas
 - **NPC**: Teodoro, o Condutor (Posto da Ponte).
@@ -90,7 +90,7 @@ Cada missão principal lista **NPC**, **objetivo**, **diálogo curto**, **recomp
 
 ### 1.3 O Mestre da Sua Arma
 - **NPC**: mestre de classe da sua origem (Pedrâmbar ou Vau de Nácar).
-- **Objetivo**: visitar o mestre, aprender a ler requisitos e distribuir os pontos de atributo pendentes. Quem é de Vau de Nácar atravessa a Estrada Velha inteira pela estrada (uns 30 s a pé): os Cães de Ferrugem ficam na Curva dos Cães, ao sul, e os Javalis de Cinza na trilha do Brejo, longe do caminho.
+- **Objetivo**: visitar o mestre, aprender a ler requisitos e distribuir os pontos de atributo pendentes. Quem é de Vau de Nácar atravessa a Estrada Velha inteira pela estrada (uns 30 s a pé): os Cães de Ferrugem ficam na Curva dos Cães, ao sul, e os Javalis de Cinza no Campo de Cinza, a sudeste, longe do caminho.
 - **Diálogo** (Mestre Tarrasco, Quebraferro): "Machado não pergunta se você quer. Pergunta se você aguenta. Olha a descrição: o que estiver vermelho, você ainda não tem. Força vem de treino, não de anel." · (Mestre Otan, Tecelão): "Brasa sem Espírito é só fumaça. Cada ponto que você põe hoje é um item que você usa amanhã."
 - **Recompensa**: 100 XP, 1 grau extra de graça na habilidade de nível 1 (só se ainda estiver no grau 1).
 - **Pré-requisitos**: nível 2; 1.2.

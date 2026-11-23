@@ -64,6 +64,84 @@ test('Tutorial: dicas por classe e {skill} da tecla 1 vêm do servidor', () => {
   assert.deepEqual(data.quests.tutorial.rewards, { xp: 60, gold: 0, items: [['potion_hp_s', 3], ['map_estrada_velha', 1]] });
 });
 
+test('Tutorial: progresso gravado pelo tutorial antigo (objetos clicados) não trava os passos novos', () => {
+  const saved = [];
+  const q = new QuestEngine({ data, store: { saveQuest: (...a) => saved.push(a) } });
+  // no meio do tutorial antigo o objetivo 0 era "interact" e guardava a lista dos objetos já clicados
+  const char = { classId: 'breaker', level: 1, unspent: 0, items: new Map(), quests: new Map([['tutorial', { state: 'active', progress: { 0: ['rescue_bento', 'rescue_ligia'] } }]]) };
+  assert.equal(q.view(char, 'tutorial').objectives[0].done, false, 'Bento continua preso: o tutorial novo recomeça');
+  assert.deepEqual(q.onRescue(char, 'bento'), ['tutorial'], 'chegar a Bento marca o passo 1');
+  assert.equal(q.view(char, 'tutorial').objectives[0].done, true);
+  assert.deepEqual(q.onRescue(char, 'bento'), [], 'e só uma vez');
+  // os outros tipos novos também só contam com o valor certo (não com qualquer coisa "verdadeira")
+  const odd = { classId: 'breaker', level: 1, unspent: 0, items: new Map(), quests: new Map([['tutorial', { state: 'active', progress: { 2: 'x', 4: ['?'], 6: 1, 7: {} } }]]) };
+  assert.deepEqual(q.onSkill(odd, data.classes.breaker.skills[0]), ['tutorial']);
+  assert.deepEqual(q.onPickup(odd), ['tutorial']);
+  assert.deepEqual(q.onBell(odd), ['tutorial']);
+  assert.deepEqual(q.onArrive(odd), ['tutorial']);
+  assert.deepEqual([2, 4, 6, 7].map((i) => q.view(odd, 'tutorial').objectives[i].done), [true, true, true, true]);
+  assert.ok(saved.length >= 5);
+});
+
+test('Itens de missão que faltam na entrada: só os de recompensa que nenhuma entrega consome', () => {
+  // dados de mentira: "carta" é recompensa de A e consumida por B (pode faltar de verdade); "mapa" só é recompensa
+  const d = structuredClone(data);
+  d.items.qi_carta = { ...d.items.map_estrada_velha, id: 'qi_carta', name: 'Carta' };
+  d.quests = {
+    a: { ...d.quests.tutorial, rewards: { xp: 0, gold: 0, items: [['qi_carta', 1], ['map_estrada_velha', 1], ['potion_hp_s', 3]] } },
+    b: { ...d.quests.tutorial, objectives: [{ type: 'collect', item: 'qi_carta', count: 1, text: 'Entregue a carta' }] },
+  };
+  const inserted = [];
+  const q = new QuestEngine({ data: d, store: { insertItem: (it) => inserted.push(it.defId) } });
+  const char = { id: 1, items: new Map(), quests: new Map([['a', { state: 'done', progress: {} }], ['b', { state: 'done', progress: {} }]]) };
+  assert.deepEqual(q.grantMissingQuestItems(char), ['map_estrada_velha'], 'nem a carta (consumida em B) nem o tônico (não é de missão)');
+  assert.deepEqual(inserted, ['map_estrada_velha']);
+  assert.deepEqual(q.grantMissingQuestItems(char), [], 'com o mapa na bolsa, nada mais');
+});
+
+test('Tutorial: personagem gravado no meio do tutorial antigo entra e solta Bento; quem já tinha entregue recebe o mapa ao entrar, uma vez só', { timeout: 120000 }, async () => {
+  await withServer(async (server, url) => {
+    // 1) no meio do tutorial antigo: Bento e Ligia "clicados" (progresso por interação)
+    let A = await newChar(url, 'antigo', 'breaker', 'Antigo');
+    const idA = A.char.id;
+    await A.close();
+    await sleep(200);
+    server.store.saveQuest(idA, 'tutorial', 'active', { 0: ['rescue_bento', 'rescue_ligia'] });
+    A = await relog(url, 'antigo');
+    await waitUntil(() => followers(A).length === 3, 5000, 'os três do tutorial novo');
+    const bento = follower(A, 'Bento');
+    assert.equal(bento.st, 'trapped');
+    await goTo(A, bento.x - 2.5, bento.z + 1);
+    await waitObjective(A, 0, 10000);
+    await waitUntil(() => follower(A, 'Bento')?.st === 'follow', 5000, 'Bento seguindo');
+    log('progresso do tutorial antigo: Bento volta a esperar e o passo 1 conta ao chegar nele');
+    await A.close();
+
+    // 2) entregou o tutorial antes de ele dar o mapa (aqui pelo comando de mestre, que não dá recompensa)
+    let B = await newChar(url, 'veterano', 'emberweaver', 'Veterano');
+    assert.equal((await B.request('gm', { cmd: 'quest_done', quests: ['tutorial'] })).ok, true);
+    assert.equal(B.char.items.filter((i) => i.defId === 'map_estrada_velha').length, 0);
+    await B.close();
+    await sleep(200);
+    B = await relog(url, 'veterano');
+    const maps = (c) => c.char.items.filter((i) => i.defId === 'map_estrada_velha');
+    assert.equal(maps(B).length, 1, 'o mapa chega ao entrar');
+    assert.equal(maps(B)[0].loc, 'bag');
+    await B.close();
+    await sleep(200);
+    B = await relog(url, 'veterano');
+    assert.equal(maps(B).length, 1, 'entrar de novo não dá outro');
+    // quem ainda não entregou o tutorial não ganha o mapa
+    const C = await newChar(url, 'novato', 'warden', 'Novato');
+    await C.close();
+    await sleep(200);
+    const C2 = await relog(url, 'novato');
+    assert.equal(maps(C2).length, 0);
+    log('quem já tinha entregue o tutorial recebe o Mapa da Estrada Velha ao entrar (uma vez); quem não entregou, não');
+    await Promise.all([B.close(), C2.close()]);
+  });
+});
+
 test('Tutorial: os sete passos com Bento, Ligia e Caio escoltados até o posto; só o dono vê os três', { timeout: 240000 }, async () => {
   await withServer(async (server, url) => {
     const A = await newChar(url, 'tutor', 'emberweaver', 'Brasinha', { delta: true });
@@ -145,13 +223,16 @@ test('Tutorial: Caio cai se ninguém chama a atenção dos bichos, Ligia passa u
     // sem tônico na bolsa, Ligia passa um; bebido perto dela, ela levanta
     A.char = (await A.request('char')).char;
     const pots = A.char.items.filter((i) => i.loc === 'bag' && i.defId === 'potion_hp_s');
+    // parado a menos de 7 m dela: o tônico pode chegar logo depois do último descarte, no mesmo pacote da
+    // resposta; a espera vem antes e só aceita um tônico que não é um dos descartados
+    const discarded = new Set(pots.map((i) => i.id));
+    const gift = A.waitFor((m) => m.t === 'char' && m.char.items.some((i) => i.defId === 'potion_hp_s' && !discarded.has(i.id)), 20000, 'tônico de Ligia');
     for (const p of pots) assert.equal((await A.request('discard', { instance: p.id })).ok, true);
-    const gift = A.waitFor((m) => m.t === 'char' && m.char.items.some((i) => i.defId === 'potion_hp_s'), 20000, 'tônico de Ligia');
     const ligia = follower(A, 'Ligia');
     await goTo(A, ligia.x + 2, ligia.z - 1);
     const given = await gift;
     assert.ok(A.events.some((m) => m.t === 'say' && m.name === 'Ligia' && /bolso/.test(m.text)));
-    const pot = given.char.items.find((i) => i.defId === 'potion_hp_s');
+    const pot = given.char.items.find((i) => i.defId === 'potion_hp_s' && !discarded.has(i.id));
     assert.equal(pot.qty, 1);
     assert.equal((await A.request('use_item', { instance: pot.id })).ok, true);
     await waitObjective(A, 3);

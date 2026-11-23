@@ -164,6 +164,19 @@ export function validate(data, builds) {
       }
     }
   }
+  // chegada por portal (D164): quem atravessa não aparece, ainda na tela de carregamento, no alcance de um bando agressivo
+  for (const [mid, m] of Object.entries(data.maps)) {
+    for (const pt of m.portals ?? []) {
+      const dm = data.maps[pt.to];
+      if (!dm || !Number.isFinite(pt.toX) || !Number.isFinite(pt.toZ)) continue;
+      for (const sp of dm.spawns ?? []) {
+        const reach = aggroReach(sp);
+        if (reach == null) continue;
+        const d = Math.hypot(sp.x - pt.toX, sp.z - pt.toZ);
+        if (d <= reach) errors.push(`portal ${mid}/${pt.id}: a chegada em ${pt.to} (${pt.toX}, ${pt.toZ}) fica no alcance de ${data.monsters[sp.monster].name} em (${sp.x}, ${sp.z}): ${d.toFixed(1)} m para ${reach} m`);
+      }
+    }
+  }
   // tutorial (D165): pessoas a resgatar do bloco rescue e o segundo toque
   const LOOKS = ['man', 'woman', 'boy'], FREES = ['reach', 'tonic', 'guards'];
   const people = new Set();

@@ -11,6 +11,9 @@ export class QuestEngine {
     // nome de exibição de cada NPC (o diário mostrava o id interno: "fale com master_veilsinger")
     this.npcNames = new Map();
     for (const m of Object.values(data.maps ?? {})) for (const n of m?.npcs ?? []) if (!this.npcNames.has(n.id)) this.npcNames.set(n.id, n.name);
+    // itens que alguma entrega consome (objetivo collect): esses podem faltar sem terem sido perdidos
+    this.consumedItems = new Set();
+    for (const q of Object.values(this.quests)) for (const o of q.objectives ?? []) if (o.type === 'collect') this.consumedItems.add(o.item);
     // dicas do tutorial por classe: à distância (arma inicial com "ranged") ou corpo a corpo
     this.rangedClass = new Map();
     for (const [cid, c] of Object.entries(data.classes ?? {})) {
@@ -229,26 +232,48 @@ export class QuestEngine {
   }
 
   // ---------- tutorial (server/src/tutorial.js) ----------
+  // Feito só com true (como objectiveStatus confere): um personagem gravado no meio do tutorial antigo tem
+  // no objetivo 0 a lista dos objetos clicados (["rescue_bento", ...]), e "pr ? null : true" nunca o marcava.
   onRescue(char, who) {
-    return this.bump(char, (o) => o.type === 'rescue' && o.who === who, (o, pr) => (pr ? null : true));
+    return this.bump(char, (o) => o.type === 'rescue' && o.who === who, (o, pr) => (pr === true ? null : true));
   }
 
   // habilidade da tecla "slot" da barra (as habilidades da classe na ordem de data/classes.json)
   onSkill(char, skillId) {
     const skills = this.data.classes?.[char.classId]?.skills ?? [];
-    return this.bump(char, (o) => o.type === 'skill' && skills[(o.slot ?? 1) - 1] === skillId, (o, pr) => (pr ? null : true));
+    return this.bump(char, (o) => o.type === 'skill' && skills[(o.slot ?? 1) - 1] === skillId, (o, pr) => (pr === true ? null : true));
   }
 
   onPickup(char) {
-    return this.bump(char, (o) => o.type === 'pickup', (o, pr) => ((pr || 0) >= o.count ? null : (pr || 0) + 1));
+    return this.bump(char, (o) => o.type === 'pickup', (o, pr) => { const n = Number.isInteger(pr) ? pr : 0; return n >= o.count ? null : n + 1; });
   }
 
   onBell(char) {
-    return this.bump(char, (o) => o.type === 'bell', (o, pr) => (pr ? null : true));
+    return this.bump(char, (o) => o.type === 'bell', (o, pr) => (pr === true ? null : true));
   }
 
   onArrive(char) {
-    return this.bump(char, (o) => o.type === 'arrive', (o, pr) => (pr ? null : true));
+    return this.bump(char, (o) => o.type === 'arrive', (o, pr) => (pr === true ? null : true));
+  }
+
+  // Itens de missão (questItem) das recompensas de missões entregues que o personagem não tem: quem concluiu
+  // o tutorial antes de ele dar o Mapa da Estrada Velha (ou pelo comando de mestre quest_done) recebe o mapa
+  // ao entrar no mundo. Item de missão não se vende, descarta, troca nem deposita: se não está com o
+  // personagem (e nenhuma entrega o consome), ele nunca o recebeu. Bolsa cheia: fica para a próxima entrada.
+  grantMissingQuestItems(char) {
+    const granted = [];
+    for (const [id, st] of char.quests) {
+      if (st.state !== 'done') continue;
+      for (const [defId, qty] of this.quests[id]?.rewards?.items ?? []) {
+        if (!this.data.items[defId]?.questItem || this.consumedItems.has(defId) || [...char.items.values()].some((it) => it.defId === defId)) continue;
+        if (bagCount(char) >= BAG_CAPACITY) continue;
+        const it = { id: randomUUID(), defId, qty, enh: 0, loc: 'bag', slot: null };
+        this.store.insertItem({ ...it, charId: char.id, source: `quest:${id}` });
+        char.items.set(it.id, it);
+        granted.push(defId);
+      }
+    }
+    return granted;
   }
 
   bump(char, match, next) {

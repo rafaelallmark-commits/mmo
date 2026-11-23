@@ -88,7 +88,7 @@ próximos animados), **Sombras**, **Tela cheia** e limite de **quadros por segun
   da sua faixa e da próxima; peças melhores caem dos monstros, das elites e dos chefes.
 - **Ferreiro**: refina peças até **+6**. Até +3, a falha só gasta ouro e material; dali em diante a falha derruba
   um grau, a menos que você use um **Selo de Proteção** (só é gasto quando segura uma falha).
-- **Vender e descartar**: na bolsa (**I**), botão direito no item. Qualquer comerciante compra pela metade do valor.
+- **Vender e descartar**: na bolsa (**I**), botão direito no item. Qualquer comerciante compra pela metade do valor. O Mapa da Estrada Velha é item de missão: fica sempre com você.
 - **Depósito**: guarda-volumes compartilhado entre os personagens da sua conta.
 - Caiu? Volte ao posto de guarda do mapa. Se sair do jogo no meio de uma instância, você volta à porta dela.
 

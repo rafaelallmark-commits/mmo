@@ -76,10 +76,10 @@ z=50 │◄ ◎ Posto da Ponte (20,50)  ▓▓ Estação Norte    Vau de Nácar 
      │══════════════ Ratos de Sulco (44,50) ═══ estrada velha ══════│
      │           • Ligia (34,54)       ╲ trilha dos      ╲ trilha   │
      │             ╲ Capataz Rachado    ╲ Cães            ╲ do Brejo│
-     │               (44,72) [elite]   Cães de Ferrugem  Javalis    │
-     │                                 (92,84) [matilha] de Cinza   │
-     │                                                   (142,84)   │
-     │                                                 ◆ Brejo, nv 5│
+     │               (44,72) [elite]   Cães de Ferrugem     ╲       │
+     │                                 (92,84) [matilha]     ╲      │
+     │                                       Javalis de Cinza   ╲   │
+     │                                       (122,84)  ◆ Brejo, nv 5│
 z=100└──────────────────────────────────────────────────────────────┘
      x=0                                                        x=160
 ```
@@ -93,10 +93,12 @@ z=100└────────────────────────
 | **Ruínas da Estação Norte** | (70–76, 40–56), bloqueadas | A estrada contorna as ruínas pelo sul (ou pelo norte) |
 | **Leito Seco** | (104, 36) | Lagartos de Lastro, nível 4, passivos (4) |
 | **Curva dos Cães** | (92, 84), no fim da trilha que sai da estrada em (84, 52) | Cães de Ferrugem, nível 3, agressivos a 8 m, em matilha (5) |
-| **Campo de Cinza** | (142, 84), na trilha do Brejo | Javalis de Cinza, nível 5, agressivos a 8 m (4): guardam a Trilha do Brejo (portal de nível 5 em (150, 92)) |
+| **Campo de Cinza** | (122, 84), a sudeste, entre a Curva dos Cães e a Trilha do Brejo | Javalis de Cinza, nível 5, agressivos a 8 m (4); longe da estrada e de onde se chega pelo portal do Brejo (146, 88) |
+| **Trilha do Brejo** | sai da estrada em (136, 50) até o portal de nível 5 em (150, 92) | Portal para o Brejo das Bombas; quem volta do Brejo chega em (146, 88) |
 | **Ponte de Vau de Nácar** | (157, 50) | Portal para Vau de Nácar |
 
 - **Estrada segura** (D164): nenhum bando agressivo alcança a estrada entre o posto e a ponte de Vau de Nácar, com o desvio das ruínas — o centro do bando + o raio + o passeio (até 5 m) + a agressão fica a mais de 2 m do caminho. Quem é de Nácar atravessa no nível 2 para a missão 1.3 sem ser atacado (conferido em `server/test/estrada.test.js`, andando com a zona rodando, e pelo `npm run validate-data`, com as faixas `safeCorridor` do mapa).
+- **Chegada pelos portais** (D164): ninguém chega, ainda na tela de carregamento, no alcance de um bando agressivo — vale para todos os mapas (`npm run validate-data` confere o ponto de chegada de cada portal) e, na Estrada, `estrada.test.js` confere as chegadas de Pedrâmbar, Vau de Nácar e Brejo com a zona rodando.
 - **Solo**: ratos e besouros perto do posto (passivos, níveis 1–2), lagartos no leito seco (lentos, nível 4).
 - **Grupo**: Curva dos Cães (agressivos, chamam os vizinhos), Capataz Rachado (elite de nível 4: dois jogadores de nível 1–2 vencem com tônicos; um jogador de nível 5 vence sozinho).
 - **Tutorial**: Bento (36, 44), Ligia (34, 54) e Caio (54, 38) esperam resgate perto do posto, todos longe do Capataz e dos bandos agressivos (ver `02-campanha.md`).

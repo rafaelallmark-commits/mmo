@@ -859,13 +859,19 @@ func _bag_menu(inst: Dictionary) -> void:
 	if usable:
 		var verb := "Usar" if d.get("kind", "") == "consumable" else ("Abrir o mapa (M)" if d.get("kind", "") == "map" else "Equipar")
 		_menu_button(v, verb, func(): _on_bag_menu(0, inst))
-	if _merchant_open():
+	var quest_item: bool = d.get("questItem", false)
+	if quest_item:
+		# item de missão (o Mapa da Estrada Velha): o servidor recusa vender e descartar, então nem oferece
+		var bound := _menu_button(v, "Item de missão: não se vende nem se descarta", func(): pass)
+		bound.disabled = true
+	elif _merchant_open():
 		var label := "Vender%s a %s por %d de ouro" % [" (x%d)" % int(inst["qty"]) if int(inst.get("qty", 1)) > 1 else "", str(npc_open.get("name", "comerciante")).get_slice(",", 0), _sell_price(inst)]
 		_menu_button(v, label, func(): _on_bag_menu(1, inst))
 	else:
 		var off := _menu_button(v, "Vender (fale com um comerciante)", func(): pass)
 		off.disabled = true
-	_menu_button(v, "Descartar…", func(): _on_bag_menu(2, inst))
+	if not quest_item:
+		_menu_button(v, "Descartar…", func(): _on_bag_menu(2, inst))
 	_menu_button(v, "Cancelar", func(): pass)
 	# na posição do mouse, sem sair da tela
 	var vp := get_viewport().get_visible_rect().size

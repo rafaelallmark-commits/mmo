@@ -293,6 +293,20 @@ func _process(_d: float) -> void:
 			if Time.get_ticks_msec() > wait_until:
 				_shot("mapa")
 				main.hud.toggle_map()
+				# o menu do mapa na bolsa não oferece vender nem descartar (item de missão)
+				var map_it: Dictionary = main.my_item("map_estrada_velha")
+				if map_it.is_empty():
+					fail("Mapa da Estrada Velha fora da bolsa")
+					return
+				main.hud._bag_menu(map_it)
+				var texts := []
+				for b in main.hud._bag_menu_node.find_children("*", "Button", true, false):
+					texts.append((b as Button).text)
+				main.hud._close_bag_menu()
+				if texts.any(func(t): return str(t).begins_with("Descartar") or str(t).begins_with("Vender")):
+					fail("o menu do mapa oferece vender ou descartar: %s" % [texts])
+					return
+				say("menu do mapa na bolsa: %s" % ", ".join(PackedStringArray(texts)))
 				step = "m2_party"
 		"m2_party":
 			if main.args.has("invite"):

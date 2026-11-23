@@ -77,6 +77,40 @@ test('Estrada Velha: o pior alcance de cada bando agressivo fica longe do caminh
   assert.deepEqual(validate(data, loadBuilds()).errors, []);
 });
 
+test('Estrada Velha: quem chega por um portal (Pedrâmbar, Vau, Brejo) não aparece no meio de um bando agressivo', () => {
+  // as chegadas na Estrada são as dos portais dos outros mapas que levam a ela
+  const arrivals = [];
+  for (const [mid, m] of Object.entries(data.maps)) for (const pt of m.portals ?? []) if (pt.to === MAP) arrivals.push({ from: mid, x: pt.toX, z: pt.toZ });
+  assert.deepEqual(arrivals.map((a) => a.from).sort(), ['brejo_bombas', 'pedrambar', 'vau_de_nacar']);
+  for (const seed of [3, 17, 2024]) {
+    for (const a of arrivals) {
+      const zone = newZone(seed);
+      for (let i = 0; i < 1200; i++) zone.tick(100); // dois minutos de passeio dos bandos
+      const store = zone.store;
+      const acc = store.createAccount(`chega${seed}${a.from}`, 'senha123');
+      const cls = data.classes.breaker;
+      const id = store.createCharacter({ accountId: acc, name: `Chega${seed}${a.from.slice(0, 3)}`, classId: 'breaker', hp: 80, mp: 40, mapId: MAP, x: a.x, z: a.z, kit: cls.startingKit, slotFor: (d) => data.items[d].slot });
+      const c = store.loadCharacter(id);
+      c.quests = new Map();
+      c.level = 5; c.xp = data.xp.cumulative[4]; // do Brejo só se volta com nível 5 ou mais
+      const p = zone.addPlayer(c);
+      // a tela de carregamento: 5 s parado onde chegou
+      for (let i = 0; i < 50; i++) {
+        zone.tick(100);
+        for (const m of zone.monsters.values()) {
+          assert.ok(m.state === 'dead' || (m.targetId !== p.eid && !m.threat.has(c.id)), `semente ${seed}: quem chega de ${a.from} em (${a.x}, ${a.z}) foi mirado por ${m.def.name} em (${m.x.toFixed(1)}, ${m.z.toFixed(1)})`);
+        }
+      }
+    }
+  }
+  log(`chegadas conferidas: ${arrivals.map((a) => `${a.from} (${a.x}, ${a.z})`).join(', ')} — ninguém mirou nos primeiros 5 s`);
+  // a conferência pega o caso de verdade: os javalis na boca da trilha do Brejo, onde se chega dele
+  const old = structuredClone(data);
+  Object.assign(old.maps[MAP].spawns.find((sp) => sp.monster === 'ash_boar'), { x: 142, z: 84, radius: 8 });
+  const v = validate(old, loadBuilds());
+  assert.ok(v.errors.some((e) => /brejo_bombas\/to_estrada: a chegada em estrada_velha \(146, 88\) fica no alcance de Javali de Cinza/.test(e)), v.errors.join('\n'));
+});
+
 test('Estrada Velha: um personagem de nível 2 anda do posto ao portal do Vau e volta sem nenhum monstro o atacar', () => {
   const map = data.maps[MAP];
   const gp = map.guardPost;

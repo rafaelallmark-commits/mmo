@@ -813,6 +813,8 @@ export class GameServer {
   enterChar(s, char, leaseEpoch = null) {
     const charId = char.id;
     this.quests.load(char);
+    // o Mapa da Estrada Velha para quem entregou o tutorial antes de ele dar o mapa (D166)
+    for (const defId of this.quests.grantMissingQuestItems(char)) this.log(`item de missão entregue na entrada: ${defId} para ${char.name}`);
     this.clans.attach(char);
     const wasDead = char.dead;
     let zone = this.zones.get(char.mapId) ?? this.zones.get(DEFAULT_MAP);
