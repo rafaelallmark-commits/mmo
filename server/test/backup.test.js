@@ -30,6 +30,10 @@ const run = (args, env = {}) => spawnSync(process.execPath, ['--disable-warning=
 // date -d (GNU) é o que o script do compose usa na imagem postgres:17 (Debian)
 const GNU_DATE = spawnSync('sh', ['-c', 'date -u -d "2026-01-02 03:04:05" +%s'], { encoding: 'utf8' }).stdout.trim() === '1767323045';
 
+// limpeza da pasta temporária: tenta de novo se um arquivo ainda aparece nela na hora de apagar (ENOTEMPTY no
+// PostgreSQL do CI, depois de um processo agendado encerrado)
+const LIMPAR = { recursive: true, force: true, maxRetries: 10, retryDelay: 100 };
+
 // processos de longa duração (modo agendado): os que um teste com falha deixar para trás morrem no fim
 const running = new Set();
 after(() => { for (const c of running) c.kill('SIGKILL'); });
@@ -138,7 +142,7 @@ test('ensaio de restauração (SQLite): backup a quente com o banco aberto, cóp
     assert.equal(m.values.cinzas_backup_last_size_bytes, statSync(join(bdir, files[0])).size);
     assert.equal(m.values.cinzas_backup_oldest_copy_timestamp_seconds, Math.round(atOf(files[0].slice(7, 26)) / 1000));
     assert.match(m.text, /# TYPE cinzas_backup_last_success_timestamp_seconds gauge/);
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  } finally { rmSync(dir, LIMPAR); }
 });
 
 test('rotação: ficam as N mais novas e a mais nova de cada dia, nada com mais de 14 dias; o resto da pasta não é tocado', () => {
@@ -175,7 +179,7 @@ test('rotação: ficam as N mais novas e a mais nova de cada dia, nada com mais 
     const kept2 = copyStamps(bdir, 'cinzas', '.db');
     assert.equal(kept2.length, 2);
     assert.deepEqual(kept2, [...new Set([...kept, ...kept2])].sort().slice(-2), 'as duas mais novas');
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  } finally { rmSync(dir, LIMPAR); }
 });
 
 test('falha: banco corrompido ou ausente sai com erro, não apaga cópia nenhuma e a métrica guarda o último sucesso', () => {
@@ -213,7 +217,7 @@ test('falha: banco corrompido ou ausente sai com erro, não apaga cópia nenhuma
       const u = run(['--db', dbPath, ...args]);
       assert.equal(u.status, 2, `${args.join(' ')}: ${u.stderr}`);
     }
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  } finally { rmSync(dir, LIMPAR); }
 });
 
 test('agendado (serviço do compose): com cópia recente espera o intervalo e semeia a métrica; sem cópia, copia na hora', async () => {
@@ -247,7 +251,7 @@ test('agendado (serviço do compose): com cópia recente espera o intervalo e se
     assert.ok(readMetric(metric2).values.cinzas_backup_last_success_timestamp_seconds > 0);
     p2.child.kill('SIGTERM');
     assert.equal((await p2.exited).code, 0);
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  } finally { rmSync(dir, LIMPAR); }
 });
 
 test('--somente-sqlite com o banco no PostgreSQL: não faz nada, apaga a métrica antiga e, agendado, fica parado no ar', async () => {
@@ -267,7 +271,7 @@ test('--somente-sqlite com o banco no PostgreSQL: não faz nada, apaga a métric
     assert.equal(p.child.exitCode, null, 'continua no ar (sem reinícios em série do contêiner)');
     p.child.kill('SIGTERM');
     assert.equal((await p.exited).code, 0);
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  } finally { rmSync(dir, LIMPAR); }
 });
 
 test('--saude (verificação de saúde do serviço "backup" no compose): 0 com backup em dia, 1 sem backup, atrasado ou com falha depois', () => {
@@ -308,7 +312,7 @@ test('--saude (verificação de saúde do serviço "backup" no compose): 0 com b
     assert.equal(r.status, 0, r.stdout + r.stderr);
     assert.match(r.stdout, /parado de propósito/);
     assert.equal(run(['--db', dbPath, '--saude']).status, 2, '--saude sem --metrica');
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  } finally { rmSync(dir, LIMPAR); }
 });
 
 // pg_dump e pg_restore de mentira: o script do compose roda sem PostgreSQL (rotação, métrica, falhas)
@@ -389,7 +393,7 @@ test('deploy/backup-postgres.sh (serviço backup-banco): dump conferido, mesma r
     assert.equal(readMetric(metric).values.cinzas_backup_last_success_timestamp_seconds, Math.round(atOf(created) / 1000));
     p.child.kill('SIGTERM');
     assert.equal((await p.exited).code, 0);
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  } finally { rmSync(dir, LIMPAR); }
 });
 
 test('deploy/copia-externa.sh (perfil copia-externa): sync que espelha só as cópias, cifra exigida (ou recusada de propósito), métrica e falha', async () => {
@@ -467,7 +471,7 @@ exit 0
     assert.match(p.output(), /aviso: COPIA_SEM_CIFRA=sim: as cópias vão sem cifra/);
     p.child.kill('SIGTERM');
     assert.equal((await p.exited).code, 0);
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  } finally { rmSync(dir, LIMPAR); }
 });
 
 // ---------- PostgreSQL de verdade (npm run test:pg) ----------
@@ -551,6 +555,6 @@ test('ensaio de restauração (PostgreSQL): pg_dump do esquema pelo backup.mjs e
     }
   } finally {
     for (const name of dbs) pg('dropdb', ['--if-exists', name]);
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, LIMPAR);
   }
 });
