@@ -3,10 +3,13 @@
 #   servidor-postgres  - as mesmas suítes no PostgreSQL 17 (contêiner de serviço do job)
 #   cliente   - importa o projeto Godot 4.3 em modo headless (falha com qualquer erro de script) e roda o
 #               --autotest do cliente contra um servidor de verdade (critério 9 do Marco 1)
+#   pacotes   - exporta os pacotes do cliente para Windows e macOS como a release (mesmos modelos e presets)
+#   cliente-windows, cliente-macos - rodam o pacote exportado numa máquina Windows e numa macOS (Apple) do
+#               GitHub, contra um servidor de verdade, com o mesmo --autotest; tiram capturas com o renderizador
 #   docker    - constrói a imagem do servidor (sem publicar) e faz o teste rápido do contêiner
 #               (deploy/teste-conteiner.sh, o mesmo que a release roda antes de publicar a imagem)
 # A release (release.yml) chama este mesmo arquivo (workflow_call) com a versão da tag: nada é publicado sem
-# estes quatro jobs verdes. Por isso o push de tag não dispara o CI de novo aqui.
+# estes jobs verdes. Por isso o push de tag não dispara o CI de novo aqui.
 name: CI
 
 on:
@@ -43,6 +46,9 @@ env:
   GODOT_VERSION: 4.3-stable
   # SHA-512 publicado pelo Godot em .../releases/download/4.3-stable/SHA512-SUMS.txt
   GODOT_ZIP_SHA512: fd52bb4ba8acc30ca5accd1c566d470ad7282f891ccc0995dfafabcf92bcf76280ce182bf9d80ebd885f3ed2165d01e1fc3f2928436b15498dfbd98656c2a45a
+  # modelos de exportação (pacotes testados no Windows e no macOS; os mesmos da release)
+  GODOT_TEMPLATES: 4.3.stable
+  GODOT_TPZ_SHA512: 476366caf0fd45a8f24136cf9cf1dc0bc2b96f7c82d53e5f82200b55aefd07b286d283fd6f1ce29e0de70648c5a51d3b12f96c6d4fafd4e8c4878ecda6406d6a
 
 jobs:
   servidor:
@@ -217,6 +223,242 @@ jobs:
             importacao.log
             autotest-cliente.log
             servidor-autotest.log
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # O cliente precisa rodar no Windows e no macOS: os pacotes são exportados aqui do mesmo jeito que a release
+  # exporta (mesmos modelos e presets) e cada um roda numa máquina do próprio sistema, contra um servidor de
+  # verdade, com o mesmo --autotest do job cliente. Chamado pela release, nada é publicado sem os dois verdes.
+  pacotes:
+    name: Pacotes do cliente para Windows e macOS (exportação)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Cache do Godot e dos modelos de exportação
+        id: cache-godot
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/godot
+            ~/.local/share/godot/export_templates/${{ env.GODOT_TEMPLATES }}
+          key: godot-${{ env.GODOT_VERSION }}-modelos-desktop-v1
+
+      - name: Baixar o Godot e os modelos de exportação (só sem cache)
+        if: steps.cache-godot.outputs.cache-hit != 'true'
+        run: |
+          base="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}"
+          mkdir -p ~/godot "$RUNNER_TEMP/godot-dl"
+          cd "$RUNNER_TEMP/godot-dl"
+          curl -fsSL --retry 3 -o godot.zip "$base/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+          echo "${GODOT_ZIP_SHA512}  godot.zip" | sha512sum -c -
+          unzip -q godot.zip
+          mv "Godot_v${GODOT_VERSION}_linux.x86_64" ~/godot/godot
+          chmod +x ~/godot/godot
+          curl -fsSL --retry 3 -o modelos.tpz "$base/Godot_v${GODOT_VERSION}_export_templates.tpz"
+          echo "${GODOT_TPZ_SHA512}  modelos.tpz" | sha512sum -c -
+          destino=~/.local/share/godot/export_templates/${GODOT_TEMPLATES}
+          mkdir -p "$destino"
+          unzip -q -j -o modelos.tpz -d "$destino" templates/version.txt templates/linux_release.x86_64 \
+            templates/windows_release_x86_64.exe templates/windows_release_x86_64_console.exe templates/macos.zip
+          rm -rf "$RUNNER_TEMP/godot-dl"
+
+      - name: Importar e exportar
+        run: |
+          status=0
+          ~/godot/godot --headless --path client --import 2>&1 | tee importacao.log || status=$?
+          if grep -nE 'SCRIPT ERROR|Parse Error' importacao.log; then echo "::error title=Pacotes::erros de script na importação"; exit 1; fi
+          cd client
+          mkdir -p build/windows build/macos
+          touch build/.gdignore
+          exportar() {  # <preset> <arquivo de saída>
+            local log status=0
+            log="build/exportacao-$(printf '%s' "$1" | tr ' A-Z' '-a-z').log"
+            ~/godot/godot --headless --path . --export-release "$1" "$2" 2>&1 | tee "$log" || status=$?
+            if [ "$status" -ne 0 ] || [ ! -s "$2" ]; then echo "::error title=Exportação $1::falhou (código $status)"; exit 1; fi
+            if grep -nE 'SCRIPT ERROR|Parse Error' "$log"; then echo "::error title=Exportação $1::erros de script"; exit 1; fi
+          }
+          exportar "Windows Desktop" build/windows/CinzasDoMeridiano.exe
+          exportar "macOS" build/macos/CinzasDoMeridiano.zip
+          ls -la build/windows build/macos
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pacote-windows
+          path: client/build/windows/
+          retention-days: 3
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pacote-macos
+          path: client/build/macos/CinzasDoMeridiano.zip
+          retention-days: 3
+
+  cliente-windows:
+    name: Cliente no Windows (pacote exportado contra o servidor)
+    needs: pacotes
+    runs-on: windows-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Instalar as dependências do servidor
+        working-directory: server
+        run: npm ci --no-audit --no-fund
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: pacote-windows
+          path: pacote
+
+      # o mesmo autotest do job cliente, mas com o .exe que os jogadores baixam (headless: sem placa de vídeo)
+      - name: Autotest do pacote no Windows
+        run: |
+          $srv = Start-Process node -ArgumentList '--disable-warning=ExperimentalWarning','server/src/main.js','--dev','--host','127.0.0.1','--port','7777','--db',"$env:RUNNER_TEMP\autotest.db" -RedirectStandardOutput servidor.log -RedirectStandardError servidor-erros.log -PassThru
+          for ($i = 0; $i -lt 120; $i++) {
+            if ((Test-Path servidor.log) -and (Select-String -Path servidor.log -Pattern 'servidor ouvindo' -Quiet)) { break }
+            Start-Sleep -Milliseconds 500
+          }
+          if (-not (Select-String -Path servidor.log -Pattern 'servidor ouvindo' -Quiet)) { Get-Content servidor.log, servidor-erros.log; throw 'o servidor não subiu em 60 s' }
+          $log = Join-Path $PWD 'cliente.log'
+          $p = Start-Process -FilePath 'pacote\CinzasDoMeridiano.exe' -ArgumentList '--headless','--log-file',$log,'--','--autotest','--server=ws://127.0.0.1:7777','--account=robo','--password=robo123','--class=breaker','--name=Robo' -PassThru
+          if (-not $p.WaitForExit(300000)) { $p.Kill(); throw 'o cliente passou de 5 min' }
+          Stop-Process -Id $srv.Id -ErrorAction SilentlyContinue
+          if (-not (Test-Path $log)) {
+            # sem --log-file, o registro padrão do Godot
+            $padrao = Join-Path $env:APPDATA 'Godot\app_userdata\Cinzas do Meridiano\logs\godot.log'
+            if (Test-Path $padrao) { Copy-Item $padrao $log }
+          }
+          if (Test-Path $log) { Select-String -Path $log -Pattern '^\[autotest\]' | ForEach-Object { $_.Line } }
+          if ((Test-Path $log) -and (Select-String -Path $log -Pattern 'SCRIPT ERROR|Parse Error' -Quiet)) { throw 'erros de script no cliente do Windows' }
+          if ($p.ExitCode -ne 0 -or -not (Test-Path $log) -or -not (Select-String -Path $log -Pattern '^\[autotest\] OK$' -Quiet)) {
+            if (Test-Path $log) { Get-Content $log -Tail 40 }
+            Get-Content servidor.log -Tail 20
+            throw "o autotest do Windows não terminou com sucesso (código $($p.ExitCode))"
+          }
+          Write-Output 'Cliente no Windows: ok'
+
+      # Com o renderizador de verdade (sem --headless): a máquina do CI não tem placa de vídeo, então o Godot
+      # cai no ANGLE (Direct3D por software). Não bloqueia o CI: as capturas ficam nos artefatos para conferir.
+      - name: Capturas no Windows com renderizador (não bloqueia)
+        continue-on-error: true
+        run: |
+          $srv = Start-Process node -ArgumentList '--disable-warning=ExperimentalWarning','server/src/main.js','--dev','--host','127.0.0.1','--port','7778','--db',"$env:RUNNER_TEMP\capturas.db" -RedirectStandardOutput servidor-capturas.log -PassThru
+          Start-Sleep -Seconds 5
+          $dir = Join-Path $PWD 'capturas-windows'
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          $p = Start-Process -FilePath 'pacote\CinzasDoMeridiano.exe' -ArgumentList '--resolution','1280x720','--log-file',"$PWD\capturas-windows.log",'--','--server=ws://127.0.0.1:7778','--account=vitrine','--password=vitrine123',"--navshots=$dir" -PassThru
+          if (-not $p.WaitForExit(240000)) { $p.Kill() }
+          Stop-Process -Id $srv.Id -ErrorAction SilentlyContinue
+          Get-ChildItem $dir | Format-Table Name, Length
+          if (-not (Test-Path (Join-Path $dir '07_mundo.png'))) { throw 'sem a captura do mundo' }
+
+      - name: Guardar registros e capturas do Windows
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: registros-cliente-windows
+          path: |
+            cliente.log
+            servidor.log
+            capturas-windows.log
+            capturas-windows/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  cliente-macos:
+    name: Cliente no macOS (pacote exportado contra o servidor)
+    needs: pacotes
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Instalar as dependências do servidor
+        working-directory: server
+        run: npm ci --no-audit --no-fund
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: pacote-macos
+          path: pacote
+
+      # o pacote universal (Intel e Apple) com a assinatura ad-hoc da exportação, na máquina Apple do GitHub
+      - name: Autotest do pacote no macOS
+        run: |
+          ditto -x -k pacote/CinzasDoMeridiano.zip app
+          bin=$(find app -path '*.app/Contents/MacOS/*' -type f -perm -u+x | head -1)
+          echo "executável: $bin"
+          lipo -archs "$bin" || true
+          node --disable-warning=ExperimentalWarning server/src/main.js --dev --host 127.0.0.1 --port 7777 \
+            --db "$RUNNER_TEMP/autotest.db" > servidor.log 2>&1 &
+          servidor=$!
+          trap 'kill -INT "$servidor" 2> /dev/null || true' EXIT
+          for _ in $(seq 1 120); do grep -q "servidor ouvindo" servidor.log && break; sleep 0.5; done
+          grep -q "servidor ouvindo" servidor.log || { cat servidor.log; echo "::error title=macOS::o servidor não subiu"; exit 1; }
+          status=0
+          "$bin" --headless -- --autotest --server=ws://127.0.0.1:7777 --account=robo --password=robo123 \
+            --class=breaker --name=Robo > cliente.log 2>&1 &
+          cliente=$!
+          for _ in $(seq 1 300); do kill -0 "$cliente" 2> /dev/null || break; sleep 1; done
+          if kill -0 "$cliente" 2> /dev/null; then kill "$cliente"; echo "::error title=macOS::o cliente passou de 5 min"; exit 1; fi
+          wait "$cliente" || status=$?
+          grep -E '^\[autotest\]' cliente.log || true
+          if grep -nE 'SCRIPT ERROR|Parse Error' cliente.log; then echo "::error title=macOS::erros de script no cliente"; exit 1; fi
+          if [ "$status" -ne 0 ] || ! grep -qx '\[autotest\] OK' cliente.log; then
+            tail -n 40 cliente.log; tail -n 20 servidor.log
+            echo "::error title=macOS::o autotest não terminou com sucesso (código $status)"
+            exit 1
+          fi
+          echo "Cliente no macOS: ok"
+
+      # Com o renderizador de verdade (sem --headless), na sessão gráfica da máquina do GitHub. Não bloqueia o CI:
+      # as capturas ficam nos artefatos para conferir o visual no macOS.
+      - name: Capturas no macOS com renderizador (não bloqueia)
+        continue-on-error: true
+        run: |
+          bin=$(find app -path '*.app/Contents/MacOS/*' -type f -perm -u+x | head -1)
+          node --disable-warning=ExperimentalWarning server/src/main.js --dev --host 127.0.0.1 --port 7778 \
+            --db "$RUNNER_TEMP/capturas.db" > servidor-capturas.log 2>&1 &
+          servidor=$!
+          trap 'kill -INT "$servidor" 2> /dev/null || true' EXIT
+          sleep 5
+          mkdir -p capturas-macos
+          "$bin" --resolution 1280x720 -- --server=ws://127.0.0.1:7778 --account=vitrine --password=vitrine123 \
+            --navshots="$PWD/capturas-macos" > capturas-macos.log 2>&1 &
+          cliente=$!
+          for _ in $(seq 1 240); do kill -0 "$cliente" 2> /dev/null || break; sleep 1; done
+          kill "$cliente" 2> /dev/null || true
+          tail -n 30 capturas-macos.log
+          ls -la capturas-macos
+          test -s capturas-macos/07_mundo.png
+
+      - name: Guardar registros e capturas do macOS
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: registros-cliente-macos
+          path: |
+            cliente.log
+            servidor.log
+            capturas-macos.log
+            capturas-macos/
           retention-days: 7
           if-no-files-found: ignore
 

@@ -86,10 +86,13 @@ test('quem sai do raio de interesse some; troca de zona recomeça com "full"', a
     pb.char.x = pa.char.x + 2; pb.char.z = pa.char.z + 1;
     await a.waitFor((x) => x.t === 'snap' && a.entity(b.char.eid)?.n === b.char.name, 3000, 'b de volta com nome');
     // troca de zona: primeiro snapshot por diferença vem com "full"
+    // as esperas vêm antes da troca: o primeiro snapshot do mapa novo (o "full") pode chegar no mesmo pacote do "zone"
+    const zP = a.waitFor((x) => x.t === 'zone', 3000, 'zone');
+    const fP = a.waitFor((x) => x.t === 'snap' && x.map === 'brejo_bombas', 3000, 'snap do brejo');
     server.moveToZone(pa, 'brejo_bombas', 20, 20);
-    const z = await a.waitFor((x) => x.t === 'zone', 3000, 'zone');
+    const z = await zP;
     assert.equal(z.mapId, 'brejo_bombas');
-    const f = await a.waitFor((x) => x.t === 'snap' && x.map === 'brejo_bombas', 3000, 'snap do brejo');
+    const f = await fP;
     assert.equal(f.full, 1);
     assert.ok(a.entity(a.char.eid), 'o próprio personagem no novo mapa');
     assert.equal(a.entity(b.char.eid), null, 'quem ficou no outro mapa não aparece');
