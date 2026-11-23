@@ -55,9 +55,14 @@ export function createMailer(cfg = { kind: 'console' }) {
   return { async send(m) { console.log(`[e-mail] para ${m.to}: ${m.subject}\n${m.text}\n`); return 'console'; } };
 }
 
+// Prazo de um envio inteiro (conexão, TLS, autenticação e mensagem). Fica bem abaixo do prazo do cliente
+// (client/scripts/main.gd, _accounts_post): com o SMTP preso, o cadastro responde o 202 'email' (D174) antes
+// de o cliente desistir, e o jogador vê a tela do código em vez de "Serviço de contas indisponível" (D178).
+export const SMTP_TIMEOUT_MS = 10_000;
+
 // Cliente SMTP mínimo (sem dependências). cfg: host, port, secure (TLS direto, 465), starttls (587),
 // user, pass, from, helo, ca (lista de autoridades; sem ela, as do Node), rejectUnauthorized (só os testes),
-// allowPlainAuth.
+// allowPlainAuth, timeoutMs (padrão SMTP_TIMEOUT_MS).
 // Usuário e senha só vão por conexão cifrada: sem TLS direto e sem STARTTLS anunciado, o envio falha
 // (a menos de allowPlainAuth, só para um relé local de desenvolvimento).
 export function smtpSend(cfg, m) {
@@ -75,7 +80,7 @@ export function smtpSend(cfg, m) {
       : net.connect({ host: cfg.host, port: cfg.port });
     let buf = '';
     const queue = [];
-    const timer = setTimeout(() => fail(new Error('SMTP: tempo esgotado')), cfg.timeoutMs ?? 15000);
+    const timer = setTimeout(() => fail(new Error('SMTP: tempo esgotado')), cfg.timeoutMs ?? SMTP_TIMEOUT_MS);
     const helo = cfg.helo || senderDomain(cfg.from) || 'cinzas.local';
     const onData = (d) => {
       buf += d.toString('utf8');
@@ -124,7 +129,9 @@ export function smtpSend(cfg, m) {
       }
       const addr = (s) => (/<([^>]+)>/.exec(s)?.[1] ?? s);
       await cmd(`MAIL FROM:<${addr(cfg.from)}>`, [250]);
-      await cmd(`RCPT TO:<${addr(m.to)}>`, [250, 251]);
+      // o destinatário vai como está: o endereço gravado na conta é o que recebe (o "Nome <endereço>" vale só
+      // para o remetente). Tirar o de dentro de <...> mandava a mensagem para outro endereço que o da conta
+      await cmd(`RCPT TO:<${m.to}>`, [250, 251]);
       await cmd('DATA', [354]);
       const body = message({ from: cfg.from, ...m }).replace(/^\./gm, '..');
       await cmd(`${body}\r\n.`, [250]);

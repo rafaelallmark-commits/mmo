@@ -41,3 +41,11 @@ test('simulação acelerada: prova de classe no nível 10 e a caça depois dela,
     assert.ok(r.mecanicas.avisos > 0, `${classId} viu golpes avisados de monstros`);
   }
 });
+
+test('simulação passa pela prova de classe: os avisos da prova (pedras do Quebraferro) vão ao piloto e os dos monstros à esquiva', () => {
+  // a junção das frentes deixou dois "case 'warn'" e dois tipos em this.avisos: na prova, o primeiro aviso
+  // derrubava a rodada com "this.avisos.set is not a function"
+  const r = simularClasse({ classId: 'breaker', seed: 1, ateNivel: 11 });
+  assert.equal(r.concluiu, true, `breaker chegou ao nível 11: ${r.erro ?? ''}`);
+  assert.ok(r.provas.some((p) => p.resultado === 'success'), `prova vencida: ${JSON.stringify(r.provas)}`);
+});

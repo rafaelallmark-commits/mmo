@@ -195,6 +195,60 @@ test('exportação de dados: suspensão, silêncio, clã e as linhas do jogo (s�
   }
 });
 
+test('exportação de dados: ações da equipe contra a conta (silêncio, expulsão, nome trocado, ouro retirado, suspensão) vão junto, sem quem moderou nem denúncias', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cinzas-exp-mod-'));
+  const server = new GameServer({ port: 0, host: '127.0.0.1', dbPath: join(dir, 'e.db'), seed: 5, dev: true, log: false });
+  const port = await server.start();
+  const url = `ws://127.0.0.1:${port}`;
+  try {
+    const st = server.store;
+    const { c: M } = await enter(url, 'Vigilante');
+    const { c: D } = await enter(url, 'Denunciante');
+    const { c: O } = await enter(url, 'Ofensivo');
+    const alvo = st.findAccount('m_ofensivo');
+    const modAcc = st.findAccount('m_vigilante');
+    assert.equal((await O.request('gm', { cmd: 'gold', amount: 300 })).ok, true);
+    assert.equal((await D.request('report', { name: 'Ofensivo', reason: 'xingamentos' })).ok, true);
+    let r = await M.request('gm', { cmd: 'mute', name: 'Ofensivo', minutes: 30, reason: 'xingamentos' });
+    assert.equal(r.ok, true, r.reason);
+    const kicked = O.waitFor((m) => m.t === 'kicked', 3000, 'expulsão');
+    r = await M.request('gm', { cmd: 'kick', name: 'Ofensivo', reason: 'esfriar a cabeça' });
+    assert.equal(r.ok, true, r.reason);
+    await kicked;
+    await O.closed;
+    for (const cmd of [{ cmd: 'rename', name: 'Ofensivo', newName: 'Renomeado', reason: 'nome ofensivo' }, { cmd: 'take_gold', name: 'Renomeado', amount: 100, reason: 'ouro de trapaça' },
+      { cmd: 'ban', name: 'Renomeado', hours: 2, reason: 'reincidência' }]) {
+      r = await M.request('gm', cmd);
+      assert.equal(r.ok, true, `${cmd.cmd}: ${r.reason}`);
+    }
+    st.audit('mod_unban', { targetAccount: alvo.id, by: 'ferramenta' }); // como tools/conta.mjs grava
+    const e = st.exportAccount(alvo.id);
+    const kinds = e.acoes_da_equipe.map((a) => a.kind);
+    assert.deepEqual(kinds, ['mod_mute', 'mod_kick', 'mod_rename', 'mod_take_gold', 'mod_ban', 'mod_unban']);
+    const alvoChar = e.personagens[0].id;
+    for (const a of e.acoes_da_equipe) {
+      assert.deepEqual(Object.keys(a).sort(), ['at', 'data_json', 'kind'], 'sem conta, personagem e IP de quem moderou');
+      const d = JSON.parse(a.data_json);
+      assert.ok(d.targetAccount === alvo.id || d.target === alvoChar, a.kind);
+    }
+    assert.equal(JSON.parse(e.acoes_da_equipe[2].data_json).to, 'Renomeado');
+    assert.equal(JSON.parse(e.acoes_da_equipe[0].data_json).reason, 'xingamentos');
+    // a denúncia contra ele não vem (são dados de quem denunciou), nem em lugar nenhum da exportação dele
+    assert.equal(JSON.stringify(e).includes('"report"'), false);
+    const modChar = st.listCharacters(modAcc.id)[0].id;
+    assert.equal(e.auditoria.some((a) => a.char_id === modChar), false, 'nenhuma linha do personagem de quem moderou');
+    // a exportação de quem moderou continua com as próprias ações (como antes) e sem ações contra ela
+    const em = st.exportAccount(modAcc.id);
+    assert.ok(em.auditoria.some((a) => a.kind === 'mod_ban'));
+    assert.deepEqual(em.acoes_da_equipe, []);
+    M.ws.close(); D.ws.close();
+    await sleep(50);
+  } finally {
+    await server.stop().catch(() => {});
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('nomes: sem espaço, prefixo da exclusão reservado e sem duplicata por maiúscula acentuada', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'cinzas-nomes-'));
   const server = new GameServer({ port: 0, host: '127.0.0.1', dbPath: join(dir, 'n.db'), seed: 5, dev: true, log: false });

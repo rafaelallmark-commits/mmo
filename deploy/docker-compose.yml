@@ -64,6 +64,11 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
+      # versão da implantação no hello, no registro de início e no /bug (D150): CINZAS_VERSION no .env, a tag da
+      # release sem o "v" (0.4.0-teste.2); vazia, vale a do package.json. Argumento de build e não environment:
+      # um environment vazio apagaria a versão gravada na imagem publicada (CINZAS_IMAGEM) (D181)
+      args:
+        CINZAS_VERSION: ${CINZAS_VERSION:-}
     image: ${CINZAS_IMAGEM:-cinzas-servidor:local}
     restart: unless-stopped
     init: true

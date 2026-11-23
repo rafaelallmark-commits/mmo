@@ -831,14 +831,17 @@ func _accounts_base() -> String:
 		return accounts_url.trim_suffix("/")
 	var u := server_url
 	var host := u.get_slice("://", 1).get_slice("/", 0).get_slice(":", 0)
-	if u.begins_with("wss://"):
+	# o esquema em qualquer caixa ("Wss://", como um app de mensagens deixa): o WebSocket do Godot o aceita assim (D179)
+	if u.to_lower().begins_with("wss://"):
 		return "https://%s/contas" % host
 	return "http://%s:7780" % host
 
+## Prazo de 30 s: bem acima do prazo do envio de e-mail no servidor (SMTP_TIMEOUT_MS, 10 s em server/src/mailer.js),
+## para o cadastro com o SMTP preso chegar como 202 (tela do código) e não como "Serviço de contas indisponível" (D178).
 func _accounts_post(path: String, body: Dictionary, cb: Callable) -> void:
 	var http := HTTPRequest.new()
 	add_child(http)
-	http.timeout = 15.0
+	http.timeout = 30.0
 	http.request_completed.connect(func(result: int, code: int, _h: PackedStringArray, raw: PackedByteArray):
 		http.queue_free()
 		var data = JSON.parse_string(raw.get_string_from_utf8()) if raw.size() > 0 else null
@@ -916,7 +919,6 @@ func show_chars(select_id := -1) -> void:
 	if _selected_char >= 0:
 		var sel := _selected_char
 		_button(box, "Excluir personagem", func(): show_delete_char(sel))
-	_button(box, "Excluir conta", show_delete_account)
 	_button(box, "Voltar", func():
 		Net.close()
 		show_login())
@@ -1039,6 +1041,11 @@ func hide_loading(delay := 0.0) -> void:
 
 # ---------------- MUNDO ----------------
 func enter_world(cid: int) -> void:
+	# conexão já fechada (servidor reiniciado, outra conexão na conta, queda): o pedido não sairia e a tela
+	# Carregando ficaria sobre tudo, sem resposta (D180)
+	if not Net.is_open():
+		set_status("Sem conexão com o servidor. Use Voltar e entre de novo.", true)
+		return
 	char_id = cid
 	var row: Dictionary = {}
 	for c in chars_cache:
@@ -1290,11 +1297,25 @@ func leave_world(to_title: bool, keep_conn := false) -> void:
 	if to_title:
 		show_title()
 	else:
-		show_loading("Personagens")
 		_pending_register = false
+		_show_returning()
+		show_loading("Personagens")
 		state = "login"
 		Net.connect_to(server_url)
 		get_tree().create_timer(0.3).timeout.connect(func(): hide_loading(0.2))
+
+## Volta do mundo para Personagens: o login é refeito numa conexão nova. Um painel com a linha de status e o
+## Voltar fica na tela enquanto isso, para a recusa (senha trocada em outro aparelho, servidor reiniciando,
+## serviço de contas fora do ar) ou a queda da conexão aparecerem, com a saída para a tela Entrar (D180).
+func _show_returning() -> void:
+	state = "login"
+	menu_scene.set_view("login")
+	var box := _menu_panel("Voltando aos personagens")
+	_button(box, "Voltar", func():
+		Net.close()
+		show_login())
+	_status(box)
+	set_status("Entrando de novo...")
 
 func set_char(c: Dictionary) -> void:
 	ch = c
@@ -1748,6 +1769,8 @@ func _on_disconnected(reason: String) -> void:
 	if not _transfer.is_empty():
 		_transfer_failed("a conexão caiu (%s)" % reason)
 		return
+	# a tela Carregando (Jogar, troca de mapa, volta aos personagens) não fica presa sobre o motivo da queda (D180)
+	hide_loading()
 	if _kicked_reason != "":
 		return
 	if state == "world" and hud:

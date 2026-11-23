@@ -47,6 +47,8 @@ const POCOES_MANA = ['potion_mp_m', 'potion_mp_s'];
 const TEMPOS = ['combate', 'deslocamento', 'saque', 'espera', 'descanso', 'fuga', 'morto', 'viagem', 'cidade', 'prova'];
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+// avisos da prova de classe (Trial.warnCircle em src/trial.js): os únicos 'warn' que vão para o piloto das provas
+const AVISOS_DA_PROVA = new Set(['rock', 'steam']);
 // avisos no chão: "dentro" com meio metro a mais que a borda (na dúvida, sai); o ponto de fuga fica bem fora
 const MARGEM_DENTRO = BODY + 0.5;
 const MARGEM_FORA = BODY + 0.8;
@@ -216,8 +218,12 @@ export class BotProgressao {
         break;
       case 'respawn': if (m.eid === this.eid) this.morto = false; break;
       case 'warn':
-        // na prova de classe, os avisos da arena (pedra do teto, jato de vapor) vão para o piloto da prova
-        if (this.provaEstado) { this.avisosProva.push({ x: m.x, z: m.z, radius: m.radius, ate: this.now + m.ms + 150, kind: m.kind }); break; }
+        // aviso da prova de classe (pedra do Quebraferro, jato da Cantora: Trial.warnCircle, sem src nem id): vai
+        // para o piloto das provas, que desvia dele
+        if (AVISOS_DA_PROVA.has(m.kind) && m.src == null && m.id == null) {
+          this.avisosProva.push({ x: m.x, z: m.z, radius: m.radius, ate: this.now + m.ms + 150, kind: m.kind });
+          break;
+        }
         // golpe de área avisado (forma, posição, duração): como o cliente desenha no chão
         this.avisos.set(m.id ?? `w${this.now}`, { ...m, visto: this.now, ate: this.now + m.ms, contado: false });
         this.mecanicas.avisos++;

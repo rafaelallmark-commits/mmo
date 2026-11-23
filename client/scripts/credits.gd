@@ -25,6 +25,9 @@ static func game_text(version: String) -> String:
 		"",
 		"MOTOR",
 		"Feito com o Godot Engine %d.%d (https://godotengine.org), licença MIT. A licença do motor, os componentes de terceiros que vêm com ele e os textos das licenças estão nesta tela (abas Godot Engine, Terceiros e Licenças) e no arquivo %s, que acompanha cada pacote do jogo." % [int(v.get("major", 4)), int(v.get("minor", 3)), FILE_NAME],
+		"",
+		"AUTORIDADES CERTIFICADORAS",
+		"Para conferir o certificado do servidor, o jogo usa a lista de autoridades certificadoras da Mozilla (Mozilla Contributors, Mozilla Public License 2.0; texto completo em Licenças), a mesma \"CA certificates\" do Godot listada em Terceiros, numa versão mais nova que vai junto do jogo (certs/ca-certificates.crt).",
 	]))
 
 ## Licença do Godot Engine (MIT/Expat), com o aviso de direitos que ela exige, e a frase de atribuição que a

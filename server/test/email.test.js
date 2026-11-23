@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import net from 'node:net';
 import tls from 'node:tls';
-import { createMailer, readExtraCa, smtpSend, senderDomain } from '../src/mailer.js';
+import { createMailer, readExtraCa, smtpSend, senderDomain, SMTP_TIMEOUT_MS } from '../src/mailer.js';
 import { mailConfig, mailProblems, mailSummary, mailWarning } from '../src/mailcfg.js';
 
 const noArgs = (_name, def) => def; // nenhuma opção na linha de comando: tudo vem do ambiente
@@ -230,4 +230,27 @@ test('CINZAS_SMTP_CA: autoridade a mais para um relé com CA privada, sem deslig
   });
   assert.equal(r.status, 2, r.stderr);
   assert.match(r.stderr, /CINZAS_SMTP_CA/);
+});
+
+// ---------- revisão final antes do teste público (D178) ----------
+
+test('destinatário vai ao RCPT TO como está gravado na conta: "a<b@c.com>" não é entregue a b@c.com', async () => {
+  const f = await fakeSmtp();
+  try {
+    await smtpSend({ host: '127.0.0.1', port: f.port, from: 'Jogo <j@x.com>', starttls: false }, { ...MSG, to: 'a<vitima@exemplo.com>' });
+    const rcpt = f.seen.find((s) => /^RCPT TO/.test(s.line))?.line;
+    assert.equal(rcpt, 'RCPT TO:<a<vitima@exemplo.com>>', 'um servidor de verdade recusa a sintaxe; nunca vira RCPT TO:<vitima@exemplo.com>');
+    // o remetente continua lido de "Nome <endereço>"
+    assert.ok(f.seen.some((s) => s.line === 'MAIL FROM:<j@x.com>'));
+  } finally { f.srv.close(); }
+});
+
+test('prazo do SMTP abaixo do prazo do cliente: com o servidor de e-mail preso, o cadastro responde (202 "email") antes de o cliente desistir', () => {
+  // o cliente desiste do pedido ao serviço de contas em http.timeout (main.gd, _accounts_post); o cadastro espera o
+  // envio. Com folga para o resto do pedido (hash da senha, banco, proxy)
+  const main = readFileSync(new URL('../../client/scripts/main.gd', import.meta.url), 'utf8');
+  const body = /func _accounts_post\([\s\S]*?\n(?=func )/.exec(main)?.[0] ?? '';
+  const clientS = Number(/http\.timeout = ([\d.]+)/.exec(body)?.[1]);
+  assert.ok(clientS > 0, 'prazo do cliente achado em _accounts_post');
+  assert.ok(SMTP_TIMEOUT_MS + 5000 <= clientS * 1000, `SMTP ${SMTP_TIMEOUT_MS} ms contra o cliente ${clientS} s`);
 });

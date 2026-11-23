@@ -37,6 +37,8 @@ O cliente é feito com o **Godot Engine 4.3** (licença MIT/Expat), que traz bib
 
 A frase que a licença do FreeType pede na documentação de quem o distribui está nos dois lugares: *Portions of this software are copyright © The FreeType Project (www.freetype.org). All rights reserved.*
 
+O cliente leva também a lista de autoridades certificadoras da Mozilla (`client/certs/ca-certificates.crt`, Mozilla Contributors, **MPL 2.0**; a mesma "CA certificates" que o Godot lista em Terceiros, numa versão mais nova), com que ele confere o certificado do servidor (D179). A tela de créditos cita a lista e o texto da MPL 2.0 está em Licenças.
+
 Os pacotes trazem também o guia (`GUIA.txt`), os termos (`TERMOS.txt`) e a política de privacidade (`PRIVACIDADE.txt`).
 
 A imagem Docker do servidor leva o Node.js (licença MIT, com as licenças dos componentes dele) e os pacotes npm `ws` e `pg` com as suas dependências (MIT e ISC); o texto da licença de cada pacote vai junto, em `node_modules/<pacote>/LICENSE` dentro da imagem.

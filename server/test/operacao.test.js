@@ -317,6 +317,10 @@ test('compose e Prometheus ligados: alertas vão para o Alertmanager, contas e m
   for (const m of compose.matchAll(/\n  ([a-z][a-z-]*):\n([\s\S]*?)(?=\n  [a-z][a-z-]*:\n|\n[a-z]+:)/g)) services[m[1]] = m[2];
   const gameImage = Object.keys(services).filter((n) => /(?:^|\n)    image: \$\{CINZAS_IMAGEM/.test(services[n]));
   assert.deepEqual(gameImage.sort(), ['backup', 'contas', 'servidor']);
+  // o guia do VPS sobe com "up --build": a versão do .env entra na imagem como argumento de build (hello e /bug com
+  // a versão da release, D181); nunca como environment, que apagaria a versão gravada na imagem publicada
+  assert.match(services.servidor, /\n    build:\n(?:      .*\n)*?      args:\n        CINZAS_VERSION: \$\{CINZAS_VERSION:-\}\n/, 'servidor: CINZAS_VERSION como argumento de build');
+  for (const n of Object.keys(services)) assert.ok(!/\n      CINZAS_VERSION:/.test(services[n].replace(/\n      args:\n        CINZAS_VERSION:[^\n]*/, '')), `${n}: CINZAS_VERSION fora do environment`);
   for (const n of gameImage.filter((x) => x !== 'servidor')) assert.match(services[n], /\n    healthcheck:\n/, `${n}: healthcheck próprio`);
   // o do backup lê a métrica que o próprio serviço grava (tools/backup.mjs --saude, D175)
   const backupMetric = services.backup.match(/"tools\/backup\.mjs", "--para"[\s\S]*?"--metrica", "([^"]+)"/)?.[1];

@@ -12,6 +12,11 @@ import { checkClanName } from './clans.js';
 
 export const PERMANENT = 253402300799000; // 31/12/9999: suspensão sem data para acabar
 export const STAFF_ROLES = new Set(['gm', 'admin']); // papéis com a marca [Equipe] e os avisos de denúncia
+// Expulsão e "última mensagem antes de fechar" (kicked, resposta do delete_account): a sessão sai na hora (mapas,
+// mundo, posse), mas o WebSocket só fecha este tempo depois. O WebSocketPeer do Godot 4.3 descarta a mensagem
+// que chega no mesmo instante do fechamento: sem a espera, o jogador na tela de personagens via só
+// "Sem conexão" no lugar do motivo (D178).
+export const KICK_CLOSE_MS = 500;
 const CHAT_KEEP = 20;          // últimas falas por personagem guardadas para dar contexto às denúncias
 const REPORTS_PER_HOUR = 5;
 const BUGS_PER_HOUR = 10;
@@ -127,8 +132,9 @@ export class Moderation {
     const accounts = new Map(this.st.findAccountsByIds(sessions.map((s) => s.accountId)).map((a) => [a.id, a]));
     for (const s of sessions) {
       const acc = accounts.get(s.accountId);
-      // conta excluída fora deste servidor (serviço de contas, ferramenta): a sessão cai
-      if (!acc) { this.kickSession(s, 'Esta conta foi excluída.'); continue; }
+      // conta excluída fora deste servidor (serviço de contas, ferramenta): a sessão cai sem gravar (o personagem
+      // já foi anonimizado no banco; gravar a saída traria de volta o ouro e as marcas dele, D178)
+      if (!acc) { s.noSave = true; this.kickSession(s, 'Esta conta foi excluída.'); continue; }
       s.mutedUntil = acc.muted_until ?? 0;
       const ban = banMessage(acc, now);
       if (ban) { this.kickSession(s, ban); continue; }
@@ -150,8 +156,7 @@ export class Moderation {
 
   kickSession(s, reason) {
     this.s.sendTo(s, { t: 'kicked', reason });
-    this.s.dropSession(s);
-    try { s.ws.close(4003, 'moderação'); } catch { /* já fechada */ }
+    this.s.dropSession(s, KICK_CLOSE_MS, 4003, 'moderação'); // fecha depois: o motivo chega antes (D178)
   }
 
   // alvo por nome de personagem: on-line (sessão), on-line em outra zona (remote) ou só a conta

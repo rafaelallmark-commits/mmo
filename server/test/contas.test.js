@@ -334,3 +334,166 @@ test('versão dos termos: TERMS_VERSION é o número no topo de docs/TERMOS.md e
     assert.equal(Number(/\*Versão (\d+)/.exec(text)?.[1]), TERMS_VERSION, `${f}: a versão no topo do texto`);
   }
 });
+
+// ---------- revisão final antes do teste público (D178) ----------
+
+// conta confirmada, criada direto no banco (o cadastro e a confirmação já têm testes próprios)
+const confirmada = (st, conta) => st.createAccount(conta, SENHA, { email: `${conta}@exemplo.com`, verified: true, termsVersion: TERMS_VERSION, termsAt: Date.now() });
+
+// eventos de uma conexão com o instante de cada um (para medir o intervalo entre a última mensagem e o fechamento)
+function timeline(c) {
+  const ev = [];
+  c.ws.on('message', (b) => { const m = JSON.parse(b.toString()); if (m.t !== 'snap') ev.push({ m, at: performance.now() }); });
+  const closed = new Promise((r) => c.ws.on('close', (code) => r({ code, at: performance.now() })));
+  return { ev, closed };
+}
+
+test('nomes da exclusão reservados na conta: excluida_<id> e excluido_<id> recusados no cadastro; a exclusão grava excluida#<id> e não trava com um nome ocupado', async () => {
+  const dir = tmp('cinzas-reserva-');
+  const db = join(dir, 'r.db');
+  const zone = new GameServer({ port: 0, host: '127.0.0.1', dbPath: db, seed: 3, log: false });
+  const zport = await zone.start();
+  const { svc, port } = await startAccounts(db);
+  try {
+    for (const conta of ['EXCLUIDA_2', 'excluida_3', 'Excluido_1', 'excluido_']) {
+      const r = await post(port, '/contas', { conta, email: `${conta.toLowerCase()}@exemplo.com`, senha: SENHA, aceite: true });
+      assert.equal(r.status, 400, `${conta}: ${r.erro}`);
+      assert.match(r.erro, /reservado/);
+    }
+    // parecido, mas sem o prefixo: vale
+    assert.equal((await post(port, '/contas', { conta: 'excluidao', email: 'excluidao@exemplo.com', senha: SENHA, aceite: true })).status, 201);
+    // cadastro direto na zona (servidor sem --auth token) também recusa
+    const c = new SimClient('reserva');
+    await c.connect(`ws://127.0.0.1:${zport}`);
+    const reg = await c.request('register', { account: 'Excluida_7', password: 'senha123' });
+    assert.equal(reg.code, 'bad_account');
+    assert.match(reg.reason, /reservado/);
+    await c.close();
+    // um nome assim já no banco (banco antigo, ferramenta de desenvolvimento) não trava mais a exclusão da conta
+    // daquele número: a exclusão grava um nome que o cadastro nunca aceita
+    const squat = svc.store.createAccount('ocupante', SENHA, { email: 'ocupante@exemplo.com', verified: true });
+    const vitima = confirmada(svc.store, 'vitima');
+    svc.store.db.prepare('UPDATE accounts SET name = ? WHERE id = ?').run(`EXCLUIDA_${vitima}`, squat);
+    const r = await post(port, '/contas/excluir', { conta: 'vitima', senha: SENHA });
+    assert.equal(r.ok, true, r.erro);
+    const row = svc.store.db.prepare('SELECT name, email, deleted_at FROM accounts WHERE id = ?').get(vitima);
+    assert.equal(row.name, `excluida#${vitima}`);
+    assert.equal(row.email, null);
+    assert.ok(row.deleted_at);
+    // o nome gravado não passa no cadastro (nem cai em "Erro interno")
+    const again = await post(port, '/contas', { conta: `excluida#${vitima}`, email: 'outra@exemplo.com', senha: SENHA, aceite: true });
+    assert.equal(again.status, 400);
+  } finally { await svc.stop(); await zone.stop(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('e-mail com < > ( ) [ ] , ; : " \\ é recusado no cadastro: "a<vitima@x>" não vira um endereço próprio que fura os limites', async () => {
+  const dir = tmp('cinzas-angulo-');
+  const { svc, port, mails } = await startAccounts(join(dir, 'a.db'));
+  try {
+    const bad = ['a<vitima@exemplo.com>', 'b<vitima@exemplo.com', 'vitima@exemplo.com>', '"a"@exemplo.com', 'a,b@exemplo.com', 'a;b@exemplo.com',
+      'a:b@exemplo.com', 'a(b)@exemplo.com', 'a[b]@exemplo.com', 'a\\b@exemplo.com', 'a@exem<plo.com'];
+    for (const [i, email] of bad.entries()) {
+      const r = await post(port, '/contas', { conta: `angulo${i}`, email, senha: SENHA, aceite: true });
+      assert.equal(r.status, 400, `${email}: ${r.erro}`);
+      assert.equal(r.erro, 'E-mail inválido.');
+    }
+    assert.equal(mails.length, 0, 'nenhum e-mail saiu');
+    // endereços comuns continuam valendo (com + e com domínio internacional em punycode)
+    for (const [i, email] of ['vitima@exemplo.com', 'vitima+jogo@exemplo.com', 'ana.maria@xn--exmplo-bva.com.br'].entries()) {
+      const r = await post(port, '/contas', { conta: `valido${i}`, email, senha: SENHA, aceite: true });
+      assert.equal(r.status, 201, `${email}: ${r.erro}`);
+    }
+  } finally { await svc.stop(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('conta excluída pelo serviço de contas com sessão aberta na zona: criar e entrar recusados; a varredura derruba sem regravar o personagem', async () => {
+  const dir = tmp('cinzas-excl-online-');
+  const db = join(dir, 'x.db');
+  const zone = new GameServer({ port: 0, host: '127.0.0.1', dbPath: db, seed: 6, log: false, auth: 'token', tokenSecret: SECRET, dev: true });
+  const zport = await zone.start();
+  clearInterval(zone.saveTimer); // sem o salvamento periódico no meio: o que se mede é a gravação da saída
+  const { svc, port } = await startAccounts(db);
+  const entra = async (conta) => {
+    const t = await post(port, '/sessoes', { conta, senha: SENHA });
+    assert.equal(t.ok, true, t.erro);
+    const c = new SimClient(conta);
+    await c.connect(`ws://127.0.0.1:${zport}`);
+    const lg = await c.request('login_token', { token: t.token });
+    assert.equal(lg.ok, true, lg.reason);
+    return c;
+  };
+  try {
+    confirmada(svc.store, 'alfa');
+    confirmada(svc.store, 'beta');
+    // alfa no mundo com ouro
+    const a = await entra('alfa');
+    const ch = await a.request('create_char', { name: 'Alfeira', classId: 'breaker' });
+    assert.equal((await a.request('enter', { charId: ch.char.id })).ok, true);
+    assert.equal((await a.request('gm', { cmd: 'gold', amount: 5000 })).ok, true);
+    // beta parada na tela de personagens
+    const b = await entra('beta');
+    const bt = timeline(b);
+    assert.equal((await post(port, '/contas/excluir', { conta: 'beta', senha: SENHA })).ok, true);
+    let r = await b.request('create_char', { name: 'Fantasma', classId: 'breaker' });
+    assert.equal(r.ok, false, 'criar personagem numa conta excluída');
+    assert.equal(r.code, 'account_deleted');
+    assert.equal(zone.store.characterNameTaken('Fantasma'), false, 'o nome não fica preso à conta excluída');
+    r = await b.request('enter', { charId: ch.char.id });
+    assert.equal(r.code, 'account_deleted');
+    // alfa excluída com o personagem no mundo: o banco já está anônimo; a varredura derruba sem gravar a saída
+    const at = timeline(a);
+    assert.equal((await post(port, '/contas/excluir', { conta: 'alfa', senha: SENHA })).ok, true);
+    assert.equal(zone.store.loadCharacter(ch.char.id).gold, 0);
+    zone.mod.lastSweep = 0;
+    zone.mod.sweep();
+    for (const [c, t] of [[a, at], [b, bt]]) {
+      const closed = await t.closed;
+      const kicked = t.ev.find((e) => e.m.t === 'kicked');
+      assert.equal(kicked?.m.reason, 'Esta conta foi excluída.', c.label);
+      assert.ok(closed.at - kicked.at >= 300, `${c.label}: o fechamento espera o motivo chegar (${(closed.at - kicked.at).toFixed(0)} ms)`);
+      assert.equal(closed.code, 4003);
+    }
+    const row = zone.store.loadCharacter(ch.char.id);
+    assert.equal(row.gold, 0, 'a saída não regravou o ouro');
+    assert.match(row.name, /^excluido_/);
+  } finally { await svc.stop(); await zone.stop(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('última mensagem antes de fechar: "kicked" da outra conexão e a resposta do delete_account chegam antes do fechamento (o Godot perde o que vem junto com ele)', async () => {
+  const dir = tmp('cinzas-fecha-');
+  const db = join(dir, 'f.db');
+  const zone = new GameServer({ port: 0, host: '127.0.0.1', dbPath: db, seed: 8, log: false });
+  const zport = await zone.start();
+  const url = `ws://127.0.0.1:${zport}`;
+  const conecta = async (label, conta) => {
+    const c = new SimClient(label);
+    await c.connect(url);
+    await c.request('register', { account: conta, password: 'senha123' });
+    const lg = await c.request('login', { account: conta, password: 'senha123' });
+    assert.equal(lg.ok, true, lg.reason);
+    return c;
+  };
+  try {
+    // outra conexão entra na mesma conta com a primeira na tela de personagens
+    const c1 = await conecta('primeira', 'fecha');
+    const t1 = timeline(c1);
+    const c2 = await conecta('segunda', 'fecha');
+    const kicked = t1.ev.find((e) => e.m.t === 'kicked');
+    assert.equal(kicked?.m.reason, 'Sua conta entrou em outra conexão.');
+    assert.equal(zone.sessions.size, 1, 'a sessão antiga saiu na hora');
+    // o que a antiga manda no meio-tempo é ignorado
+    c1.send({ t: 'list_chars', rid: 'tarde' });
+    const closed1 = await t1.closed;
+    assert.ok(closed1.at - kicked.at >= 300, `fechou ${(closed1.at - kicked.at).toFixed(0)} ms depois do aviso`);
+    assert.equal(t1.ev.some((e) => e.m.rid === 'tarde'), false, 'pedido da sessão encerrada sem resposta');
+    // excluir a conta pela tela de personagens: a resposta chega e o fechamento vem depois
+    const t2 = timeline(c2);
+    const r = await c2.request('delete_account', { password: 'senha123' });
+    assert.equal(r.ok, true, r.reason);
+    const res = t2.ev.find((e) => e.m.t === 'res' && e.m.req === 'delete_account');
+    const closed2 = await t2.closed;
+    assert.ok(closed2.at - res.at >= 300, `fechou ${(closed2.at - res.at).toFixed(0)} ms depois da resposta`);
+    assert.equal(zone.store.findAccount('fecha'), undefined);
+    assert.equal(zone.sessions.size, 0);
+  } finally { await zone.stop(); rmSync(dir, { recursive: true, force: true }); }
+});

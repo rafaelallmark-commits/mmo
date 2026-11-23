@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { verifyToken, ReplayGuard } from './token.js';
 import { TradeManager } from './trade.js';
 import { ClanManager } from './clans.js';
-import { Moderation, banMessage, STAFF_ROLES } from './moderation.js';
+import { Moderation, banMessage, STAFF_ROLES, KICK_CLOSE_MS } from './moderation.js';
 import { checkCharName, accentCaseVariants, DELETED_PREFIX_RE } from './names.js';
 import { enhanceable, enhanceQuote, enhancePreview, rollEnhance, enhanceOutcome } from './smith.js';
 import { randomUUID } from 'node:crypto';
@@ -428,14 +428,19 @@ export class GameServer {
     this.sendTo(s, { t: 'hello', protocol: PROTOCOL_VERSION, server: 'cinzas-zone', version: this.serverVersion, dataVersion: this.dataVersion, auth: this.opts.auth, dev: !!this.opts.dev });
   }
 
-  dropSession(s) {
+  // closeAfterMs > 0: a sessão sai na hora (mapas, mundo, posse), mas o WebSocket só fecha depois, para a última
+  // mensagem mandada a ela (kicked, resposta do delete_account) chegar ao cliente Godot (KICK_CLOSE_MS, D178).
+  // O que ela mandar nesse meio-tempo é ignorado (onMessage confere this.sessions).
+  dropSession(s, closeAfterMs = 0, code = undefined, reason = undefined) {
     if (!this.sessions.has(s)) return;
     this.sessions.delete(s);
     const n = (this.ipConns.get(s.ip) ?? 1) - 1;
     if (n <= 0) this.ipConns.delete(s.ip); else this.ipConns.set(s.ip, n);
     if (s.charId != null) this.leaveWorld(s);
     if (s.accountId != null && this.byAccount.get(s.accountId) === s) this.byAccount.delete(s.accountId);
-    try { s.ws.close(); } catch { /* já fechado */ }
+    const close = () => { try { s.ws.close(code, reason); } catch { /* já fechado */ } };
+    if (closeAfterMs > 0) setTimeout(close, closeAfterMs).unref();
+    else close();
   }
 
   leaveWorld(s) {
@@ -817,7 +822,7 @@ export class GameServer {
     for (const g of gone) this.afterCharGone(g.charId, g.name, g.clan);
     this.audit('account_deleted', { accountId: acc.id, ip: s.ip, characters: n });
     this.log(`conta excluída: ${acc.id} (${n} personagens)`);
-    return { ok: true, after: () => this.dropSession(s) };
+    return { ok: true, after: () => this.dropSession(s, KICK_CLOSE_MS) }; // a resposta chega antes do fechamento
   }
 
   // Exclusão de um personagem (a conta continua), confirmada com a senha; só na tela de personagens (D144).
@@ -875,6 +880,8 @@ export class GameServer {
 
   hRegister(s, { account, password }) {
     if (typeof account !== 'string' || !/^[a-zA-Z0-9_]{3,20}$/.test(account)) return { ok: false, code: 'bad_account', reason: 'Conta: 3 a 20 letras, números ou _.' };
+    // prefixos da exclusão reservados, como no serviço de contas (D178)
+    if (DELETED_PREFIX_RE.test(account)) return { ok: false, code: 'bad_account', reason: 'Esse nome de conta é reservado. Escolha outro.' };
     if (typeof password !== 'string' || password.length < 4) return { ok: false, code: 'bad_password', reason: 'Senha precisa de pelo menos 4 caracteres.' };
     if (this.store.findAccount(account)) return { ok: false, code: 'account_exists', reason: 'Essa conta já existe.' };
     this.store.createAccount(account, password);
@@ -908,9 +915,10 @@ export class GameServer {
     if (ban) { this.audit('login_banned', { accountId: acc.id, ip: s.ip, via }); return { ok: false, code: 'banned', reason: ban }; }
     const old = this.byAccount.get(acc.id);
     if (old) {
-      // Reconexão: a sessão antiga (talvez "pendurada") é encerrada e salva antes de continuar.
+      // Reconexão: a sessão antiga (talvez "pendurada") é encerrada e salva antes de continuar; o WebSocket dela
+      // fecha um pouco depois, para o aviso chegar também a quem está na tela de personagens
       this.sendTo(old, { t: 'kicked', reason: 'Sua conta entrou em outra conexão.' });
-      this.dropSession(old);
+      this.dropSession(old, KICK_CLOSE_MS);
     }
     s.accountId = acc.id;
     s.role = acc.role ?? 'player';
@@ -922,7 +930,16 @@ export class GameServer {
     return { ok: true, account: acc.name, chars: this.store.listCharacters(acc.id).map(charRow), classes: this.creatableClasses() };
   }
 
+  // Conta excluída fora deste servidor (serviço de contas, ferramenta) com a sessão ainda aberta aqui: a varredura
+  // de cada minuto a derruba; até lá, nada de criar personagem nem entrar (D178).
+  accountGone(s) {
+    if (this.store.findAccountById(s.accountId)) return null;
+    return { ok: false, code: 'account_deleted', reason: 'Esta conta foi excluída.' };
+  }
+
   hCreateChar(s, { name: rawName, classId }) {
+    const gone = this.accountGone(s);
+    if (gone) return gone;
     // formato, prefixos da exclusão, palavras da equipe (D145) e duplicata por maiúscula acentuada
     const v = checkCharName(this.store, rawName);
     if (v.err) return v.err;
@@ -963,6 +980,8 @@ export class GameServer {
 
   hEnter(s, { charId }) {
     if (s.charId != null) return { ok: false, code: 'already', reason: 'Você já está no mundo.' };
+    const gone = this.accountGone(s);
+    if (gone) return gone;
     const row = this.store.listCharacters(s.accountId).find((c) => c.id === charId);
     if (!row) return { ok: false, code: 'bad_char', reason: 'Personagem não encontrado nesta conta.' };
     const full = this.serverFull(s, charId);

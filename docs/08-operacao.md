@@ -8,7 +8,7 @@ do Marco 4 ([relatorio-carga.md](relatorio-carga.md), [relatorio-cenarios.md](re
 - **Servidor**: Node.js ≥ 22.13. Em desenvolvimento, nada mais (SQLite embutido, `node:sqlite`); em produção,
   **PostgreSQL** central (testado no 16; §8.11). Dependências: `ws` e `pg` (só carregado com PostgreSQL).
 - **Cliente**: Godot 4.3 (renderizador Compatibility). Roda pelo editor ou exportado; para jogar, um computador de
-  64 bits (Windows 10/11, macOS 10.12 ou mais novo, Linux x86_64) com placa de vídeo de OpenGL 3.3 ([GUIA.md](GUIA.md), §1).
+  64 bits (Windows 10/11, macOS 10.13 ou mais novo, Linux x86_64) com placa de vídeo de OpenGL 3.3 ([GUIA.md](GUIA.md), §1).
 - **Implantação** (teste público, §8.8): Docker 25+ com Compose, ou systemd; um domínio com DNS para o TLS.
 
 ## 8.2 Subir o servidor
@@ -430,12 +430,14 @@ o primeiro `up --build` não tenta mais baixá-la de um registro (antes saíam d
 for cinzas-servidor" antes do build).
 
 - **Versão**: a imagem da release traz a tag em `CINZAS_VERSION` (`hello`, registro de início e `/bug`; D150).
-  Construindo aqui, passe a mesma com `--build-arg CINZAS_VERSION=0.4.0-teste.2` (no compose:
-  `docker compose build --build-arg CINZAS_VERSION=...`); sem ela vale a do `package.json`. Um valor que não pareça
+  Construindo aqui, ponha a mesma no `.env` (`CINZAS_VERSION=0.4.0-teste.2`, a tag sem o `v`): o compose a passa
+  como argumento de build do serviço `servidor` no `up --build` (D181); fora do compose,
+  `docker build --build-arg CINZAS_VERSION=0.4.0-teste.2`. Sem ela vale a do `package.json`. Um valor que não pareça
   uma tag (espaço, aspas) faz o servidor recusar subir. Para conferir uma imagem como o CI confere:
   `deploy/teste-conteiner.sh cinzas-servidor:local 0.4.0-teste.2` (com a pilha no ar, que já ocupa a 9100 no
   127.0.0.1: `CINZAS_TESTE_PORTA=9101 deploy/teste-conteiner.sh …`; o contêiner de teste sai com o volume dele).
-- **Atualizar**: baixe a versão nova do repositório e rode `docker compose up -d --build`. Parar ou recriar o
+- **Atualizar**: baixe a versão nova do repositório, troque o `CINZAS_VERSION` do `.env` pela tag nova e rode
+  `docker compose up -d --build`. Parar ou recriar o
   contêiner manda SIGTERM e dá 45 s (`stop_grace_period`) para o servidor salvar todos os personagens.
 - **Imagem publicada**: ponha `CINZAS_IMAGEM=ghcr.io/<dono>/cinzas-servidor:<versão>` no `deploy/.env` e rode
   `docker compose pull servidor contas && docker compose up -d --no-build`. A variável vale para a zona **e** para as
@@ -584,8 +586,24 @@ máquina de verdade tem: o volume, as permissões e as cópias reais.
   o DNS precisa apontar para a máquina e as portas 80 e 443 precisam estar abertas. O volume `caddy_dados` guarda
   os certificados; não o apague (há limite de emissões).
 - Os jogadores conectam em `wss://jogo.exemplo.com.br` (campo **Servidor** da tela de entrada, ou
-  `CinzasDoMeridiano.x86_64 -- --server=wss://jogo.exemplo.com.br`). O Godot confere o certificado com a lista de
-  autoridades que vem com ele.
+  `CinzasDoMeridiano.x86_64 -- --server=wss://jogo.exemplo.com.br`).
+- **Certificado do servidor no cliente** (D179): o cliente confere o certificado (do `wss://` e do serviço de contas)
+  com a lista de autoridades da Mozilla que vai dentro dele, `client/certs/ca-certificates.crt`, apontada por
+  `network/tls/certificate_bundle_override` no `client/project.godot` — e **não** com o repositório do sistema. Sem
+  isso, o Godot 4.3 usaria só o repositório do sistema, e no Windows ele só tem as raízes que aquela máquina já
+  baixou: num computador que nunca baixou a raiz do Let's Encrypt (ISRG Root X1) o jogador não conectava, vendo
+  "Sem conexão: Conexão encerrada (código -1)." ou "Serviço de contas indisponível". O arquivo tem as raízes da
+  Mozilla (as do Let's Encrypt e as da ZeroSSL, que o Caddy usa como reserva, entre elas). Consequências:
+  - Antivírus ou rede de empresa que inspeciona HTTPS (reassina as conexões com uma autoridade que só existe no
+    sistema) faz o cliente recusar a conexão, com as mesmas mensagens: o jogador desliga a inspeção de HTTPS para o
+    jogo ou usa outra rede (o GUIA, §3, diz isso).
+  - Testar contra uma autoridade privada (Caddy com `tls internal`, como no ensaio do [10](10-subir-no-vps.md))
+    exige acrescentar o certificado dela ao fim do `client/certs/ca-certificates.crt` numa cópia local do cliente
+    (nunca no repositório).
+  - Para atualizar a lista (raiz nova ou retirada pela Mozilla): gere o arquivo de novo a partir das raízes da
+    Mozilla (no Ubuntu, `cat /usr/share/ca-certificates/mozilla/*.crt`, conferidas com `dpkg -V ca-certificates`;
+    ou o `cacert.pem` de <https://curl.se/docs/caextract.html>), sem nenhuma autoridade local da máquina, e faça uma
+    Release nova do cliente.
 - O Caddy separa pelo pedido: **WebSocket** (o jogo, no endereço raiz) vai para a porta 7777; `/contas/*` vai para o
   serviço de contas; **todo o resto** recebe a **página do jogo** (`deploy/site/index.html`, montada em `/srv/site`):
   estática, em português, sem scripts, cookies nem recursos de outros sites (a política de segurança que o Caddy
@@ -860,8 +878,13 @@ público a zona roda com `--auth token`.
 
 **Privacidade**: política em [PRIVACIDADE.md](PRIVACIDADE.md). Na tela de personagens, *Baixar meus dados* chama
 `POST /contas/dados` e grava o JSON em `user://dados` (com botão para abrir a pasta e opção de salvar uma cópia em
-outro lugar). Exclusão de conta pelo jogo (tela de personagens) ou pelo serviço de contas apaga e-mail, senha, itens e
-missões na hora e anonimiza os nomes. Na tela de personagens também dá para **excluir um personagem só** (D144): o
+outro lugar); `acoes_da_equipe` traz as ações da equipe contra a conta (expulsão, suspensão, silêncio, nome trocado,
+itens ou ouro retirados, com o motivo) sem a conta, o personagem e o IP de quem moderou, e sem denúncias (D178).
+Exclusão de conta pelo jogo (tela de personagens) ou pelo serviço de contas apaga e-mail, senha, itens e
+missões na hora e anonimiza os nomes (a conta vira `excluida#<id>`, nome que o cadastro nunca aceita). Com a conta
+excluída pelo serviço de contas ou pela ferramenta enquanto uma sessão dela está aberta na zona, essa sessão não
+cria personagem nem entra no mundo, e a conferência de cada minuto a derruba sem gravar a saída (D178).
+Na tela de personagens também dá para **excluir um personagem só** (D144): o
 jogador digita o nome dele e a senha da conta; saem os itens, o ouro, as missões e as listas de ignorados, ele sai do
 grupo e do clã (o clã que ele liderava passa ao membro de maior cargo; sem ninguém, acaba) e o nome fica livre; as
 peças que ele guardou no depósito da conta continuam lá. Na zona, a senha de excluir conta ou personagem é conferida
