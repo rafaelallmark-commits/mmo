@@ -464,6 +464,29 @@ export class QuestEngine {
     return changed;
   }
 
+  // Espaços da bolsa depois da entrega, pela mesma regra da transação de turnIn (sem mexer na bolsa): consome
+  // a coleta (item de missão sai todo; material comum, só o pedido) e guarda a recompensa, empilhando onde der.
+  bagAfterTurnIn(char, q, rewardItems) {
+    const bag = [...char.items.values()].filter((it) => it.loc === 'bag').map((it) => ({ defId: it.defId, qty: it.qty }));
+    for (const o of q.objectives.filter((x) => x.type === 'collect')) {
+      let need = this.data.items[o.item]?.questItem ? Infinity : o.count;
+      for (const it of bag) {
+        if (need <= 0) break;
+        if (it.defId !== o.item || it.qty <= 0) continue;
+        const take = Math.min(need, it.qty);
+        it.qty -= take; need -= take;
+      }
+    }
+    const left = bag.filter((it) => it.qty > 0);
+    for (const [defId, qty] of rewardItems) {
+      const def = this.data.items[defId];
+      const stack = def.stack ? left.find((it) => it.defId === defId && it.qty + qty <= def.stack) : null;
+      if (stack) stack.qty += qty;
+      else left.push({ defId, qty });
+    }
+    return left.length;
+  }
+
   // Entrega. grantXp(amount) é fornecido pela zona (cuida da subida de nível).
   turnIn(char, id, npcId, grantXp) {
     const q = this.quests[id];
@@ -478,9 +501,11 @@ export class QuestEngine {
       return { ok: false, code: 'incomplete', reason: `Ainda falta: ${miss.join('; ')}.` };
     }
     const rewardItems = this.rewardItems(char, q);
-    const newStacks = rewardItems.filter(([defId]) => !this.data.items[defId].stack || ![...char.items.values()].some((it) => it.loc === 'bag' && it.defId === defId)).length;
-    const consumesSlots = q.objectives.filter((o) => o.type === 'collect').length;
-    if (bagCount(char) + newStacks > BAG_CAPACITY + consumesSlots) return { ok: false, code: 'bag_full', reason: 'Inventário cheio: libere espaço para a recompensa.' };
+    // a bolsa como fica depois da entrega: material comum que sobra na pilha (a brasa e a sucata da Brasa
+    // para a Forja) não libera espaço, então não se conta um espaço livre por coleta; a entrega só não pode
+    // deixar a bolsa acima da capacidade
+    const after = this.bagAfterTurnIn(char, q, rewardItems);
+    if (after > BAG_CAPACITY && after > bagCount(char)) return { ok: false, code: 'bag_full', reason: 'Inventário cheio: libere espaço para a recompensa.' };
     const title = this.resolveTitle(char, q.rewards.title);
     const changedItems = [], deleted = [];
     let leveled = false;

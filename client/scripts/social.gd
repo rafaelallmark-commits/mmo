@@ -348,7 +348,8 @@ func _on_trade(t: Dictionary) -> void:
 	for c in trade_bag.get_children():
 		c.queue_free()
 	for it in main.ch.get("items", []):
-		if it["loc"] != "bag":
+		# item de missão não se troca (o servidor recusa a oferta)
+		if it["loc"] != "bag" or main.defs["items"].get(it["defId"], {}).get("questItem", false):
 			continue
 		var b := Button.new()
 		var on: bool = it["id"] in mine

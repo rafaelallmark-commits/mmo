@@ -1504,7 +1504,7 @@
    },
    "dialogue": {
     "offer": "As caixas do Arquivo precisam de fusível sobrando, senão a luz cai de novo no meio da leitura. Os escavadores ainda carregam os velhos, de antes do apagão. Seis, por favor.",
-    "progress": "A Galeria dos Escavadores fica a noroeste da Boca da Oficina. Eles cavam em turma e brigam em turma.",
+    "progress": "A Galeria dos Escavadores fica ao norte da Boca da Oficina. Eles cavam em turma e brigam em turma.",
     "complete": "Seis fusíveis com o carimbo de Âmbar e de Nacre no mesmo tubo. Engraçado: as duas cidades faziam as peças juntas."
    }
   },
@@ -1642,7 +1642,7 @@
    },
    "dialogue": {
     "offer": "Os Ecoantes repetem o último som que ouviram, e alguns carregam lascas de metal que repetem para sempre. Quero ouvir o que elas guardam. Doze lascas. E vá em grupo: eles andam juntos.",
-    "progress": "O Salão dos Sinos fica ao norte da Estação Sonhada, perto das ruínas. Os Ecoantes chamam uns aos outros.",
+    "progress": "O Salão dos Sinos fica no norte das galerias, a leste da Estação Sonhada. Os Ecoantes chamam uns aos outros.",
     "complete": "Escuta esta: 'turma funda, turma funda'. Doze lascas, a mesma palavra. Alguém chamava a turma funda pelo nome."
    }
   },

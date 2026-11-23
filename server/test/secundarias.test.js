@@ -301,6 +301,37 @@ test('diária: o tempo até a volta (00:00 UTC) sai em horas e minutos inteiros'
   assert.equal(wait(DAY / 1000 - 1), 'em 24 h 0 min');
 });
 
+test('entrega com a bolsa cheia: brasa e sucata que sobram na pilha não abrem espaço para a recompensa', () => {
+  const store = { saveQuest() {}, tx(fn) { fn(); }, deleteItem() {}, insertItem() {}, saveItems() {}, saveCharacter() {} };
+  const qe = new QuestEngine({ data, store });
+  let seq = 0;
+  const add = (c, defId, qty) => { const it = { id: `i${seq++}`, defId, qty, enh: 0, loc: 'bag', slot: null }; c.items.set(it.id, it); return it; };
+  const mk = (ember, scrap, fill) => {
+    const c = { id: 1, classId: 'breaker', level: 12, gold: 0, skills: {}, unspent: 0, quests: new Map([['s_forge_ember', { state: 'active', progress: {} }]]), items: new Map() };
+    add(c, 'mat_ember', ember); add(c, 'mat_scrap', scrap);
+    const filler = [];
+    for (let i = 0; i < fill; i++) filler.push(add(c, 'axe_1h_t1', 1));
+    return { c, filler };
+  };
+  const bag = (c) => [...c.items.values()].filter((i) => i.loc === 'bag').length;
+  // 20 brasas + 20 sucatas + 28 peças = 30/30: a entrega consome 6 e 10, mas as duas pilhas ficam, e o Pó de
+  // Refino abriria a 31ª pilha (antes contava um espaço livre por coleta e deixava a bolsa em 31/30)
+  const { c, filler } = mk(20, 20, 28);
+  const r = qe.turnIn(c, 's_forge_ember', 'smith_gusmao', () => false);
+  assert.equal(r.ok, false);
+  assert.equal(r.code, 'bag_full');
+  assert.equal(bag(c), 30);
+  assert.equal(c.quests.get('s_forge_ember').state, 'active', 'nada foi consumido');
+  // um espaço livre resolve
+  c.items.delete(filler[0].id);
+  assert.equal(qe.turnIn(c, 's_forge_ember', 'smith_gusmao', () => false).ok, true);
+  assert.equal(bag(c), 30);
+  // brasa e sucata na conta certa somem da bolsa e abrem os espaços: cabe com a bolsa cheia
+  const exact = mk(6, 10, 28).c;
+  assert.equal(qe.turnIn(exact, 's_forge_ember', 'smith_gusmao', () => false).ok, true);
+  assert.equal(bag(exact), 29);
+});
+
 test('diária: Recibo do Capataz volta no dia seguinte (UTC) e o diário e o quadro dizem quando', async () => {
   await withServer(async (server, url) => {
     const c = await hero(server, url, 'recibo', 'pikeman', 5, ['tutorial', 'c1_count', 'c1_rats', 'c1_master', 'c1_route', 'c1_foreman']);

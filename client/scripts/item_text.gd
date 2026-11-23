@@ -94,6 +94,9 @@ static func describe(defs: Dictionary, inst: Dictionary, ch: Dictionary, compare
 	if d.has("bonusAttrs"):
 		for a in d["bonusAttrs"].keys():
 			t += "+%d %s (não conta para requisitos)\n" % [int(d["bonusAttrs"][a]), defs["attributes"][a]["name"]]
+	if d.get("questItem", false):
+		# material de coleta das secundárias: só cai com a missão ativa e sai da bolsa na entrega
+		t += "[color=#9fd3d1]Item de missão: sai da bolsa na entrega. Não se vende, troca, descarta nem vai para o depósito.[/color]\n"
 	if d.has("use"):
 		var u: Dictionary = d["use"]
 		if u.has("healHp"):

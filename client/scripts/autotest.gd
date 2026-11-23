@@ -6,10 +6,14 @@ extends Node
 ## Com --transfer (servidor em várias zonas, --dev): em vez de lutar, atravessa o portal para um mapa de
 ## outra zona e confere que o cliente reconectou no endereço novo e está no mapa novo.
 ## Com --board (servidor --dev): depois do fluxo normal, vai a Pedrâmbar e abre o quadro de missões da praça
-## pelo mesmo clique da interface, conferindo que ele lista missões. Com --defense (servidor --dev): aceita
+## pelo mesmo clique da interface, conferindo que ele lista missões; depois recebe um item de missão e confere
+## que o menu da bolsa não oferece venda nem descarte e que a dica o marca. Com --defense (servidor --dev): aceita
 ## "O Teste de Pressão" com Joca e abre a válvula, conferindo que o Joca da defesa (com vida e cronômetro)
-## toma o lugar do NPC parado e que a ficha mostra o seletor de título; depois sai do Brejo e confere que o
-## cronômetro da válvula não fica preso na tela.
+## toma o lugar do NPC parado e que a ficha mostra o seletor de título; quando a onda chega, clica entre um monstro
+## e o NPC escondido e confere que o clique ataca o monstro; depois sai do Brejo e confere que o cronômetro da
+## válvula não fica preso na tela.
+
+const ItemText = preload("res://scripts/item_text.gd")
 
 var main
 var step := "connect"
@@ -267,9 +271,42 @@ func _process(_d: float) -> void:
 				say("quadro de missões aberto pela interface: %d missões disponíveis" % rows)
 				_shot("quadro")
 				main.hud.npc_panel.visible = false
-				say("OK")
-				get_tree().quit(0)
-				step = "quitting"
+				# item de missão na bolsa: o menu do botão direito não oferece venda nem descarte
+				step = "board_qitem_wait"
+				Net.request("gm", {"cmd": "give", "defId": "qi_warm_shell"}, func(r):
+					if not r["ok"]:
+						fail("não deu para criar o item de missão: %s" % r.get("reason", ""))
+						return
+					if r.has("char"):
+						main.set_char(r["char"])
+					step = "board_qitem")
+		"board_qitem":
+			var inst := {}
+			for it in main.ch.get("items", []):
+				if it["defId"] == "qi_warm_shell" and it["loc"] == "bag":
+					inst = it
+			if inst.is_empty():
+				fail("o item de missão não apareceu na bolsa")
+				return
+			main.hud._bag_menu(inst)
+			var texts := []
+			var marked := false
+			for b in main.hud._bag_menu_node.find_children("*", "Button", true, false):
+				texts.append(str(b.text))
+				if str(b.text).begins_with("Item de missão") and b.disabled:
+					marked = true
+			main.hud._close_bag_menu()
+			for t in texts:
+				if str(t).begins_with("Vender") or str(t).begins_with("Descartar"):
+					fail("o menu do item de missão oferece \"%s\" (o servidor recusa)" % t)
+					return
+			if not marked or not ItemText.describe(main.defs, inst, main.ch).contains("Item de missão"):
+				fail("o item de missão não aparece como tal no menu e na dica: %s" % ", ".join(texts))
+				return
+			say("item de missão na bolsa: menu sem venda nem descarte (%s)" % ", ".join(texts))
+			say("OK")
+			get_tree().quit(0)
+			step = "quitting"
 		# ---------------- defesa do Joca (--defense, servidor --dev) ----------------
 		"def_prep":
 			step = "def_wait"
@@ -312,14 +349,45 @@ func _process(_d: float) -> void:
 				say("títulos na ficha: %s" % ", ".join(titles))
 				_shot("defesa")
 				main.hud.sheet_panel.visible = false
-				# sai do Brejo no meio da defesa: o cronômetro da válvula não pode ficar preso na tela
-				zone_changed = ""
-				step = "def_wait_leave"
-				Net.request("gm", {"cmd": "teleport", "mapId": "pedrambar", "x": 37.0, "z": 26.0}, func(r):
-					if not r["ok"]:
-						fail("teleporte para Pedrâmbar recusado: %s" % r.get("reason", "")))
+				wait_until = Time.get_ticks_msec() + 20000
+				step = "def_click"
 			elif Time.get_ticks_msec() > wait_until:
 				fail("a defesa não apareceu (entidade %s, NPC visível %s)" % [joca_e, str((main.world.npc_nodes["joca"]["node"] as Node3D).visible)])
+		"def_click":
+			# a onda chega no Joca: o clique entre um monstro e o NPC escondido ataca o monstro (antes abria a
+			# conversa com o NPC, que fica a menos de 1,5 m do clique)
+			var jpos: Vector3 = main.world.npc_nodes["joca"]["pos"]
+			var mon := ""
+			var mon_d := 2.6
+			for eid in main.world.entities.keys():
+				var e: Dictionary = main.world.entities[eid]
+				var md: float = Vector2(e["node"].position.x - jpos.x, e["node"].position.z - jpos.z).length()
+				if e["data"]["k"] == "m" and md < mon_d:
+					mon = eid
+					mon_d = md
+			if mon == "":
+				if Time.get_ticks_msec() > wait_until:
+					fail("nenhum monstro da onda chegou perto do Joca da defesa")
+				return
+			var mp: Vector3 = main.world.entities[mon]["node"].position
+			var dir := Vector3(mp.x - jpos.x, 0.0, mp.z - jpos.z).normalized()
+			var gp := Vector3(jpos.x + dir.x * 1.0, mp.y, jpos.z + dir.z * 1.0)
+			main.world.pending_action = {}
+			main.world.selected = ""
+			main.world._click(main.world.camera.unproject_position(gp))
+			if not main.world.pending_action.is_empty():
+				fail("o clique no monstro colado no Joca virou %s com %s" % [str(main.world.pending_action.get("kind", "")), str(main.world.pending_action.get("id", ""))])
+				return
+			if main.world.selected == "" or str(main.world.entities.get(main.world.selected, {}).get("data", {}).get("k", "")) != "m":
+				fail("o clique no monstro colado no Joca não selecionou o monstro (alvo: %s)" % main.world.selected)
+				return
+			say("clique no monstro a %.1f m do Joca da defesa: atacando %s" % [mon_d, main.world.selected])
+			# sai do Brejo no meio da defesa: o cronômetro da válvula não pode ficar preso na tela
+			zone_changed = ""
+			step = "def_wait_leave"
+			Net.request("gm", {"cmd": "teleport", "mapId": "pedrambar", "x": 37.0, "z": 26.0}, func(r):
+				if not r["ok"]:
+					fail("teleporte para Pedrâmbar recusado: %s" % r.get("reason", "")))
 		"def_wait_leave":
 			if zone_changed == "pedrambar" and main.world and not main.world.me().is_empty():
 				if main.hud.defense_label.visible:

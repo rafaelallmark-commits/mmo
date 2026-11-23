@@ -172,7 +172,7 @@ Teste automático do **cliente** (headless, contra um servidor rodando), da raiz
 /Applications/Godot.app/Contents/MacOS/Godot --headless --path client -- --autotest --server=ws://127.0.0.1:7777 --account=robo --password=robo123 --class=breaker --name=Robo
 ```
 
-Ele cria a conta/personagem se preciso, entra no mundo pela mesma rotina da interface, anda até (30, 50), ataca um Rato de Sulco, coleta o saque e termina com `[autotest] OK` (código de saída 0). Mensagens `Parameter "m" is null` vêm do renderizador "dummy" do modo headless e são inofensivas. Com servidor `--dev`, `--board` vai depois a Pedrâmbar e abre o quadro de missões da praça pelo clique da interface, e `--defense` aceita "O Teste de Pressão" com Joca, abre a válvula e confere o Joca da defesa no lugar do NPC, o cronômetro e o seletor de título da ficha; depois sai do Brejo e confere que o cronômetro não fica preso na tela.
+Ele cria a conta/personagem se preciso, entra no mundo pela mesma rotina da interface, anda até (30, 50), ataca um Rato de Sulco, coleta o saque e termina com `[autotest] OK` (código de saída 0). Mensagens `Parameter "m" is null` vêm do renderizador "dummy" do modo headless e são inofensivas. Com servidor `--dev`, `--board` vai depois a Pedrâmbar, abre o quadro de missões da praça pelo clique da interface e confere que um item de missão na bolsa aparece sem venda nem descarte, e `--defense` aceita "O Teste de Pressão" com Joca, abre a válvula e confere o Joca da defesa no lugar do NPC, o cronômetro, o seletor de título da ficha e que o clique num monstro colado no Joca ataca o monstro; depois sai do Brejo e confere que o cronômetro não fica preso na tela.
 
 Vitrine com as 8 classes, monstros e NPCs (salva capturas, inclusive closes do rosto):
 
