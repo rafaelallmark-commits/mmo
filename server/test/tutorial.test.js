@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { GameServer } from '../src/server.js';
 import { loadGameData } from '../src/data.js';
 import { QuestEngine } from '../src/quests.js';
+import { validate, loadBuilds } from '../tools/validate-data.js';
 import { SimClient, sleep } from './helpers/client.js';
 import { playTutorial, followers, follower, goTo, waitUntil, tutorialQuest, waitObjective, d2 } from './helpers/tutorial.js';
 
@@ -62,6 +63,21 @@ test('Tutorial: dicas por classe e {skill} da tecla 1 vêm do servidor', () => {
   assert.match(q.view(char('veilsinger'), 'tutorial').objectives[1].tip, /À distância/);
   assert.match(q.view(char('pikeman'), 'tutorial').objectives[1].tip, /Corpo a corpo/);
   assert.deepEqual(data.quests.tutorial.rewards, { xp: 60, gold: 0, items: [['potion_hp_s', 3], ['map_estrada_velha', 1]] });
+});
+
+test('validate-data recusa um resgate mal montado: perto de agressivo, descanso fora do posto, guarda inexistente, faixa que derruba', () => {
+  assert.deepEqual(validate(data, loadBuilds()).errors, []);
+  const bad = structuredClone(data);
+  const r = bad.maps.estrada_velha.rescue;
+  Object.assign(r.people.ligia, { x: 44, z: 64 }); // ao lado do Capataz Rachado (agride a 10 m)
+  r.people.bento.rest = [40, 50];                  // fora do círculo do posto (12 m)
+  r.people.caio.guards = [['nao_existe', 1]];
+  r.bell.damagePct = 100;
+  bad.quests.tutorial.objectives[0].who = 'ninguem';
+  const errs = validate(bad, loadBuilds()).errors;
+  for (const re of [/resgate ligia: Capataz Rachado em \(44, 72\) alcança quem vai buscá-lo/, /resgate bento: rest precisa ficar dentro do círculo do posto/, /resgate caio: guarda nao_existe ×1 inválido/, /o segundo toque não derruba ninguém/, /missão tutorial: pessoa ninguem sem bloco rescue/]) {
+    assert.ok(errs.some((e) => re.test(e)), `${re}\n${errs.join('\n')}`);
+  }
 });
 
 test('Tutorial: progresso gravado pelo tutorial antigo (objetos clicados) não trava os passos novos', () => {

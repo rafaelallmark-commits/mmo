@@ -96,6 +96,9 @@ func _ready() -> void:
 	for p in [inv_panel, sheet_panel, journal_panel, npc_panel, invite_panel, map_panel]:
 		var panel: Control = p
 		panel.visibility_changed.connect(func(): Sfx.ui("ui_open" if panel.visible else "ui_close"))
+	# a dica do tutorial sai da frente dos painéis grandes enquanto estão abertos
+	for p in _tut_covered_panels():
+		(p as Control).visibility_changed.connect(sync_tutorial_visibility)
 
 func _bar(parent: Control, color: Color, w := 260.0) -> ProgressBar:
 	var b := ProgressBar.new()
@@ -448,7 +451,6 @@ func refresh_tutorial() -> void:
 				hint = str(q["startHint"])
 				key = "%s:start" % q["id"]
 				break
-	tut_panel.visible = key != ""
 	tut_title.text = title
 	tut_hint.text = hint
 	tut_tip.text = tip
@@ -456,6 +458,22 @@ func refresh_tutorial() -> void:
 	if key != tut_step and tut_step != "" and key != "":
 		Sfx.ui("ui_open", -6.0)   # passo novo
 	tut_step = key
+	sync_tutorial_visibility()
+
+## Painéis grandes que a dica do tutorial cobriria na janela padrão (1280 × 720): o fim do diálogo do NPC (o
+## botão Aceitar de Mara ficava embaixo dela), a bolsa, a ficha, o diário e o mapa.
+func _tut_covered_panels() -> Array:
+	return [npc_panel, journal_panel, inv_panel, sheet_panel, map_panel]
+
+## A dica aparece quando há passo a mostrar e some enquanto um painel grande está aberto (volta quando ele fecha).
+func sync_tutorial_visibility() -> void:
+	if tut_panel == null:
+		return
+	var blocked := false
+	for p in _tut_covered_panels():
+		if p != null and (p as Control).visible:
+			blocked = true
+	tut_panel.visible = tut_step != "" and not blocked
 
 ## Fala de quem você resgata (Bento, Ligia, Caio): no chat (o balão sobre a pessoa é do world.gd).
 func say(m: Dictionary) -> void:

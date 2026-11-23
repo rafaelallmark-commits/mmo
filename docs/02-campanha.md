@@ -31,6 +31,8 @@ Mestres de classe: em Pedrâmbar, **Mestre Tarrasco** (Quebraferro), **Mestra Io
 
 Cena em tempo real, câmera elevada mais baixa que a de jogo, sem interface. O jogador já está no meio da caravana.
 
+> **Ainda não está no jogo.** Hoje o personagem já começa no Posto da Ponte, com a dica na tela para falar com Mara; a fala de oferta de «Três do Outro Lado» resume a cena ("Três ficaram do outro lado… Se ouvir o segundo toque, sai da faixa.") e o mapa dobrado de Mara chega como recompensa do tutorial (D166).
+
 | Tempo | Imagem | Som | Fala |
 |---|---|---|---|
 | 0–6 s | Ponte de pedra antes do amanhecer. Carroças, lanternas, animais de carga. Neblina azulada. | Vento, rodas, cascos. | — |
@@ -54,7 +56,7 @@ Cena em tempo real, câmera elevada mais baixa que a de jogo, sem interface. O j
   7. **segundo toque do sino**: na volta, já com os três, a 24 m do posto o sino toca duas vezes e uma faixa vermelha de 4 m de largura acende no chão embaixo do jogador, na direção em que ele anda; em 3 s é preciso sair dela para o lado. Quem fica perde 15% da vida (nunca cai) e o sino toca de novo 4 s depois — a prévia das linhas do piso da Última Eclusa.
 
   Por fim, entrar no círculo do posto com os três e falar com Mara.
-- **Adaptação à classe**: o kit inicial vem equipado de acordo com a classe (Quebraferro com Machado de Lasca e Couraça de Ferro Batido, com um Machado de Lenhador de duas mãos na bolsa para experimentar; Tecelão com Varinha de Vidro Bruto, Foco de Vidro Bruto e Veste de Linho, com um Cajado de Aprendiz na bolsa etc.; ver `03-classes.md`). No ataque ao rato e na luta por Caio, as classes à distância (Vigia, Andarilha, Cantora e Tecelão) recebem a dica de manter distância e as corpo a corpo (Quebraferro, Bastião, Lanceiro e Escudeiro), a de ficar entre o monstro e o resgatado.
+- **Adaptação à classe**: o kit inicial vem equipado de acordo com a classe (Quebraferro com Machado de Lasca e Couraça de Ferro Batido, com um Machado de Lenhador de duas mãos na bolsa para experimentar; Tecelão com Varinha de Vidro Bruto, Foco de Vidro Bruto e Veste de Linho, com um Cajado de Aprendiz na bolsa etc.; ver `03-classes.md`). No ataque ao rato e na luta por Caio, as classes à distância (Vigia, Andarilha, Cantora e Tecelão) recebem a dica de manter distância; as corpo a corpo (Quebraferro, Bastião, Lanceiro e Escudeiro), a de encostar no bicho para bater (no rato) e a de ficar entre os bichos e o menino (na luta por Caio).
 - **Diálogo**: BENTO: "Você é da caravana? Então me tira daqui antes que o chão abra de novo." · LIGIA: "Minha perna não aguenta. Tem tônico aí?" — depois do gole: "Ardeu, mas firmou. Eu vou atrás de você." · CAIO: "Ele não deixa eu passar!" (o besouro) — solto: "Eu não estava com medo. Só um pouco." Na chegada, um de cada vez: BENTO: "Posto da Ponte. Nunca achei que ia gostar tanto de ver essa fogueira." · LIGIA: "Obrigada. Diz pro Teodoro que eu ainda sei contar." · CAIO: "Chegamos! Posso contar pra todo mundo que eu ajudei?" As falas aparecem num balão sobre quem fala e no chat.
 - **Recompensa**: 60 XP, 3 Tônicos de Vida Pequenos e o **Mapa da Estrada Velha** — item de missão (não se vende, descarta, troca nem vai ao depósito): com ele, a tecla **M** abre o mapa de onde o jogador estiver, em qualquer área (D166).
 - **Pré-requisitos**: nenhum (criação de personagem).

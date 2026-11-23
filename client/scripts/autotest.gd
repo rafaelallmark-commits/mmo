@@ -241,11 +241,18 @@ func _process(_d: float) -> void:
 			if Time.get_ticks_msec() < settle_until:
 				return
 			_shot("paineis")
+			# a dica do tutorial não fica por cima da bolsa e da ficha (na janela padrão ela as cobria)
+			if main.hud.tut_panel.visible:
+				fail("a dica do tutorial ficou por cima da bolsa e da ficha")
+				return
 			Net.request("char", {}, func(r):
 				var gold := int(r["char"]["gold"])
 				say("coleta concluída; nível %d, XP %d, ouro %d, itens na bolsa %d" % [int(r["char"]["level"]), int(r["char"]["xp"]), gold, int(r["char"]["bagUsed"])])
 				main.hud.inv_panel.visible = false
 				main.hud.sheet_panel.visible = false
+				if main.hud.tut_step != "" and not main.hud.tut_panel.visible:
+					fail("a dica do tutorial não voltou depois de fechar a bolsa e a ficha")
+					return
 				if main.args.has("m2"):
 					step = "m2_talk"
 				else:
@@ -259,6 +266,11 @@ func _process(_d: float) -> void:
 		"m2_wait_npc":
 			if main.hud.npc_panel.visible:
 				say("diálogo com Mara aberto pela interface")
+				# a dica de começar ("clique em Mara") sai da frente do diálogo: cobria o botão Aceitar
+				if main.hud.tut_panel.visible:
+					fail("a dica do tutorial cobre o diálogo de Mara")
+					return
+				_shot("mara_oferta")
 				Net.request("quest_accept", {"quest": "tutorial", "npc": "mara"}, func(r):
 					say("missão aceita: %s" % r.get("quest", {}).get("title", r.get("reason", "")))
 					main.hud.npc_panel.visible = false

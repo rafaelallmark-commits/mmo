@@ -79,7 +79,7 @@ func _process(delta: float) -> void:
 	_acc += delta
 	if _acc >= 0.2:
 		_acc = 0.0
-		canvas.queue_redraw()
+		refresh()   # título e desenho: aberto, o painel acompanha a troca de mapa por um portal
 
 # ---------------- desenho ----------------
 var _s := 1.0

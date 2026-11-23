@@ -171,5 +171,5 @@ z=160└────────────────────────
 | Diário de missões | missões ativas, objetivo, progresso | M2 |
 | Painel de grupo | membros, vida, mana, distância | M2 |
 | Ferreiro | custo, chance, prévia | M3 |
-| Dica do tutorial | passo atual de «Três do Outro Lado» acima da barra de atalhos ("Passo 3 de 7"), com a dica da classe; antes de aceitar, diz para falar com Mara | Auditoria (D165) |
+| Dica do tutorial | passo atual de «Três do Outro Lado» acima da barra de atalhos ("Passo 3 de 7"), com a dica da classe; antes de aceitar, diz para falar com Mara; sai da frente enquanto a bolsa, a ficha, o diário, o mapa ou o diálogo de um NPC estão abertos | Auditoria (D165) |
 | Mapa (M) | o mapa de onde você está visto de cima: estradas, áreas bloqueadas, portais com o destino e o nível, NPCs com nome, posto de guarda, você e o grupo; exige o Mapa da Estrada Velha na bolsa (sem ele: "Você ainda não tem um mapa.") | Auditoria (D166) |

@@ -44,7 +44,7 @@ Da mais baixa para a mais alta. Uma camada de cima bloqueia o clique nas de baix
 | Camada | O que é | Abre / fecha |
 |---|---|---|
 | 1. Mundo 3D | câmera elevada, personagens, monstros, NPCs, portais | clique: andar, atacar, falar, coletar |
-| 2. HUD fixo | vida/mana/XP, barra de atalhos (1–8), alvo, rastreador de missões, painel de grupo, chat; durante o tutorial, a dica do passo atual acima da barra de atalhos | sempre visível |
+| 2. HUD fixo | vida/mana/XP, barra de atalhos (1–8), alvo, rastreador de missões, painel de grupo, chat; durante o tutorial, a dica do passo atual acima da barra de atalhos (sai da frente enquanto a bolsa, a ficha, o diário, o mapa ou o diálogo de um NPC estão abertos) | sempre visível |
 | 3. Painéis | Inventário (**I**), Ficha (**C**), Missões (**J**), Clã (**L**), Mapa (**M**, com o Mapa da Estrada Velha na bolsa) — podem ficar abertos juntos | tecla ou **Esc** |
 | 4. Diálogos | NPC (missões, loja, prova de classe, ferreiro), convites (grupo, troca, clã, duelo), janela de troca, ações sobre outro jogador | clique no NPC ou no jogador / **Esc** (fechar a troca a cancela) |
 | 5. Menu de pausa | Continuar, Opções, Trocar de personagem, Sair para o título, Sair do jogo | **Esc** sem nada aberto |

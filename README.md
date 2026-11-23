@@ -172,7 +172,7 @@ Teste automático do **cliente** (headless, contra um servidor rodando), da raiz
 /Applications/Godot.app/Contents/MacOS/Godot --headless --path client -- --autotest --server=ws://127.0.0.1:7777 --account=robo --password=robo123 --class=breaker --name=Robo
 ```
 
-Ele cria a conta/personagem se preciso, entra no mundo pela mesma rotina da interface, anda até (30, 50), ataca um Rato de Sulco, coleta o saque, confere que a tecla **M** só avisa sem o item de mapa e termina com `[autotest] OK` (código de saída 0). Com `--m2` ele segue: faz o tutorial inteiro pela interface (a dica na tela de cada passo, as teclas 1 e 7, a luta pelos bichos de Caio, a faixa do segundo toque, a chegada dos três ao posto), entrega a Mara, abre o mapa com **M** na Estrada e na cidade e fala com o mestre da classe. Mensagens `Parameter "m" is null` vêm do renderizador "dummy" do modo headless e são inofensivas.
+Ele cria a conta/personagem se preciso, entra no mundo pela mesma rotina da interface, anda até (30, 50), ataca um Rato de Sulco, coleta o saque, confere que a tecla **M** só avisa sem o item de mapa e que a dica do tutorial sai da frente da bolsa e da ficha, e termina com `[autotest] OK` (código de saída 0). Com `--m2` ele segue: faz o tutorial inteiro pela interface (a dica sai da frente do diálogo de Mara; a dica na tela de cada passo, as teclas 1 e 7, a luta pelos bichos de Caio, a faixa do segundo toque, a chegada dos três ao posto), entrega a Mara, abre o mapa com **M** na Estrada e na cidade e fala com o mestre da classe. Mensagens `Parameter "m" is null` vêm do renderizador "dummy" do modo headless e são inofensivas.
 
 Vitrine com as 8 classes, monstros e NPCs (salva capturas, inclusive closes do rosto):
 
