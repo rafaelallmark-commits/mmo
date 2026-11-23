@@ -18,10 +18,14 @@ pacote do seu sistema:
 | Sistema | Pacote |
 |---|---|
 | Windows 10 ou 11, 64 bits | `CinzasDoMeridiano-<versão>-windows-x86_64.zip` |
-| macOS 10.12 ou mais novo (Intel e Apple Silicon) | `CinzasDoMeridiano-<versão>-macos-universal.zip` |
+| macOS 10.13 ou mais novo (Intel e Apple Silicon) | `CinzasDoMeridiano-<versão>-macos-universal.zip` |
 | Linux, 64 bits (x86_64) | `CinzasDoMeridiano-<versão>-linux-x86_64.tar.gz` |
 
-O arquivo `SHA256SUMS.txt` da mesma página confere se o download chegou inteiro (`sha256sum -c SHA256SUMS.txt`).
+O arquivo `SHA256SUMS.txt` da mesma página confere se o download chegou inteiro (opcional): com ele e o pacote na
+mesma pasta, calcule o resumo do pacote e compare com a linha dele no `SHA256SUMS.txt` (maiúsculas e minúsculas não
+importam). No Windows, no PowerShell: `Get-FileHash .\CinzasDoMeridiano-<versão>-windows-x86_64.zip` (ou
+`certutil -hashfile <arquivo> SHA256` no Prompt de Comando); no macOS, no Terminal: `shasum -a 256 <arquivo>`; no
+Linux: `sha256sum -c --ignore-missing SHA256SUMS.txt` (diz `OK` para o pacote baixado e ignora os dos outros sistemas).
 Cada pacote traz também este guia, os termos, a política de privacidade e as licenças de terceiros em texto
 (`GUIA.txt`, `TERMOS.txt`, `PRIVACIDADE.txt`, `LICENCAS-TERCEIROS.txt`).
 
@@ -36,6 +40,13 @@ jogo é online).
 3. Se aparecer **"O Windows protegeu o computador"** (SmartScreen, enquanto o executável não tiver assinatura
    digital), clique em **Mais informações** e depois em **Executar assim mesmo**. As notas de cada versão dizem
    se ela saiu assinada.
+4. No Windows 11, se o aviso for do **Controle Inteligente de Aplicativos** (*Smart App Control*: "parte deste
+   aplicativo foi bloqueada"), não existe *Executar assim mesmo*: ele bloqueia todo programa sem assinatura digital
+   que ainda não conhece, sem exceção por programa. Com uma versão sem assinatura, a única saída é desligá-lo em
+   **Segurança do Windows → Controle de aplicativos e do navegador → Configurações do Controle Inteligente de
+   Aplicativos → Desativado**. Isso reduz a proteção do computador e, em algumas versões do Windows, ele só volta a
+   ligar reinstalando ou restaurando o sistema; se preferir não desligar, espere uma versão assinada (as notas da
+   versão dizem).
 
 **macOS**
 
@@ -114,6 +125,12 @@ motor Godot e dos componentes que vêm com ele.
 
 Apareceu **"Servidor cheio"** ao entrar? O teste chegou ao limite de jogadores ao mesmo tempo: tente de novo em alguns
 minutos.
+
+Apareceu **"Sem conexão: Conexão encerrada (código -1)"** ou **"Serviço de contas indisponível"** logo ao entrar, com
+a internet funcionando? Confira o campo **Servidor** (o endereço do teste, começando por `wss://`). Se estiver certo,
+um antivírus ou a rede de uma empresa ou escola que inspeciona as conexões seguras (HTTPS) pode estar no meio: o jogo
+só aceita o certificado verdadeiro do servidor. Desligue a inspeção de HTTPS do antivírus para o jogo, ou tente de
+outra rede.
 
 ## 3.1 Os primeiros 5 minutos: «Três do Outro Lado»
 

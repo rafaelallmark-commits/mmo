@@ -45,8 +45,10 @@ monitor de disponibilidade levam só números do servidor, sem dados de jogadore
   botão para abrir a pasta) e deixa salvar uma cópia onde você quiser. O mesmo conteúdo vem do serviço de
   contas (`POST /contas/dados` com conta e senha): conta (com o aceite dos termos — versão e data —,
   suspensão e silêncio), personagens, itens, missões, clãs, as listas de ignorados e os registros de
-  segurança da conta e dos personagens. As denúncias que você fez vêm sem as falas do denunciado (são dados
-  de outra pessoa, guardados só para a equipe analisar).
+  segurança da conta e dos personagens, inclusive as ações da equipe contra a sua conta (suspensões, silêncios,
+  expulsões, nomes trocados e itens ou ouro retirados, com o motivo, sem identificar quem da equipe agiu). As
+  denúncias que você fez vêm sem as falas do denunciado (são dados de outra pessoa, guardados só para a equipe
+  analisar); denúncias contra você não vêm (são dados de quem denunciou).
 - **Exclusão**: no jogo (tela de personagens, ou na tela de termos novos, se você não quiser aceitá-los)
   ou pelo serviço de contas (`POST /contas/excluir`); um personagem só também pode ser excluído na tela de
   personagens.

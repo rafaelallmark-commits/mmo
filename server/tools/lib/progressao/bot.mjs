@@ -47,6 +47,8 @@ const POCOES_MANA = ['potion_mp_m', 'potion_mp_s'];
 const TEMPOS = ['combate', 'deslocamento', 'saque', 'espera', 'descanso', 'fuga', 'morto', 'viagem', 'cidade', 'prova'];
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+// avisos da prova de classe (Trial.warnCircle em src/trial.js): os únicos 'warn' que vão para o piloto das provas
+const AVISOS_DA_PROVA = new Set(['rock', 'steam']);
 // avisos no chão: "dentro" com meio metro a mais que a borda (na dúvida, sai); o ponto de fuga fica bem fora
 const MARGEM_DENTRO = BODY + 0.5;
 const MARGEM_FORA = BODY + 0.8;
@@ -101,7 +103,7 @@ export class BotProgressao {
     this.ultimoAbate = 0; this.terminou = false;
     // métricas
     this.niveis = new Map();
-    this.equipamento = []; this.provas = []; this.avisos = []; this.provaEstado = null; this.ultimoGolpe = -1e9; this.rejeicoes = {}; this.ignorados = 0; this.viagens = 0;
+    this.equipamento = []; this.provas = []; this.avisosProva = []; this.provaEstado = null; this.ultimoGolpe = -1e9; this.rejeicoes = {}; this.ignorados = 0; this.viagens = 0;
     this.destravamentos = 0; this.compras = []; this.vendas = { itens: 0, ouro: 0 }; this.anomalias = []; this.viagensPorMotivo = {}; this.mortesPor = {};
     // golpes recebidos e tônicos de vida bebidos nos últimos 10 s (para descrever cada morte)
     this.mortesDetalhe = []; this.golpesRecentes = []; this.golesRecentes = [];
@@ -216,6 +218,12 @@ export class BotProgressao {
         break;
       case 'respawn': if (m.eid === this.eid) this.morto = false; break;
       case 'warn':
+        // aviso da prova de classe (pedra do Quebraferro, jato da Cantora: Trial.warnCircle, sem src nem id): vai
+        // para o piloto das provas, que desvia dele
+        if (AVISOS_DA_PROVA.has(m.kind) && m.src == null && m.id == null) {
+          this.avisosProva.push({ x: m.x, z: m.z, radius: m.radius, ate: this.now + m.ms + 150, kind: m.kind });
+          break;
+        }
         // golpe de área avisado (forma, posição, duração): como o cliente desenha no chão
         this.avisos.set(m.id ?? `w${this.now}`, { ...m, visto: this.now, ate: this.now + m.ms, contado: false });
         this.mecanicas.avisos++;
@@ -239,11 +247,10 @@ export class BotProgressao {
         if (this.conjurando?.skill === m.skill) this.conjurando = null;
         break;
       }
-      case 'warn': this.avisos.push({ x: m.x, z: m.z, radius: m.radius, ate: this.now + m.ms + 150, kind: m.kind }); break;
       case 'trial': {
         if (m.char) this.recebeChar(m.char);
         // prova de classe: o piloto (tools/lib/provas/piloto.mjs) joga com o objetivo e o estado que o servidor manda
-        if (m.state === 'started') { this.provaEstado = { iniciada: m, status: null }; this.avisos = []; }
+        if (m.state === 'started') { this.provaEstado = { iniciada: m, status: null }; this.avisosProva = []; }
         if (m.state === 'status' && this.provaEstado) this.provaEstado.status = m;
         if (m.state === 'success' || m.state === 'failed') {
           this.provaEstado = null;
@@ -1214,8 +1221,8 @@ export class BotProgressao {
       },
       tonico() { if (bot.now >= bot.potPronto) bot.usarPocao(POCOES_VIDA, eu.mhp - eu.hp, 'pocoesVida', false, true); },
     };
-    this.avisos = (this.avisos ?? []).filter((w) => w.ate > this.now);
-    this.piloto.decidir({ agora: this.now, eu, ents: mundo, char: this.char, prova: this.provaEstado, avisos: this.avisos, ultimoGolpe: this.ultimoGolpe }, acoes);
+    this.avisosProva = this.avisosProva.filter((w) => w.ate > this.now);
+    this.piloto.decidir({ agora: this.now, eu, ents: mundo, char: this.char, prova: this.provaEstado, avisos: this.avisosProva, ultimoGolpe: this.ultimoGolpe }, acoes);
   }
 
   perto(eu, npc) {

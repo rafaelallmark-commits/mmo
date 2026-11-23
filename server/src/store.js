@@ -273,6 +273,13 @@ export function charSaveValues(c, now = Date.now()) {
 
 // Exportação dos dados da conta (LGPD): a denúncia que a conta fez sai sem as falas do denunciado e sem o id
 // da conta dele (dados de outra pessoa, guardados só para a equipe analisar); fica o número de falas.
+// Ações da equipe contra a conta que entram na exportação (D176). As linhas mod_* têm nas colunas a conta, o
+// personagem e o IP de quem moderou; o alvo fica em data_json (targetAccount; na expulsão, só target, o
+// personagem). A exportação do alvo leva só instante, tipo e data_json — nunca as colunas de quem moderou.
+// Lista fechada: denúncias ('report') também têm targetAccount, e o denunciado não recebe os dados de quem
+// denunciou.
+export const EXPORT_MOD_KINDS = ['mod_kick', 'mod_ban', 'mod_unban', 'mod_mute', 'mod_unmute', 'mod_rename', 'mod_take_item', 'mod_take_gold'];
+
 export function exportAuditRows(rows) {
   return rows.map((r) => {
     if (r.kind !== 'report') return r;
@@ -440,13 +447,14 @@ export class Store {
   }
 
   // Exclusão de conta (privacidade): apaga dados pessoais e itens, mantém linhas anônimas para a
-  // integridade das referências (saque, auditoria).
+  // integridade das referências (saque, auditoria). O nome vira excluida#<id>, que o cadastro nunca aceita
+  // (só letras, números e _): ninguém ocupa antes o nome que a exclusão vai gravar (D176).
   deleteAccount(accountId) {
     return this.tx(() => {
       const chars = this.prep('SELECT id FROM characters WHERE account_id = ?').all(accountId);
       for (const c of chars) this.wipeCharacter(c.id);
       this.prep('DELETE FROM account_codes WHERE account_id = ?').run(accountId);
-      this.prep("UPDATE accounts SET name = ?, email = NULL, pass_hash = '', salt = '', deleted_at = ? WHERE id = ?").run(`excluida_${accountId}`, Date.now(), accountId);
+      this.prep("UPDATE accounts SET name = ?, email = NULL, pass_hash = '', salt = '', deleted_at = ? WHERE id = ?").run(`excluida#${accountId}`, Date.now(), accountId);
       return chars.length;
     });
   }
@@ -477,6 +485,11 @@ export class Store {
       ignorados: inChars('SELECT i.char_id, c.name AS ignorado, i.created_at FROM char_ignores i JOIN characters c ON c.id = i.ignored_id WHERE i.char_id = ? ORDER BY i.created_at, i.ignored_id'),
       // a conta e os personagens dela (as linhas do jogo — saque, compra, venda, refino, troca, clã — têm só o personagem)
       auditoria: exportAuditRows(this.prep('SELECT at, kind, char_id, ip, data_json FROM audit_log WHERE account_id = ? OR char_id IN (SELECT id FROM characters WHERE account_id = ?) ORDER BY at, id').all(accountId, accountId)),
+      // suspensões, silêncios, expulsões, nomes trocados e itens ou ouro retirados pela equipe (sem quem moderou)
+      acoes_da_equipe: this.prep(`SELECT at, kind, data_json FROM audit_log WHERE kind IN (${EXPORT_MOD_KINDS.map(() => '?').join(', ')})
+        AND CASE WHEN kind IN (${EXPORT_MOD_KINDS.map(() => '?').join(', ')}) THEN json_extract(data_json, '$.targetAccount') = ?
+          OR json_extract(data_json, '$.target') IN (SELECT id FROM characters WHERE account_id = ?) END
+        ORDER BY at, id`).all(...EXPORT_MOD_KINDS, ...EXPORT_MOD_KINDS, accountId, accountId),
     };
   }
 

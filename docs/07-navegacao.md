@@ -41,12 +41,12 @@ Como o jogador se move entre telas, painéis e mapas. Este documento manda: o cl
 | **Confirmar e-mail** | explicação, conta, código; Confirmar, Reenviar código, Esqueci a senha, Voltar; dica (validade, lixo eletrônico, limites) | Confirmar → Entrar com o aviso; Esqueci a senha → Esqueci a senha; Voltar → Entrar |
 | **Esqueci a senha** | e-mail, Enviar código; código, nova senha, Trocar a senha | Trocar → Entrar; Voltar → Entrar |
 | **Termos atualizados** | aviso com a versão nova, links dos Termos e da Política, caixa de aceite; Aceitar e entrar, Não aceito: baixar meus dados, Não aceito: excluir a conta, Voltar | Aceitar → Personagens; os dois "Não aceito" voltam aqui; Voltar → Entrar |
-| **Personagens** | até 4 cartões (nome, classe, nível, mapa); personagem selecionado em 3D no centro, girando; Baixar meus dados, Excluir personagem, Excluir conta | Jogar → Carregando; Criar novo → Criação; Baixar meus dados → Baixar meus dados; Excluir personagem → Excluir personagem; Excluir conta → Excluir conta; Voltar → Entrar |
+| **Personagens** | até 4 cartões (nome, classe, nível, mapa); personagem selecionado em 3D no centro, girando; Baixar meus dados, Excluir personagem, Excluir conta | Jogar → Carregando (com a conexão caída, o aviso fica na linha de status e Voltar leva a Entrar, D178); Criar novo → Criação; Baixar meus dados → Baixar meus dados; Excluir personagem → Excluir personagem; Excluir conta → Excluir conta; Voltar → Entrar |
 | **Baixar meus dados** | o que vem no arquivo, senha, Baixar; depois: caminho do arquivo em `user://dados`, Abrir a pasta, Salvar uma cópia em outro lugar... | Voltar → Personagens (ou Termos atualizados) |
 | **Excluir personagem** | aviso (itens, ouro, missões e clã; o depósito da conta fica), nome do personagem, senha da conta, Excluir personagem para sempre, Cancelar | Excluir → Personagens, com o aviso; Cancelar → Personagens |
 | **Excluir conta** | aviso, senha, Excluir para sempre, Cancelar | Excluir → Título; Cancelar → Personagens (ou Termos atualizados) |
 | **Criação** | 8 classes em dois grupos (Âmbar / Nacre), papel e armas da classe, prévia 3D muda ao escolher, nome | Criar → Personagens; Voltar → Personagens |
-| **Carregando** | nome do mapa, dica de jogo; aparece ao entrar no mundo e em cada troca de mapa | → Mundo (personagem novo: → Abertura) |
+| **Carregando** | nome do mapa, dica de jogo; aparece ao entrar no mundo e em cada troca de mapa; uma queda de conexão a fecha | → Mundo (personagem novo: → Abertura) |
 | **Abertura** | ~40 s na ponte antes do amanhecer (docs/02, "Abertura"): caravana, primeiro toque, sulco vermelho, a margem que cede e Mara entregando o mapa; legendas, sem interface. Só na primeira entrada de um personagem novo neste computador | Pular (Esc, Espaço, Enter ou botão) ou fim da cena → Mundo, no Posto da Ponte |
 | **Opções** | sensibilidade da câmera, mostrar nomes, escala da interface; gráficos: modo leve, sombras, tela cheia, limite de quadros (salvos em `user://opcoes.cfg`, junto com o último servidor usado na tela Entrar); volume geral, da música e dos efeitos (salvos em `user://settings.cfg`) | Fechar → tela anterior |
 
@@ -65,7 +65,7 @@ Da mais baixa para a mais alta. Uma camada de cima bloqueia o clique nas de baix
 
 **Esc** fecha a camada aberta mais alta; sem nada aberto, abre o menu de pausa. O jogo não pausa (é online): o menu só cobre a tela.
 
-**Trocar de personagem** desconecta e volta direto para Personagens (login refeito automaticamente). **Sair para o título** desconecta e vai ao Título.
+**Trocar de personagem** desconecta e volta para Personagens (login refeito automaticamente); enquanto isso fica o painel **Voltando aos personagens**, com a linha de status e Voltar (→ Entrar): uma recusa do login (senha trocada em outro aparelho, servidor reiniciando) ou a queda da conexão aparecem nele (D178). **Sair para o título** desconecta e vai ao Título.
 
 **Reconectar** (aviso de conexão perdida) refaz o login e volta ao mundo. Se o serviço de contas recusar pedindo o código do e-mail ou o aceite de termos novos, o jogo sai do mundo e abre *Confirmar e-mail* ou *Termos atualizados*, com a conexão nova aberta para a próxima tentativa; aceitos os termos, segue para Personagens.
 

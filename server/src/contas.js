@@ -28,6 +28,7 @@ import { createStore } from './db.js';
 import { signToken } from './token.js';
 import { banMessage } from './moderation.js';
 import { createMailer } from './mailer.js';
+import { DELETED_PREFIX_RE } from './names.js';
 
 // Versão atual de docs/TERMOS.md e docs/PRIVACIDADE.md. Fica gravada na conta no cadastro; ao subir este
 // número, cada conta que aceitou uma versão anterior vê a tela de aceite no próximo login (POST /sessoes
@@ -40,7 +41,9 @@ export const CODE_FAILS_PER_DAY = 20; // palpites de código errados por conta e
 const DAY_MS = 86_400_000;
 
 const ACCOUNT_RE = /^[a-zA-Z0-9_]{3,20}$/;
-const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,24}$/;
+// Sem espaços e sem os caracteres especiais do endereço de e-mail (< > ( ) [ ] , ; : " \): com eles, "a<b@c.com>"
+// passava como um endereço próprio (unicidade e limites por endereço) e era entregue a b@c.com (D176).
+const EMAIL_RE = /^[^\s@<>()[\],;:"\\]{1,64}@[^\s@<>()[\],;:"\\]{1,190}\.[^\s@<>()[\],;:"\\]{2,24}$/;
 
 // tempo restante para a mensagem ("40 s", "12 min", "cerca de 5 h")
 function waitText(ms) {
@@ -183,6 +186,9 @@ export class AccountsService {
       case '/contas': {
         const { conta, email, senha } = b;
         if (typeof conta !== 'string' || !ACCOUNT_RE.test(conta)) return { ok: false, erro: 'Conta: 3 a 20 letras, números ou _.' };
+        // os prefixos da exclusão (excluido_, excluida_) são reservados: uma conta com o nome que a exclusão grava
+        // travava a exclusão da conta daquele número (D176)
+        if (DELETED_PREFIX_RE.test(conta)) return { ok: false, erro: 'Esse nome de conta é reservado. Escolha outro.' };
         if (typeof email !== 'string' || !EMAIL_RE.test(email)) return { ok: false, erro: 'E-mail inválido.' };
         if (typeof senha !== 'string' || senha.length < this.opts.minPassword) return { ok: false, erro: `A senha precisa de pelo menos ${this.opts.minPassword} caracteres.` };
         if (b.aceite !== true) return { ok: false, erro: 'Para criar a conta, confirme que tem 13 anos ou mais e aceita os Termos de Uso e a Política de Privacidade.' };

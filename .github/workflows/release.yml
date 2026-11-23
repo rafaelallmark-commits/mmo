@@ -641,7 +641,7 @@ jobs:
             cp artefatos/cliente-macos/* dist/
           fi
           (cd dist && sha256sum -- * > SHA256SUMS.txt && cat SHA256SUMS.txt)
-          if [ "$WINDOWS_ASSINADO" = true ]; then win="assinado (Authenticode, com carimbo de tempo)"; else win="**sem assinatura**: o SmartScreen avisa; \"Mais informações\" > \"Executar assim mesmo\""; fi
+          if [ "$WINDOWS_ASSINADO" = true ]; then win="assinado (Authenticode, com carimbo de tempo)"; else win="**sem assinatura**: o SmartScreen avisa; \"Mais informações\" > \"Executar assim mesmo\". Com o Controle Inteligente de Aplicativos (Smart App Control) do Windows 11 ligado não há essa opção: veja o guia"; fi
           if [ "$MACOS_ASSINADO" = true ]; then mac="assinado (Developer ID) e notarizado"; else mac="**sem notarização** (assinatura ad-hoc): o Gatekeeper bloqueia na primeira vez; veja o guia (no macOS 15: Ajustes do Sistema > Privacidade e Segurança > Abrir Mesmo Assim)"; fi
           if [ -n "$SERVIDOR" ]; then
             jogar="Para jogar: abra o cliente; o campo **Servidor** da tela de entrada já vem com \`${SERVIDOR}\`."
@@ -662,7 +662,7 @@ jobs:
             echo
             echo "### Antes de jogar"
             echo
-            echo "- **[Guia do testador](${docs}/GUIA.md)**: requisitos (64 bits, placa de vídeo com OpenGL 3.3), como abrir em cada sistema (SmartScreen, Gatekeeper, \`chmod +x\`), onde fica o registro do jogo para mandar quando ele nem abre e como relatar problemas (\`/bug\` ou *Esc → Reportar um problema*)."
+            echo "- **[Guia do testador](${docs}/GUIA.md)**: requisitos (64 bits, placa de vídeo com OpenGL 3.3), como abrir em cada sistema (SmartScreen, Controle Inteligente de Aplicativos, Gatekeeper, \`chmod +x\`), onde fica o registro do jogo para mandar quando ele nem abre e como relatar problemas (\`/bug\` ou *Esc → Reportar um problema*)."
             echo "- [Termos de uso](${docs}/TERMOS.md) e [Política de privacidade](${docs}/PRIVACIDADE.md) do teste público."
             echo "- Cada pacote traz \`GUIA.txt\`, \`TERMOS.txt\`, \`PRIVACIDADE.txt\` e \`LICENCAS-TERCEIROS.txt\` (créditos e licenças de terceiros, os mesmos da tela *Créditos e licenças* do jogo)."
             echo
@@ -670,7 +670,7 @@ jobs:
             echo
             echo "Servidor desta versão: \`${imagem}\` (o \`hello\` e o \`/bug\` dizem \`${VERSAO}\`)."
             echo
-            echo "Conferir os downloads: \`sha256sum -c SHA256SUMS.txt\`."
+            echo "Conferir o download (opcional): calcule o resumo do pacote e compare com a linha dele no \`SHA256SUMS.txt\` (maiúsculas e minúsculas não importam). Windows (PowerShell): \`Get-FileHash <arquivo>\`; macOS: \`shasum -a 256 <arquivo>\`; Linux: \`sha256sum -c --ignore-missing SHA256SUMS.txt\`."
           } > notas.md
           cat notas.md
 

@@ -31,7 +31,7 @@ Mestres de classe: em Pedrâmbar, **Mestre Tarrasco** (Quebraferro), **Mestra Io
 
 Cena em tempo real, câmera elevada mais baixa que a de jogo, sem interface. O jogador já está no meio da caravana.
 
-> **Ainda não está no jogo.** Hoje o personagem já começa no Posto da Ponte, com a dica na tela para falar com Mara; a fala de oferta de «Três do Outro Lado» resume a cena ("Três ficaram do outro lado… Se ouvir o segundo toque, sai da faixa.") e o mapa dobrado de Mara chega como recompensa do tutorial (D166).
+> **No jogo (D170):** toca uma vez por personagem novo em cada computador e pode ser pulada (Esc, Espaço, Enter ou o botão); depois o personagem está no Posto da Ponte, com a dica na tela para falar com Mara, e o mapa dobrado de Mara chega como recompensa do tutorial (D166).
 
 | Tempo | Imagem | Som | Fala |
 |---|---|---|---|

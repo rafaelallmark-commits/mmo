@@ -109,6 +109,7 @@ CINZAS_SMTP_PORT=587
 CINZAS_SMTP_USER=seu.endereco@gmail.com
 CINZAS_SMTP_PASS=abcdefghijklmnop
 CINZAS_SMTP_FROM=Cinzas do Meridiano <seu.endereco@gmail.com>
+CINZAS_VERSION=0.4.0-teste.1
 FIM
 echo "CINZAS_TOKEN_SECRET=$(openssl rand -hex 32)" >> .env
 chmod 600 .env
@@ -123,6 +124,7 @@ sudo docker compose config --quiet && echo "configuração ok"
 | `CINZAS_SMTP_HOST`, `CINZAS_SMTP_PORT` | Servidor de envio do provedor. **587** = STARTTLS obrigatório (sem ele o envio falha em vez de mandar a senha às claras); **465** = TLS direto. |
 | `CINZAS_SMTP_USER`, `CINZAS_SMTP_PASS` | Login do SMTP. Valor com `$`, `#` ou aspas vai entre aspas simples: `CINZAS_SMTP_PASS='a$b#c'`. |
 | `CINZAS_SMTP_FROM` | Remetente que o jogador vê: `Nome <endereco@dominio>`. O domínio dele vai no EHLO; precisa ser um endereço que o provedor deixa você usar. |
+| `CINZAS_VERSION` | A versão do servidor: a tag da Release do cliente (passo 11) **sem o `v`** (`v0.4.0-teste.1` → `0.4.0-teste.1`). Entra na imagem no `up --build` e aparece no `hello`, no registro de início e em cada `/bug`; sem a linha, o servidor diz `0.1.0` (a do `package.json`) e os relatos não dizem com que versão aconteceram. Só letras, números, `.`, `+`, `_` e `-`: um espaço ou aspas fazem o servidor recusar subir (o `--wait` mostra). |
 
 Opcionais (o padrão serve): `CINZAS_MAX_PLAYERS` (teto de jogadores, 200), `CINZAS_SMTP_TLS`
 (`direto`/`starttls`, força o modo), `CINZAS_SMTP_CA_ARQUIVO` (só para um servidor de e-mail próprio com
@@ -287,12 +289,14 @@ mudado depois da cópia voltou exatamente como estava nela.
 cd ~/mmo
 git pull
 cd deploy
+nano .env        # CINZAS_VERSION = a tag nova sem o "v" (ex.: 0.4.0-teste.2)
 sudo docker compose up -d --build --wait
 ```
 
-Quem está jogando recebe o aviso de reinício e volta em seguida, com tudo o que estava gravado. Voltar para uma
-versão anterior: `git checkout v0.4.0-teste.1` (a tag que funcionava) e o mesmo `up -d --build --wait`
-**[não testado aqui: ainda não há tags]**. Rode o teste de fumaça (passo 9) depois de cada atualização e, de vez
+Troque o `CINZAS_VERSION` do `.env` a cada versão: é ele que o `hello` e o `/bug` mostram (passo 6). Quem está
+jogando recebe o aviso de reinício e volta em seguida, com tudo o que estava gravado. Voltar para uma
+versão anterior: `git checkout v0.4.0-teste.1` (a tag que funcionava), `CINZAS_VERSION=0.4.0-teste.1` no `.env` e o
+mesmo `up -d --build --wait` **[não testado aqui: ainda não há tags]**. Rode o teste de fumaça (passo 9) depois de cada atualização e, de vez
 em quando, `sudo docker image prune -f` para apagar as imagens antigas que os builds deixam.
 
 ## 14. Quando algo dá errado
@@ -305,7 +309,7 @@ em quando, `sudo docker image prune -f` para apagar as imagens antigas que os bu
 | `servidor` ou `contas` reiniciando sem parar | `sudo docker compose logs --tail 20 servidor contas` | A mensagem diz o motivo: segredo curto ou de exemplo (`openssl rand -hex 32`), `CINZAS_SMTP_FROM` vazio ou sem domínio, e assim por diante. Corrija o `.env` e `sudo docker compose up -d --wait`. |
 | Teste de fumaça: `FALHOU ... o e-mail com o código NÃO saiu`; jogador: "Conta criada, mas o e-mail com o código não saiu agora" | `sudo docker compose logs contas \| grep "falha no envio"` | `SMTP 535` = usuário ou senha recusados (senha de app sem espaços, verificação em duas etapas ligada). `SMTP: tempo esgotado` ou `ECONNREFUSED` = porta bloqueada (teste do passo 7). `certificate`/`altnames` = `CINZAS_SMTP_HOST` errado. A conta já existe: depois de corrigir, o jogador usa *Confirmar e-mail → Reenviar código*. |
 | O código chega no lixo eletrônico | — | SPF, DKIM e DMARC do domínio do remetente (provedor transacional, passo 7). |
-| Cliente: "Serviço de contas indisponível (https://DOMINIO/contas)" | `sudo docker compose ps contas` e `curl https://DOMINIO/contas/saude` | `contas` fora do ar ou o campo Servidor do cliente com outro endereço. |
+| Cliente: "Serviço de contas indisponível (https://DOMINIO/contas)" | `sudo docker compose ps contas` e `curl https://DOMINIO/contas/saude` | `contas` fora do ar ou o campo Servidor do cliente com outro endereço. Só num computador, com o resto entrando: antivírus ou rede de empresa que inspeciona HTTPS (o cliente só aceita o certificado verdadeiro, D177; GUIA §3). |
 | `servidor` aparece `(unhealthy)` | `curl http://127.0.0.1:9100/health` | `laço do jogo parado`: `sudo docker compose restart servidor` (os personagens voltam do último salvamento, de 10 s em 10 s; itens e ouro são gravados na hora). Se o processo cair sozinho, o Docker o sobe de novo. |
 | `backup` aparece `(unhealthy)` | `sudo docker compose logs --tail 20 backup` | Não há cópia conferida há mais de 2 h: disco cheio (`df -h`) ou banco com defeito. |
 | Jogador: "Servidor cheio (200 jogadores)" | `curl -s http://127.0.0.1:9100/metrics \| grep cinzas_max_players` | Suba o teto com `CINZAS_MAX_PLAYERS=N` no `.env` e `sudo docker compose up -d --wait servidor`. |

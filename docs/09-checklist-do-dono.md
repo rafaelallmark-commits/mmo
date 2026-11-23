@@ -92,7 +92,8 @@ guardando as cópias dos últimos 14 dias na própria máquina (D148). Falta o q
       de assinatura em nuvem). O passo da Release hoje usa `.pfx` e precisa ser trocado pela ferramenta do
       provedor escolhido.
 - [ ] **macOS**: conta paga no Apple Developer Program (Developer ID e notarização; 5 segredos no GitHub).
-- [ ] Sem assinatura, avise os testadores sobre o SmartScreen e o Gatekeeper (o GUIA explica como passar).
+- [ ] Sem assinatura, avise os testadores sobre o SmartScreen, o Controle Inteligente de Aplicativos do Windows 11
+      (que bloqueia sem opção de abrir mesmo assim) e o Gatekeeper (o GUIA explica o que fazer em cada um).
 
 ## 8. Decisões de produto
 
