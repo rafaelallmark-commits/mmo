@@ -33,6 +33,11 @@ test('o Caddyfile separa WebSocket, contas, guia e página, com política de seg
   assert.match(caddy, /handle @jogo \{\s*reverse_proxy servidor:7777/);
   assert.match(caddy, /handle \/guia \{\s*root \* \{\$CINZAS_DOCS:\/srv\/docs\}\s*rewrite \* \/GUIA\.md/);
   assert.match(caddy, /Content-Security-Policy "default-src 'none';/);
+  // Avisos e guia: o navegador confere a cada visita (sem Cache-Control ele reaproveitaria a cópia guardada por
+  // até 10% da idade do arquivo, sem perguntar, e quem voltou à página não via o aviso novo)
+  const block = (start) => { const b = caddy.slice(caddy.indexOf(start)); return b.slice(0, b.indexOf('\n\t\tfile_server')); };
+  assert.match(block('\n\thandle {'), /\n\t\t\tCache-Control no-cache(\n|$)/, 'página do jogo');
+  assert.match(block('handle /guia {'), /\n\t\theader Cache-Control no-cache(\n|$)/, 'guia');
   // a página é o bloco "handle" sem condição: o Caddy o põe depois dos que têm caminho ou matcher, então um
   // pedido de WebSocket nunca cai nela
   assert.match(caddy, /\n\thandle \{\s*root \* \{\$CINZAS_SITE:\/srv\/site\}/);

@@ -6,8 +6,9 @@
 # Uso, na raiz do repositório:
 #   deploy/teste-conteiner.sh <imagem> [versão esperada no hello]
 # Sem a versão, o hello tem que trazer a do package.json da imagem (imagem construída sem CINZAS_VERSION).
-# A porta de métricas publicada no 127.0.0.1 é a 9100 (CINZAS_TESTE_PORTA para outra). O registro do servidor
-# fica em servidor-docker.log, na pasta atual.
+# A porta de métricas publicada no 127.0.0.1 é a 9100 (CINZAS_TESTE_PORTA para outra; com a pilha do compose no
+# ar, que já ocupa a 9100: CINZAS_TESTE_PORTA=9101). O registro do servidor fica em servidor-docker.log, na pasta
+# atual.
 set -euo pipefail
 
 imagem=${1:?uso: deploy/teste-conteiner.sh <imagem> [versão esperada no hello]}
@@ -19,7 +20,9 @@ falha() {
   echo "::error title=Imagem do servidor::$1"
   exit 1
 }
-trap 'docker rm -f "$nome" > /dev/null 2>&1 || true' EXIT
+# -v: leva junto o volume anônimo de /data (VOLUME do Dockerfile); sem ele, cada teste rodado numa máquina de
+# verdade (no VPS, por exemplo) deixaria um volume órfão com o banco e o backup do teste
+trap 'docker rm -f -v "$nome" > /dev/null 2>&1 || true' EXIT
 
 docker run -d --name "$nome" -p "127.0.0.1:${porta}:9100" "$imagem" > /dev/null
 estado=starting

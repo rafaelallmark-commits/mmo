@@ -135,8 +135,9 @@ mmo/
 │   │   ├── telemetria.test.js     telemetria do teste: mortes, sessões, missões aceitas e calabouço na auditoria
 │   │   ├── operacao.test.js       métricas como contadores, saúde 503, teto de jogadores, painel e alertas
 │   │   ├── backup.test.js         backup, rotação, ensaio de restauração e cópia externa (SQLite e PostgreSQL)
-│   │   ├── versao.test.js         versão da release (CINZAS_VERSION) no hello, no registro e no /bug
+│   │   ├── versao.test.js         versão da release (CINZAS_VERSION) no hello, no registro e no /bug; regra da tag
 │   │   ├── site.test.js           página do jogo sem rastreadores e as rotas do Caddyfile
+│   │   ├── conteiner.test.js      deploy/teste-conteiner.sh (com um docker de mentira): versão, root, limpeza
 │   │   ├── helpers/tutorial.js    roteiro do tutorial para clientes simulados
 │   │   └── helpers/client.js      cliente simulado (mesmo protocolo do Godot)
 │   └── tools/
