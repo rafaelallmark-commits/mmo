@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { loadGameData, ATTRS } from '../src/data.js';
 import { derivedStats, playerAttack, monsterAttack, levelDiffMod, mitigationK, physicalHitChance, splitKillXp, totalAttributePoints } from '../src/rules.js';
 import { reachability, runBuild, loadBuilds, TIERS, WEAPON_FAMILIES } from './validate-data.js';
+import { pluralName as plural } from '../src/mechanics.js';
 
 const data = loadGameData();
 const DOCS = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'docs');
@@ -67,8 +68,6 @@ function classesDoc() {
 
 // ---------------------------------------------------------------- mecânicas dos monstros
 const s1 = (ms) => `${String(Math.round(ms / 10) / 100).replace('.', ',')} s`;
-// plural do nome do monstro: só a primeira palavra (Rato-Engrenagem → Ratos-Engrenagem, Ecoante → Ecoantes)
-const plural = (name) => name.replace(/^([^\s-]+)/, (w) => (/[aeiou]$/i.test(w) ? `${w}s` : `${w}es`));
 const cap = (t) => t[0].toUpperCase() + t.slice(1);
 // O que a mecânica faz, com os números dos dados (server/src/mechanics.js aplica as mesmas regras).
 function debuffDesc(d) {
@@ -76,7 +75,8 @@ function debuffDesc(d) {
   if (d.mods?.hitChancePct) parts.push(`${d.mods.hitChancePct}% de acerto`);
   if (d.mods?.moveSpeedPct) parts.push(`${d.mods.moveSpeedPct}% de velocidade`);
   if (d.mpPctPerSec) parts.push(`−${n1(d.mpPctPerSec)}% da mana máxima por segundo`);
-  if (d.silence) parts.push('sem habilidades');
+  // o selo é controle: passa pela resistência da Vitalidade, como o atordoamento (zone.controlMs)
+  if (d.silence) parts.push('sem habilidades; menos com Vitalidade');
   return `**${d.name}** por ${s1(d.durationMs)} (${parts.join(', ').replace(/-/g, '−')})`;
 }
 function areaDesc(t) {
@@ -88,7 +88,7 @@ function areaDesc(t) {
   }[t.shape];
   const fx = [];
   if (t.damagePct > 0) fx.push(`${t.damagePct}% do dano ${t.magic ? 'como dano mágico' : 'físico'}`);
-  if (t.dash) fx.push('o monstro corre a linha inteira');
+  if (t.dash) fx.push('o monstro corre a linha inteira (enraizado, fica no lugar)');
   if (t.pullTo) fx.push(`puxa até ${n1(t.pullTo)} m dele`);
   if (t.stunMs) fx.push(`atordoa ${s1(t.stunMs)} (menos com Vitalidade)`);
   if (t.debuff) fx.push(debuffDesc(t.debuff));

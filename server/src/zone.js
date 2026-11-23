@@ -13,7 +13,7 @@ import { makeRng } from './rng.js';
 import { NavGrid, followPath, brake } from './nav.js';
 import {
   mechanicTick, meleeMods, afterMeleeHit, recordBlow, tryEcho, afterMonsterDamaged, onMonsterDeath, tickHazards,
-  cancelWindup, resetMechanic, summonOrphaned, territoryRadius, railGoal, defenseFactor, debuffText,
+  cancelWindup, resetMechanic, summonOrphaned, territoryRadius, railGoal, idlePath, defenseFactor, debuffText,
 } from './mechanics.js';
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -1007,7 +1007,8 @@ export class Zone {
     const mopts = { accel: 14, decel: 20 };
     if (m.state === 'return') {
       if (m.mech) resetMechanic(this, m); // desistiu da luta: a próxima começa do zero
-      if (!m.path) m.path = this.nav.findPath(m.x, m.z, m.home.x, m.home.z) ?? [{ x: m.home.x, z: m.home.z }];
+      // (a Lâmina de Esteira volta pelos trilhos)
+      if (!m.path) m.path = idlePath(this, m, m.home.x, m.home.z) ?? [{ x: m.home.x, z: m.home.z }];
       if (followPath(m, m.path, dt, m.def.moveSpeed * 1.5, { ...mopts, isFree: this.isFreeFn })) { m.state = 'idle'; m.hp = m.def.hp; m.score.clear(); m.path = null; }
       return;
     }
@@ -1047,7 +1048,8 @@ export class Zone {
         const roam = m.def.mechanic?.patrolRadius ?? Math.min(4, m.spawn.radius);
         const a = this.rng() * Math.PI * 2, d = 1 + this.rng() * roam;
         const tx = m.home.x + Math.cos(a) * d, tz = m.home.z + Math.sin(a) * d;
-        m.path = this.nav.isFree(tx, tz) ? this.nav.findPath(m.x, m.z, tx, tz) : null;
+        // (a Lâmina de Esteira passeia pelos trilhos: um eixo de cada vez)
+        m.path = this.nav.isFree(tx, tz) ? idlePath(this, m, tx, tz) : null;
       }
       // passeio calmo: acelera e para devagar
       if (m.path && m.path.length) { if (followPath(m, m.path, dt, speed * 0.4, { accel: 4, decel: 6, isFree: this.isFreeFn })) m.path = null; }

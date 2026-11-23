@@ -5,6 +5,9 @@ extends Node
 ##   godot --headless --path client -- --autotest --server=ws://127.0.0.1:7777 --account=bot --password=bot123 --class=breaker --name=Robo
 ## Com --transfer (servidor em várias zonas, --dev): em vez de lutar, atravessa o portal para um mapa de
 ## outra zona e confere que o cliente reconectou no endereço novo e está no mapa novo.
+## Em servidor --dev (comandos de mestre), também luta de verdade contra uma mecânica de monstro: perto dos
+## Javalis de Cinza, recebe a investida avisada pelo servidor, confere o aviso desenhado, sai de lado e
+## confere que o javali passou direto sem acertá-lo.
 
 var main
 var step := "connect"
@@ -21,6 +24,13 @@ var log_lines := []
 var desc_checked := false
 var mech_until := 0
 var speed_before := 0.0
+# luta de verdade contra a investida do Javali de Cinza (servidor --dev)
+var real_warn := {}
+var real_boar := ""
+var real_hit := false
+var real_dash := false
+var real_until := 0
+var real_shot_at := 0
 # --transfer (várias zonas)
 var tr_url := ""
 var tr_from := ""
@@ -94,6 +104,8 @@ func _msg(m: Dictionary) -> void:
 		Net.request("party_accept", {"from": int(m["fromId"])})
 	if m.get("t", "") == "zone":
 		zone_changed = m["mapId"]
+	if step.begins_with("real_"):
+		_real_msg(m)
 
 func _process(_d: float) -> void:
 	if Time.get_ticks_msec() - t0 > deadline_ms:
@@ -242,7 +254,80 @@ func _process(_d: float) -> void:
 				fail("a velocidade não voltou ao normal na previsão")
 				return
 			say("mecânicas dos monstros: avisos em círculo, cone e linha (e um cancelado), explosão, puxão, drenagem de mana, eco, investida, reforços e pressão desenhados; Desorientado na interface e tirado pela Alvorada; a velocidade do Atolado chegou à previsão do movimento e voltou")
-			step = "done"
+			step = "mech_real"
+		"mech_real":
+			# luta de verdade (servidor --dev): a uns 25 m dos Javalis de Cinza, bem fora do raio em que eles
+			# percebem alguém (8 m), para o aviso não chegar antes de o cliente desenhar o personagem no lugar
+			# novo; sem comandos de mestre (servidor de produção), fica de fora
+			step = "real_wait"
+			Net.request("gm", {"cmd": "teleport", "x": 111.0, "z": 50.0}, func(r):
+				if not r.get("ok", false):
+					say("sem comandos de mestre neste servidor: a luta de verdade contra uma mecânica ficou de fora (%s)" % r.get("reason", ""))
+					step = "done"
+					return
+				real_until = Time.get_ticks_msec() + 20000
+				wait_until = Time.get_ticks_msec() + 600
+				step = "real_approach")
+		"real_approach":
+			if not real_warn.is_empty():
+				if not main.world.vfx._warns.has(str(real_warn.get("id", ""))):
+					var me: Vector3 = main.world.my_pos()
+					fail("a investida chegou do servidor, mas o aviso não foi desenhado (aviso %s em (%.1f, %.1f); personagem desenhado em (%.1f, %.1f); avisos desenhados: %s)" % [str(real_warn.get("id", "")), float(real_warn["x"]), float(real_warn["z"]), me.x, me.z, str(main.world.vfx._warns.keys())])
+					return
+				real_shot_at = Time.get_ticks_msec() + 350  # com --shots: a marcação já desenhada no meio do aviso
+				wait_until = Time.get_ticks_msec() + int(float(real_warn.get("ms", 1500))) + 700
+				step = "real_check"
+				return
+			if Time.get_ticks_msec() > real_until:
+				fail("nenhum Javali de Cinza avisou a investida em 20 s")
+				return
+			if Time.get_ticks_msec() < wait_until or Vector2(main.world.my_pos().x - 111.0, main.world.my_pos().z - 50.0).length() > 12.0:
+				return
+			# anda até 6 m do javali mais perto: a 8 m ele percebe e avisa a investida (4 a 12 m)
+			var mp: Vector3 = main.world.auth_pos()
+			var boar := ""
+			var bd := 1e9
+			for eid in main.world.entities.keys():
+				var e: Dictionary = main.world.entities[eid]
+				if e["data"]["k"] == "m" and e["data"]["def"] == "ash_boar":
+					var d: float = Vector2(e["node"].position.x - mp.x, e["node"].position.z - mp.z).length()
+					if d < bd:
+						bd = d
+						boar = eid
+			if boar == "":
+				fail("nenhum Javali de Cinza visível perto de (111, 50)")
+				return
+			var bp: Vector3 = main.world.entities[boar]["node"].position
+			var dir := Vector2(bp.x - mp.x, bp.z - mp.z)
+			var go := Vector2(mp.x, mp.z) + dir.normalized() * maxf(0.0, dir.length() - 6.0)
+			Net.request("move", {"x": go.x, "z": go.y})
+			wait_until = Time.get_ticks_msec() + 700
+		"real_check":
+			# o golpe sai no relógio do servidor (tempo real); a marcação segue o relógio do cliente, que anda
+			# mais devagar quando os quadros demoram (renderização por software): espera ela sumir, com folga
+			if real_shot_at > 0 and Time.get_ticks_msec() >= real_shot_at:
+				real_shot_at = 0
+				_shot("investida")
+			if Time.get_ticks_msec() < wait_until:
+				return
+			if not real_dash:
+				fail("o Javali avisou a investida, mas não correu")
+				return
+			if real_hit:
+				fail("a investida acertou o personagem mesmo depois do passo de lado")
+				return
+			if main.world.vfx._warns.has(str(real_warn.get("id", ""))):
+				if Time.get_ticks_msec() > wait_until + 8000:
+					fail("a marcação da investida não sumiu depois do golpe")
+				return
+			say("luta de verdade: um Javali de Cinza avisou a investida (linha de %d m, %s s), o aviso foi desenhado, o personagem saiu de lado e o javali passou direto sem acertá-lo" % [int(float(real_warn.get("length", 0.0))), ("%.1f" % (float(real_warn.get("ms", 0.0)) / 1000.0)).replace(".", ",")])
+			step = "real_back"
+			Net.request("gm", {"cmd": "teleport", "x": 20.0, "z": 50.0}, func(_r):
+				wait_until = Time.get_ticks_msec() + 600
+				step = "real_done")
+		"real_done":
+			if Time.get_ticks_msec() >= wait_until:
+				step = "done"
 		"done":
 			step = "wait_gm"
 			# Em servidor --dev, mostra a descrição de um item de nível 5 (requisitos em vermelho).
@@ -359,6 +444,28 @@ func _process(_d: float) -> void:
 				say("OK")
 				get_tree().quit(0)
 				step = "quitting"
+
+## Eventos da luta de verdade contra o Javali: o primeiro aviso de investida faz o personagem sair de lado
+## na hora (3,5 m para o lado em que já está; se o servidor recusar, para o outro); golpes e a corrida dele
+## ficam anotados para a conferência.
+func _real_msg(m: Dictionary) -> void:
+	var t: String = m.get("t", "")
+	if t == "warn" and real_warn.is_empty() and str(m.get("kind", "")) == "charge":
+		real_warn = m
+		real_boar = str(m.get("src", ""))
+		var yaw := float(m.get("yaw", 0.0))
+		var side := Vector2(cos(yaw), -sin(yaw))
+		var p: Vector3 = main.world.auth_pos()
+		var sgn := 1.0 if Vector2(p.x - float(m["x"]), p.z - float(m["z"])).dot(side) >= 0.0 else -1.0
+		var a := Vector2(p.x, p.z) + side * sgn * 3.5
+		var b := Vector2(p.x, p.z) - side * sgn * 3.5
+		Net.request("move", {"x": a.x, "z": a.y}, func(r):
+			if not r.get("ok", false):
+				Net.request("move", {"x": b.x, "z": b.y}))
+	elif t == "hit" and m.get("skill", "") == "charge" and m.get("src", "") == real_boar and m.get("dst", "") == main.ch.get("eid", ""):
+		real_hit = true
+	elif t == "mech" and m.get("kind", "") == "dash" and m.get("eid", "") == real_boar:
+		real_dash = true
 
 ## Alimenta o cliente com os eventos das mecânicas dos monstros (como o servidor manda), em volta do
 ## personagem: avisos em círculo, cone e linha, um aviso cancelado, explosão, puxão, drenagem de mana, eco,
