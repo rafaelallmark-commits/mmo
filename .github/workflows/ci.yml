@@ -436,9 +436,34 @@ jobs:
           fi
           echo "Cliente no macOS: ok"
 
-      # Com o renderizador de verdade (sem --headless), na sessão gráfica da máquina do GitHub. Não bloqueia o CI:
-      # as capturas ficam nos artefatos para conferir o visual no macOS.
-      - name: Capturas no macOS com renderizador (não bloqueia)
+      # Com o renderizador de verdade (sem --headless), na sessão gráfica da máquina do GitHub. Não bloqueiam o CI:
+      # as capturas ficam nos artefatos para conferir o visual no macOS. A máquina do GitHub não tem placa de
+      # vídeo para o OpenGL da Apple (cai no "Apple Software Renderer", poucos quadros por segundo); por isso há
+      # duas rodadas: pelo Metal (ANGLE, --rendering-driver opengl3_angle) e pelo OpenGL nativo (o padrão do jogo).
+      - name: Capturas no macOS pelo Metal (ANGLE, não bloqueia)
+        continue-on-error: true
+        run: |
+          bin=$(find app -path '*.app/Contents/MacOS/*' -type f -perm -u+x | head -1)
+          node --disable-warning=ExperimentalWarning server/src/main.js --dev --host 127.0.0.1 --port 7779 \
+            --db "$RUNNER_TEMP/capturas-angle.db" > servidor-capturas-angle.log 2>&1 &
+          servidor=$!
+          trap 'kill -INT "$servidor" 2> /dev/null || true' EXIT
+          sleep 5
+          mkdir -p capturas-macos-angle
+          "$bin" --rendering-driver opengl3_angle --resolution 1280x720 -- --server=ws://127.0.0.1:7779 \
+            --account=vitrine --password=vitrine123 --navshots="$PWD/capturas-macos-angle" > capturas-macos-angle.log 2>&1 &
+          cliente=$!
+          for _ in $(seq 1 330); do kill -0 "$cliente" 2> /dev/null || break; sleep 1; done
+          kill "$cliente" 2> /dev/null || true
+          grep -E 'OpenGL|ANGLE|Metal' capturas-macos-angle.log | head -5 || true
+          grep -nE 'ERROR|SHADER' capturas-macos-angle.log | head -30 || true
+          grep -E '^\[autotest\]' capturas-macos-angle.log | tail -n 30 || true
+          ls -la capturas-macos-angle
+          test -s capturas-macos-angle/07_mundo.png
+          sips -s format jpeg -Z 480 capturas-macos-angle/07_mundo.png --out miniatura-angle.jpg > /dev/null
+          echo MINIATURA-MACOS-ANGLE-INICIO; base64 -i miniatura-angle.jpg | tr -d '\n'; echo; echo MINIATURA-MACOS-ANGLE-FIM
+
+      - name: Capturas no macOS pelo OpenGL nativo (não bloqueia)
         continue-on-error: true
         run: |
           bin=$(find app -path '*.app/Contents/MacOS/*' -type f -perm -u+x | head -1)
@@ -451,15 +476,16 @@ jobs:
           "$bin" --resolution 1280x720 -- --server=ws://127.0.0.1:7778 --account=vitrine --password=vitrine123 \
             --navshots="$PWD/capturas-macos" > capturas-macos.log 2>&1 &
           cliente=$!
-          for _ in $(seq 1 240); do kill -0 "$cliente" 2> /dev/null || break; sleep 1; done
+          for _ in $(seq 1 330); do kill -0 "$cliente" 2> /dev/null || break; sleep 1; done
           kill "$cliente" 2> /dev/null || true
-          tail -n 30 capturas-macos.log
+          grep -E 'OpenGL|ANGLE|Metal|Vulkan|driver' capturas-macos.log | head -5 || true
+          grep -nE 'ERROR|SHADER' capturas-macos.log | head -30 || true
+          grep -E '^\[autotest\]' capturas-macos.log | tail -n 30 || true
           ls -la capturas-macos
           test -s capturas-macos/07_mundo.png
           # miniatura da captura do mundo no próprio registro (para conferir o visual sem baixar o artefato)
           sips -s format jpeg -Z 480 capturas-macos/07_mundo.png --out miniatura.jpg > /dev/null
           echo MINIATURA-MACOS-INICIO; base64 -i miniatura.jpg | tr -d '\n'; echo; echo MINIATURA-MACOS-FIM
-          grep -E 'OpenGL|ANGLE|Metal|Vulkan|driver' capturas-macos.log | head -5 || true
 
       - name: Guardar registros e capturas do macOS
         if: always()
@@ -471,6 +497,8 @@ jobs:
             servidor.log
             capturas-macos.log
             capturas-macos/
+            capturas-macos-angle.log
+            capturas-macos-angle/
           retention-days: 7
           if-no-files-found: ignore
 

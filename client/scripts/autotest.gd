@@ -679,12 +679,14 @@ func _act(kind: String, id: String) -> void:
 # ---------------- capturas da navegação (--navshots=pasta) ----------------
 var nav_step := 0
 var nav_until := 0
+var nav_frames_at := 0  # quadros desenhados exigidos antes do próximo passo (renderizador lento, sem placa)
 var nav_delete_shown := false
 
 func start_nav(m) -> void:
 	main = m
 	t0 = Time.get_ticks_msec()
-	deadline_ms = 120000
+	# renderizador por software (máquina sem placa de vídeo, como a macOS do CI): poucos quadros por segundo
+	deadline_ms = 300000
 	step = "nav"
 	nav_until = Time.get_ticks_msec() + 1500
 	say("capturas de navegação em %s" % main.args["navshots"])
@@ -693,11 +695,13 @@ func _nav_shot(name: String) -> void:
 	var path := "%s/%s.png" % [main.args["navshots"], name]
 	get_viewport().get_texture().get_image().save_png(path)
 	say("captura: " + path)
+	say("quadros: %.1f por segundo, %d desenhados" % [Engine.get_frames_per_second(), Engine.get_frames_drawn()])
 
 func _nav_tick() -> void:
-	if Time.get_ticks_msec() < nav_until:
+	if Time.get_ticks_msec() < nav_until or Engine.get_frames_drawn() < nav_frames_at:
 		return
 	var next_wait := 1200
+	var next_frames := 2  # a captura é do último quadro desenhado: espera a tela nova aparecer num quadro
 	match nav_step:
 		0:
 			_nav_shot("01_titulo")
@@ -742,6 +746,8 @@ func _nav_tick() -> void:
 				main.show_delete_char(main._selected_char)
 				nav_delete_shown = true
 				nav_until = Time.get_ticks_msec() + 800
+				if DisplayServer.get_name() != "headless":
+					nav_frames_at = Engine.get_frames_drawn() + 2
 				return
 			_nav_shot("05b_excluir_personagem")
 			main.show_chars(main._selected_char)
@@ -755,6 +761,7 @@ func _nav_tick() -> void:
 				return
 			Net.request("move", {"x": 30.0, "z": 50.0})
 			next_wait = 3500
+			next_frames = 8  # a tela Carregando some em 0,8 s de jogo (com quadros lentos, só depois de vários)
 		9:
 			_nav_shot("07_mundo")
 			main.world.cam_dist = 11.0
@@ -770,6 +777,8 @@ func _nav_tick() -> void:
 			return
 	nav_step += 1
 	nav_until = Time.get_ticks_msec() + next_wait
+	if DisplayServer.get_name() != "headless":
+		nav_frames_at = Engine.get_frames_drawn() + next_frames
 
 
 # ---------------- telas de conta (--contastest=pasta_dos_emails) ----------------
@@ -1022,6 +1031,7 @@ func _scene_shot(name: String) -> void:
 	var path := "%s/%s.png" % [main.args["sceneshots"], name]
 	get_viewport().get_texture().get_image().save_png(path)
 	say("captura: " + path)
+	say("quadros: %.1f por segundo, %d desenhados" % [Engine.get_frames_per_second(), Engine.get_frames_drawn()])
 
 func _scene_tick() -> void:
 	if Time.get_ticks_msec() < scene_until:
