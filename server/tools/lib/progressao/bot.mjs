@@ -101,7 +101,7 @@ export class BotProgressao {
     this.ultimoAbate = 0; this.terminou = false;
     // métricas
     this.niveis = new Map();
-    this.equipamento = []; this.provas = []; this.avisos = []; this.provaEstado = null; this.ultimoGolpe = -1e9; this.rejeicoes = {}; this.ignorados = 0; this.viagens = 0;
+    this.equipamento = []; this.provas = []; this.avisosProva = []; this.provaEstado = null; this.ultimoGolpe = -1e9; this.rejeicoes = {}; this.ignorados = 0; this.viagens = 0;
     this.destravamentos = 0; this.compras = []; this.vendas = { itens: 0, ouro: 0 }; this.anomalias = []; this.viagensPorMotivo = {}; this.mortesPor = {};
     // golpes recebidos e tônicos de vida bebidos nos últimos 10 s (para descrever cada morte)
     this.mortesDetalhe = []; this.golpesRecentes = []; this.golesRecentes = [];
@@ -216,6 +216,8 @@ export class BotProgressao {
         break;
       case 'respawn': if (m.eid === this.eid) this.morto = false; break;
       case 'warn':
+        // na prova de classe, os avisos da arena (pedra do teto, jato de vapor) vão para o piloto da prova
+        if (this.provaEstado) { this.avisosProva.push({ x: m.x, z: m.z, radius: m.radius, ate: this.now + m.ms + 150, kind: m.kind }); break; }
         // golpe de área avisado (forma, posição, duração): como o cliente desenha no chão
         this.avisos.set(m.id ?? `w${this.now}`, { ...m, visto: this.now, ate: this.now + m.ms, contado: false });
         this.mecanicas.avisos++;
@@ -239,11 +241,10 @@ export class BotProgressao {
         if (this.conjurando?.skill === m.skill) this.conjurando = null;
         break;
       }
-      case 'warn': this.avisos.push({ x: m.x, z: m.z, radius: m.radius, ate: this.now + m.ms + 150, kind: m.kind }); break;
       case 'trial': {
         if (m.char) this.recebeChar(m.char);
         // prova de classe: o piloto (tools/lib/provas/piloto.mjs) joga com o objetivo e o estado que o servidor manda
-        if (m.state === 'started') { this.provaEstado = { iniciada: m, status: null }; this.avisos = []; }
+        if (m.state === 'started') { this.provaEstado = { iniciada: m, status: null }; this.avisosProva = []; }
         if (m.state === 'status' && this.provaEstado) this.provaEstado.status = m;
         if (m.state === 'success' || m.state === 'failed') {
           this.provaEstado = null;
@@ -1214,8 +1215,8 @@ export class BotProgressao {
       },
       tonico() { if (bot.now >= bot.potPronto) bot.usarPocao(POCOES_VIDA, eu.mhp - eu.hp, 'pocoesVida', false, true); },
     };
-    this.avisos = (this.avisos ?? []).filter((w) => w.ate > this.now);
-    this.piloto.decidir({ agora: this.now, eu, ents: mundo, char: this.char, prova: this.provaEstado, avisos: this.avisos, ultimoGolpe: this.ultimoGolpe }, acoes);
+    this.avisosProva = this.avisosProva.filter((w) => w.ate > this.now);
+    this.piloto.decidir({ agora: this.now, eu, ents: mundo, char: this.char, prova: this.provaEstado, avisos: this.avisosProva, ultimoGolpe: this.ultimoGolpe }, acoes);
   }
 
   perto(eu, npc) {
