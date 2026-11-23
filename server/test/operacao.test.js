@@ -216,7 +216,8 @@ test('serviço de contas: pedidos, cadastros e falhas de e-mail em GET /metrics 
     assert.equal((await post('/contas', { conta: 'medida', email: 'medida@exemplo.com', senha: 'senha-forte-1', aceite: true })).status, 201);
     failMail = true;
     const broken = await post('/contas', { conta: 'semcorreio', email: 'semcorreio@exemplo.com', senha: 'senha-forte-1', aceite: true });
-    assert.notEqual(broken.status, 201, 'sem e-mail o cadastro não termina bem');
+    assert.equal(broken.status, 202, 'conta criada, mas sem o e-mail do código');
+    assert.equal((await broken.json()).codigo, 'email');
     assert.equal((await fetch(`http://127.0.0.1:${aport}/qualquer/coisa`)).status, 404);
     assert.equal((await fetch(`http://127.0.0.1:${aport}/saude`)).status, 200);
     // a porta do serviço (a que o proxy repassa) não serve métricas
@@ -226,7 +227,7 @@ test('serviço de contas: pedidos, cadastros e falhas de e-mail em GET /metrics 
     const { values, types } = parseProm(await r.text());
     assert.equal(types.cinzas_accounts_requests_total, 'counter');
     assert.equal(types.cinzas_accounts_email_failures_total, 'counter');
-    assert.equal(values.cinzas_accounts_signups_total, 1);
+    assert.equal(values.cinzas_accounts_signups_total, 2, 'as duas contas foram criadas (uma sem o e-mail)');
     assert.equal(values.cinzas_accounts_emails_sent_total, 1);
     assert.equal(values.cinzas_accounts_email_failures_total, 1);
     assert.equal(values['cinzas_accounts_requests_total{route="/contas",status="201"}'], 1);

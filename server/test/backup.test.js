@@ -270,6 +270,47 @@ test('--somente-sqlite com o banco no PostgreSQL: não faz nada, apaga a métric
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('--saude (verificação de saúde do serviço "backup" no compose): 0 com backup em dia, 1 sem backup, atrasado ou com falha depois', () => {
+  const dir = tmp();
+  try {
+    const dbPath = join(dir, 'cinzas.db');
+    const st = new Store(dbPath);
+    populate(st);
+    st.close();
+    const metric = join(dir, 'metricas', 'backup-sqlite.prom');
+    const saude = (extra = [], env = {}) => run(['--db', dbPath, '--saude', '--metrica', metric, '--somente-sqlite', ...extra], env);
+    let r = saude();
+    assert.equal(r.status, 1, 'sem métrica: nenhum backup ainda');
+    assert.match(r.stdout, /nenhum backup conferido/);
+    assert.equal(run(['--db', dbPath, '--para', join(dir, 'b'), '--metrica', metric]).status, 0);
+    r = saude();
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(r.stdout, /backup em dia: o último conferido é de .* há 0 min/);
+    assert.equal(readdirSync(join(dir, 'b')).length, 1, '--saude não copia nada');
+    // atrasado: o último sucesso de 3 h atrás passa do limite padrão (7500 s) e de um --idade-max menor
+    const secs = Math.round(Date.now() / 1000);
+    const write = (ok, bad) => writeFileSync(metric, `cinzas_backup_last_success_timestamp_seconds{db="sqlite"} ${ok}\ncinzas_backup_last_failure_timestamp_seconds{db="sqlite"} ${bad}\n`);
+    write(secs - 3 * 3600, 0);
+    r = saude();
+    assert.equal(r.status, 1);
+    assert.match(r.stdout, /há 180 min \(limite: 125 min\)/);
+    assert.equal(saude(['--idade-max', String(4 * 3600)]).status, 0);
+    // falha depois do último sucesso: doente até o próximo backup conferido
+    write(secs - 600, secs - 60);
+    r = saude();
+    assert.equal(r.status, 1);
+    assert.match(r.stdout, /o último backup falhou/);
+    write(secs - 60, secs - 600);
+    assert.equal(saude().status, 0, 'falha antiga, sucesso depois: em dia');
+    // banco no PostgreSQL: o serviço fica parado de propósito e conta como saudável
+    rmSync(metric);
+    r = run(['--saude', '--metrica', metric, '--somente-sqlite'], { CINZAS_DB: 'postgres://cinzas@banco:5432/cinzas' });
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(r.stdout, /parado de propósito/);
+    assert.equal(run(['--db', dbPath, '--saude']).status, 2, '--saude sem --metrica');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 // pg_dump e pg_restore de mentira: o script do compose roda sem PostgreSQL (rotação, métrica, falhas)
 function fakePgTools(dir) {
   const bin = join(dir, 'bin');

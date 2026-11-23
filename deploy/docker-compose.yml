@@ -1,10 +1,9 @@
 # Teste público de CINZAS DO MERIDIANO: servidor de zona + serviço de contas + proxy TLS (Caddy).
-# Ver docs/08-operacao.md §8.8 e §8.9.
+# Do VPS limpo ao jogo no ar: docs/10-subir-no-vps.md. Detalhes: docs/08-operacao.md §8.8 e §8.9.
 #
 #   cd deploy
 #   cat > .env <<'FIM'                                 # deploy/.env fica fora do git
 #   DOMINIO=jogo.exemplo.com.br                       # domínio real, com DNS apontando para esta máquina
-#   CINZAS_TOKEN_SECRET=<openssl rand -hex 32>         # segredo compartilhado pela zona e pelas contas
 #   CINZAS_EMAIL=smtp                                  # "arquivo" grava os e-mails em /data/emails (testes)
 #   CINZAS_SMTP_HOST=smtp.exemplo.com.br
 #   CINZAS_SMTP_PORT=587
@@ -12,10 +11,13 @@
 #   CINZAS_SMTP_PASS=...
 #   CINZAS_SMTP_FROM=Cinzas do Meridiano <nao-responda@exemplo.com.br>   # domínio verificado no provedor
 #   FIM
-#   docker compose up -d --build
+#   echo "CINZAS_TOKEN_SECRET=$(openssl rand -hex 32)" >> .env   # segredo compartilhado pela zona e pelas contas
+#   docker compose up -d --build --wait
+#   docker compose exec servidor node tools/fumaca-deploy.mjs --url https://jogo.exemplo.com.br --email voce@exemplo.com
 # O servidor e as contas recusam subir com um segredo de exemplo ou com menos de 32 caracteres, e as contas
 # recusam CINZAS_EMAIL=smtp sem servidor ou sem remetente. Porta 465 liga o TLS direto; 587 exige STARTTLS
-# (CINZAS_SMTP_TLS=direto|starttls força o modo).
+# (CINZAS_SMTP_TLS=direto|starttls força o modo). Servidor de e-mail próprio com certificado de uma CA privada:
+# CINZAS_SMTP_CA_ARQUIVO=./segredos/ca-smtp.pem (soma às autoridades públicas; a conferência nunca é desligada).
 #
 # Imagem publicada pelo CI (release.yml) em vez de construir aqui: a MESMA imagem vale para a zona e as
 # contas (as duas leem e migram o mesmo banco), então defina só a variável e baixe:
@@ -129,6 +131,8 @@ services:
     # exportação e exclusão de conta, termos). Sempre a mesma imagem da zona (CINZAS_IMAGEM), mesmo banco:
     # uma etiqueta diferente rodaria contas de outra versão contra o banco já migrado pela zona.
     image: ${CINZAS_IMAGEM:-cinzas-servidor:local}
+    # a imagem vem do serviço "servidor" (construída ou baixada por ele): nunca procurar num registro
+    pull_policy: never
     restart: unless-stopped
     init: true
     depends_on:
@@ -143,12 +147,14 @@ services:
               "--metrics-port", "9101", "--metrics-host", "0.0.0.0"]
     volumes:
       - dados:/data
-    secrets: [senha_banco]
+    secrets: [senha_banco, ca_smtp]
     environment:
       CINZAS_DB: ${CINZAS_DB:-/data/cinzas.db}      # o mesmo banco da zona
       CINZAS_DB_PASSWORD_FILE: /run/secrets/senha_banco
       CINZAS_TOKEN_SECRET: ${CINZAS_TOKEN_SECRET:?defina CINZAS_TOKEN_SECRET em deploy/.env}
       CINZAS_TRUST_PROXY: "1"
+      # autoridades a mais para o certificado do SMTP (só relé próprio com CA privada; vazio = só as públicas)
+      CINZAS_SMTP_CA: /run/secrets/ca_smtp
       # smtp no teste público; "arquivo" (códigos em /data/emails, ninguém recebe e-mail) só para ensaio
       CINZAS_EMAIL: ${CINZAS_EMAIL:?defina CINZAS_EMAIL=smtp em deploy/.env (ou arquivo, só para um ensaio)}
       CINZAS_SMTP_HOST: ${CINZAS_SMTP_HOST:-}
@@ -182,6 +188,8 @@ services:
   # (CINZAS_DB=postgres://...) este serviço fica parado e quem faz o backup é o "backup-banco".
   backup:
     image: ${CINZAS_IMAGEM:-cinzas-servidor:local}
+    # a imagem vem do serviço "servidor" (construída ou baixada por ele): nunca procurar num registro
+    pull_policy: never
     restart: unless-stopped
     init: true
     stop_grace_period: 60s       # um backup em andamento termina antes de o contêiner parar
@@ -197,6 +205,17 @@ services:
       - dados:/data
       - metricas:/metricas
     network_mode: none           # só lê e grava arquivos: nenhuma rede
+    # Saudável com um backup conferido nas últimas ~2 h e nenhuma falha depois dele (lê a métrica que o próprio
+    # serviço grava). Sem isto valeria o HEALTHCHECK da imagem, que é o da zona (porta 9100), e o serviço
+    # apareceria "unhealthy" no docker compose ps mesmo com os backups em dia.
+    healthcheck:
+      test: ["CMD", "node", "--disable-warning=ExperimentalWarning", "tools/backup.mjs", "--saude",
+             "--metrica", "/metricas/backup-sqlite.prom", "--somente-sqlite"]
+      interval: 60s
+      timeout: 10s
+      retries: 2
+      start_period: 10m
+      start_interval: 5s
     logging:
       driver: json-file
       options:
@@ -395,3 +414,9 @@ secrets:
     # perfil "postgres": CINZAS_DB_SENHA_ARQUIVO=./segredos/senha_banco.txt no .env (deploy/segredos/ está
     # no .gitignore). Sem o perfil não é usado: /dev/null, para o SQLite não exigir o arquivo.
     file: ${CINZAS_DB_SENHA_ARQUIVO:-/dev/null}
+  ca_smtp:
+    # Só para um servidor de e-mail com certificado de uma CA privada (relé próprio): CINZAS_SMTP_CA_ARQUIVO=
+    # ./segredos/ca-smtp.pem no .env (legível pelo uid 10001: um certificado não é segredo, chmod 644). As
+    # autoridades do arquivo se SOMAM às públicas; a verificação do certificado nunca é desligada. Gmail,
+    # Brevo e afins não precisam: sem a variável, /dev/null (nenhuma a mais).
+    file: ${CINZAS_SMTP_CA_ARQUIVO:-/dev/null}

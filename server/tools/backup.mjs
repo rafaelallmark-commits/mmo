@@ -25,6 +25,10 @@
 //                      o backup do PostgreSQL é o serviço "backup-banco"): sai com 0 ou, com --a-cada, fica
 //                      parado (sem reinícios em série do contêiner) e apaga a própria métrica, que já não
 //                      diz nada sobre o banco do jogo
+//   --saude --metrica ARQUIVO [--idade-max SEGUNDOS]
+//                      não copia nada: lê a métrica e sai com 0 se o último backup conferido tem até
+//                      --idade-max segundos (padrão 7500) e nenhuma falha depois dele, e com 1 se não (com o
+//                      motivo). É a verificação de saúde do serviço "backup" no compose.
 import { DatabaseSync } from 'node:sqlite';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -264,6 +268,29 @@ function schedule() {
     setTimeout(round, Math.max(1000, t0 + everyS * 1000 - Date.now()));
   };
   setTimeout(round, firstIn);
+}
+
+// --saude: verificação de saúde do serviço "backup" do compose (o HEALTHCHECK da imagem é o da zona, que este
+// serviço não roda). Saudável com um backup conferido há no máximo --idade-max segundos (padrão 7500: duas
+// rodadas de hora em hora e folga, como o alerta BackupAtrasado) e nenhuma falha depois dele. Com
+// --somente-sqlite e o banco no PostgreSQL o serviço fica parado de propósito: saudável.
+if (flag('saude')) {
+  if (kind === 'postgres' && flag('somente-sqlite')) { console.log('backup do SQLite parado de propósito: o banco é o PostgreSQL (serviço backup-banco).'); process.exit(0); }
+  if (!metricFile) usage('--saude precisa de --metrica (o arquivo que o backup agendado grava).');
+  const maxAge = Number(arg('idade-max', 7500));
+  if (!(maxAge > 0)) usage('--idade-max precisa de um número de segundos maior que zero.');
+  const m = previousMetrics();
+  const ok = m.cinzas_backup_last_success_timestamp_seconds ?? 0;
+  const bad = m.cinzas_backup_last_failure_timestamp_seconds ?? 0;
+  const iso = (s) => new Date(s * 1000).toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+  const ageS = Date.now() / 1000 - ok;
+  // código 1 = "unhealthy" para o Docker (o 2 do usage() é reservado no HEALTHCHECK)
+  const unhealthy = (msg) => { console.log(msg); process.exit(1); };
+  if (!(ok > 0)) unhealthy(`nenhum backup conferido ainda (métrica ${metricFile}): docker compose logs backup`);
+  if (bad > ok) unhealthy(`o último backup falhou (${iso(bad)}); o último conferido é de ${iso(ok)}: docker compose logs backup`);
+  if (ageS > maxAge) unhealthy(`o último backup conferido é de ${iso(ok)}, há ${Math.round(ageS / 60)} min (limite: ${Math.round(maxAge / 60)} min): docker compose logs backup`);
+  console.log(`backup em dia: o último conferido é de ${iso(ok)}, há ${Math.round(ageS / 60)} min.`);
+  process.exit(0);
 }
 
 for (const s of ['SIGTERM', 'SIGINT']) process.on(s, () => { if (everyS != null) console.log('backup: encerrando.'); process.exit(0); });
