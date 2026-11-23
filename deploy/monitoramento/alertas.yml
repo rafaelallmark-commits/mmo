@@ -52,8 +52,11 @@ groups:
         labels: { gravidade: aviso }
         annotations:
           resumo: "Entradas recusadas com o servidor cheio nos últimos 15 minutos: o teto de jogadores (CINZAS_MAX_PLAYERS) foi atingido."
+      # o p99 é das últimas 8192 chamadas: com o servidor quase parado (de madrugada, logo depois de subir) quem
+      # manda nele são as chamadas lentas da subida (migrações, conexão) e o alerta disparava sem ninguém jogando;
+      # por isso ele só vale com movimento (mais de 1 chamada por segundo)
       - alert: BancoLento
-        expr: rate(cinzas_db_wait_seconds_total[5m]) > 0.05 or cinzas_db_call_ms_p99 > 5
+        expr: rate(cinzas_db_wait_seconds_total[5m]) > 0.05 or (cinzas_db_call_ms_p99 > 5 and rate(cinzas_db_calls_total[5m]) > 1)
         for: 5m
         labels: { gravidade: aviso }
         annotations:

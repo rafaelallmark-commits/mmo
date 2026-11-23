@@ -12,7 +12,10 @@ jogo, administrador, backups e o que fazer quando algo dá errado. O detalhe de 
 > no Docker da máquina do ensaio). O que **não dá para
 > testar fora do VPS** está marcado com **[não testado aqui]**: DNS de verdade, o certificado do Let's Encrypt,
 > o envio de e-mail por um provedor real e a Release no GitHub. O ensaio usou `localhost` com a CA interna do
-> Caddy no lugar do domínio.
+> Caddy no lugar do domínio. Um segundo ensaio, independente, refez o guia do zero num clone novo (com um nome de
+> domínio de verdade apontado para a máquina, `jogo.cinzas.internal`, e o teste de fumaça de dentro do contêiner
+> passando pelo IP da máquina), os perfis `postgres` e `monitoramento`, a atualização e o reinício do VPS simulado
+> (o mesmo SIGTERM que o systemd manda ao Docker no desligamento); o que ele corrigiu está nos passos 4, 9, 10 e 12.
 
 No fim você terá: `https://SEU-DOMINIO/` com a página do jogo, o serviço de contas em `https://SEU-DOMINIO/contas`
 (cadastro com e-mail, código de confirmação, login por token), o jogo em `wss://SEU-DOMINIO`, personagens, itens,
@@ -24,8 +27,11 @@ ouro e missões gravados no volume `dados` (SQLite) e um backup conferido de hor
   e 144 MB (§8.3); o resto da memória fica para o Docker, o Caddy, o serviço de contas e o backup.
 - **Ubuntu 24.04 LTS**, IP público fixo, acesso SSH com `sudo` (ou como `root`). De preferência numa região perto
   dos testadores.
-- Portas que precisam chegar à máquina: **22** (SSH), **80** (certificado e redirecionamento) e **443** (jogo,
-  contas e página). Nada mais.
+- Portas que precisam chegar à máquina: **22** (SSH; ou a porta que o seu provedor usa), **80** (certificado e
+  redirecionamento) e **443** (jogo, contas e página). Nada mais.
+- Relógio certo (certificado, códigos do e-mail, tokens de 5 min): o Ubuntu acerta sozinho; `timedatectl` deve
+  mostrar `System clock synchronized: yes` **[não testado aqui]**. Registros e nomes dos backups ficam em **UTC**
+  (3 h a mais que o horário de Brasília).
 
 Entre na máquina **[não testado aqui]**: `ssh usuario@IP-DO-VPS`.
 
@@ -73,14 +79,20 @@ sudo ufw status verbose  # 22, 80 e 443 em ALLOW IN; o resto em deny (incoming)
 
 ## 4. DNS
 
-No painel do seu domínio, crie um **registro A**: `jogo.seudominio.com.br` → IP do VPS (e um **AAAA** com o IPv6,
-se a máquina tiver) **[não testado aqui]**. Pode levar de minutos a horas para valer. Confira de qualquer lugar:
+No painel do seu domínio, crie **só um registro A**: `jogo.seudominio.com.br` → IP (IPv4) do VPS **[não testado
+aqui]**. **Não crie AAAA (IPv6)**, e apague um que o provedor tenha criado sozinho (D176): o Docker leva as conexões
+IPv6 até o proxy por um repasse que troca o endereço do jogador pelo da rede interna, e aí todo jogador por IPv6
+pareceria um só para os limites por endereço (8 conexões na zona, 20 pedidos por minuto nas contas). No ensaio, o
+que passa por esse repasse chegou mesmo como um endereço só (`172.18.0.1` na auditoria) e um cliente que insistia
+deixou o outro com "Muitas tentativas" (429); a máquina do ensaio não tem IPv6 para mostrar o caso inteiro. Pode
+levar de minutos a horas para valer. Confira de qualquer lugar:
 
 ```bash
-getent hosts jogo.seudominio.com.br     # tem que mostrar o IP do VPS
+getent hosts jogo.seudominio.com.br     # tem que mostrar o IP do VPS, e só ele (nenhum endereço com ":")
 ```
 
-Sem isso o Caddy não consegue o certificado do Let's Encrypt (ele tenta de novo sozinho; não precisa reiniciar).
+Sem isso o Caddy não consegue o certificado do Let's Encrypt (ele tenta de novo sozinho, cada vez mais espaçado;
+depois de acertar o DNS, `sudo docker compose restart proxy` faz tentar na hora).
 
 ## 5. Baixar o jogo
 
@@ -162,8 +174,9 @@ subir (passo 8), teste de dentro do contêiner das contas:
 sudo docker compose exec contas node -e "require('net').connect(587,'smtp.gmail.com').setTimeout(5000,function(){console.log('sem resposta em 5 s: porta bloqueada no caminho');this.destroy()}).on('connect',function(){console.log('porta aberta');this.end()}).on('error',e=>console.log('falhou:',e.message))"
 ```
 
-`porta aberta` é o esperado. Outra resposta: peça ao provedor do VPS para liberar a porta ou use a porta
-alternativa do provedor de e-mail (muitos atendem também na 2525, com STARTTLS).
+`porta aberta` é o esperado (no ensaio, contra o SMTP de teste). `falhou: getaddrinfo ENOTFOUND` é DNS: o contêiner
+não resolve nomes (confira o `/etc/resolv.conf` da máquina). Sem resposta ou `ECONNREFUSED`: peça ao provedor do VPS
+para liberar a porta ou use a porta alternativa do provedor de e-mail (muitos atendem também na 2525, com STARTTLS).
 
 ## 8. Subir
 
@@ -216,9 +229,12 @@ sudo docker compose exec servidor node tools/fumaca-deploy.mjs --conferir /data/
 sudo docker compose exec servidor node tools/fumaca-deploy.mjs --conferir /data/fumaca.json --excluir
 ```
 
-O `restart` leva uns 35 s: o servidor avisa quem está jogando e espera 30 s antes de gravar e sair. Teste também
-de um computador seu: o cliente com `wss://jogo.seudominio.com.br` no campo **Servidor**, *Criar conta*, código,
-entrar, criar personagem.
+O `restart` leva uns 30 s. Ele reinicia todos os serviços ao mesmo tempo, o proxy junto: quem estiver jogando cai
+na hora (sem o aviso de 30 s) e o servidor grava cada personagem nessa queda; durante os 30 s a zona recusa entradas
+("O servidor está reiniciando. Tente em instantes."). No ensaio, um jogador conectado durante o `restart`, o
+`down` + `up -d` e o reinício simulado do VPS voltou exatamente na mesma posição. O aviso "O servidor vai reiniciar
+em 30 s" chega quando só o servidor é recriado (atualização, passo 13). Teste também de um computador seu: o cliente
+com `wss://jogo.seudominio.com.br` no campo **Servidor**, *Criar conta*, código, entrar, criar personagem.
 
 ## 10. A conta de administrador
 
@@ -227,13 +243,15 @@ entrar, criar personagem.
 2. Dê o papel (o nome da **conta**, não o do personagem):
 
    ```bash
-   sudo docker compose exec servidor npm run conta -- --db /data/cinzas.db --conta SUA_CONTA --papel admin
+   sudo docker compose exec servidor npm run conta -- --conta SUA_CONTA --papel admin
    ```
 
+   Sem `--db`: a ferramenta usa o banco do contêiner, o certo também com o perfil `postgres` (com
+   `--db /data/cinzas.db` ela abriria o arquivo SQLite antigo e o papel não chegaria ao jogo).
 3. Em até 60 s o jogo mostra "Seu papel na equipe mudou: agora você é administrador." e o personagem ganha
-   **[Equipe]**, sem sair. Confira com `/gm onde SeuPersonagem` no chat; um jogador comum recebe "Comandos de
-   mestre desativados.". A troca fica na auditoria:
-   `sudo docker compose exec servidor npm run conta -- --db /data/cinzas.db --auditoria --tipo role_set --n 5`.
+   **[Equipe]**, sem sair (no ensaio, de 15 a 49 s). Confira com `/gm onde SeuPersonagem` no chat; um jogador comum
+   recebe "Comandos de mestre desativados.". A troca fica na auditoria:
+   `sudo docker compose exec servidor npm run conta -- --auditoria --tipo role_set --n 5`.
 
 ## 11. Distribuir o cliente
 
@@ -254,8 +272,11 @@ conferida das últimas 2 h.
 
 ```bash
 sudo docker compose run --rm --no-deps servidor ls -l /data/backups                           # as cópias
-sudo docker compose exec servidor npm run backup -- --db /data/cinzas.db --para /data/backups --manter 14 --diarias   # uma agora
+sudo docker compose exec servidor npm run backup -- --para /data/backups --manter 14 --diarias   # uma agora
 ```
+
+O nome de cada cópia tem a data e a hora em UTC. (Com o perfil `postgres`, as cópias são `.dump` do serviço
+`backup-banco` e a restauração é outra: [08 §8.11](08-operacao.md#811-postgresql).)
 
 **Levar uma cópia para fora da máquina** (um disco perdido leva o banco e os backups juntos):
 
@@ -299,7 +320,7 @@ em quando, `sudo docker image prune -f` para apagar as imagens antigas que os bu
 
 | Sintoma | Comando | O que fazer |
 |---|---|---|
-| `https://DOMINIO` não abre, ou o navegador acusa certificado | `sudo docker compose logs proxy \| grep -iE "tls\|acme"` | DNS ainda não aponta para o VPS (`getent hosts DOMINIO`) ou a porta 80 está fechada (ufw, firewall do provedor). O Caddy tenta de novo sozinho. Não apague o volume `caddy_dados` (há limite de certificados por semana). |
+| `https://DOMINIO` não abre, ou o navegador acusa certificado | `sudo docker compose logs proxy \| grep -iE "tls\|acme"` | DNS ainda não aponta para o VPS (`getent hosts DOMINIO`) ou a porta 80 está fechada (ufw, firewall do provedor). O Caddy tenta de novo sozinho, com intervalos cada vez maiores; depois de corrigir, `sudo docker compose restart proxy` faz tentar na hora **[não testado aqui]**. Não apague o volume `caddy_dados` (há limite de certificados por semana). |
 | `docker compose up` falha com `port is already allocated` ou `address already in use` na 80 ou 443 | `sudo docker compose ps` | Outro servidor web veio instalado no VPS: pare-o (ex.: `sudo systemctl disable --now nginx` ou `apache2`) **[não testado aqui]** e suba de novo. |
 | `required variable ... is missing a value` | `sudo docker compose config --quiet` | Falta uma variável no `deploy/.env` (passo 6). |
 | `servidor` ou `contas` reiniciando sem parar | `sudo docker compose logs --tail 20 servidor contas` | A mensagem diz o motivo: segredo curto ou de exemplo (`openssl rand -hex 32`), `CINZAS_SMTP_FROM` vazio ou sem domínio, e assim por diante. Corrija o `.env` e `sudo docker compose up -d --wait`. |
@@ -312,5 +333,8 @@ em quando, `sudo docker image prune -f` para apagar as imagens antigas que os bu
 | Precisa ver tudo de uma vez | `sudo docker compose logs --since 10m` | Registros dos últimos 10 minutos de todos os serviços. |
 
 Depois de tudo no ar, siga o resto do [checklist do dono](09-checklist-do-dono.md): alertas (perfil
-`monitoramento`, §8.3), monitor externo de `https://DOMINIO/contas/saude`, cópia fora da máquina (perfil
-`copia-externa`), termos e política preenchidos.
+`monitoramento`, [08 §8.3](08-operacao.md#83-métricas-saúde-e-alertas)), monitor externo de
+`https://DOMINIO/contas/saude`, cópia fora da máquina (perfil `copia-externa`), termos e política preenchidos. Os
+perfis se ligam **sempre** pela linha `COMPOSE_PROFILES=` do `deploy/.env` (vários separados por vírgula, ex.:
+`COMPOSE_PROFILES=monitoramento,copia-externa`), nunca com `--profile` na linha de comando: no ensaio, um
+`docker compose down` sem o perfil deixou o monitoramento no ar e a rede presa ("Resource is still in use").

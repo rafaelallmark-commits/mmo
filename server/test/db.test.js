@@ -8,7 +8,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import pg from 'pg';
-import { createStore, isPostgresUrl, testSchemaFor } from '../src/db.js';
+import { createStore, isDbNotReady, isPostgresUrl, openWhenDbReady, testSchemaFor } from '../src/db.js';
 import { Store, MIGRATIONS } from '../src/store.js';
 import { PgStore, PG_MIGRATIONS, parsePgUrl, questionToDollar } from '../src/store-pg.js';
 
@@ -62,6 +62,29 @@ test('senha do PostgreSQL num arquivo (CINZAS_DB_PASSWORD_FILE): entra na conex�
     assert.throws(() => parsePgUrl('postgres://u@h/db', { passwordFile: file }), /vazio/);
     assert.throws(() => parsePgUrl('postgres://u@h/db', { passwordFile: join(dir, 'nao-existe') }), /CINZAS_DB_PASSWORD_FILE/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('openWhenDbReady: espera o banco que ainda sobe ou desliga; erro de outro tipo ou prazo esgotado sai na hora', async () => {
+  const notReady = (msg) => Object.assign(new Error(msg), { code: '57P03' }); // "the database system is starting up"
+  const logs = [];
+  let n = 0;
+  const got = await openWhenDbReady(() => { if (++n < 3) throw notReady('the database system is starting up'); return 'aberto'; },
+    { waitS: 5, stepMs: 10, log: (m) => logs.push(m) });
+  assert.equal(got, 'aberto');
+  assert.equal(n, 3);
+  assert.equal(logs.length, 1); // um aviso só a cada 10 s
+  assert.match(logs[0], /banco ainda indisponível \(the database system is starting up\)/);
+  for (const code of ['08001', 'ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'CINZAS_PG_TIMEOUT']) assert.ok(isDbNotReady({ code }), code);
+  // senha errada (28P01), banco que não existe (3D000) e defeito comum não esperam
+  for (const err of [Object.assign(new Error('password authentication failed'), { code: '28P01' }), Object.assign(new Error('no db'), { code: '3D000' }), new Error('defeito')]) {
+    let calls = 0;
+    await assert.rejects(openWhenDbReady(() => { calls++; throw err; }, { waitS: 5, stepMs: 10, log: () => {} }), (e) => e === err);
+    assert.equal(calls, 1);
+  }
+  // prazo esgotado: lança o último erro do banco
+  const t0 = Date.now();
+  await assert.rejects(openWhenDbReady(() => { throw notReady('the database system is shutting down'); }, { waitS: 0.1, stepMs: 20, log: () => {} }), /shutting down/);
+  assert.ok(Date.now() - t0 < 2000);
 });
 
 test('migrações escritas para os dois bancos: mesmas versões e mesmos nomes', () => {

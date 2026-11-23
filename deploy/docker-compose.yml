@@ -52,7 +52,9 @@
 # desligada): perfil "copia-externa" com COPIA_DESTINO e COPIA_S3_* no .env (docs §8.8).
 #
 # Monitoramento (opcional): perfil "monitoramento" — Prometheus, Grafana, Alertmanager e node-exporter. Os
-# alertas chegam por e-mail, Telegram ou Discord com as variáveis ALERTA_* no .env (docs §8.3).
+# alertas chegam por e-mail, Telegram ou Discord com as variáveis ALERTA_* no .env (docs §8.3). Ligue os perfis
+# sempre por COMPOSE_PROFILES no .env (ex.: COMPOSE_PROFILES=postgres,monitoramento): um --profile na linha de
+# comando SUBSTITUI o COMPOSE_PROFILES, e um "docker compose down" sem o perfil deixa os serviços dele no ar.
 name: cinzas
 
 services:
@@ -229,7 +231,13 @@ services:
     image: postgres:17
     profiles: ["postgres"]
     restart: unless-stopped
-    stop_grace_period: 60s     # desligamento "fast": desfaz transações abertas e grava o checkpoint
+    # Desligamento "smart" (SIGTERM; a imagem usaria SIGINT, o "fast", que derruba as conexões na hora): no
+    # reinício do VPS o Docker para todos os serviços AO MESMO TEMPO, e a zona ainda grava os personagens depois
+    # dos 30 s de aviso. Com o "smart" o banco recusa conexões novas mas espera a zona e as contas gravarem e
+    # saírem; com o "fast" a zona caía ao gravar ("the database system is shutting down") e os jogadores
+    # voltavam ao último salvamento (D177). 60 s de prazo cobrem os 30 s do aviso da zona com folga.
+    stop_signal: SIGTERM
+    stop_grace_period: 60s
     environment:
       POSTGRES_USER: cinzas
       POSTGRES_DB: cinzas
@@ -328,7 +336,7 @@ services:
         max-size: "5m"
         max-file: "3"
 
-  # --- Monitoramento (opcional): docker compose --profile monitoramento up -d -----------------------
+  # --- Monitoramento (opcional): COMPOSE_PROFILES=monitoramento no .env (junto dos outros perfis) -------
   # Prometheus coleta as métricas da zona (servidor:9100), do serviço de contas (contas:9101) e da máquina
   # (node-exporter: disco, e a idade do último backup) e avalia os alertas de monitoramento/alertas.yml;
   # o Alertmanager manda os alertas por e-mail, Telegram ou Discord (variáveis ALERTA_* no .env; sem elas,
@@ -347,6 +355,11 @@ services:
       - prometheus_dados:/prometheus
     ports:
       - "127.0.0.1:9090:9090"
+    logging:                     # sem isto o registro do Docker cresce sem limite
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
   alertmanager:
     image: prom/alertmanager:v0.27.0
     profiles: ["monitoramento"]
@@ -372,6 +385,11 @@ services:
     read_only: true
     ports:
       - "127.0.0.1:9093:9093"
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
   node-exporter:
     # métricas da máquina (disco, memória, CPU) e, pelo coletor textfile, a idade do último backup
     image: prom/node-exporter:v1.8.2
@@ -383,6 +401,11 @@ services:
     volumes:
       - /:/host:ro,rslave        # só leitura: o node-exporter só olha a máquina
       - metricas:/metricas:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
   grafana:
     image: grafana/grafana:11.3.1
     profiles: ["monitoramento"]
@@ -398,6 +421,11 @@ services:
       - grafana_dados:/var/lib/grafana
     ports:
       - "127.0.0.1:3000:3000"
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
 
 volumes:
   dados:

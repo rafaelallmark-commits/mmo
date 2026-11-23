@@ -292,12 +292,18 @@ func _process(_d: float) -> void:
 				step = "loot"
 		"loot":
 			if main.world.loots.is_empty():
-				step = "mech_fx"
+				# o "char" que o servidor manda depois da coleta (bolsa e atributos) pode chegar depois da resposta
+				# (no PostgreSQL, sempre): espera ele passar para não desfazer a velocidade injetada abaixo
+				settle_until = Time.get_ticks_msec() + 1500
+				step = "loot_settle"
 			elif main.world.pending_pickup == "":
 				var lid: String = main.world.loots.keys()[0]
 				var lp: Vector3 = main.world.loots[lid]["node"].position
 				main.world.pending_pickup = lid
 				Net.request("move", {"x": lp.x, "z": lp.z})
+		"loot_settle":
+			if Time.get_ticks_msec() >= settle_until and Net._callbacks.is_empty():
+				step = "mech_fx"
 		"mech_fx":
 			# mecânicas dos monstros: os mesmos eventos que o servidor manda, desenhados no lugar do personagem
 			speed_before = float(main.ch.get("stats", {}).get("moveSpeed", 5.0))

@@ -91,7 +91,11 @@ Os **backups** (§8.8) gravam a própria métrica num arquivo que o node-exporte
 | `cinzas_backup_copies` · `cinzas_backup_oldest_copy_timestamp_seconds` | Cópias guardadas depois da rotação e a hora da mais velha |
 | `cinzas_offsite_copy_last_success_timestamp_seconds` · `…_last_failure_timestamp_seconds` | Cópia para fora da máquina (perfil `copia-externa`) |
 
-**Painel e alertas**: `docker compose --profile monitoramento up -d` (em `deploy/`) sobe o Prometheus (coleta a cada
+**Painel e alertas**: ponha `monitoramento` em `COMPOSE_PROFILES` no `deploy/.env` (junto dos perfis que já estiverem
+lá: `COMPOSE_PROFILES=monitoramento`, ou `COMPOSE_PROFILES=postgres,monitoramento`) e rode `docker compose up -d` (em
+`deploy/`). Não use `--profile monitoramento` na linha de comando: ele **substitui** o `COMPOSE_PROFILES` (some o
+`postgres` daquela chamada), e um `docker compose down` sem o perfil deixa os quatro serviços no ar e a rede presa
+(`Resource is still in use`; conferido no ensaio de 2026-11-23). Sobe o Prometheus (coleta a cada
 15 s a zona, as contas e o node-exporter; retenção de 15 dias; alertas de `deploy/monitoramento/alertas.yml`), o
 **Alertmanager**, o **node-exporter** (disco, memória e CPU da máquina, montada só para leitura, e a métrica dos
 backups) e o Grafana com o painel "Cinzas do Meridiano — servidor de zona" (jogadores e teto, duração do tick com as
@@ -109,7 +113,7 @@ Senha do admin do Grafana em `GRAFANA_SENHA` no `deploy/.env`.
 | `MemoriaCrescendo` | memória acima de 600 MB e subindo sem parar por 30 min | aviso |
 | `ServidorCheio` | alguma entrada recusada pelo teto de jogadores nos últimos 15 min | aviso |
 | `DenunciaNova` | denúncia nova de jogador nos últimos 10 min (a equipe on-line também recebe o aviso no jogo; os `/bug` só contam) | aviso |
-| `BancoLento` | só PostgreSQL: mais de 50 ms por segundo esperando o banco, ou chamada p99 acima de 5 ms, por 5 min | aviso |
+| `BancoLento` | só PostgreSQL: mais de 50 ms por segundo esperando o banco, ou chamada p99 acima de 5 ms com mais de 1 chamada por segundo, por 5 min (com o servidor quase parado o p99 das últimas 8192 chamadas é o das chamadas lentas da subida, e o alerta disparava sem ninguém jogando) | aviso |
 | `ServicoDeContasForaDoAr` | o serviço de contas não responde às métricas por 2 min | crítica |
 | `FalhaNoEnvioDeEmail` | algum envio de e-mail falhou nos últimos 15 min (códigos não chegam) | aviso |
 | `DiscoQuaseCheio` | menos de 10% livre num disco da máquina por 5 min | crítica |
@@ -150,7 +154,8 @@ páginas. Ligue um ou mais canais:
   ALERTA_DISCORD_WEBHOOK=https://discord.com/api/webhooks/...
   ```
 
-Depois, `docker compose --profile monitoramento up -d alertmanager` (recria o serviço com as variáveis novas) e
+Depois, `docker compose up -d alertmanager` (recria o serviço com as variáveis novas; o perfil vem do
+`COMPOSE_PROFILES`) e
 `docker compose logs alertmanager`: a configuração montada passa pelo `amtool check-config` antes de subir, e uma
 variável que faltou aparece no registro (ex.: `a variável ALERTA_TELEGRAM_CHAT está vazia`). Valor com `$` no `.env`
 (senha, token) vai entre aspas simples, senão o Compose tenta trocá-lo por uma variável. Para conferir o canal, mande
@@ -158,16 +163,21 @@ um alerta de teste (chega em ~30 s; o "resolvido" vem uns 5 min depois):
 
 ```bash
 docker compose exec alertmanager amtool --alertmanager.url=http://127.0.0.1:9093 \
-  alert add Teste gravidade=aviso --annotation=resumo="Teste do canal de alertas"
+  alert add Teste gravidade=aviso --annotation='resumo="Teste do canal de alertas"'
 ```
+
+(As aspas simples por fora levam as duplas até o `amtool`; sem elas ele aceita o alerta igual, mas imprime um aviso
+longo sobre o "parser" novo.) No ensaio, com o canal de e-mail apontando para um SMTP de teste com STARTTLS e senha,
+o alerta chegou em 31 s.
 
 **Monitor externo de disponibilidade** (recomendado antes de abrir o teste): o Prometheus e o Alertmanager rodam na
 mesma máquina do jogo; se ela, a rede ou o Docker caírem, ninguém é avisado por eles. Cadastre um monitor externo —
 um serviço como UptimeRobot, Better Stack ou Healthchecks.io, ou um Uptime Kuma em **outra** máquina — que consulte
 `https://DOMINIO/contas/saude` a cada 1 a 5 minutos, espere `200` com `{"ok":true}` e avise por e-mail ou Telegram.
 O mesmo teste pega DNS errado, certificado vencido e proxy fora do ar. Um segundo monitor em `https://DOMINIO/`
-aceitando o código `426` (o jogo só fala WebSocket) confere o caminho até a zona. A escolha do serviço e a conta
-ficam com o dono do projeto.
+(`200`, a página do jogo) confere o proxy e a página; a zona não responde a um pedido HTTP comum (o proxy só manda
+para ela os pedidos de WebSocket), então quem avisa da zona são os alertas `ServidorForaDoAr` e `LacoDoJogoParado`
+do Prometheus. A escolha do serviço e a conta ficam com o dono do projeto.
 
 Referência medida (100 clientes juntos no mesmo mapa, 10 Hz): tick p50 4,8 ms, p99 10,2 ms, máximo 22 ms,
 nenhum acima de 50 ms; CPU do processo ~7% de um núcleo; 144 MB de memória.
@@ -435,7 +445,9 @@ for cinzas-servidor" antes do build).
   jogadores). Tente de novo em alguns minutos."; contas `gm` e `admin` entram sempre e não ocupam vaga; quem já está no
   mundo reconecta. `CINZAS_MAX_PLAYERS=0` no `.env` tira o teto.
 - **Backup**: automático, de hora em hora, pelo serviço `backup` (abaixo, "Backups e cópia fora da máquina"). Um backup
-  na hora, além do agendado: `docker compose exec servidor npm run backup -- --db /data/cinzas.db --para /data/backups --manter 14 --diarias`.
+  na hora, além do agendado: `docker compose exec servidor npm run backup -- --para /data/backups --manter 14 --diarias`
+  (o banco vem do `CINZAS_DB` do contêiner). No perfil `postgres` a imagem do jogo não tem o `pg_dump`: um agora é
+  `docker compose exec backup-banco sh /opt/cinzas/backup-postgres.sh --uma-vez`.
 - **Restaurar**: troque o banco **dentro do volume e como o usuário da imagem** (`docker compose run` usa o
   usuário `cinzas`). Não use `docker compose cp` para pôr o banco no lugar: o arquivo entraria como root e o
   servidor não conseguiria gravar nele.
@@ -651,11 +663,13 @@ Faça isto uma vez em cada implantação, depois que zona e contas estiverem no 
    - **Docker**, em `deploy/`:
 
      ```bash
-     docker compose exec servidor npm run conta -- --db /data/cinzas.db --conta nome --papel admin
+     docker compose exec servidor npm run conta -- --conta nome --papel admin
      ```
 
-     Com o perfil `postgres`, tire o `--db /data/cinzas.db`: sem ele a ferramenta usa o `CINZAS_DB` do contêiner,
-     que aponta para o banco.
+     Sem `--db`, a ferramenta usa o `CINZAS_DB` do contêiner, que aponta para o banco do jogo nos dois perfis. Não
+     ponha `--db /data/cinzas.db`: no perfil `postgres` ele abre o arquivo SQLite antigo (conferido no ensaio: "conta
+     não encontrada" para uma conta nova; uma conta de antes da troca de banco ganharia o papel no arquivo, sem efeito
+     no jogo).
    - **systemd**, como o usuário do serviço (para o arquivo do banco continuar dele; `-H` usa a pasta dele,
      `/var/lib/cinzas`, como o `backup.service`):
 
@@ -668,7 +682,8 @@ Faça isto uma vez em cada implantação, depois que zona e contas estiverem no 
    recebe "Seu papel na equipe mudou: agora você é administrador." e passa a aparecer com **[Equipe]**, sem sair e
    entrar de novo.
 4. **Confira**: no jogo, `/gm onde SeuPersonagem` responde com o mapa e a posição; fora dele,
-   `npm run conta -- --db ... --auditoria --tipo role_set --n 5` mostra a troca de papel.
+   `docker compose exec servidor npm run conta -- --auditoria --tipo role_set --n 5` (systemd: `npm run conta -- --db ...
+   --auditoria --tipo role_set --n 5`) mostra a troca de papel.
 
 Mestres voluntários recebem `--papel gm` do mesmo jeito; `--papel player` tira o papel (também em até 60 s, com a
 marca **[Equipe]** saindo junto). O que cada papel pode: [§8.9](#89-contas-segurança-e-privacidade-teste-público).
@@ -689,7 +704,7 @@ marca **[Equipe]** saindo junto). O que cada papel pode: [§8.9](#89-contas-segu
   `curl http://IP:7777/` nem `curl http://IP:9101/metrics`, que só a máquina alcança).
 - Backup rodando (`docker compose logs backup`), o **ensaio de restauração** feito (acima) e a decisão sobre a cópia
   fora da máquina tomada (perfil `copia-externa`, com cifra e sem versões antigas no provedor).
-- Monitoramento no ar (`--profile monitoramento`), pelo menos um canal de alerta ligado e conferido com o alerta de
+- Monitoramento no ar (`monitoramento` em `COMPOSE_PROFILES`, §8.3), pelo menos um canal de alerta ligado e conferido com o alerta de
   teste (§8.3), e o **monitor externo** de `https://DOMINIO/contas/saude` cadastrado.
 - Teto de jogadores conferido (`CINZAS_MAX_PLAYERS`, 200 por padrão).
 - Variáveis do repositório `SERVIDOR_PADRAO` (e `PAGINA_DOWNLOAD`, se não for a página do jogo) definidas **antes**
@@ -978,22 +993,33 @@ docker compose logs servidor | grep banco:          # "banco: PostgreSQL cinzas@
   rotação de 14 dias e a métrica do último backup. Um dump na hora, fora do agendado:
   `docker compose exec -T banco pg_dump -U cinzas -Fc cinzas > cinzas-$(date +%F-%H%M).dump`. Ensaio de restauração:
   §8.8.
-- **Restaurar** (os dumps do `backup-banco` ficam no volume `dados`, que o contêiner dele monta): pare quem usa o
-  banco e o próprio backup, para nenhum dump fotografar o banco no meio da troca, e restaure por um contêiner
-  avulso do `backup-banco`, que já tem a conexão, a senha e o volume:
+- **Restaurar**: `docker compose stop servidor contas`, depois um dos dois e `docker compose start servidor contas`:
+  - cópia do `backup-banco` (fica no volume `dados`, não na máquina; o contêiner `backup-banco` tem o volume e a
+    senha):
+    `docker compose exec backup-banco sh -c 'PGPASSWORD="$(cat /run/secrets/senha_banco)" pg_restore -d cinzas --clean --if-exists --no-owner /data/backups/cinzas-AAAA-MM-DDTHH-MM-SS.dump'`;
+  - arquivo na máquina (o dump na hora acima, ou um trazido de fora):
+    `docker compose exec -T banco pg_restore -U cinzas -d cinzas --clean --if-exists --no-owner < cinzas-AAAA-MM-DD-HHMM.dump`.
 
-  ```bash
-  docker compose stop servidor contas backup-banco
-  docker compose run --rm --no-deps --entrypoint sh backup-banco -c 'PGPASSWORD="$(cat /run/secrets/senha_banco)" pg_restore -d cinzas --clean --if-exists --no-owner /data/backups/cinzas-AAAA-MM-DDTHH-MM-SS.dump'
-  docker compose start servidor contas backup-banco
-  ```
-
-  Um dump que está fora da máquina entra no volume como no SQLite (§8.8, "Restaurar"), com o nome
-  `/data/backups/restaurar.dump`; apague-o depois da troca.
+  Os dois conferidos no ensaio de 2026-11-23: um personagem mudado depois do dump voltou como estava nele. Para
+  nenhuma cópia de hora em hora sair no meio da troca, pare também o `backup-banco` e, no primeiro caminho, troque
+  `docker compose exec backup-banco sh -c` por `docker compose run --rm --no-deps --entrypoint sh backup-banco -c`
+  (o mesmo comando num contêiner avulso, que não precisa do serviço no ar). Um dump trazido de fora também pode
+  entrar no volume como no SQLite (§8.8, "Restaurar"), com o nome `/data/backups/restaurar.dump`; apague-o depois.
 - **Levar o SQLite que já existe** (volume `dados`) para o PostgreSQL, com a zona parada:
   `docker compose stop servidor contas && docker compose up -d banco`, depois
   `docker compose run --rm --no-deps servidor npm run sqlite-para-pg -- --de /data/cinzas.db` (o destino é o
-  `CINZAS_DB` do contêiner; o arquivo SQLite não é alterado) e `docker compose up -d`.
+  `CINZAS_DB` do contêiner; o arquivo SQLite não é alterado) e `docker compose up -d`. Faça isso logo depois de ligar o
+  perfil, antes de abrir para os jogadores: o `up -d --build` acima já sobe a zona no PostgreSQL vazio, e o import
+  recusa tabelas que já têm dados (no ensaio, feito em seguida, as 173 linhas entraram e o personagem de teste voltou
+  igual).
+- **Desligamento**: o `banco` para com SIGTERM (modo "smart" do PostgreSQL, D177): recusa conexões novas e espera a
+  zona e as contas gravarem e saírem. No reinício do VPS o Docker para todos os serviços ao mesmo tempo, e com o modo
+  "fast" da imagem a zona caía ao gravar os personagens ("the database system is shutting down"), que voltavam ao
+  último salvamento. As contas, ao subir com o banco ainda subindo ou desligando (`docker compose restart`, boot),
+  esperam até 90 s por ele ("banco ainda indisponível ... tentando de novo") em vez de sair. Para **recriar** o
+  `banco` (imagem nova do PostgreSQL, mudança no serviço), pare antes quem usa o banco —
+  `docker compose stop servidor contas backup-banco && docker compose up -d` —, senão o banco espera os 60 s do prazo
+  pelas conexões abertas e o Docker o encerra à força (ele se recupera pelo WAL na subida).
 
 **Com systemd** (`deploy/cinzas.service` e `cinzas-contas.service`): tire o `--db /var/lib/cinzas/cinzas.db` do
 `ExecStart` dos dois e ponha em `/etc/cinzas/cinzas.env` o `CINZAS_DB=postgres://...` (com a senha na URL, já que o
