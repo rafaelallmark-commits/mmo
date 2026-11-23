@@ -133,7 +133,7 @@ mmo/
 │   │   ├── convivencia.test.js    ignorados, intervalo do convite, marca [Equipe], papel relido, avisos à equipe
 │   │   ├── nivel25.test.js        pós-v1: teto 25, Cava Primeira, habilidades do 25 e o capítulo 6 inteiro
 │   │   ├── multizona.test.js      mundo + 2 zonas: transferência, tokens, posse única, grupo/clã, quedas
-│   │   ├── progressao.test.js     simulador de progressão: planos de atributos e uma rodada curta
+│   │   ├── progressao.test.js     simulador de progressão: planos de atributos, uma rodada curta e outra até o nível 12 (prova de classe e golpes avisados)
 │   │   ├── telemetria.test.js     telemetria do teste: mortes, sessões, missões aceitas e calabouço na auditoria
 │   │   ├── operacao.test.js       métricas como contadores, saúde 503, teto de jogadores, painel e alertas
 │   │   ├── backup.test.js         backup, rotação, ensaio de restauração e cópia externa (SQLite e PostgreSQL)
@@ -353,7 +353,7 @@ Feito: métricas do servidor e HTTP de métricas, snapshots por diferença e int
 - Medição de latência no cliente (indicador na interface) e tolerância a 150 ms.
 - Revisão da progressão com telemetria de tempo por nível contra as metas da tabela de XP; ajuste de economia (ouro de entrada/saída, preço de tônicos, equipamento do armeiro e refino).
 - Documentação de execução, operação e cenários críticos atualizada.
-- **Aceitação**: relatório com p50/p95/p99 de tick e de latência; nenhum tick > 50 ms com 100 clientes; tempo médio por nível dentro de ±25% da meta; script de cenários críticos reproduzível. **Resultado**: com 100 clientes, tick p50/p95/p99 de 4,5/7,8/14,1 ms e nenhum acima de 50 ms (~9,5 KB/s por cliente); com 150 ms de atraso, todos conectados e sem erros; na simulação do 1 ao 25 — já com as mecânicas dos monstros e o bot saindo das áreas avisadas 0,6 s depois de vê-las —, a média das classes fica dentro de ±25% da meta em todos os níveis (7,2 h contra 7,7 h no total), cada classe a até ±25% do total (de −15% a +1%) e as mortes ficam em 3,0 a 7,1 por execução (eram 2,8 a 10,3 antes das mecânicas); `npm run cenarios` reproduz tudo.
+- **Aceitação**: relatório com p50/p95/p99 de tick e de latência; nenhum tick > 50 ms com 100 clientes; tempo médio por nível dentro de ±25% da meta; script de cenários críticos reproduzível. **Resultado**: com 100 clientes, tick p50/p95/p99 de 4,5/7,8/14,1 ms e nenhum acima de 50 ms (~9,5 KB/s por cliente); com 150 ms de atraso, todos conectados e sem erros; na simulação do 1 ao 25 — com as mecânicas dos monstros, o bot saindo das áreas avisadas 0,6 s depois de vê-las e a prova de classe de cada classe no nível 10 (64 de 64 vencidas na primeira tentativa) —, a média das classes fica dentro de ±25% da meta em todos os níveis (7,3 h contra 7,7 h no total), cada classe a até ±25% do total (de −15% a +5%) e as mortes ficam em 2,8 a 6,6 por execução (eram 2,8 a 10,3 antes das mecânicas); `npm run cenarios` reproduz tudo.
 
 ### Pós-v1 — Níveis 21–25
 

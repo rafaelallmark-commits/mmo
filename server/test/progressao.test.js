@@ -30,3 +30,14 @@ test('simulação acelerada: bots sobem do 1 ao 5 pelo protocolo e Date.now volt
   }
   assert.ok(Math.abs(Date.now() - antes) < 60_000, 'Date.now() restaurado depois da simulação');
 });
+
+test('simulação acelerada: prova de classe no nível 10 e a caça depois dela, com os golpes avisados dos monstros', () => {
+  // a prova e as mecânicas dos monstros dividem os avisos ('warn'); uma rodada que passa pela prova e volta a
+  // caçar pega a mistura (na integração, o primeiro golpe avisado depois da prova derrubava o robô)
+  for (const classId of ['breaker', 'emberweaver']) {
+    const r = simularClasse({ classId, seed: 1, ateNivel: 12 });
+    assert.equal(r.concluiu, true, `${classId} chegou ao nível 12`);
+    assert.equal(r.provas.at(-1)?.resultado, 'success', `${classId}: ${JSON.stringify(r.provas)}`);
+    assert.ok(r.mecanicas.avisos > 0, `${classId} viu golpes avisados de monstros`);
+  }
+});
