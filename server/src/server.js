@@ -19,6 +19,7 @@ import { Zone, lootView } from './zone.js';
 import { makeRng } from './rng.js';
 import { QuestEngine } from './quests.js';
 import { Dungeon } from './dungeon.js';
+import { Trial } from './trial.js';
 import { checkEquip, applyEquip, checkUnequip, revalidateEquipment, bagCount, BAG_CAPACITY, EQUIP_SLOTS } from './equipment.js';
 import { totalAttributePoints, derivedStats } from './rules.js';
 import { WorldLink } from './worldlink.js';
@@ -135,10 +136,11 @@ export class GameServer {
 
   setXpRate(rate) { for (const z of this.zones.values()) z.xpRate = rate; this.opts.xpRate = rate; }
 
-  createZone(mapId, instanceId = null) {
+  // mapOverride: instância com geografia própria (os fossos da prova do Lanceiro)
+  createZone(mapId, instanceId = null, mapOverride = null) {
     const key = instanceId ?? mapId;
     const zone = new Zone({
-      mapId, instanceId, data: this.data, store: this.store, rng: makeRng((this.opts.seed + this.zones.size * 7919) >>> 0), xpRate: this.opts.xpRate,
+      mapId, instanceId, mapOverride, data: this.data, store: this.store, rng: makeRng((this.opts.seed + this.zones.size * 7919) >>> 0), xpRate: this.opts.xpRate,
       send: (charId, msg) => this.sendTo(this.byChar.get(charId), msg),
       broadcast: (msg) => this.broadcastZone(key, msg),
       hooks: {
@@ -693,7 +695,8 @@ export class GameServer {
 
   defsPayload() {
     const d = this.data;
-    const monsters = Object.fromEntries(Object.entries(d.monsters).map(([id, m]) => [id, { name: m.name, level: m.level, family: m.family, rank: m.rank, aggro: m.aggro }]));
+    // model: aparência própria das peças da prova de classe (pilar, boneco, alvo, sino, atirador, perseguidor)
+    const monsters = Object.fromEntries(Object.entries(d.monsters).map(([id, m]) => [id, { name: m.name, level: m.level, family: m.family, rank: m.rank, aggro: m.aggro, ...(m.model ? { model: m.model } : {}) }]));
     const maps = Object.fromEntries(Object.entries(d.maps).filter(([, m]) => m.size).map(([id, m]) => [id, { id, ...m }]));
     const quests = Object.fromEntries(Object.entries(d.quests).map(([id, q]) => [id, { title: q.title, chapter: q.chapter, level: q.level }]));
     return {
@@ -1304,11 +1307,9 @@ export class GameServer {
 
   onKillCredit(zone, p, monsterId) {
     this.notifyQuests(p, this.quests.onKill(p.char, monsterId, zone.rng));
-    const key = zone.key;
-    if (this.trials.has(key)) this.checkTrial(key);
   }
 
-  // ---------- prova de classe (instância solo) ----------
+  // ---------- prova de classe (instância solo; a regra de cada classe fica em trial.js) ----------
   hTrialStart(s, p, { npc }) {
     const n = p.zone.npcNear(p, npc);
     const c = p.char;
@@ -1317,43 +1318,22 @@ export class GameServer {
     if (c.level < 10) return { ok: false, code: 'level', reason: `Nível 10 exigido. Seu nível atual é ${c.level}.` };
     if (c.quests.get('c3_trial')?.state !== 'active') return { ok: false, code: 'quest', reason: 'Aceite a missão "Prova de Classe" primeiro.' };
     const arena = this.data.maps.arena_prova;
+    const cfg = arena.trial.classes?.[c.classId];
+    if (!cfg) return { ok: false, code: 'no_trial', reason: 'A prova desta classe ainda não está pronta.' };
     const key = `trial:${c.id}:${randomUUID().slice(0, 8)}`;
-    const zone = this.createZone('arena_prova', key);
+    // áreas bloqueadas só desta prova (fossos do Lanceiro): a navegação da instância já nasce com elas
+    const zone = this.createZone('arena_prova', key, cfg.blocked?.length ? { ...arena, blocked: [...(arena.blocked ?? []), ...cfg.blocked] } : null);
     c.saveMapId = p.zone.mapId; c.saveX = n.x; c.saveZ = n.z + 2;
-    const trial = { key, charId: c.id, wave: 0, returnTo: { mapId: p.zone.mapId, x: n.x, z: n.z + 2 }, startedAt: zone.now, deadline: arena.trial.durationMs, done: false };
+    const trial = new Trial({ key, zone, data: this.data, classId: c.classId, charId: c.id, returnTo: { mapId: p.zone.mapId, x: n.x, z: n.z + 2 } });
     this.trials.set(key, trial);
     return {
-      ok: true, cache: false, durationMs: arena.trial.durationMs,
+      ok: true, cache: false, durationMs: trial.timeMs, kind: trial.kind, title: trial.cfg.title,
       after: () => {
         const np = this.moveToZone(p, key, arena.spawnPoint.x, arena.spawnPoint.z);
         np.char.hp = np.stats.maxHp; np.char.mp = np.stats.maxMp;
-        this.spawnWave(trial);
-        this.sendTo(this.byChar.get(c.id), { t: 'trial', state: 'started', wave: 1, waves: arena.trial.waves.length, ms: arena.trial.durationMs });
+        trial.start(np);
       },
     };
-  }
-
-  spawnWave(trial) {
-    const zone = this.zones.get(trial.key);
-    const arena = this.data.maps.arena_prova.trial;
-    for (const [monster, count] of arena.waves[trial.wave]) {
-      for (let i = 0; i < count; i++) zone.spawnMonster({ monster, ...arena.spawnAt, count: 1 }, { noRespawn: true });
-    }
-  }
-
-  checkTrial(key) {
-    const trial = this.trials.get(key);
-    const zone = this.zones.get(key);
-    if (!trial || trial.done || !zone) return;
-    if ([...zone.monsters.values()].some((m) => m.state !== 'dead')) return;
-    const arena = this.data.maps.arena_prova.trial;
-    trial.wave++;
-    if (trial.wave < arena.waves.length) {
-      this.spawnWave(trial);
-      this.sendTo(this.byChar.get(trial.charId), { t: 'trial', state: 'wave', wave: trial.wave + 1, waves: arena.waves.length });
-      return;
-    }
-    this.endTrial(key, true, 'Prova vencida!');
   }
 
   // ---------- calabouço ----------
@@ -1416,8 +1396,9 @@ export class GameServer {
       if (!zone || trial.done) continue;
       const p = zone.players.get(trial.charId);
       if (!p) continue;
-      if (p.char.dead) this.endTrial(key, false, 'Você caiu durante a prova. Fale com o mestre para tentar de novo.');
-      else if (zone.now - trial.startedAt > trial.deadline) this.endTrial(key, false, 'O tempo da prova acabou. Fale com o mestre para tentar de novo.');
+      if (p.char.dead) { this.endTrial(key, false, 'Você caiu durante a prova. Fale com o mestre para tentar de novo.'); continue; }
+      const r = trial.tick(p);
+      if (r) this.endTrial(key, r.success, r.message);
     }
   }
 

@@ -123,6 +123,21 @@ z=160└────────────────────────
 
 ![A Cava Primeira](img/23_cava.png)
 
+### Arena da Prova (instância solo, nível 10)
+
+Pátio de areia de 36 × 36 m cercado de muros, com braseiros nos cantos. Cada tentativa da prova de classe (missão 3.3) abre uma cópia só do jogador, montada pela regra da classe (`server/src/trial.js`; números em `data/maps.json`, `arena_prova.trial`). A habilidade do nível 10 fica emprestada no grau 1; as peças da arena não dão XP nem saque.
+
+| Classe | Prova | O que há na arena |
+|---|---|---|
+| Quebraferro | Pilares Blindados (90 s) | 3 pilares de pedra com placas rebitadas, perto o bastante para dois caberem no cone da Ruptura; pedras caem do teto com aviso |
+| Bastião | O Aprendiz no Centro (60 s) | o aprendiz Brás no meio; 6 construtos em duas levas; uma investida avisada |
+| Lanceiro | Duas Filas de Bonecos (120 s) | dois fossos de lado a lado da arena (só o Avanço do Fosso cruza) e uma fila de 4 bonecos depois de cada um |
+| Vigia | Alvos em Movimento (90 s) | o posto de tiro (faixa marcada perto da entrada) e 4 filas de 8 alvos em trilhos no fundo |
+| Escudeiro | A Travessia da Peregrina (150 s) | a peregrina Odila, a rota até o portão do fundo e três marcos de emboscada (construtos, atiradores e a Sentinela) |
+| Andarilha | Percurso do Vento (100 s) | 4 sinos numerados (o aceso acende) e até 3 perseguidores |
+| Cantora | Vigília dos Aprendizes (70 s) | os aprendizes Lia, Duarte e Cora; fuligem contínua e jatos de vapor avisados |
+| Tecelão | Três Ondas de Fagulhas (150 s) | a linha de contenção perto da entrada; ondas de 6, 7 e 8 fagulhas (as duas últimas com um construto) |
+
 ## Morte e resgate
 
 - Ao cair, o personagem fica no chão. Opções: **voltar ao posto de guarda** do mapa (aparece com 50% de vida e mana) ou esperar **resgate por aliado**: qualquer jogador a até 3 m levanta um caído canalizando 5 s fora de combate, com 20% de vida (`revive_ally`; D154), e o Coro do Recomeço da Cantora (nível 20) levanta à distância. Sem resgate, o caído volta sozinho ao posto em 5 min (`death.corpseTimeoutMs`). Não há perda de XP; o custo é tempo e deslocamento.
@@ -136,7 +151,9 @@ z=160└────────────────────────
 - Números de dano flutuantes (branco: seu dano; laranja: mágico; amarelo com "!": crítico; vermelho: dano recebido; "errou").
 - Anel de seleção amarelo sob o alvo; quadro do alvo com nome, nível, tipo (elite/chefe) e vida.
 - Áreas de efeito desenhadas no chão durante toda a duração; perigos de chefe sempre com aviso visual + sonoro antes do dano.
-- Legibilidade com muitos monstros: nomes e vida só como rótulo curto; cores por família; o próprio personagem com contorno da cor da classe.
+- Legibilidade com muitos monstros: nomes e vida só como rótulo curto; cores por família; o próprio personagem com contorno da cor da classe, um pouco mais grosso (Quebraferro laranja-brasa, Bastião bronze, Lanceiro azul-aço, Vigia verde, Escudeiro dourado, Andarilha turquesa, Cantora lavanda, Tecelão vermelho); os outros jogadores, NPCs e monstros seguem com o contorno escuro.
+- Objetos de missão com modelo próprio, parados no chão e com um losango pequeno flutuando em cima (dá para usar): marcos de rota, páginas do registro, caixas de fusíveis, cofre de ordens, medidores de pressão, pontos de medição térmica, válvulas, tubos de voz, a máquina do posto antigo, selos da Porta Funda, a carroça parada da escolta, o quadro de missões das cidades e as pessoas a resgatar no tutorial.
+- Prova de classe: painel no alto da tela com objetivo, tempo, progresso e o aviso da vez (investida, jato de vapor, emboscada); golpe que a peça recusa aparece como texto ("blindado", "apagado", "fora do posto"); aprendizes e peregrina com o nome e a vida em verde, clicáveis para curas e escudos.
 
 ## Interface (telas)
 

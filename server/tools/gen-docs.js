@@ -41,7 +41,12 @@ function classesDoc() {
       out.push(`- **Atributos iniciais:** ${ATTRS.map((a) => `${A(a)} ${c.start[a]}`).join(' · ')}`);
       const st = derivedStats({ classId: cid, level: 1, alloc: {} }, c.startingKit.equip.map((id) => ({ def: data.items[id] })), data);
       out.push(`- **Nível 1 com o kit inicial:** vida ${st.maxHp}, mana ${st.maxMp}, defesa ${st.defense}, precisão ${st.accuracy}, crítico ${n1(st.crit)}%`);
-      out.push(`- **Kit inicial (tutorial adapta à classe):** equipado ${c.startingKit.equip.map((i) => data.items[i].name).join(', ')}; na bolsa ${c.startingKit.bag.map(([i, q]) => `${data.items[i].name}${q > 1 ? ` ×${q}` : ''}`).join(', ')}\n`);
+      out.push(`- **Kit inicial (tutorial adapta à classe):** equipado ${c.startingKit.equip.map((i) => data.items[i].name).join(', ')}; na bolsa ${c.startingKit.bag.map(([i, q]) => `${data.items[i].name}${q > 1 ? ` ×${q}` : ''}`).join(', ')}`);
+      // prova de classe (data/maps.json → arena_prova.trial.classes; regra em server/src/trial.js)
+      const tr = data.maps.arena_prova?.trial?.classes?.[cid];
+      const sig = c.skills.map((s) => data.skills[s]).find((s) => s.unlockLevel === 10);
+      if (tr) out.push(`- **Prova de classe (nível 10, missão 3.3): ${tr.title}.** ${tr.objective} Limite: ${n1(tr.timeMs / 1000)} s. ${tr.hint} ${sig.name} fica emprestada no grau 1 durante a prova; vencer a libera de vez.`);
+      out.push('');
       const rows = c.skills.map((sid) => {
         const s = data.skills[sid];
         const e = s.effect;

@@ -85,7 +85,8 @@ Esta seção é o SQLite (desenvolvimento). Em produção o banco é o PostgreSQ
 | `npm run carga -- --clientes 100 --duracao 60 --md ../docs/relatorio-carga.md` | Só o teste de carga (sobe um servidor próprio; `--url`/`--metricas` para usar um existente; `--completo` para comparar com snapshots completos). | ~1,5 min |
 | `npm run telemetria -- --db cinzas.db` | Tempo jogado por nível no banco real contra as metas (±25%). | segundos |
 | `npm run simular-progressao` | Simulação acelerada da caça solo do nível 1 ao teto (25) para as 8 classes; escreve `docs/relatorio-progressao.md` (a versão no git é essa rodada completa, do 1 ao 25, com 8 sementes fixas). | ~13 min |
-| `npm run validate-data` | Valida os JSON de `data/`. | segundos |
+| `npm run provas -- --sementes 10` | Joga a prova de classe de cada classe no nível 10, com o kit inicial e com o da faixa 5, num servidor em processo (piloto pelo protocolo, `tools/lib/provas/`); mostra vitórias, tempo e vida mínima. `--sem-habilidade` mostra quais só fecham com a habilidade do nível 10; `--classes`, `--faixas` e `--detalhe` filtram e explicam cada rodada. | ~20 s |
+| `npm run validate-data` | Valida os JSON de `data/` (inclusive a prova de cada classe na Arena da Prova). | segundos |
 
 ## 8.7 Solução de problemas
 

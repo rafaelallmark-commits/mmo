@@ -9,6 +9,7 @@
 import { IMPLEMENTED_KINDS } from '../../../src/skills.js';
 import { requirementFailures } from '../../../src/equipment.js';
 import { ClienteEmProcesso } from './cliente.mjs';
+import { criarPiloto } from '../provas/piloto.mjs';
 import {
   FAIXAS, kitPadrao, kitDaFaixa, joiasDaFaixa, planoAtributos, prioridadeHabilidades, valorItem,
   grafoMapas, rota, cidadeDaClasse, areasDeCaca, escolherArea,
@@ -95,7 +96,7 @@ export class BotProgressao {
     this.ultimoAbate = 0; this.terminou = false;
     // métricas
     this.niveis = new Map();
-    this.equipamento = []; this.provas = []; this.rejeicoes = {}; this.ignorados = 0; this.viagens = 0;
+    this.equipamento = []; this.provas = []; this.avisos = []; this.provaEstado = null; this.ultimoGolpe = -1e9; this.rejeicoes = {}; this.ignorados = 0; this.viagens = 0;
     this.destravamentos = 0; this.compras = []; this.vendas = { itens: 0, ouro: 0 }; this.anomalias = []; this.viagensPorMotivo = {}; this.mortesPor = {};
     // golpes recebidos e tônicos de vida bebidos nos últimos 10 s (para descrever cada morte)
     this.mortesDetalhe = []; this.golpesRecentes = []; this.golesRecentes = [];
@@ -221,9 +222,14 @@ export class BotProgressao {
         if (this.conjurando?.skill === m.skill) this.conjurando = null;
         break;
       }
+      case 'warn': this.avisos.push({ x: m.x, z: m.z, radius: m.radius, ate: this.now + m.ms + 150, kind: m.kind }); break;
       case 'trial': {
         if (m.char) this.recebeChar(m.char);
+        // prova de classe: o piloto (tools/lib/provas/piloto.mjs) joga com o objetivo e o estado que o servidor manda
+        if (m.state === 'started') { this.provaEstado = { iniciada: m, status: null }; this.avisos = []; }
+        if (m.state === 'status' && this.provaEstado) this.provaEstado.status = m;
         if (m.state === 'success' || m.state === 'failed') {
+          this.provaEstado = null;
           this.provas.push({ nivel: this.level, tentativa: this.tentativasProva, resultado: m.state, duracaoS: Math.round((this.now - this.provaInicio) / 1000), mensagem: m.message });
           this.log('prova', m.state, m.message);
           this.pendenteNivel = true;
@@ -239,6 +245,7 @@ export class BotProgressao {
     const d = this.dano;
     if (m.t === 'heal') { if (m.src === this.eid) { d.cura += m.amount; this.met().cura += m.amount; } return; }
     if (m.src === this.eid) {
+      this.ultimoGolpe = this.now;
       if (m.miss) { d.erros++; return; }
       const k = m.skill ?? 'basico';
       d.porFonte[k] = (d.porFonte[k] || 0) + m.dmg;
@@ -296,6 +303,7 @@ export class BotProgressao {
       }
       this.conjurando = null; // o fim não chegou (não deveria acontecer): segue a vida
     }
+    if (this.instancia && this.provaEstado) return this.lutarNaProva(eu, mundo);
     if (this.vigiar()) return;
     if (this.pendenteNivel) this.gerenciarPersonagem();
     if (this.now - this.charEm >= 1000) this.atualizarChar();
@@ -1074,13 +1082,44 @@ export class BotProgressao {
     this.viajar(destino.mapId, this.data.maps[destino.mapId].guardPost.x, this.data.maps[destino.mapId].guardPost.z, 'caca');
   }
 
+  // Prova de classe: a regra muda por classe (pilares, aprendiz, filas, alvos, peregrina, percurso, vigília,
+  // ondas); o piloto compartilhado com os testes joga como a dica de cada prova ensina.
   lutarNaProva(eu, mundo) {
     this.atividade = 'prova';
-    const ms = this.monstros(mundo);
-    if (!ms.length) return;
-    const alvo = ms.reduce((b, m) => (!b || dist(eu, m) < dist(eu, b) ? m : b), null);
-    const r = this.cli.pedir('attack', { target: alvo.id });
-    if (r.ok) { this.alvoId = alvo.id; this.alvoDesde = this.now; this.alvoVidaInicio = alvo.hp; } else this.rejeitou('attack', r);
+    if (!this.provaEstado) return;
+    if (this.now - this.charEm >= 1000) this.atualizarChar(); // mana e recargas para o piloto
+    this.piloto ??= criarPiloto(this.classId, this.data);
+    const bot = this;
+    const acoes = {
+      mover(x, z) {
+        if (bot.destinoProva && Math.hypot(bot.destinoProva.x - x, bot.destinoProva.z - z) < 0.4 && bot.now - bot.destinoProva.em < 1500) return;
+        const r = bot.cli.pedir('move', { x, z });
+        if (r.ok) { bot.destinoProva = { x, z, em: bot.now }; bot.alvoId = null; } else bot.rejeitou('move_prova', r);
+      },
+      atacar(id) {
+        if (bot.alvoId === id) return;
+        const r = bot.cli.pedir('attack', { target: id });
+        if (r.ok) { bot.alvoId = id; bot.alvoDesde = bot.now; bot.destinoProva = null; } else bot.rejeitou('attack', r);
+      },
+      parar() { bot.cli.pedir('stop'); bot.alvoId = null; bot.destinoProva = null; },
+      pronta(skill) { return (bot.char?.skills?.[skill] ?? 0) > 0 && bot.now >= (bot.cd[skill] ?? 0) && bot.now >= bot.gcdAte; },
+      lancar(skill, o = {}) {
+        const r = bot.cli.pedir('cast', { skill, ...o });
+        if (r.ok) {
+          bot.cd[skill] = bot.now + (r.cooldownMs ?? 0);
+          bot.gcdAte = bot.now + (r.gcdMs ?? 0);
+          if (r.char) bot.recebeChar(r.char);
+          if (o.target && bot.data.skills[skill].target === 'enemy') bot.alvoId = o.target;
+        } else {
+          bot.cd[skill] = Math.max(bot.cd[skill] ?? 0, bot.now + (r.code === 'cooldown' || r.code === 'gcd' ? 300 : 400));
+          bot.rejeitou(`cast_prova`, r);
+        }
+        return r;
+      },
+      tonico() { if (bot.now >= bot.potPronto) bot.usarPocao(POCOES_VIDA, eu.mhp - eu.hp, 'pocoesVida', false, true); },
+    };
+    this.avisos = (this.avisos ?? []).filter((w) => w.ate > this.now);
+    this.piloto.decidir({ agora: this.now, eu, ents: mundo, char: this.char, prova: this.provaEstado, avisos: this.avisos, ultimoGolpe: this.ultimoGolpe }, acoes);
   }
 
   perto(eu, npc) {

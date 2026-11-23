@@ -74,6 +74,7 @@ mmo/
 │   │   ├── worldlink.js           ligação da zona com o mundo: hello com HMAC, sinal de vida, pedidos, cerca
 │   │   ├── token.js · mailer.js · metrics.js   token HMAC de uso único · SMTP mínimo · métricas/saúde
 │   │   ├── dungeon.js             A Última Eclusa: o Custódio em três fases, avisos, comportas
+│   │   ├── trial.js               provas de classe: uma regra por classe, aliados com vida (aprendiz, peregrina)
 │   │   ├── rules.js               regras puras: atributos, estatísticas, dano, acerto, crítico, XP
 │   │   ├── equipment.js           validação de nível/classe/atributos/espaço/empunhadura
 │   │   ├── store.js               SQLite: contas, personagens, instâncias de item, saques, missões
@@ -92,6 +93,7 @@ mmo/
 │   │   ├── nav.test.js            caminhos, desvios, destinos inalcançáveis, aceleração e mapas reais
 │   │   ├── skills.test.js         as 40 habilidades numa zona real
 │   │   ├── m2.test.js             aceitação do Marco 2 (grupo de 5, prova de classe, missões)
+│   │   ├── provas.test.js         as oito provas de classe (kit inicial e faixa 5), habilidade emprestada, aliados
 │   │   ├── m3.test.js             aceitação do Marco 3 (refino, depósito, elite diária, Custódio com bots)
 │   │   ├── ch4.test.js            capítulo 4: canalização, escolta, escolha de diálogo
 │   │   ├── snapshots.test.js · store.test.js   snapshots por diferença · migrações
@@ -105,6 +107,7 @@ mmo/
 │       ├── validate-data.js       validador (também usado nos testes)
 │       ├── gen-docs.js            gera docs/03 e docs/04 a partir dos dados
 │       ├── gen-scenery.js         gera estradas, peças e casas de cada mapa (semente fixa)
+│       ├── provas.mjs             bancada das provas de classe (npm run provas; piloto em lib/provas/)
 │       ├── partner.mjs            parceiro simulado para ver o calabouço no cliente
 │       ├── multizona.mjs          sobe o mundo + N zonas localmente (npm run multizona -- --zonas 2)
 │       └── create-character.js    cria contas/personagens de teste no banco
@@ -178,7 +181,7 @@ Todo pedido do cliente leva `rid` (texto único por pedido). A resposta é `{ t:
 | `chat` | text | canal da zona |
 | `char` | — | ficha atual |
 | `talk`, `interact`, `buy`, `quests`, `quest_accept`, `quest_turnin` | npc / object / item | NPCs, objetos de missão, loja e diário |
-| `trial_start` | npc | prova de classe (instância solo) |
+| `trial_start` | npc | prova de classe (instância solo): devolve `kind` e `title`; a regra da classe roda em `trial.js` |
 | `party_invite`, `party_accept`, `party_decline`, `party_leave`, `party_kick` | name / from | grupos de até 5 |
 | `enhance_quote`, `enhance` | npc (ferreiro), instance | custo, chance e prévia; refino com RNG semeado (falha mantém o grau e gasta ouro e materiais) |
 | `storage_list`, `storage_put`, `storage_take` | npc (guarda-volumes), instance | depósito compartilhado pela conta |
@@ -189,6 +192,8 @@ Todo pedido do cliente leva `rid` (texto único por pedido). A resposta é `{ t:
 Com várias zonas, o `enter` de um personagem cujo mapa é de outra zona responde `{ ok, transfer: { url, token, mapId } }`, e um portal para um mapa de outra zona manda o evento `transfer` com os mesmos campos (seção [Múltiplas zonas](#múltiplas-zonas)).
 
 Eventos do servidor: `hello`, `defs`, `snap` (10 Hz: `now` = relógio da zona em ms; por entidade id, tipo, posição, velocidade `vx`/`vz`, vida, alvo), `hit` (origem, destino, dano, crítico, errou, habilidade), `death`, `spawn`, `loot` (só para o dono), `xp`, `level_up`, `char`, `buff`, `ground`, `cast`, `player_dead`, `respawn`, `joined`, `left`, `chat`, `kicked`, `cast` (habilidade usada, para os efeitos), `shield`, `quest_update`, `party`, `trial`, `boss` (fase, vida, proteção, válvula, comportas) e `warn` (aviso de perigo: círculo ou linha, duração).
+
+Prova de classe (`server/src/trial.js`, D167–D168): `trial` chega com `state` `started` (classe, `kind`, `title`, `objective`, `hint`, `skill` emprestada, `ms`, `marks` — filas, fossos, posto de tiro, marcos e sinos para o chão — e a ficha com a habilidade emprestada, `trialSkill`), `status` a cada 0,5 s ou quando algo muda (`text` e `sub` do progresso, `frac`/`bar` da barra, `left`, `alert` — investida, jato, emboscada —, estados das marcas e, na Cantora, `allies` e o `jet` pendente) e `success`/`failed` (`message`, ficha). Nos snapshots, aprendizes e peregrina vêm como entidades `k: 'a'` (`def` = modelo, `n`, vida, `dead`, `sh` do escudo), alvos das habilidades de aliado pelo `ally` do `cast`; peças paradas são monstros com `model` nas definições e `fx` de estado (`armor` no pilar blindado, `idle` no sino apagado); golpe recusado chega como `hit` com `dmg` 0 e `note` (`blindado`, `apagado`, `fora do posto`). Uma instância pode nascer com áreas bloqueadas próprias (os fossos do Lanceiro: `createZone(..., mapOverride)`).
 
 ## Movimento no cliente
 

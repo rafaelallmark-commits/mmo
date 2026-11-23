@@ -84,7 +84,7 @@ Da mais baixa para a mais alta. Uma camada de cima bloqueia o clique nas de baix
 | Andar | clique esquerdo no chão |
 | Atacar / selecionar | clique no monstro |
 | Falar, usar objeto, atravessar portal | clique no NPC, objeto ou anel do portal |
-| Selecionar aliado (curas) e abrir as ações (Trocar, Duelar, Grupo, Clã, Sussurrar) | clique em outro jogador |
+| Selecionar aliado (curas) e abrir as ações (Trocar, Duelar, Grupo, Clã, Sussurrar) | clique em outro jogador; na prova de classe, clique no aprendiz ou na peregrina para escolhê-lo como alvo das curas, escudos e do Juramento |
 | Atacar o oponente num duelo | clique nele (fora de duelo, jogador não é alvo) |
 | Câmera | botão direito arrastando ou Q/E gira; roda aproxima |
 | Atalhos | 1–6 habilidades (a 6ª é a do nível 25; a barra mostra a recarga; depois de cada habilidade há 1 s de recarga global), 7–8 tônicos (o mais forte do seu nível) |
@@ -96,7 +96,7 @@ Da mais baixa para a mais alta. Uma camada de cima bloqueia o clique nas de baix
 ## 7.5 Direção gráfica: 3D estilizado com traço de anime
 
 - **Sombreamento em faixas** (cel shading): luz e sombra em degraus nítidos, com a sombra puxando para um tom frio arroxeado em vez de preto.
-- **Contorno** escuro e fino em personagens, monstros, NPCs e objetos (técnica de "casca invertida").
+- **Contorno** escuro e fino em personagens, monstros, NPCs e objetos (técnica de "casca invertida"); o seu personagem tem o contorno na cor da classe, um pouco mais grosso, para achar a si mesmo no meio de uma briga.
 - **Luz de borda** clara no lado oposto à câmera, para destacar silhuetas vistas de cima.
 - **Proporções levemente estilizadas**: cabeça maior, olhos grandes e marcados, cabelo em volume colorido por classe; monstros com formas simples e olhos expressivos.
 - **Cores**: saturadas, mas dentro da paleta de ferrugem e nácar (céu do amanhecer de violeta para pêssego, chão ocre, verde-oliva); vermelho reservado para perigo e requisitos não atendidos.
@@ -130,6 +130,17 @@ Da mais baixa para a mais alta. Uma camada de cima bloqueia o clique nas de baix
 | | |
 |---|---|
 | ![Prova de classe](img/21_prova.png) | ![Canais da Eclusa](img/22_canais.png) |
+
+### Prova de classe na tela
+
+- Ao entrar na Arena da Prova, um **painel no alto da tela** (abaixo do quadro do alvo) mostra o nome da prova e o tempo que falta, o objetivo, o progresso ("Pilares rompidos: 1/3", "Aprendiz Brás: 260/340", "Alvos derrubados: 9/16"...) com uma barra, o **aviso da vez** em laranja (investida em 3 s, jato de vapor no aprendiz marcado, emboscada no marco) e, nos primeiros 15 s, a dica da habilidade emprestada. Vitória, derrota ou queda fecham o painel.
+- A habilidade do nível 10 aparece na barra como **"emprestada"** enquanto a prova durar.
+- No chão: os **fossos** do Lanceiro (vala escura com beiradas de pedra), o **posto de tiro** do Vigia (área marcada), as **filas** de bonecos, os **marcos** da rota da peregrina, os **números dos sinos** da Andarilha (o da vez em âmbar, os feitos em verde) e a **linha de contenção** do Tecelão. As pedras do teto e os jatos de vapor vêm com o círculo de aviso que enche antes de cair.
+- Peças da prova com modelo próprio: pilar de pedra com placas rebitadas (as placas caem, com lascas, quando a Ruptura racha), boneco de palha num poste (cai de lado e volta a ficar de pé), alvo pintado sobre rodas, sino num poste que acende quando é a vez; aprendizes e peregrina como moradores com varinha ou cajado, nome e vida em verde.
+
+| | |
+|---|---|
+| ![Pilares Blindados](img/24_prova_pilares.png) | ![Fossos do Lanceiro](img/25_prova_fossos.png) |
 
 ## 7.8 Social: troca, clã e duelo
 

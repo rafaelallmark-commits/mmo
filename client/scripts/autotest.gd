@@ -611,37 +611,58 @@ func _trial_tick() -> void:
 		3:
 			if main.map_def().get("id", "") != "arena_prova" or main.world == null or main.world.me().is_empty():
 				return
+			# visão ampla da arena (de frente para o fundo) com as peças e as marcas da prova desta classe; o
+			# Lanceiro fica antes do primeiro fosso. O painel da prova sai da frente só nesta captura.
+			var zz := 12.5 if str(main.ch["classId"]) == "pikeman" else 16.0
+			Net.request("gm", {"cmd": "teleport", "x": 18.0, "z": zz})
+			main.world.cam_yaw = PI
+			main.world.cam_dist = 26.0
+			main.world.cam_pitch = 0.9
+			if main.hud.trial_panel:
+				main.hud.trial_panel.visible = false
+			wait = 2500
+		4:
+			_scene_shot("90_%s_arena" % str(main.ch["classId"]))
+			if main.hud.trial_panel:
+				main.hud.trial_panel.visible = true
 			main.world.cam_dist = 16.0
 			main.world.cam_pitch = 0.75
-			_scene_shot("90_arena_entrada")
-			wait = 2500
-		4, 5, 6, 7, 8, 9, 10, 11:
-			# ataca o monstro mais próximo e usa as habilidades disponíveis
+			wait = 1800
+		5, 6, 7, 8, 9, 10, 11:
+			# ataca o monstro (ou peça) mais próximo; sem monstro, escolhe um aliado da prova (aprendiz,
+			# peregrina) para as curas e escudos; usa as habilidades disponíveis, a emprestada inclusive
 			var best := ""
 			var bd := 1e9
+			var ally := ""
 			for eid in main.world.entities.keys():
 				var e: Dictionary = main.world.entities[eid]
-				if e["data"]["k"] == "m":
-					var d: float = e["node"].position.distance_to(main.world.my_pos())
-					if d < bd:
-						bd = d
-						best = eid
+				var d: float = e["node"].position.distance_to(main.world.my_pos())
+				if e["data"]["k"] == "m" and d < bd:
+					bd = d
+					best = eid
+				elif e["data"]["k"] == "a" and ally == "":
+					ally = eid
+			if ally != "":
+				main.world.ally_selected = ally
 			if best != "":
 				main.world.selected = best
-				if trial_step == 4 or main.world.entities[best]["data"].get("tgt", null) == null:
+				if trial_step == 5 or main.world.entities[best]["data"].get("tgt", null) == null:
 					Net.request("attack", {"target": best})
-				var sk: Array = main.class_skills()
-				var learned: Dictionary = main.ch.get("skills", {})
-				var usable := []
-				for sid in sk:
-					if int(learned.get(sid, 0)) > 0:
-						usable.append(sid)
-				if not usable.is_empty():
-					main.world.use_skill(usable[trial_casts % usable.size()])
-					trial_casts += 1
+			var sk: Array = main.class_skills()
+			var learned: Dictionary = main.ch.get("skills", {})
+			var usable := []
+			for sid in sk:
+				var tgt_kind: String = str(main.defs["skills"].get(sid, {}).get("target", "enemy"))
+				# sem monstro por perto, só as de aliado e as de área em volta (curas, escudos, reforços)
+				if int(learned.get(sid, 0)) > 0 and (best != "" or tgt_kind in ["ally", "self", "party_area"]):
+					usable.append(sid)
+			if not usable.is_empty() and (best != "" or ally != ""):
+				main.world.use_skill(usable[trial_casts % usable.size()])
+				trial_casts += 1
 			wait = 900
-			if trial_step in [6, 8, 10]:
-				get_tree().create_timer(0.25).timeout.connect(func(): _scene_shot("9%d_arena_combate" % trial_step))
+			if trial_step in [7, 9, 11]:
+				var tag := "9%d_%s_prova" % [trial_step, str(main.ch["classId"])]
+				get_tree().create_timer(0.25).timeout.connect(func(): _scene_shot(tag))
 		12:
 			say("prova vista no cliente: %d habilidades usadas, mapa %s" % [trial_casts, main.map_def().get("id", "")])
 			trial_done = true

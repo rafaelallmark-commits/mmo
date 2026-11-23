@@ -88,8 +88,15 @@ Fora da tabela vale o extremo (−6 ou menos: ×0,1; +5 ou mais: ×1,4).
 | Voz Soterrada | A Cava Primeira | 23 | normal | agressivo (8 m) | 441 | 37–39 | 68 | 367 | 312 |
 | Toupeira de Basalto | A Cava Primeira | 24 | normal | agressivo (8 m) | 459 | 39–41 | 71 | 409 | 348 |
 | Selador da Porta Funda | A Cava Primeira | 24 | elite | agressivo (10 m) | 1836 | 59–62 | 92 | 1636 | 1391 |
-| Construto de Prova | Arena da Prova | 10 | normal | agressivo (40 m) | 180 | 8–11 | 24 | 40 | 34 |
-| Sentinela de Prova | Arena da Prova | 10 | normal | agressivo (40 m) | 320 | 12–15 | 30 | 80 | 68 |
+| Construto de Prova | Arena da Prova | 10 | normal | agressivo (40 m) | 180 | 8–11 | 24 | 0 | 0 |
+| Sentinela de Prova | Arena da Prova | 10 | normal | agressivo (40 m) | 320 | 12–15 | 30 | 0 | 0 |
+| Pilar Blindado | Arena da Prova | 10 | normal | passivo | 220 | 0–0 | 30 | 0 | 0 |
+| Boneco de Treino | Arena da Prova | 10 | normal | passivo | 35 | 0–0 | 14 | 0 | 0 |
+| Alvo Móvel | Arena da Prova | 10 | normal | passivo | 40 | 0–0 | 16 | 0 | 0 |
+| Sino do Percurso | Arena da Prova | 10 | normal | passivo | 70 | 0–0 | 12 | 0 | 0 |
+| Atirador de Prova | Arena da Prova | 10 | normal | agressivo (40 m) | 150 | 12–15 | 18 | 0 | 0 |
+| Fagulha de Prova | Arena da Prova | 10 | normal | passivo | 40 | 0–0 | 6 | 0 | 0 |
+| Perseguidor de Prova | Arena da Prova | 10 | normal | agressivo (40 m) | 900 | 6–9 | 24 | 0 | 0 |
 | Trava da Comporta | A Última Eclusa (calabouço) | 20 | normal | passivo | 900 | 0–0 | 60 | 0 | 0 |
 
 ### Exemplo solo

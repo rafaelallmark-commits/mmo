@@ -173,19 +173,19 @@ Cada missão principal lista **NPC**, **objetivo**, **diálogo curto**, **recomp
 
 ### 3.3 Prova de Classe (nível 10)
 - **NPC**: mestre de classe.
-- **Objetivo**: vencer a prova individual da classe (instância solo de 3 minutos), que ensina a habilidade marcante:
-  - Quebraferro: romper 3 pilares blindados antes que o teto ceda (Ruptura).
-  - Bastião: manter 6 monstros longe de um aprendiz por 60 s (Reforço de Campo).
-  - Lanceiro: derrubar duas filas de bonecos em linha (Avanço do Fosso).
-  - Vigia: acertar alvos móveis marcados a distância (Chuva de Espinhos).
-  - Escudeiro: proteger um peregrino durante uma travessia (Juramento).
-  - Andarilha: atravessar um percurso batendo e recuando (Vento a Favor).
-  - Cantora: manter três aprendizes vivos sob dano contínuo (Selo do Véu).
-  - Tecelão: conter três ondas com áreas e controle (Círculo de Fuligem).
+- **Objetivo**: vencer a prova individual da classe (instância solo na Arena da Prova, até 3 minutos), que ensina a habilidade marcante — ela fica **emprestada no grau 1** enquanto a prova durar:
+  - Quebraferro — **Pilares Blindados** (90 s): romper os 3 pilares antes que o teto ceda. Só a Ruptura racha a blindagem, e de vez; a mana do nível 10 dá para duas, então o cone precisa pegar dois pilares. Pedras caem do teto onde ele está, com aviso no chão.
+  - Bastião — **O Aprendiz no Centro** (60 s): manter os 6 construtos longe do aprendiz. Eles miram no aprendiz e esquecem o Bastião se pararem de apanhar (Pulso de Atração prende três); numa investida avisada, largam tudo e batem mais forte no aprendiz — hora do Reforço de Campo.
+  - Lanceiro — **Duas Filas de Bonecos** (120 s): derrubar as duas filas, cada uma do outro lado de um fosso que atravessa a arena. Só o Avanço do Fosso cruza; a fila só conta com todos os bonecos no chão ao mesmo tempo (caído levanta em 8 s, quem fica 5 s sem apanhar volta inteiro).
+  - Vigia — **Alvos em Movimento** (90 s): do posto de tiro, derrubar 16 dos 32 alvos que correm em trilhos do outro lado da arena; a Chuva de Espinhos, mirada à frente da fila, é o que dá conta das filas.
+  - Escudeiro — **A Travessia da Peregrina** (150 s): levar a peregrina viva até o portão. Ela só anda com o Escudeiro perto, para quando há monstro em cima dela e sofre emboscadas em três marcos; os atiradores só miram nela. Juramento: 30% do dano dela vai para o Escudeiro.
+  - Andarilha — **Percurso do Vento** (100 s): derrubar os 4 sinos do percurso, em ordem (só o aceso aceita golpes), batendo e recuando de perseguidores que aceleram a cada sino; com o Vento a Favor ela corre mais que eles.
+  - Cantora — **Vigília dos Aprendizes** (70 s): manter três aprendizes vivos sob fuligem contínua; os jatos de vapor avisados são mais fortes que a vida deles e só o Selo do Véu segura.
+  - Tecelão — **Três Ondas de Fagulhas** (150 s): conter três ondas de fagulhas que correm para a saída, sem deixar 3 passarem pela linha de contenção; o Círculo de Fuligem prende quem estiver a 5 m.
 - **Diálogo** (Dama Aurélia): "Escudo não é para você. É para quem está atrás de você. Mostre que entendeu."
 - **Recompensa**: 1.800 XP, habilidade de nível 10 no grau 1, teto de graus passa a 4, título "Provado(a)".
 - **Pré-requisitos**: nível 10; 3.2.
-- **Conclusão**: objetivo da instância concluído (a instância é recriada se a conexão cair; a recompensa só é concedida uma vez).
+- **Conclusão**: objetivo da instância concluído (a instância é recriada se a conexão cair; a recompensa só é concedida uma vez). Implementado em `server/src/trial.js`, com os números de cada prova em `data/maps.json` (`arena_prova.trial`) e a ficha de cada uma em `03-classes.md`: cair, perder o aprendiz ou a peregrina, deixar o tempo acabar ou desconectar devolve ao mestre sem a habilidade; vencer a libera de vez no grau 1. As peças da arena não dão XP nem saque.
 
 ### 3.4 A Ordem de Desligamento
 - **NPC**: Mara (Arquivo).

@@ -188,12 +188,18 @@ func _build_map(map: Dictionary) -> void:
 			add_child(ol2)
 			object_nodes[o["id"]] = {"pos": op, "data": o, "node": gate, "static": true}
 			continue
-		var crate := Art.part(self, Art.box(Vector3(0.7, 0.7, 0.7)), Art.toon(Color("#9fd3d1"), true, Color(0.15, 0.35, 0.35)), op + Vector3(0, 0.35, 0), Vector3.ONE, Vector3(0, 30, 0))
-		crate.set_meta("bob", true)
+		# objeto de missão com modelo próprio (art.gd quest_object: pelo kind ou pelo prefixo do id), parado no
+		# chão; um losango pequeno flutua em cima para dizer que dá para usar
+		var obj: Node3D = Art.quest_object(o)
+		obj.position = op
+		obj.rotation.y = float(hash(o["id"]) % 360) * PI / 180.0 * 0.25
+		add_child(obj)
+		var top := 2.4 if o.get("kind", "") in ["board", "escort"] or str(o["id"]).begins_with("rescue_") else 1.9
+		var gem := Art.part(self, Art.sphere(0.13, 4), Art.toon(Color("#9fd3d1"), true, Color(0.2, 0.45, 0.45)), op + Vector3(0, top, 0), Vector3(1.0, 1.6, 1.0))
 		var ol := _label(o["name"], 30, Color("#bfeeee"))
-		ol.position = op + Vector3(0, 1.3, 0)
+		ol.position = op + Vector3(0, top + 0.5, 0)
 		add_child(ol)
-		object_nodes[o["id"]] = {"pos": op, "data": o, "node": crate}
+		object_nodes[o["id"]] = {"pos": op, "data": o, "node": obj, "static": true, "gem": gem, "gem_y": top}
 	for pt in map.get("portals", []):
 		var pp := _gpos(float(pt["x"]), float(pt["z"]))
 		var ring2 := Art.cyl(float(pt["radius"]), float(pt["radius"]), 0.06, 48)
@@ -276,13 +282,23 @@ func apply_snapshot(snap: Dictionary) -> void:
 				name = "«%s»\n%s" % [str(d["ttl"]), name]
 		elif d["k"] == "e":
 			name = str(d.get("n", "Carroça"))
+		elif d["k"] == "a":
+			name = str(d.get("n", "Aprendiz"))
 		else:
 			name = "%s  nv %d" % [main.defs["monsters"].get(d["def"], {}).get("name", d["def"]), int(d["lvl"])]
 		var frac := clampf(float(d["hp"]) / maxf(1.0, float(d["mhp"])), 0.0, 1.0)
 		e["label"].text = "%s\n%d / %d" % [name, int(d["hp"]), int(d["mhp"])]
-		e["label"].visible = main.settings.get("show_names", true) or eid == selected
+		# peça parada da prova (pilar, boneco, alvo, sino): só a vida no rótulo (o nome está no quadro do alvo)
+		if d["k"] == "m" and main.defs["monsters"].get(d["def"], {}).has("model") and main.defs["monsters"][d["def"]]["model"] in ["pillar", "dummy", "target", "bell"]:
+			e["label"].text = "%d / %d" % [int(d["hp"]), int(d["mhp"])]
+		if d["k"] == "a" and int(d.get("sh", 0)) > 0:
+			e["label"].text += "  (+%d)" % int(d["sh"])
+		e["label"].visible = main.settings.get("show_names", true) or eid == selected or d["k"] == "a"
 		if d["k"] == "m":
 			e["label"].modulate = Color("#ffcf9a").lerp(Color("#ff4a3a"), 1.0 - frac)
+			_trial_piece_state(e, d)
+		elif d["k"] == "a":
+			e["label"].modulate = Color("#a8f0b0").lerp(Color("#ff6a4a"), 1.0 - frac)
 		if _is_me(eid):
 			_reconcile(pos, d)
 			if d.get("tgt") != null and not d.get("dead", false):
@@ -329,16 +345,22 @@ func _spawn_entity(d: Dictionary) -> Dictionary:
 	var root: Node3D
 	if d["k"] == "p":
 		root = Art.character(d.get("cls", ""), _weapon_family(d.get("w")), false, Color("#c9b07a"), 0, _weapon_family(d.get("oh")) if d.has("oh") else "?")
+		# o próprio personagem com o contorno na cor da classe (os outros seguem com o escuro)
+		if _is_me(d["id"]) and Art.CLASS_OUTLINE.has(d.get("cls", "")):
+			Art.tint_outline(root, Art.CLASS_OUTLINE[d["cls"]])
 	elif d["k"] == "e":
 		root = Art.cart()
+	elif d["k"] == "a":
+		# aliado da prova de classe (aprendiz, peregrina)
+		root = Art.trial_ally(str(d.get("def", "apprentice")), hash(str(d.get("n", "")) + str(d["id"])))
 	else:
 		var md: Dictionary = main.defs["monsters"].get(d["def"], {}).duplicate()
 		md["id"] = d["def"]
 		root = Art.monster(md)
-	root.scale = Vector3.ONE * (1.3 if d["k"] == "p" else (1.0 if d["k"] == "e" else 1.15))
+	root.scale = Vector3.ONE * (1.3 if d["k"] in ["p", "a"] else (1.0 if d["k"] == "e" else 1.15))
 	add_child(root)
-	var label := _label("", 34, Color("#f2ead8") if d["k"] == "p" else (Color("#9fe3ff") if d["k"] == "e" else Color("#ffcf9a")))
-	label.position.y = 2.1 if d["k"] == "p" else (2.5 if d["k"] == "e" else 1.8)
+	var label := _label("", 34, Color("#f2ead8") if d["k"] == "p" else (Color("#9fe3ff") if d["k"] == "e" else (Color("#a8f0b0") if d["k"] == "a" else Color("#ffcf9a"))))
+	label.position.y = 2.1 if d["k"] in ["p", "a"] else (2.5 if d["k"] == "e" else (3.6 if root.has_meta("armor") else 1.8))
 	root.add_child(label)
 	var x := float(d["x"])
 	var z := float(d["z"])
@@ -355,8 +377,8 @@ func _spawn_entity(d: Dictionary) -> Dictionary:
 ## Como a entidade soa: passos (arquivo, tom, volume) e voz ao apanhar/cair (tom pelo tamanho e família).
 ## Espíritos flutuam (sem passos); máquinas pisam pesado e rangem metal; bichos pequenos têm patas leves.
 func _sound_profile(d: Dictionary) -> Dictionary:
-	if d["k"] == "p":
-		return {"fam": "player", "step": _step_surface, "step_pitch": 1.0, "step_db": 0.0, "voice": 1.0}
+	if d["k"] == "p" or d["k"] == "a":
+		return {"fam": "player", "step": _step_surface, "step_pitch": 1.0, "step_db": 0.0 if d["k"] == "p" else -4.0, "voice": 1.0}
 	if d["k"] != "m":
 		# outras entidades do servidor (objetos que andam ou apanham): sem passos nem voz
 		return {"fam": "object", "step": "", "step_pitch": 1.0, "step_db": 0.0, "voice": 1.0}
@@ -539,6 +561,10 @@ func _process(delta: float) -> void:
 		gem.rotation.y += delta * 1.5
 		gem.position.y = sin(_t * 2.2 + float(hash(l["data"]["id"]) % 100)) * 0.08
 	for o in object_nodes.values():
+		var gem = o.get("gem", null)
+		if gem != null:
+			gem.position.y = (o["pos"] as Vector3).y + float(o["gem_y"]) + sin(_t * 2.2 + (o["pos"] as Vector3).x) * 0.08
+			gem.rotation.y += delta * 1.2
 		if o.get("static", false):
 			continue
 		var on: Node3D = o["node"]
@@ -697,6 +723,13 @@ func _click(screen_pos: Vector2) -> void:
 				pending_pickup = ""
 				request_move(pos.x + 0.8, pos.z + 0.8)
 				return
+	# aliado da prova de classe (aprendiz, peregrina): vira o alvo das habilidades de aliado (cura, escudo, Juramento)
+	for eid in entities.keys():
+		var ae: Dictionary = entities[eid]
+		if ae["data"]["k"] == "a" and not ae["data"].get("dead", false) and _flat_dist(ae["node"].position, gp) < 1.2:
+			ally_selected = eid
+			main.hud.system("Aliado selecionado: %s (curas e escudos vão para ele)" % str(ae["data"].get("n", "")))
+			return
 	for eid in entities.keys():
 		var pe: Dictionary = entities[eid]
 		if pe["data"]["k"] == "p" and eid != main.ch.get("eid", "") and _flat_dist(pe["node"].position, gp) < 1.2:
@@ -797,6 +830,16 @@ func on_hit(m: Dictionary) -> void:
 	var dst: Dictionary = entities.get(m["dst"], {})
 	if dst.is_empty():
 		return
+	# golpe recusado pela peça da prova (blindado, apagado, fora do posto) ou escudo que segurou tudo
+	var note := str(m.get("note", "")) if m.get("note", null) != null else ""
+	if note != "":
+		_float_text(dst["node"].position, note, Color("#b8c8d8"), 36)
+		if note == "blindado":
+			Sfx.play("hit_blunt", dst["node"].position, -2.0, 1.5)
+		var nsrc: Dictionary = entities.get(m.get("src", ""), {})
+		if not nsrc.is_empty() and m.get("skill", null) == null and nsrc["node"].has_method("play_attack"):
+			nsrc["node"].play_attack()
+		return
 	# golpe que o escudo segurou chega como "errou" com block: mostra o bloqueio, não um erro
 	var blocked: bool = m.get("block", false)
 	var text := "Bloqueio" if blocked else ("errou" if m.get("miss", false) else str(int(m["dmg"])))
@@ -841,7 +884,7 @@ func _hit_voice(m: Dictionary, dst: Dictionary) -> void:
 	var at: Vector3 = dst["node"].position
 	if m["dst"] == my_eid:
 		Sfx.play("player_hurt", null, 2.0 if crit else 0.0)
-	elif dst["data"]["k"] == "p":
+	elif dst["data"]["k"] == "p" or dst["data"]["k"] == "a":
 		Sfx.play("player_hurt", at, -4.0)
 	elif dst["snd"]["fam"] != "object" and (crit or randf() < 0.55):
 		var snd: Dictionary = dst["snd"]
@@ -964,6 +1007,117 @@ func _boss_audio(m: Dictionary) -> void:
 				Sfx.warn("gate")
 			_gate_prog[g["id"]] = p
 
+
+# ---------------- prova de classe ----------------
+var trial_mark_nodes := {} # id -> { node, data, ring }
+
+## Estado das peças paradas da prova pelo snapshot: o pilar mostra a blindagem enquanto tiver 'armor' (e
+## solta lascas quando a Ruptura racha); o sino só acende quando é o da vez (sem 'idle').
+func _trial_piece_state(e: Dictionary, d: Dictionary) -> void:
+	var n: Node3D = e["node"]
+	var fx: Array = d["fx"] if d.get("fx", null) is Array else []
+	if n.has_meta("armor"):
+		var armored := fx.has("armor")
+		var armor: Node3D = n.get_meta("armor")
+		if armor.visible and not armored and e.get("armor_seen", false):
+			vfx._sparks(n.position + Vector3(0, 2.2, 0), Color(1.0, 0.62, 0.22), 30, 4.5, 1.5, 0.7)
+			Sfx.play("hit_blunt", n.position, 3.0, 0.55)
+		armor.visible = armored
+		(n.get_meta("cracks") as Node3D).visible = not armored
+		e["armor_seen"] = true
+	if n.has_meta("glow"):
+		(n.get_meta("glow") as Node3D).visible = not fx.has("idle")
+
+## Marcas da prova ('trial' started): filas (linha no chão), fossos (vala), posto de tiro (área), marcos da
+## rota e números dos sinos (anel). 'status' marca a ativa e as concluídas (update_trial_marks).
+func trial_marks(marks: Array) -> void:
+	for t in trial_mark_nodes.values():
+		t["node"].queue_free()
+	trial_mark_nodes.clear()
+	for mk in marks:
+		var node := Node3D.new()
+		add_child(node)
+		var kind: String = str(mk.get("kind", "goal"))
+		var x0 := float(mk.get("x", 0.0))
+		var z0 := float(mk.get("z", 0.0))
+		var x1 := float(mk.get("x2", x0))
+		var z1 := float(mk.get("z2", z0))
+		var center := _gpos((x0 + x1) / 2.0, (z0 + z1) / 2.0)
+		var ring: MeshInstance3D = null
+		var label_y := 1.6
+		match kind:
+			"ditch":
+				# vala: fundo escuro rente ao chão, beiradas de pedra e pedras soltas no fundo
+				var sx := absf(x1 - x0)
+				var sz := absf(z1 - z0)
+				var floor_mi := Art.part(node, Art.box(Vector3(sx, 0.05, sz)), Art.toon(Color("#17110d"), false), center + Vector3(0, 0.02, 0))
+				floor_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				for edge in [minf(z0, z1), maxf(z0, z1)]:
+					Art.part(node, Art.box(Vector3(sx, 0.28, 0.32)), Art.toon(Color("#6d5e4e")), _gpos(center.x, edge) + Vector3(0, 0.14, 0))
+				var rng := RandomNumberGenerator.new()
+				rng.seed = hash(str(mk.get("id", "")))
+				for i in int(sx / 1.6):
+					Art.part(node, Art.sphere(rng.randf_range(0.12, 0.26), 6), Art.toon(Color("#3a3028")), _gpos(minf(x0, x1) + 0.8 + i * 1.6, center.z + rng.randf_range(-sz * 0.3, sz * 0.3)) + Vector3(0, 0.05, 0), Vector3(1.2, 0.6, 1.0))
+				label_y = 1.0
+			"zone":
+				# área (posto de tiro): borda clara no chão e um véu fino
+				var sx2 := absf(x1 - x0)
+				var sz2 := absf(z1 - z0)
+				var fill := StandardMaterial3D.new()
+				fill.albedo_color = Color(0.6, 0.9, 1.0, 0.1)
+				fill.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+				fill.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+				var fm := Art.part(node, Art.box(Vector3(sx2, 0.02, sz2)), fill, center + Vector3(0, 0.04, 0))
+				fm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				var edge_mat := Art.toon(Color("#9fe3ff"), false, Color(0.3, 0.6, 0.7))
+				for e2 in [[Vector3(sx2, 0.05, 0.12), Vector3(0, 0, -sz2 / 2.0)], [Vector3(sx2, 0.05, 0.12), Vector3(0, 0, sz2 / 2.0)], [Vector3(0.12, 0.05, sz2), Vector3(-sx2 / 2.0, 0, 0)], [Vector3(0.12, 0.05, sz2), Vector3(sx2 / 2.0, 0, 0)]]:
+					Art.part(node, Art.box(e2[0]), edge_mat, center + e2[1] + Vector3(0, 0.05, 0))
+				center = _gpos((x0 + x1) / 2.0, maxf(z0, z1) - 1.0)
+				label_y = 0.8
+			"line":
+				# fila ou linha de contenção: faixa clara no chão de ponta a ponta
+				var a := Vector2(x0, z0)
+				var b := Vector2(x1, z1)
+				var len := a.distance_to(b)
+				var strip := Art.part(node, Art.box(Vector3(0.22, 0.04, len + 1.0)), Art.toon(Color("#ffcf7a"), false, Color(0.5, 0.35, 0.1)), center + Vector3(0, 0.03, 0))
+				strip.rotation.y = atan2(b.x - a.x, b.y - a.y)
+				strip.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				ring = strip
+				label_y = 0.9
+			_:
+				# marco (rota da peregrina) ou número do sino: anel no chão
+				var r := float(mk.get("r", 1.2))
+				var t := TorusMesh.new()
+				t.inner_radius = r - 0.12
+				t.outer_radius = r
+				t.rings = 40
+				t.ring_segments = 4
+				ring = Art.part(node, t, Art.toon(Color("#f2ead8"), false, Color(0.3, 0.3, 0.3)), center + Vector3(0, 0.06, 0), Vector3(1, 0.3, 1))
+				ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				label_y = 3.3 if str(mk.get("id", "")).begins_with("bell") else 1.4
+		var text := str(mk.get("label", ""))
+		if text != "":
+			var l := _label(text, 40 if text.length() <= 2 else 34, Color("#ffe39a"))
+			l.position = center + Vector3(0, label_y, 0)
+			node.add_child(l)
+		trial_mark_nodes[str(mk.get("id", ""))] = {"node": node, "data": mk, "ring": ring}
+	update_trial_marks(marks)
+
+## Marca a vez (ativa: âmbar) e o que já foi feito (verde apagado).
+func update_trial_marks(states: Array) -> void:
+	for st in states:
+		var t: Dictionary = trial_mark_nodes.get(str(st.get("id", "")), {})
+		if t.is_empty() or t["ring"] == null:
+			continue
+		var col := Color("#f2ead8")
+		var glow := Color(0.3, 0.3, 0.3)
+		if st.get("done", false):
+			col = Color("#7fbf6a")
+			glow = Color(0.1, 0.25, 0.05)
+		elif st.get("active", false):
+			col = Color("#ffb347")
+			glow = Color(0.9, 0.5, 0.1)
+		(t["ring"] as MeshInstance3D).material_override = Art.toon(col, false, glow)
 
 # ---------------- opções gráficas ----------------
 var sun_light: DirectionalLight3D

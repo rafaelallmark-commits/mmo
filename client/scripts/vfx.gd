@@ -535,7 +535,14 @@ func on_warn(m: Dictionary) -> void:
 	Sfx.warn(kind)
 	if kind == "valve":
 		Sfx.play("steam_vent", at)
+	# prova de classe: pedra que cai do teto (Quebraferro) e jato de vapor no aprendiz (Cantora)
+	var end_sound := "" if kind == "valve" else "spell_impact"
+	if kind == "rock":
+		end_sound = "hit_blunt"
+	elif kind == "steam":
+		c = Color(0.85, 0.95, 1.0)
+		end_sound = "steam_vent"
 	if m.get("shape", "circle") == "line":
 		warn_line(at, float(m.get("yaw", 0.0)), float(m.get("length", 10.0)), float(m.get("width", 2.0)), float(m.get("ms", 1500)), c)
 	else:
-		warn_circle(at, float(m.get("radius", 3.0)), float(m.get("ms", 1500)), c, "" if kind == "valve" else "spell_impact")
+		warn_circle(at, float(m.get("radius", 3.0)), float(m.get("ms", 1500)), c, end_sound)

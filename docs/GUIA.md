@@ -34,6 +34,15 @@ Cada classe tem seis habilidades: as dos níveis 1 e 5, a do nível 10 (liberada
 mestre da sua classe, na sua cidade), as dos níveis 15 e 20 e a do nível 25, o teto de nível. A Cantora do Véu ganha
 a **Nota Clara** (dano sagrado à distância) no nível 5 e a **Luz Compartilhada** (cura do grupo) no nível 15.
 
+A **prova de classe** (missão 3.3, no nível 10, com o mestre da sua classe) é diferente para cada classe e ensina
+a habilidade do nível 10, que fica **emprestada** durante a prova (até 3 minutos, sozinho na Arena da Prova): o
+Quebraferro racha pilares blindados com a Ruptura antes que o teto ceda; o Bastião segura seis construtos longe de
+um aprendiz; o Lanceiro salta os fossos com o Avanço do Fosso para derrubar duas filas de bonecos; o Vigia, do posto
+de tiro, derruba alvos que correm em trilhos; o Escudeiro leva uma peregrina viva até o portão; a Andarilha derruba
+quatro sinos em ordem fugindo de perseguidores; a Cantora mantém três aprendizes vivos sob fuligem e jatos de vapor;
+o Tecelão contém três ondas de fagulhas. O painel no alto da tela diz o objetivo, o tempo e o aviso da vez. Perdeu?
+Fale de novo com o mestre e tente outra vez; vencer libera a habilidade de vez.
+
 O **escudo** (Bastião e Escudeiro) tem chance de **bloqueio** contra golpes de monstro, de 8% a 21% conforme a peça
 (a dica do escudo mostra a chance): o golpe bloqueado não causa dano e aparece como "Bloqueio".
 
@@ -43,7 +52,8 @@ O **escudo** (Bastião e Escudeiro) tem chance de **bloqueio** contra golpes de 
 |---|---|
 | Andar | clique no chão |
 | Atacar | clique no monstro (o personagem vai até ele e ataca sozinho) |
-| Falar com NPC, usar objeto, atravessar portal, coletar saque | clique neles |
+| Falar com NPC, usar objeto, atravessar portal, coletar saque | clique neles (o losango que flutua em cima marca os objetos de missão) |
+| Escolher aliado para curas e escudos | clique no outro jogador (ou, na prova de classe, no aprendiz ou na peregrina) |
 | Habilidades | **1–6** (a barra mostra a recarga; depois de cada habilidade há 1 s de recarga global) |
 | Tônicos | **7** vida, **8** mana (o mais forte que você pode usar) |
 | Câmera | **Q/E** ou botão direito arrastando giram; a roda aproxima |

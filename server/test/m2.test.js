@@ -220,25 +220,47 @@ test('M2 — prova de classe com queda de conexão no meio concede a habilidade 
     let inArena = A.waitFor((m) => m.t === 'zone' && m.mapId === 'arena_prova', 5000);
     assert.equal((await A.request('trial_start', { npc: 'master_breaker' })).ok, true);
     await inArena;
-    log('prova iniciada em instância solo; a conexão cai no meio da primeira onda');
+    log('prova iniciada em instância solo (pilares blindados); a conexão cai no meio dela');
     await A.close();
     await sleep(200);
     A = await relog(url, 'prova2');
     assert.equal(A.char.mapId, 'pedrambar', 'volta para a cidade do mestre');
     assert.equal(A.char.trialDone, false);
     assert.equal(A.char.skills.rupture, undefined);
-    // 2ª tentativa: vence as duas ondas
+    // 2ª tentativa: os pilares blindados (server/src/trial.js) — Ruptura de frente para dois (o cone racha os
+    // dois), golpes nos rachados e a segunda Ruptura no terceiro, com a mana que voltar
     await goTo(A, 14, 16);
     inArena = A.waitFor((m) => m.t === 'zone' && m.mapId === 'arena_prova', 5000);
+    const started = A.waitFor((m) => m.t === 'trial' && m.state === 'started', 5000, 'início da prova');
     assert.equal((await A.request('trial_start', { npc: 'master_breaker' })).ok, true);
     await inArena;
+    const ini = await started;
+    assert.equal(ini.kind, 'pillars');
+    assert.equal(ini.char.skills.rupture, 1, 'a Ruptura fica emprestada durante a prova');
     const result = A.waitFor((m) => m.t === 'trial' && (m.state === 'success' || m.state === 'failed'), 120000, 'fim da prova');
     let finished = false;
     result.then(() => { finished = true; });
+    const pilares = () => A.snap?.ents.filter((e) => e.k === 'm' && e.def === 'trial_pillar') ?? [];
+    while (pilares().length < 3) await sleep(50);
+    const [p1, p2] = pilares().sort((a, b) => a.x - b.x);
+    const meio = { x: (p1.x + p2.x) / 2, z: (p1.z + p2.z) / 2 };
+    let nx = p2.z - p1.z, nz = -(p2.x - p1.x);
+    const nl = Math.hypot(nx, nz); nx /= nl; nz /= nl;
+    if (nz > 0) { nx = -nx; nz = -nz; } // do lado da entrada
+    await goTo(A, meio.x + nx * 2.3, meio.z + nz * 2.3);
+    const r1 = await A.request('cast', { skill: 'rupture', x: meio.x, z: meio.z });
+    assert.equal(r1.ok, true, r1.reason);
+    await A.waitFor((m) => m.t === 'snap' && pilares().filter((q) => !q.fx?.includes('armor')).length === 2, 3000, 'dois pilares rachados');
+    log('uma Ruptura de frente para o par rachou dois pilares de uma vez');
     while (!finished) {
-      const target = A.snap?.ents.find((e) => e.k === 'm');
-      if (!target) { await sleep(100); continue; }
-      await Promise.race([kill(A, target.id, 'deep_cut').catch(() => {}), result]);
+      const ps = pilares();
+      const rachado = ps.find((q) => !q.fx?.includes('armor'));
+      if (rachado) { await Promise.race([kill(A, rachado.id).catch(() => {}), result]); continue; }
+      const c = ps[0];
+      if (!c) { await sleep(100); continue; }
+      if (Math.hypot(A.me().x - c.x, A.me().z - (c.z - 2.2)) > 1) await goTo(A, c.x, c.z - 2.2).catch(() => {});
+      const r = await A.request('cast', { skill: 'rupture', target: c.id });
+      if (!r.ok) await sleep(400); // esperando a mana da segunda Ruptura
     }
     const end = await result;
     assert.equal(end.state, 'success', end.message);
