@@ -145,13 +145,16 @@ test('Tutorial: Caio cai se ninguém chama a atenção dos bichos, Ligia passa u
     // sem tônico na bolsa, Ligia passa um; bebido perto dela, ela levanta
     A.char = (await A.request('char')).char;
     const pots = A.char.items.filter((i) => i.loc === 'bag' && i.defId === 'potion_hp_s');
+    // parado a menos de 7 m dela: o tônico pode chegar logo depois do último descarte, no mesmo pacote da
+    // resposta; a espera vem antes e só aceita um tônico que não é um dos descartados
+    const discarded = new Set(pots.map((i) => i.id));
+    const gift = A.waitFor((m) => m.t === 'char' && m.char.items.some((i) => i.defId === 'potion_hp_s' && !discarded.has(i.id)), 20000, 'tônico de Ligia');
     for (const p of pots) assert.equal((await A.request('discard', { instance: p.id })).ok, true);
-    const gift = A.waitFor((m) => m.t === 'char' && m.char.items.some((i) => i.defId === 'potion_hp_s'), 20000, 'tônico de Ligia');
     const ligia = follower(A, 'Ligia');
     await goTo(A, ligia.x + 2, ligia.z - 1);
     const given = await gift;
     assert.ok(A.events.some((m) => m.t === 'say' && m.name === 'Ligia' && /bolso/.test(m.text)));
-    const pot = given.char.items.find((i) => i.defId === 'potion_hp_s');
+    const pot = given.char.items.find((i) => i.defId === 'potion_hp_s' && !discarded.has(i.id));
     assert.equal(pot.qty, 1);
     assert.equal((await A.request('use_item', { instance: pot.id })).ok, true);
     await waitObjective(A, 3);
