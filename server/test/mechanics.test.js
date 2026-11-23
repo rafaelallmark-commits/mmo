@@ -67,7 +67,7 @@ test('Supervisor de Turno: chama dois Ratos-Engrenagem a cada 30% de vida perdid
     assert.equal(a.state, 'chase'); assert.equal(a.targetId, p.eid, 'vão direto em quem briga com o supervisor');
     assert.ok(a.temp && a.noLoot);
   }
-  assert.ok(sent.some((m) => m.t === 'system' && m._to === p.char.id && /Chamado de Turno/.test(m.text)), 'quem briga é avisado');
+  assert.ok(sent.some((m) => m.t === 'system' && m._to === p.char.id && m.text === 'Supervisor de Turno: Chamado de Turno! Chegaram 2 Ratos-Engrenagem.'), `quem briga é avisado, no plural certo: ${JSON.stringify(sent.filter((m) => m.t === 'system').map((m) => m.text))}`);
   assert.ok(sent.some((m) => m.t === 'mech' && m.kind === 'summon' && m.eid === sup.eid && m.adds.length === 2));
   // um golpe só cruza os 40% e os 10%: mais quatro, no teto de seis vivos
   zone.damageMonster(sup, p.char.id, Math.round(hp * 0.62));
@@ -362,6 +362,51 @@ test('Javali de Cinza: investe em linha contra quem está a 4–12 m, logo ao en
   const antes = zone.hazards.length;
   zone.tick(100);
   assert.equal(zone.hazards.length, antes, 'perto demais para investir');
+});
+
+test('monstro enraizado durante o aviso não corre a investida: fica no lugar e só pega quem está colado', () => {
+  const { zone, mk, spawn, engage, run, warnOf, hitsOf, sent } = setup('estrada_velha');
+  const s = spec('ash_boar');
+  const javali = spawn('ash_boar', 134, 58);
+  const p = mk('breaker', 142, 58, 5);
+  engage(javali, p);
+  zone.tick(100);
+  assert.ok(warnOf(javali), 'avisada');
+  // Círculo de Fuligem (enraíza) no meio do aviso
+  zone.addMonsterFx(javali, { kind: 'root', until: zone.now + 4000, by: p.char.id });
+  const x0 = javali.x, z0 = javali.z;
+  run(s.warnMs + 100, () => { p.char.hp = p.stats.maxHp; });
+  assert.ok(Math.hypot(javali.x - x0, javali.z - z0) < 0.01, `enraizado não corre (andou até ${javali.x.toFixed(2)})`);
+  assert.equal(hitsOf(javali, s.id).length, 0, 'quem estava a 8 m não foi atropelado');
+  assert.ok(!sent.some((m) => m.t === 'mech' && m.kind === 'dash' && m.eid === javali.eid && Math.hypot(m.x1 - m.x0, m.z1 - m.z0) > 0.3), 'nenhuma corrida desenhada');
+});
+
+test('Lâmina de Esteira passeia e volta para casa pelos trilhos (um eixo de cada vez), não na diagonal', () => {
+  const { zone, mk, spawn, engage } = setup('oficina_soterrada');
+  const lamina = spawn('belt_blade', 124, 140);
+  // quanto ela anda na diagonal: em cada passo, o deslocamento no eixo menor contra o do eixo maior (só a
+  // esquina de um trilho para o outro, dentro de um passo, sai dos eixos; no passeio livre, ~40%)
+  const diagonal = (ticks) => {
+    let menor = 0, maior = 0, px = lamina.x, pz = lamina.z;
+    for (let i = 0; i < ticks; i++) {
+      zone.tick(100);
+      const dx = Math.abs(lamina.x - px), dz = Math.abs(lamina.z - pz);
+      menor += Math.min(dx, dz); maior += Math.max(dx, dz);
+      px = lamina.x; pz = lamina.z;
+    }
+    return { andou: maior, fatia: menor / Math.max(maior, 1e-9) };
+  };
+  const passeio = diagonal(1500);
+  assert.ok(passeio.andou > 5, `passeou (${passeio.andou.toFixed(1)} m)`);
+  assert.ok(passeio.fatia < 0.05, `passeio nos eixos (${(passeio.fatia * 100).toFixed(1)}% na diagonal)`);
+  // volta para casa (desistiu da luta) também pelos eixos
+  const p = mk('breaker', 130, 146, 12);
+  engage(lamina, p);
+  lamina.x = 132; lamina.z = 147;
+  zone.removePlayer(p.char.id, false);
+  const volta = diagonal(150);
+  assert.equal(lamina.state, 'idle', 'chegou em casa');
+  assert.ok(volta.andou > 5 && volta.fatia < 0.05, `volta nos eixos (${volta.andou.toFixed(1)} m, ${(volta.fatia * 100).toFixed(1)}% na diagonal)`);
 });
 
 test('Morcego de Eco: o grito avisado desorienta (−25% de acerto e de velocidade, na interface) e a Alvorada tira', () => {

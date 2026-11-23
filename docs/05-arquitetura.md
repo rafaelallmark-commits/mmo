@@ -184,7 +184,7 @@ mmo/
 │       ├── social.gd              troca, painel do clã, convites, aviso de duelo, ações sobre outro jogador
 │       ├── item_text.gd           descrição de itens com requisitos em vermelho e comparação
 │       ├── ui_theme.gd            paleta
-│       └── autotest.gd            modos --autotest (headless; --transfer cruza para outra zona), --navshots, --sceneshots
+│       └── autotest.gd            modos --autotest (headless; --transfer cruza para outra zona; com --dev, luta de verdade contra a investida de um Javali), --navshots, --sceneshots
 │                                  e --contastest (telas de conta: código, termos novos, baixar meus dados)
 └── docs/                          este conjunto de documentos
 ```
@@ -297,7 +297,7 @@ O teste de aceitação envia o mesmo pedido de coleta 4 vezes (2 simultâneos, 2
 ## Testes automatizados
 
 - `npm test` roda unitários (regras, equipamento, dados) e o **teste de aceitação do Marco 1** (servidor real em porta aleatória + banco temporário + dois clientes WebSocket simulados). O teste acelera o relógio do jogo (4×) e, só na fase de "caçar até o nível 5", liga uma taxa de XP de evento (15×) pelo próprio objeto do servidor, para caber em ~25 s; regras e fórmulas são as mesmas.
-- O cliente Godot tem o modo `--autotest`, usado em headless para importar o projeto, conectar, criar personagem, entrar, andar, atacar e coletar. O CI roda esse autotest a cada push contra um servidor de verdade (`node src/main.js --dev`), e a release, que chama o mesmo CI, também (08-operacao.md §8.8).
+- O cliente Godot tem o modo `--autotest`, usado em headless para importar o projeto, conectar, criar personagem, entrar, andar, atacar e coletar. Contra um servidor `--dev`, também enfrenta de verdade uma mecânica de monstro: perto dos Javalis de Cinza, recebe a investida avisada, confere o aviso desenhado, sai de lado e confere que o javali passou direto sem acertá-lo (sem comandos de mestre, essa parte fica de fora). O CI roda esse autotest a cada push contra um servidor de verdade (`node src/main.js --dev`), e a release, que chama o mesmo CI, também (08-operacao.md §8.8).
 
 ---
 

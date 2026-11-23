@@ -24,6 +24,8 @@ const TARGET_CIRCLE_RANGE = 14;
 
 const r2 = (v) => Math.round(v * 100) / 100;
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+// plural do nome de um monstro: só a primeira palavra (Rato-Engrenagem → Ratos-Engrenagem, Ecoante → Ecoantes)
+export const pluralName = (name) => name.replace(/^([^\s-]+)/, (w) => (/[aeiou]$/i.test(w) ? `${w}s` : `${w}es`));
 // ângulo no chão com a convenção das linhas do Custódio e do cliente: direção (sin yaw, cos yaw) = (dx, dz)
 export const yawOf = (dx, dz) => Math.atan2(dx, dz);
 
@@ -233,7 +235,8 @@ export function afterMonsterDamaged(zone, m) {
     st.marks++;
     const adds = spawnAdds(zone, m, mech);
     if (adds.length) {
-      const text = `${m.def.name}: ${mech.name}! ${adds.length === 1 ? 'Chegou um' : `Chegaram ${adds.length}`} ${zone.data.monsters[mech.monster].name}${adds.length === 1 ? '' : 's'}.`;
+      const nm = zone.data.monsters[mech.monster].name;
+      const text = `${m.def.name}: ${mech.name}! ${adds.length === 1 ? `Chegou um ${nm}` : `Chegaram ${adds.length} ${pluralName(nm)}`}.`;
       for (const charId of m.threat.keys()) zone.send(charId, { t: 'system', text });
     }
   }
@@ -289,6 +292,17 @@ export function railGoal(zone, m, goal) {
   return zone.nav.isFree(g.x, g.z) ? g : goal;
 }
 
+// Caminho fora de combate (passeio, volta para casa): o monstro de trilho vai num eixo e depois no outro,
+// pela esquina, quando os dois trechos estão livres; os demais (e o trilho sem esquina livre) usam o A*.
+export function idlePath(zone, m, tx, tz) {
+  if (m.def.mechanic?.rails) {
+    const c = Math.abs(tx - m.x) >= Math.abs(tz - m.z) ? { x: tx, z: m.z } : { x: m.x, z: tz };
+    const nav = zone.nav;
+    if (nav.isFree(c.x, c.z) && nav.lineOfSight(m.x, m.z, c.x, c.z) && nav.lineOfSight(c.x, c.z, tx, tz)) return [c, { x: tx, z: tz }];
+  }
+  return zone.nav.findPath(m.x, m.z, tx, tz);
+}
+
 // Áreas avisadas que venceram neste passo. Golpe de monstro que saiu da luta sem passar por killMonster (a
 // emboscada desfeita da escolta, a câmara do chefe que recomeça) não sai: a marcação some ({ t: 'warn_cancel' }).
 export function tickHazards(zone) {
@@ -331,11 +345,12 @@ function resolveHazard(zone, h) {
 }
 
 // Investida: o monstro corre pela linha avisada até o fim (ou até um obstáculo) e acerta quem está no caminho.
+// Enraizado (Círculo de Fuligem) não corre: fica no lugar e só pega quem está colado na frente dele.
 function dashAlong(zone, m, h) {
   const ux = Math.sin(h.yaw), uz = Math.cos(h.yaw);
   const step = 0.25;
   let t = 0;
-  while (t + step <= h.length) {
+  while (!zone.monsterFx(m, 'root') && t + step <= h.length) {
     const nx = h.x + ux * (t + step), nz = h.z + uz * (t + step);
     if (!zone.inBounds(nx, nz) || zone.isBlocked(nx, nz) || !zone.nav.isFree(nx, nz)) break;
     t += step;

@@ -356,36 +356,113 @@ func warn_mat(c: Color, alpha: float) -> StandardMaterial3D:
 	_mats[key] = m
 	return m
 
-## Traço fino no chão de a até b (bordas de linha e de cone).
-func _warn_stroke(a: Vector3, b: Vector3, c: Color, alpha: float, parent: Node3D, w := 0.09) -> MeshInstance3D:
-	var d := a.distance_to(b)
-	var mi := _mesh(Gear.box(Vector3(w, 0.03, maxf(d, 0.01))), warn_mat(c, alpha), a.lerp(b, 0.5), parent)
-	mi.rotation.y = atan2(b.x - a.x, b.z - a.z)
-	return mi
+## As marcações acompanham o relevo: cada vértice fica WARN_LIFT acima do chão naquele ponto (a borda,
+## um pouco mais). Um plano na altura do centro deixava enterrada parte da borda no lado mais alto — até
+## um quarto dela nos círculos de 5 m dos canais.
+const WARN_LIFT := 0.1
+
+## Altura do chão sob um ponto da marcação (coordenadas locais da raiz), mais a folga.
+func _ground_local(root: Node3D, lx: float, lz: float, lift: float) -> float:
+	return world.ground_y(root.position.x + lx, root.position.z + lz) - root.position.y + lift
+
+## Malha sobre o relevo a partir de uma grade de pontos locais no chão (lista de linhas de Vector2 x, z):
+## cada quadrado da grade vira dois triângulos, com a altura do chão em cada vértice. Não gire a malha
+## depois: as alturas já são as do lugar onde ela fica.
+func _drape(root: Node3D, grid: Array, lift: float) -> ArrayMesh:
+	var rows := []
+	for line_pts in grid:
+		var row := []
+		for q in line_pts:
+			row.append(Vector3(q.x, _ground_local(root, q.x, q.y, lift), q.y))
+		rows.append(row)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for i in rows.size() - 1:
+		var a: Array = rows[i]
+		var b: Array = rows[i + 1]
+		for j in a.size() - 1:
+			for v in [a[j], a[j + 1], b[j + 1], a[j], b[j + 1], b[j]]:
+				st.add_vertex(v)
+	return st.commit()
+
+## Grade polar de um disco ou de uma coroa (raio r0 a r1), do ângulo a0 ao a1 (no chão, direção (sin, cos),
+## a mesma do yaw dos avisos).
+func _polar(r0: float, r1: float, rings: int, a0: float, a1: float, segs: int) -> Array:
+	var grid := []
+	for i in rings + 1:
+		var r := lerpf(r0, r1, float(i) / rings)
+		var line_pts := []
+		for j in segs + 1:
+			var a := lerpf(a0, a1, float(j) / segs)
+			line_pts.append(Vector2(sin(a), cos(a)) * r)
+		grid.append(line_pts)
+	return grid
+
+## Grade de uma faixa reta de p a q com a largura dada (bordas de linha e de cone).
+func _strip(p: Vector2, q: Vector2, width: float, steps: int) -> Array:
+	var d := q - p
+	var side := Vector2(d.y, -d.x).normalized() * (width / 2.0)
+	var grid := []
+	for i in steps + 1:
+		var c := p.lerp(q, float(i) / steps)
+		grid.append([c - side, c + side])
+	return grid
+
+## Preenchimento do círculo que enche do centro para fora (reach, em metros), sobre o relevo: o disco
+## inteiro já está lá; o shader só desenha até reach.
+const WARN_FILL_SHADER := """
+shader_type spatial;
+render_mode unshaded, cull_disabled, blend_mix, depth_draw_never, shadows_disabled;
+uniform vec4 tint : source_color = vec4(1.0, 0.25, 0.15, 0.32);
+uniform float reach = 0.0;
+uniform float fade = 1.0;
+varying vec2 flat_pos;
+void vertex() {
+	flat_pos = VERTEX.xz;
+}
+void fragment() {
+	if (length(flat_pos) > reach) {
+		discard;
+	}
+	ALBEDO = tint.rgb;
+	ALPHA = tint.a * fade;
+}
+"""
+var _fill_shader: Shader
+
+func _fill_mat(c: Color, alpha: float) -> ShaderMaterial:
+	if _fill_shader == null:
+		_fill_shader = Shader.new()
+		_fill_shader.code = WARN_FILL_SHADER
+	var m := ShaderMaterial.new()
+	m.shader = _fill_shader
+	m.render_priority = 2
+	m.set_shader_parameter("tint", Color(c.r, c.g, c.b, alpha))
+	# os tweens partem do valor guardado no material: os dois começam definidos
+	m.set_shader_parameter("reach", 0.0)
+	m.set_shader_parameter("fade", 1.0)
+	return m
 
 ## Marcação de perigo no chão (chefe ou monstro avisa antes de atacar): a área inteira fica marcada de
 ## leve, com a borda forte, e o vermelho enche do centro para fora até o golpe.
 ## end_sound: o som quando o círculo se completa; end_fx: o efeito do golpe (ver _warn_end).
 func warn_circle(at: Vector3, radius: float, ms: float, c := COLORS["danger"], end_sound := "spell_impact", end_fx := "") -> Node3D:
 	var root := _warn_root(at)
-	var edge := TorusMesh.new()
-	edge.inner_radius = 0.95
-	edge.outer_radius = 1.0
-	edge.rings = 56
-	edge.ring_segments = 4
-	var e := _mesh(edge, warn_mat(c, 0.9), Vector3(0, 0.13, 0), root)
-	e.scale = Vector3(radius, 0.04 * radius, radius)
-	var base := _mesh(Gear.cyl(1.0, 1.0, 0.02, 48), warn_mat(c, 0.12), Vector3(0, 0.1, 0), root)
-	base.scale = Vector3(radius, 1, radius)
-	var fill := _mesh(Gear.cyl(1.0, 1.0, 0.02, 48), warn_mat(c, 0.32), Vector3(0, 0.11, 0), root)
-	fill.scale = Vector3(0.05, 1, 0.05)
+	var segs := clampi(int(radius * 10.0), 24, 64)
+	var area := _drape(root, _polar(0.0, radius, clampi(int(radius), 2, 8), 0.0, TAU, segs), WARN_LIFT)
+	var base := _mesh(area, warn_mat(c, 0.12), Vector3.ZERO, root)
+	var bw := clampf(radius * 0.05, 0.12, 0.3)
+	var e := _mesh(_drape(root, _polar(radius - bw, radius, 1, 0.0, TAU, segs), WARN_LIFT + 0.03), warn_mat(c, 0.9), Vector3.ZERO, root)
+	var fill_mat := _fill_mat(c, 0.32)
+	fill_mat.set_shader_parameter("reach", radius * 0.05)
+	_mesh(area, fill_mat, Vector3(0, 0.01, 0), root)
 	var tw := root.create_tween()
-	tw.tween_property(fill, "scale", Vector3(radius, 1, radius), ms / 1000.0)
+	tw.tween_property(fill_mat, "shader_parameter/reach", radius, ms / 1000.0)
 	tw.tween_callback(func():
 		_warn_end(end_fx, at, radius, c)
 		if end_sound != "":
 			Sfx.play(end_sound, at, 1.0, 0.85))
-	tw.tween_property(fill.material_override, "albedo_color:a", 0.0, 0.2)
+	tw.tween_property(fill_mat, "shader_parameter/fade", 0.0, 0.2)
 	tw.parallel().tween_property(base.material_override, "albedo_color:a", 0.0, 0.2)
 	tw.parallel().tween_property(e.material_override, "albedo_color:a", 0.0, 0.2)
 	tw.tween_callback(root.queue_free)
@@ -395,19 +472,22 @@ func warn_circle(at: Vector3, radius: float, ms: float, c := COLORS["danger"], e
 ## cada vez mais vermelha até o golpe.
 func warn_line(at: Vector3, yaw: float, length: float, width: float, ms: float, c := COLORS["danger"]) -> Node3D:
 	var root := _warn_root(at)
-	var fwd := Vector3(sin(yaw), 0, cos(yaw))
-	var side := Vector3(cos(yaw), 0, -sin(yaw)) * (width / 2.0)
-	var mi := _mesh(Gear.box(Vector3(width, 0.03, length)), warn_mat(c, 0.16), fwd * (length / 2.0) + Vector3(0, 0.1, 0), root)
-	mi.rotation.y = yaw
-	var y := Vector3(0, 0.13, 0)
+	var fwd := Vector2(sin(yaw), cos(yaw))
+	var side := Vector2(cos(yaw), -sin(yaw)) * (width / 2.0)
+	var steps := clampi(int(ceil(length)), 2, 48)
+	var grid := []
+	for i in steps + 1:
+		var mid := fwd * (length * i / steps)
+		grid.append([mid - side, mid, mid + side])
+	var mi := _mesh(_drape(root, grid, WARN_LIFT), warn_mat(c, 0.16), Vector3.ZERO, root)
 	for s in [side, -side]:
-		_warn_stroke(s + y, s + fwd * length + y, c, 0.9, root)
-	_warn_stroke(side + fwd * length + y, -side + fwd * length + y, c, 0.9, root)
+		_mesh(_drape(root, _strip(s, s + fwd * length, 0.12, steps), WARN_LIFT + 0.03), warn_mat(c, 0.9), Vector3.ZERO, root)
+	_mesh(_drape(root, _strip(side + fwd * length, -side + fwd * length, 0.12, 2), WARN_LIFT + 0.03), warn_mat(c, 0.9), Vector3.ZERO, root)
 	var tw := root.create_tween()
 	tw.tween_property(mi.material_override, "albedo_color:a", 0.5, ms / 1000.0)
 	tw.tween_callback(func():
 		line(at, yaw, length, width, c)
-		Sfx.play("spell_fire", at + fwd * (length / 2.0), -1.0, 1.25))
+		Sfx.play("spell_fire", at + Vector3(fwd.x, 0, fwd.y) * (length / 2.0), -1.0, 1.25))
 	tw.tween_property(mi.material_override, "albedo_color:a", 0.0, 0.15)
 	tw.tween_callback(root.queue_free)
 	return root
@@ -417,25 +497,13 @@ func warn_line(at: Vector3, yaw: float, length: float, width: float, ms: float, 
 func warn_cone(at: Vector3, yaw: float, reach: float, angle_deg: float, ms: float, c := COLORS["danger"], end_fx := "") -> Node3D:
 	var root := _warn_root(at)
 	var half := deg_to_rad(angle_deg) / 2.0
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var n := 24
-	for i in n:
-		var a0 := -half + (2.0 * half) * i / n
-		var a1 := -half + (2.0 * half) * (i + 1) / n
-		st.add_vertex(Vector3.ZERO)
-		st.add_vertex(Vector3(sin(a0), 0, cos(a0)) * reach)
-		st.add_vertex(Vector3(sin(a1), 0, cos(a1)) * reach)
-	var fan := _mesh(st.commit(), warn_mat(c, 0.14), Vector3(0, 0.1, 0), root)
-	fan.rotation.y = yaw
+	var segs := clampi(int(angle_deg / 4.0), 8, 45)
+	var rings := clampi(int(reach), 2, 8)
+	var fan := _mesh(_drape(root, _polar(0.0, reach, rings, yaw - half, yaw + half, segs), WARN_LIFT), warn_mat(c, 0.14), Vector3.ZERO, root)
 	# bordas do leque: as duas retas e o arco (só o arco do cone, não o círculo inteiro)
-	var y := Vector3(0, 0.13, 0)
-	for a in [-half, half]:
-		_warn_stroke(y, Vector3(sin(yaw + a), 0, cos(yaw + a)) * reach + y, c, 0.9, root)
-	for i in n:
-		var b0 := yaw - half + (2.0 * half) * i / n
-		var b1 := yaw - half + (2.0 * half) * (i + 1) / n
-		_warn_stroke(Vector3(sin(b0), 0, cos(b0)) * reach + y, Vector3(sin(b1), 0, cos(b1)) * reach + y, c, 0.9, root)
+	for a in [yaw - half, yaw + half]:
+		_mesh(_drape(root, _strip(Vector2.ZERO, Vector2(sin(a), cos(a)) * reach, 0.12, rings), WARN_LIFT + 0.03), warn_mat(c, 0.9), Vector3.ZERO, root)
+	_mesh(_drape(root, _polar(reach - 0.12, reach, 1, yaw - half, yaw + half, segs), WARN_LIFT + 0.03), warn_mat(c, 0.9), Vector3.ZERO, root)
 	var tw := root.create_tween()
 	tw.tween_property(fan.material_override, "albedo_color:a", 0.5, ms / 1000.0)
 	tw.tween_callback(func():
