@@ -51,6 +51,7 @@ var real_hit := false
 var real_dash := false
 var real_until := 0
 var real_shot_at := 0
+var real_spot := Vector2(111.0, 50.0)  # de onde parte: na estrada segura, na altura dos javalis (_boar_spot)
 # --transfer (várias zonas)
 var tr_url := ""
 var tr_from := ""
@@ -329,16 +330,18 @@ func _process(_d: float) -> void:
 			say("mecânicas dos monstros: avisos em círculo, cone e linha (e um cancelado), explosão, puxão, drenagem de mana, eco, investida, reforços e pressão desenhados; Desorientado na interface e tirado pela Alvorada; a velocidade do Atolado chegou à previsão do movimento e voltou")
 			step = "mech_real"
 		"mech_real":
-			# luta de verdade (servidor --dev): a uns 25 m dos Javalis de Cinza, bem fora do raio em que eles
-			# percebem alguém (8 m), para o aviso não chegar antes de o cliente desenhar o personagem no lugar
-			# novo; sem comandos de mestre (servidor de produção), fica de fora
+			# luta de verdade (servidor --dev): na estrada segura, a uns 25 m dos Javalis de Cinza (o ponto vem
+			# dos dados do mapa: a estrada e o bando podem mudar de lugar), bem fora do raio em que eles percebem
+			# alguém (8 m), para o aviso não chegar antes de o cliente desenhar o personagem no lugar novo; sem
+			# comandos de mestre (servidor de produção), fica de fora
 			step = "real_wait"
-			Net.request("gm", {"cmd": "teleport", "x": 111.0, "z": 50.0}, func(r):
+			real_spot = _boar_spot()
+			Net.request("gm", {"cmd": "teleport", "x": real_spot.x, "z": real_spot.y}, func(r):
 				if not r.get("ok", false):
 					say("sem comandos de mestre neste servidor: a luta de verdade contra uma mecânica ficou de fora (%s)" % r.get("reason", ""))
 					step = "done"
 					return
-				real_until = Time.get_ticks_msec() + 20000
+				real_until = Time.get_ticks_msec() + 30000
 				wait_until = Time.get_ticks_msec() + 600
 				step = "real_approach")
 		"real_approach":
@@ -352,9 +355,9 @@ func _process(_d: float) -> void:
 				step = "real_check"
 				return
 			if Time.get_ticks_msec() > real_until:
-				fail("nenhum Javali de Cinza avisou a investida em 20 s")
+				fail("nenhum Javali de Cinza avisou a investida em 30 s (partindo de (%.0f, %.0f))" % [real_spot.x, real_spot.y])
 				return
-			if Time.get_ticks_msec() < wait_until or Vector2(main.world.my_pos().x - 111.0, main.world.my_pos().z - 50.0).length() > 12.0:
+			if Time.get_ticks_msec() < wait_until or Vector2(main.world.my_pos().x - real_spot.x, main.world.my_pos().z - real_spot.y).length() > 12.0:
 				return
 			# anda até 6 m do javali mais perto: a 8 m ele percebe e avisa a investida (4 a 12 m)
 			var mp: Vector3 = main.world.auth_pos()
@@ -368,7 +371,7 @@ func _process(_d: float) -> void:
 						bd = d
 						boar = eid
 			if boar == "":
-				fail("nenhum Javali de Cinza visível perto de (111, 50)")
+				fail("nenhum Javali de Cinza visível perto de (%.0f, %.0f)" % [real_spot.x, real_spot.y])
 				return
 			var bp: Vector3 = main.world.entities[boar]["node"].position
 			var dir := Vector2(bp.x - mp.x, bp.z - mp.z)
@@ -722,6 +725,23 @@ func _process(_d: float) -> void:
 				say("OK")
 				get_tree().quit(0)
 				step = "quitting"
+
+## Ponto de partida da luta de verdade: na estrada segura (safeCorridor do mapa), na altura do bando de Javalis
+## de Cinza dos dados, do lado de onde eles estão; nenhum monstro agressivo alcança a estrada (validate-data).
+func _boar_spot() -> Vector2:
+	var m: Dictionary = main.defs["maps"].get("estrada_velha", {})
+	var boar: Dictionary = {}
+	for sp in m.get("spawns", []):
+		if str(sp.get("monster", "")) == "ash_boar":
+			boar = sp
+	if boar.is_empty():
+		return Vector2(111.0, 50.0)
+	var bx := float(boar["x"])
+	var bz := float(boar["z"])
+	for r in m.get("safeCorridor", {}).get("rects", []):
+		if bx >= float(r["x0"]) and bx <= float(r["x1"]):
+			return Vector2(bx, float(r["z1"]) - 1.0 if bz > float(r["z1"]) else float(r["z0"]) + 1.0)
+	return Vector2(bx, bz - 25.0)
 
 ## Eventos da luta de verdade contra o Javali: o primeiro aviso de investida faz o personagem sair de lado
 ## na hora (3,5 m para o lado em que já está; se o servidor recusar, para o outro); golpes e a corrida dele
