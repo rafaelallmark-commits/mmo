@@ -995,7 +995,9 @@ func on_say(m: Dictionary) -> void:
 	var b := _label(str(m.get("text", "")), 30, Color("#fff4d6"))
 	b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	b.width = 520.0
-	b.position = Vector3(0, 2.75, 0)
+	# cresce para cima a partir de logo acima do nome (centrado, um balão de três linhas cobria o nome e a vida)
+	b.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+	b.position = Vector3(0, 2.95, 0)
 	node.add_child(b)
 	e["bubble"] = b
 	var tw := b.create_tween()

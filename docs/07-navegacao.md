@@ -57,7 +57,7 @@ Da mais baixa para a mais alta. Uma camada de cima bloqueia o clique nas de baix
 | Camada | O que é | Abre / fecha |
 |---|---|---|
 | 1. Mundo 3D | câmera elevada, personagens, monstros, NPCs, portais | clique: andar, atacar, falar, coletar |
-| 2. HUD fixo | vida/mana/XP com os efeitos negativos e o tempo que falta, barra de atalhos (1–8), alvo (com a descrição do monstro), rastreador de missões, painel de grupo, chat; durante o tutorial, a dica do passo atual acima da barra de atalhos | sempre visível |
+| 2. HUD fixo | vida/mana/XP com os efeitos negativos e o tempo que falta, barra de atalhos (1–8), alvo (com a descrição do monstro), rastreador de missões, painel de grupo, chat; durante o tutorial, a dica do passo atual acima da barra de atalhos (sai da frente enquanto a bolsa, a ficha, o diário, o mapa ou o diálogo de um NPC estão abertos) | sempre visível |
 | 3. Painéis | Inventário (**I**), Ficha (**C**), Missões (**J**), Clã (**L**), Mapa (**M**, com o Mapa da Estrada Velha na bolsa) — podem ficar abertos juntos | tecla ou **Esc** |
 | 4. Diálogos | NPC (missões, loja, prova de classe, ferreiro), quadro de missões das praças, convites (grupo, troca, clã, duelo), janela de troca, ações sobre outro jogador | clique no NPC, no quadro ou no jogador / **Esc** (fechar a troca a cancela) |
 | 5. Menu de pausa | Continuar, Opções, Reportar um problema (abre o chat com `/bug `), Trocar de personagem, Sair para o título, Sair do jogo | **Esc** sem nada aberto |
@@ -107,7 +107,7 @@ Da mais baixa para a mais alta. Uma camada de cima bloqueia o clique nas de baix
 | Câmera | botão direito arrastando ou Q/E gira; roda aproxima |
 | Atalhos | 1–6 habilidades (a 6ª é a do nível 25; a barra mostra a recarga; depois de cada habilidade há 1 s de recarga global), 7–8 tônicos (o mais forte do seu nível) |
 | Conjuração | habilidades com tempo de conjuração mostram a barra "Conjurando…": fique parado; andar, atacar ou usar item interrompe sem gastar mana |
-| Vender e descartar | bolsa (**I**), botão direito no item: **Vender** (com loja, ferreiro ou armeiro aberto; metade do valor) ou **Descartar…** (pede confirmação) |
+| Vender e descartar | bolsa (**I**), botão direito no item: **Vender** (com loja, ferreiro ou armeiro aberto; metade do valor) ou **Descartar…** (pede confirmação); item de missão (o Mapa da Estrada Velha e os materiais de coleta das secundárias) não tem essas opções |
 | Painéis | I inventário, C ficha, J missões, L clã, M mapa (com o Mapa da Estrada Velha), Enter chat, Esc fechar painel, tirar a seleção do alvo ou abrir o menu (nessa ordem) |
 | Chat | `/g` grupo · `/s Nome` sussurro · `/c` clã · `/convidar Nome` · `/troca Nome` · `/duelo Nome` · `/cla criar Nome SIGLA` · `/cla convidar Nome` · `/cla sair` · `/denunciar Nome motivo` · `/bug texto` (nome antigo com espaço entre aspas: `/s "Ana Maria" oi`) |
 

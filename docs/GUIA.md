@@ -208,7 +208,7 @@ próximos animados), **Sombras**, **Tela cheia** e limite de **quadros por segun
   um grau, a menos que você use um **Selo de Proteção** (só é gasto quando segura uma falha). O Pó de Refino se
   compra com ele ou se ganha nas missões dos ferreiros, que aceitam a Brasa Cristalizada e a Sucata de Condutor
   que sobram da caça.
-- **Vender e descartar**: na bolsa (**I**), botão direito no item. Qualquer comerciante compra pela metade do valor.
+- **Vender e descartar**: na bolsa (**I**), botão direito no item. Qualquer comerciante compra pela metade do valor. Itens de missão não se vendem nem se descartam: o Mapa da Estrada Velha fica sempre com você, e os materiais das secundárias saem na entrega.
 - **Depósito**: guarda-volumes compartilhado entre os personagens da sua conta.
 - Caiu? Volte ao posto de guarda do mapa. Se sair do jogo no meio de uma instância, você volta à porta dela.
 
