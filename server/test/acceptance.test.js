@@ -60,7 +60,9 @@ const findItem = (c, defId, loc) => c.char.items.find((i) => i.defId === defId &
 async function kill(c, eid, skill) {
   let done = false;
   const dead = c.waitFor((m) => m.t === 'death' && m.eid === eid, 60000, `morte de ${eid}`).then(() => { done = true; });
-  assert.equal((await c.request('attack', { target: eid })).ok, true);
+  const a = await c.request('attack', { target: eid });
+  // o outro jogador derrubou primeiro (ou o monstro já voltou para casa): procura outro alvo
+  if (!a.ok) { dead.catch(() => {}); return false; }
   let nextCast = 0;
   while (!done) {
     await sleep(60);
@@ -78,6 +80,7 @@ async function kill(c, eid, skill) {
     }
   }
   await dead;
+  return true;
 }
 
 async function collectLoot(c, { onlyIds } = {}) {
@@ -144,7 +147,7 @@ test('Marco 1 — dois jogadores do início ao equipamento persistido', { timeou
       while (level < 2) {
         const rat = nearestMonster(c, ['furrow_rat']);
         const xp = c.waitFor((m) => m.t === 'xp', 60000);
-        await kill(c, rat.id, skill);
+        if (!(await kill(c, rat.id, skill))) { xp.catch(() => {}); await sleep(100); continue; }
         level = (await xp).level;
         log(`${c.label} ainda no nível 1: caçou um Rato de Sulco (nível ${level})`);
       }
@@ -200,7 +203,7 @@ test('Marco 1 — dois jogadores do início ao equipamento persistido', { timeou
         const other = c === A ? B : A;
         const target = nearestMonster(c, ['furrow_rat', 'ember_beetle'], new Set([other.me()?.tgt].filter(Boolean)));
         if (!target) { await sleep(200); continue; }
-        await kill(c, target.id, skill);
+        if (!(await kill(c, target.id, skill))) { await sleep(100); continue; }
         kills++;
         await collectLoot(c);
         const ch = await c.request('char');

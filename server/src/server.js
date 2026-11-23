@@ -2387,7 +2387,8 @@ export class GameServer {
         }
         return { ok: true, cache: false, after: () => this.moveToZone(p, msg.mapId, x, z) };
       }
-      c.x = x; c.z = z; p.dest = null;
+      // para de andar: sem limpar o caminho, o personagem seguia o trajeto antigo a partir do ponto novo
+      c.x = x; c.z = z; p.dest = null; p.path = null; c.chase = null; c.speed = 0; c.vx = 0; c.vz = 0;
       return { ok: true, char: p.zone.charView(p) };
     }
     if (msg.cmd === 'xp') {
