@@ -104,8 +104,9 @@ mmo/
 │   │   ├── moderacao.test.js      silêncio, denúncia, suspensão, ferramenta, anúncio
 │   │   ├── nivel25.test.js        pós-v1: teto 25, Cava Primeira, habilidades do 25 e o capítulo 6 inteiro
 │   │   ├── multizona.test.js      mundo + 2 zonas: transferência, tokens, posse única, grupo/clã, quedas
-│   │   ├── versao.test.js         versão da release (CINZAS_VERSION) no hello, no registro e no /bug
+│   │   ├── versao.test.js         versão da release (CINZAS_VERSION) no hello, no registro e no /bug; regra da tag
 │   │   ├── site.test.js           página do jogo sem rastreadores e as rotas do Caddyfile
+│   │   ├── conteiner.test.js      deploy/teste-conteiner.sh (com um docker de mentira): versão, root, limpeza
 │   │   └── helpers/client.js      cliente simulado (mesmo protocolo do Godot)
 │   └── tools/
 │       ├── validate-data.js       validador (também usado nos testes)

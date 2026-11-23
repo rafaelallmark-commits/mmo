@@ -39,6 +39,8 @@
 		# navegador baixar o arquivo em vez de mostrar)
 		header >Content-Type "text/plain; charset=utf-8"
 		header X-Content-Type-Options nosniff
+		# o guia muda a cada versão: o navegador confere (ETag) antes de reaproveitar a cópia que guardou
+		header Cache-Control no-cache
 		file_server
 	}
 
@@ -61,6 +63,10 @@
 			Content-Security-Policy "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 			X-Content-Type-Options nosniff
 			Referrer-Policy no-referrer
+			# Avisos: sem isto o navegador reaproveita a página guardada por até 10% da idade dela (Last-Modified)
+			# sem perguntar ao servidor, e quem voltou à página não via o aviso novo; com no-cache ele confere
+			# (ETag, resposta 304 quando nada mudou) a cada visita
+			Cache-Control no-cache
 		}
 		file_server
 	}

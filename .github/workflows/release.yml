@@ -1,6 +1,6 @@
 # Release de CINZAS DO MERIDIANO (docs/08-operacao.md §8.8). A cada tag v* (ex.: v0.4.0, v0.4.0-teste.1):
-#   versao    - a versão da tag inteira, sem o "v" (0.4.0-teste.2 continua 0.4.0-teste.2), conferida; vai para
-#               o cliente, para a imagem do servidor e para as notas (D150)
+#   versao    - a versão da tag inteira, sem o "v" (0.4.0-teste.2 continua 0.4.0-teste.2), conferida (vX.Y.Z com
+#               sufixo opcional); vai para o cliente, para a imagem do servidor e para as notas (D150)
 #   ci        - o CI inteiro (ci.yml chamado como workflow reutilizável, com a versão): dados e testes no SQLite
 #               e no PostgreSQL, importação do cliente e autotest contra um servidor de verdade, imagem com o
 #               teste rápido do contêiner
@@ -68,6 +68,15 @@ jobs:
           # tem só letras, números e . + _ - (até 64); o servidor recusaria subir com outra coisa
           if ! [[ "$versao" =~ ^[0-9A-Za-z][0-9A-Za-z.+_-]{0,63}$ ]]; then
             echo "::error title=Versão::a tag \"$GITHUB_REF_NAME\" não serve de versão (v + letras, números e . + _ -, ex.: v0.4.0-teste.2)"
+            exit 1
+          fi
+          # tag de release: também X.Y.Z com sufixo opcional (semver, sem "+"), que é o que o job imagem
+          # (docker/metadata-action, type=semver) transforma em etiqueta da imagem; com outra tag (v1.0,
+          # v0.4.0-teste_2) a imagem ficaria sem etiqueta e a release só falharia lá, depois do CI e da exportação
+          ident='(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)'
+          semver="^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-${ident}(\.${ident})*)?$"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]] && ! [[ "$versao" =~ $semver ]]; then
+            echo "::error title=Versão::a tag \"$GITHUB_REF_NAME\" não é vX.Y.Z com sufixo opcional (ex.: v0.4.0 ou v0.4.0-teste.2)"
             exit 1
           fi
           # parte numérica (X.Y.Z) para o Info.plist do macOS e o recurso de versão do .exe

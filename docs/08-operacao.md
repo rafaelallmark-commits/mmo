@@ -93,8 +93,8 @@ Fora de `server/`, na raiz do repositório:
 | Comando | O que faz | Tempo |
 |---|---|---|
 | `godot --headless --path client -- --autotest --server=ws://127.0.0.1:7777` | Autotest do cliente contra um servidor rodando (`npm run dev`): conecta, cria conta e personagem, entra, anda, derrota um Rato de Sulco e coleta o saque; termina com `[autotest] OK` e código 0 (qualquer falha: código 1). O CI roda o mesmo (critério 9 do Marco 1). | ~30 s |
-| `deploy/teste-conteiner.sh <imagem> [versão]` | Teste rápido de uma imagem do servidor (saúde, usuário, `hello` com a versão, backup, parada graciosa): o mesmo do CI e da release. | ~1 min |
-| `godot --headless --path client -- --licenses=LICENCAS-TERCEIROS.txt` | Grava o arquivo de créditos e licenças de terceiros que vai nos pacotes (o mesmo texto da tela *Créditos e licenças*). | segundos |
+| `deploy/teste-conteiner.sh <imagem> [versão]` | Teste rápido de uma imagem do servidor (saúde, usuário, `hello` com a versão, backup, parada graciosa): o mesmo do CI e da release. Com a pilha do compose no ar (ela já ocupa a 9100 no 127.0.0.1), `CINZAS_TESTE_PORTA=9101 deploy/teste-conteiner.sh …`. | ~1 min |
+| `godot --headless --path client -- --licenses="$PWD/LICENCAS-TERCEIROS.txt"` | Grava o arquivo de créditos e licenças de terceiros que vai nos pacotes (o mesmo texto da tela *Créditos e licenças*). Caminho absoluto: com `--path` o Godot passa a rodar dentro de `client/`, e um caminho relativo iria parar lá. | segundos |
 
 ## 8.7 Solução de problemas
 
@@ -139,7 +139,10 @@ Publicar uma versão: `git tag v0.4.0 && git push origin v0.4.0`. Tags com hífe
 nomes dos pacotes e nas notas (D150). O fluxo:
 
 1. **versao**: tira o `v` da tag e confere o formato com a mesma regra do servidor (começa com letra ou número; só
-   letras, números e `. + _ -`; até 64); tag fora disso para a release aqui. Disparo manual: `0.0.0-dev.<commit>`.
+   letras, números e `. + _ -`; até 64) e, como a versão também vira a etiqueta da imagem (`type=semver` do
+   `docker/metadata-action`), exige `vX.Y.Z` com sufixo opcional, sem `+` (`v0.4.0`, `v0.4.0-teste.2`); tag fora
+   disso (`v1.0`, `v0.4.0-teste_2`) para a release aqui, em segundos, e não no job da imagem depois do CI e da
+   exportação. Disparo manual: `0.0.0-dev.<commit>`.
 2. **ci**: **os mesmos do CI**, literalmente: o `ci.yml` chamado como workflow reutilizável (`workflow_call`), com a
    versão — dados e testes no SQLite e no PostgreSQL, importação do cliente e autotest contra um servidor de verdade,
    imagem com o teste rápido do contêiner (o `hello` tem que trazer a versão da tag). Sem os quatro jobs verdes,
@@ -263,7 +266,8 @@ docker compose logs -f servidor
   Construindo aqui, passe a mesma com `--build-arg CINZAS_VERSION=0.4.0-teste.2` (no compose:
   `docker compose build --build-arg CINZAS_VERSION=...`); sem ela vale a do `package.json`. Um valor que não pareça
   uma tag (espaço, aspas) faz o servidor recusar subir. Para conferir uma imagem como o CI confere:
-  `deploy/teste-conteiner.sh cinzas-servidor:local 0.4.0-teste.2`.
+  `deploy/teste-conteiner.sh cinzas-servidor:local 0.4.0-teste.2` (com a pilha no ar, que já ocupa a 9100 no
+  127.0.0.1: `CINZAS_TESTE_PORTA=9101 deploy/teste-conteiner.sh …`; o contêiner de teste sai com o volume dele).
 - **Atualizar**: baixe a versão nova do repositório e rode `docker compose up -d --build`. Parar ou recriar o
   contêiner manda SIGTERM e dá 45 s (`stop_grace_period`) para o servidor salvar todos os personagens.
 - **Imagem publicada**: ponha `CINZAS_IMAGEM=ghcr.io/<dono>/cinzas-servidor:<versão>` no `deploy/.env` e rode
@@ -322,7 +326,9 @@ docker compose logs -f servidor
   Recarregar o Caddy não derruba quem está jogando (`stream_close_delay`).
 - **Avisos no site** (a política de privacidade e os termos prometem avisar "no jogo e no site"): a seção *Avisos*
   da página. Edite `deploy/site/index.html` (um `<li>` com a data no começo da lista; o modelo está no comentário)
-  e salve: o Caddy lê o arquivo do disco a cada pedido, sem reiniciar nada. No jogo, o aviso é `/gm anunciar`.
+  e salve: o Caddy lê o arquivo do disco a cada pedido, sem reiniciar nada, e manda `Cache-Control: no-cache`, então
+  o navegador de quem já abriu a página confere a versão nova a cada visita (sem isso ele reaproveitaria a cópia
+  guardada por dias, sem perguntar). No jogo, o aviso é `/gm anunciar`.
 - Sem Docker, use o mesmo Caddyfile num Caddy instalado na máquina, trocando `servidor:7777` por `127.0.0.1:7777`
   e `contas:7780` por `127.0.0.1:7780` (os dois serviços escutam só em `127.0.0.1`) e apontando `CINZAS_SITE` e
   `CINZAS_DOCS` (ambiente do Caddy) para `deploy/site` e `docs/` do repositório (ex.: `/opt/cinzas/deploy/site` e

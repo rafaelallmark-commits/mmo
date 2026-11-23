@@ -72,6 +72,12 @@ test('versão da release no hello e no /bug com o sufixo; o /bug guarda a versã
     assert.equal(bug.client, '0.4.0-teste.2', 'versão do cliente inteira, com o sufixo');
     assert.equal(bug.server, '0.4.0-teste.2', 'versão do servidor vinda da release');
     assert.match(bug.data, /^[0-9a-f]{12}$/, 'e a dos dados');
+    // a release aceita versão de até 64 caracteres (a mesma regra do servidor): o /bug guarda a inteira
+    const longa = `0.4.0-${'t'.repeat(58)}`;
+    assert.equal(longa.length, 64);
+    assert.equal(deploymentVersion(longa), longa);
+    assert.equal((await c.request('bug_report', { text: 'segundo relato com a versão comprida', client: longa })).ok, true);
+    assert.equal(JSON.parse(server.store.auditTail(1, 'bug_report')[0].data_json).client, longa, 'nada cortado da versão do cliente');
     await c.close();
   } finally { await server.stop(); rmSync(dir, { recursive: true, force: true }); }
 });
@@ -94,4 +100,58 @@ test('src/main.js lê CINZAS_VERSION do ambiente (a imagem da release traz a tag
     { encoding: 'utf8', timeout: 20_000, env: childEnv({ CINZAS_VERSION: '0.4.0 "teste"' }) });
   assert.equal(bad.status, 2, bad.stderr);
   assert.match(bad.stderr, /versão inválida em CINZAS_VERSION/);
+});
+
+// Passo `run: |` de um job do workflow (sem biblioteca de YAML: o bloco vai até a primeira linha com recuo menor
+// ou igual ao do "run:"), para rodar com o mesmo bash do runner do GitHub.
+function workflowStep(file, stepName) {
+  const lines = readFileSync(new URL(`../../.github/workflows/${file}`, import.meta.url), 'utf8').split('\n');
+  const at = lines.findIndex((l) => l.trim() === `- name: ${stepName}`);
+  assert.ok(at >= 0, `passo "${stepName}" em ${file}`);
+  let run = at + 1;
+  while (run < lines.length && !/^\s+run: \|\s*$/.test(lines[run])) run++;
+  const runIndent = lines[run].search(/\S/);
+  const body = [];
+  for (let i = run + 1; i < lines.length && (lines[i].trim() === '' || lines[i].search(/\S/) > runIndent); i++) body.push(lines[i]);
+  const indent = Math.min(...body.filter((l) => l.trim()).map((l) => l.search(/\S/)));
+  return body.map((l) => l.slice(indent)).join('\n');
+}
+
+test('release: a tag vira a versão inteira (sem o "v"), e só tag vX.Y.Z com sufixo opcional passa', () => {
+  const script = workflowStep('release.yml', 'Versão da tag');
+  const dir = mkdtempSync(join(tmpdir(), 'cinzas-tag-'));
+  const run = (ref, sha = '1fea9f51014a538d760673986cf6f173b0f8c397') => {
+    const out = join(dir, `saida-${Math.random().toString(36).slice(2)}`);
+    const r = spawnSync('bash', ['--noprofile', '--norc', '-eo', 'pipefail', '-c', script], {
+      encoding: 'utf8',
+      env: { PATH: process.env.PATH, GITHUB_REF: ref, GITHUB_REF_NAME: ref.replace(/^refs\/(tags|heads)\//, ''), GITHUB_SHA: sha, GITHUB_OUTPUT: out },
+    });
+    let vars = {};
+    try { vars = Object.fromEntries(readFileSync(out, 'utf8').trim().split('\n').map((l) => l.split('=', 2))); } catch { /* recusada antes de gravar */ }
+    return { status: r.status, out: r.stdout + r.stderr, ...vars };
+  };
+  try {
+    const ok = [['v0.4.0-teste.2', '0.4.0-teste.2', '0.4.0'], ['v0.4.0', '0.4.0', '0.4.0'], ['v1.10.0-rc.1', '1.10.0-rc.1', '1.10.0'],
+      ['v2.0.0-0a1b2c3', '2.0.0-0a1b2c3', '2.0.0'], [`v0.4.0-${'t'.repeat(58)}`, `0.4.0-${'t'.repeat(58)}`, '0.4.0']];
+    for (const [tag, versao, numerica] of ok) {
+      const r = run(`refs/tags/${tag}`);
+      assert.equal(r.status, 0, `${tag}: ${r.out}`);
+      assert.equal(r.versao, versao, `${tag}: a versão é a tag inteira, sem o "v"`);
+      assert.equal(r.numerica, numerica, `${tag}: parte numérica para o Info.plist e o .exe`);
+      assert.equal(deploymentVersion(r.versao), r.versao, `${tag}: o servidor aceita a mesma versão`);
+    }
+    // não é semver (a imagem ficaria sem etiqueta e a release falharia só no fim) ou o servidor recusaria
+    for (const tag of ['v1.0', 'v0.4', 'v0.4.0-teste_2', 'v1.2.3+build.7', 'v01.0.0', 'v0.4.0-teste.02', 'v0.4.0-', 'v0.4.0-teste..2',
+      'vteste', `v0.4.0-${'t'.repeat(59)}`]) {
+      const r = run(`refs/tags/${tag}`);
+      assert.notEqual(r.status, 0, `${tag} devia ser recusada`);
+      assert.match(r.out, /::error title=Versão::/, tag);
+      assert.equal(r.versao, undefined, `${tag}: nada gravado em GITHUB_OUTPUT`);
+    }
+    // disparo manual (sem tag): versão de desenvolvimento com o commit, mesmo que o resumo do commit comece com 0
+    const manual = run('refs/heads/main', '0123456789abcdef0123456789abcdef01234567');
+    assert.equal(manual.status, 0, manual.out);
+    assert.equal(manual.versao, '0.0.0-dev.0123456');
+    assert.equal(manual.numerica, '0.0.0');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

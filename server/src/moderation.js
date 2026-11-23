@@ -247,8 +247,9 @@ export class Moderation {
     this.bugs.set(p.char.id, recent);
     const sess = this.s.byChar.get(p.char.id);
     const c = p.char;
+    // client: a versão inteira do cliente (a tag da release, até 64 caracteres como a do servidor; D150)
     this.st.audit('bug_report', { accountId: sess?.accountId ?? null, charId: c.id, ip: sess?.ip ?? null, text: t, map: p.zone.mapId, instance: p.zone.instanceId ?? null,
-      x: Math.round(c.x * 10) / 10, z: Math.round(c.z * 10) / 10, level: c.level, classId: c.classId, client: cleanText(client, 40) || null,
+      x: Math.round(c.x * 10) / 10, z: Math.round(c.z * 10) / 10, level: c.level, classId: c.classId, client: cleanText(client, 64) || null,
       server: this.s.serverVersion ?? null, data: this.s.dataVersion ?? null });
     return { ok: true, message: 'Obrigado! O problema foi registrado com o lugar e a hora em que você está.', cache: false };
   }
