@@ -18,6 +18,7 @@
     "gen-docs": "node --disable-warning=ExperimentalWarning tools/gen-docs.js",
     "create-character": "node --disable-warning=ExperimentalWarning tools/create-character.js",
     "gen-scenery": "node --disable-warning=ExperimentalWarning tools/gen-scenery.js",
+    "provas": "node --disable-warning=ExperimentalWarning tools/provas.mjs",
     "carga": "node --disable-warning=ExperimentalWarning tools/carga.mjs",
     "cenarios": "node --disable-warning=ExperimentalWarning tools/cenarios.mjs",
     "telemetria": "node --disable-warning=ExperimentalWarning tools/telemetria.mjs",

@@ -35,6 +35,7 @@ Cidade de pedra, madeira e rotas de superfície.
 - **Nível 1 com o kit inicial:** vida 111, mana 20, defesa 12, precisão 18, crítico 7,7%
 - **No tutorial (Três do Outro Lado):** classe corpo a corpo; a tecla 1 é Talho Profundo. Dicas: «Corpo a corpo: você precisa encostar no bicho para bater.» «Corpo a corpo: fique entre os bichos e o Caio e bata neles — quem apanha larga o menino e vem atrás de você.»
 - **Kit inicial (tutorial adapta à classe):** equipado Machado de Lasca, Couraça de Ferro Batido; na bolsa Machado de Lenhador, Tônico de Vida Pequeno ×5
+- **Prova de classe (nível 10, missão 3.3): Pilares Blindados.** Rompa os 3 pilares blindados antes que o teto ceda. Limite: 90 s. Só a Ruptura racha a blindagem, e de vez. A mana do nível 10 dá para duas: pare de frente para dois pilares e aponte entre eles — sem alvo selecionado (Esc tira a seleção), a Ruptura sai para onde o cursor aponta e o cone pega os dois. Saia das pedras que caem do teto. Ruptura fica emprestada no grau 1 durante a prova; vencer a libera de vez.
 
 | Habilidade | Nível | Mana | Recarga | Alcance | Efeito | Valor principal nos graus 1–5 | Marco |
 |---|---|---|---|---|---|---|---|
@@ -56,6 +57,7 @@ Cidade de pedra, madeira e rotas de superfície.
 - **Nível 1 com o kit inicial:** vida 128, mana 23, defesa 17, precisão 18, crítico 5,6%
 - **No tutorial (Três do Outro Lado):** classe corpo a corpo; a tecla 1 é Placa Dinâmica. Dicas: «Corpo a corpo: você precisa encostar no bicho para bater.» «Corpo a corpo: fique entre os bichos e o Caio e bata neles — quem apanha larga o menino e vem atrás de você.»
 - **Kit inicial (tutorial adapta à classe):** equipado Martelo de Rebitar, Escudo de Ferro Batido, Couraça de Ferro Batido; na bolsa Garra de Arame, Tônico de Vida Pequeno ×5
+- **Prova de classe (nível 10, missão 3.3): O Aprendiz no Centro.** Mantenha os 6 construtos longe do aprendiz por 60 s. Limite: 60 s. O Pulso de Atração puxa até 3 e prende a atenção deles por alguns segundos. Antes da investida, que o painel avisa, use o Reforço de Campo perto do aprendiz: ele ganha defesa e 20% do dano dele vem para você. Reforço de Campo fica emprestada no grau 1 durante a prova; vencer a libera de vez.
 
 | Habilidade | Nível | Mana | Recarga | Alcance | Efeito | Valor principal nos graus 1–5 | Marco |
 |---|---|---|---|---|---|---|---|
@@ -77,6 +79,7 @@ Cidade de pedra, madeira e rotas de superfície.
 - **Nível 1 com o kit inicial:** vida 103, mana 20, defesa 11, precisão 20, crítico 10%
 - **No tutorial (Três do Outro Lado):** classe corpo a corpo; a tecla 1 é Estocada Longa. Dicas: «Corpo a corpo: você precisa encostar no bicho para bater.» «Corpo a corpo: fique entre os bichos e o Caio e bata neles — quem apanha larga o menino e vem atrás de você.»
 - **Kit inicial (tutorial adapta à classe):** equipado Lança de Freixo, Couraça de Ferro Batido; na bolsa Tônico de Vida Pequeno ×5
+- **Prova de classe (nível 10, missão 3.3): Duas Filas de Bonecos.** Do outro lado dos fossos, derrube as duas filas de bonecos: todos os bonecos de uma fila no chão ao mesmo tempo. Limite: 120 s. Os fossos atravessam a arena: só o Avanço do Fosso cruza, saltando até 10 m sobre o alvo e atingindo os vizinhos dele. Boneco caído levanta em 8 s e o que fica 5 s sem apanhar volta inteiro: derrube a fila de uma vez — da ponta, a Linha Partida varre todos. Guarde mana para o salto. Avanço do Fosso fica emprestada no grau 1 durante a prova; vencer a libera de vez.
 
 | Habilidade | Nível | Mana | Recarga | Alcance | Efeito | Valor principal nos graus 1–5 | Marco |
 |---|---|---|---|---|---|---|---|
@@ -98,6 +101,7 @@ Cidade de pedra, madeira e rotas de superfície.
 - **Nível 1 com o kit inicial:** vida 84, mana 27, defesa 8, precisão 29, crítico 11,8%
 - **No tutorial (Três do Outro Lado):** classe à distância; a tecla 1 é Marca da Trilha. Dicas: «À distância: você acerta de longe. Mantenha distância e deixe o bicho vir até você.» «À distância: acerte os bichos de longe para eles largarem o Caio e virem atrás de você; recue para manter distância.»
 - **Kit inicial (tutorial adapta à classe):** equipado Arco de Vime, Aljava de Couro Cru, Gibão de Couro Cru; na bolsa Tônico de Vida Pequeno ×5
+- **Prova de classe (nível 10, missão 3.3): Alvos em Movimento.** Do posto de tiro, derrube 16 dos 32 alvos que cruzam a arena. Limite: 90 s. Só valem tiros dados de dentro do posto de tiro. A Chuva de Espinhos cai por 2,5 s: aponte o cursor à frente da fila, onde os alvos vão estar. A Marca da Trilha faz o alvo levar mais dano. Chuva de Espinhos fica emprestada no grau 1 durante a prova; vencer a libera de vez.
 
 | Habilidade | Nível | Mana | Recarga | Alcance | Efeito | Valor principal nos graus 1–5 | Marco |
 |---|---|---|---|---|---|---|---|
@@ -124,6 +128,7 @@ Cidade de condutores que atravessam montanhas e rios.
 - **Nível 1 com o kit inicial:** vida 110, mana 38, defesa 15, precisão 15, crítico 7,3%
 - **No tutorial (Três do Outro Lado):** classe corpo a corpo; a tecla 1 é Corte Solar. Dicas: «Corpo a corpo: você precisa encostar no bicho para bater.» «Corpo a corpo: fique entre os bichos e o Caio e bata neles — quem apanha larga o menino e vem atrás de você.»
 - **Kit inicial (tutorial adapta à classe):** equipado Espada de Guarda, Escudo de Ferro Batido, Couraça de Ferro Batido; na bolsa Montante de Guarda, Tônico de Vida Pequeno ×5
+- **Prova de classe (nível 10, missão 3.3): A Travessia do Peregrino.** Leve o peregrino vivo até o portão do outro lado da arena. Limite: 150 s. Clique no peregrino e use o Juramento: 30% do dano que ele sofre vem para você. Os atiradores só miram nele — vá até eles; os construtos largam o peregrino quando você bate neles. Ele só anda com você por perto. Juramento fica emprestada no grau 1 durante a prova; vencer a libera de vez.
 
 | Habilidade | Nível | Mana | Recarga | Alcance | Efeito | Valor principal nos graus 1–5 | Marco |
 |---|---|---|---|---|---|---|---|
@@ -145,6 +150,7 @@ Cidade de condutores que atravessam montanhas e rios.
 - **Nível 1 com o kit inicial:** vida 87, mana 29, defesa 10, precisão 25, crítico 9,5%
 - **No tutorial (Três do Outro Lado):** classe à distância; a tecla 1 é Arremesso de Retorno. Dicas: «À distância: você acerta de longe. Mantenha distância e deixe o bicho vir até você.» «À distância: acerte os bichos de longe para eles largarem o Caio e virem atrás de você; recue para manter distância.»
 - **Kit inicial (tutorial adapta à classe):** equipado Azagaia de Junco, Broquel de Couro Cru, Gibão de Couro Cru; na bolsa Tônico de Vida Pequeno ×5
+- **Prova de classe (nível 10, missão 3.3): Percurso do Vento.** Derrube os 4 sinos do percurso, em ordem, sem deixar os perseguidores te pegarem. Limite: 120 s. Bata e recue: arremesse no sino aceso e saia antes que os perseguidores cheguem. Eles aceleram a cada sino, mas nunca correm mais que você: o perigo é ficar parada no arremesso e ser encurralada. O Vento a Favor (+8% de dano e de velocidade por 15 s) ajuda a abrir distância e a derrubar o sino mais depressa; o Passo Lateral tira você de um aperto. Vento a Favor fica emprestada no grau 1 durante a prova; vencer a libera de vez.
 
 | Habilidade | Nível | Mana | Recarga | Alcance | Efeito | Valor principal nos graus 1–5 | Marco |
 |---|---|---|---|---|---|---|---|
@@ -166,6 +172,7 @@ Cidade de condutores que atravessam montanhas e rios.
 - **Nível 1 com o kit inicial:** vida 79, mana 66, defesa 7, precisão 18, crítico 5,7%
 - **No tutorial (Três do Outro Lado):** classe à distância; a tecla 1 é Canto de Amparo. Dicas: «À distância: você acerta de longe. Mantenha distância e deixe o bicho vir até você.» «À distância: acerte os bichos de longe para eles largarem o Caio e virem atrás de você; recue para manter distância.»
 - **Kit inicial (tutorial adapta à classe):** equipado Cetro de Latão, Foco de Vidro Bruto, Veste de Linho; na bolsa Cajado de Aprendiz, Tônico de Vida Pequeno ×5
+- **Prova de classe (nível 10, missão 3.3): Vigília dos Aprendizes.** Mantenha os três aprendizes vivos sob a fuligem por 70 s. Limite: 70 s. O jato de vapor é mais forte que a vida de um aprendiz: clique no aprendiz marcado e ponha o Selo do Véu nele antes do estouro. A fuligem não para: o Canto de Amparo cura (recarga 3 s). Selo do Véu fica emprestada no grau 1 durante a prova; vencer a libera de vez.
 
 | Habilidade | Nível | Mana | Recarga | Alcance | Efeito | Valor principal nos graus 1–5 | Marco |
 |---|---|---|---|---|---|---|---|
@@ -187,6 +194,7 @@ Cidade de condutores que atravessam montanhas e rios.
 - **Nível 1 com o kit inicial:** vida 74, mana 68, defesa 7, precisão 18, crítico 5,7%
 - **No tutorial (Três do Outro Lado):** classe à distância; a tecla 1 é Faísca de Vidro. Dicas: «À distância: você acerta de longe. Mantenha distância e deixe o bicho vir até você.» «À distância: acerte os bichos de longe para eles largarem o Caio e virem atrás de você; recue para manter distância.»
 - **Kit inicial (tutorial adapta à classe):** equipado Varinha de Vidro Bruto, Foco de Vidro Bruto, Veste de Linho; na bolsa Cajado de Aprendiz, Tônico de Vida Pequeno ×5
+- **Prova de classe (nível 10, missão 3.3): Três Ondas de Fagulhas.** Contenha as três ondas: não deixe 3 fagulhas passarem pela linha de contenção. Limite: 150 s. O Círculo de Fuligem prende quem estiver a 5 m de você por 2 s e queima: espere a onda chegar perto. O Chão em Brasa deixa as fagulhas lentas; a Faísca de Vidro acaba com a que escapar. Círculo de Fuligem fica emprestada no grau 1 durante a prova; vencer a libera de vez.
 
 | Habilidade | Nível | Mana | Recarga | Alcance | Efeito | Valor principal nos graus 1–5 | Marco |
 |---|---|---|---|---|---|---|---|

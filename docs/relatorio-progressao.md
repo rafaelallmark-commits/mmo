@@ -76,7 +76,7 @@ Minutos simulados para sair de cada nível. "Fora" marca a média fora de ±25% 
 
 ### Minutos por nível e classe
 
-| Nível | Meta | Tecelão da Brasa | Andarilha do Vento | Vigia do Espinhal | Cantora do Véu | Escudeiro do Alvorecer | Lanceiro do Fosso | Bastião de Bronze | Quebraferro |
+| Nível | Meta | Tecelão da Brasa | Andarilha do Vento | Vigia do Espinhal | Cantora do Véu | Escudeiro do Alvorecer | Lanceiro do Fosso | Quebraferro | Bastião de Bronze |
 |---|---|---|---|---|---|---|---|---|---|
 | 1 | 2,0 | 2,4 | **1,3** | **1,4** | 2,1 | **1,4** | **1,5** | 1,6 | 1,5 |
 | 2 | 3,5 | **4,7** | 3,8 | 3,9 | **4,8** | 3,8 | 4,0 | 4,3 | 3,8 |

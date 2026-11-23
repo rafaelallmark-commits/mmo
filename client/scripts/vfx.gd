@@ -786,6 +786,9 @@ func on_warn(m: Dictionary) -> void:
 	var shape: String = m.get("shape", "circle")
 	var kind: String = m.get("kind", "line" if shape == "line" else "circle")
 	var ms := float(m.get("ms", 1500))
+	if kind in ["rock", "steam"]:
+		_trial_warn(m, at, kind)
+		return
 	var from_monster: bool = m.get("src", null) != null
 	if from_monster:
 		if world.my_pos().distance_to(at) > WARN_SEE:
@@ -937,3 +940,13 @@ func on_cleanse(m: Dictionary) -> void:
 	if mark:
 		mark.queue_free()
 		_sparks(node.position + Vector3(0, 1.2, 0), COLORS["sacred"], 14, 2.0, 0.8, 0.5)
+
+## Avisos da prova de classe (server/src/trial.js): a pedra que cai do teto onde o Quebraferro está (âmbar,
+## pancada surda ao cair) e o jato de vapor no aprendiz marcado da Cantora (branco-azulado, assobio de vapor).
+func _trial_warn(m: Dictionary, at: Vector3, kind: String) -> void:
+	Sfx.warn(kind)
+	var steam := kind == "steam"
+	var c: Color = Color(0.85, 0.95, 1.0) if steam else Color(1.0, 0.7, 0.2)
+	if steam:
+		Sfx.play("steam_vent", at, -4.0)
+	warn_circle(at, float(m.get("radius", 2.0)), float(m.get("ms", 1500)), c, "steam_vent" if steam else "hit_blunt")

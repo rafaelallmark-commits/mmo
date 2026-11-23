@@ -189,6 +189,21 @@ z=160└────────────────────────
 
 ![A Cava Primeira](img/23_cava.png)
 
+### Arena da Prova (instância solo, nível 10)
+
+Pátio de areia de 36 × 36 m cercado de muros, com braseiros nos cantos. Cada tentativa da prova de classe (missão 3.3) abre uma cópia só do jogador, montada pela regra da classe (`server/src/trial.js`; números em `data/maps.json`, `arena_prova.trial`). A habilidade do nível 10 fica emprestada no grau 1; as peças da arena não dão XP nem saque.
+
+| Classe | Prova | O que há na arena |
+|---|---|---|
+| Quebraferro | Pilares Blindados (90 s) | 3 pilares de pedra com placas rebitadas, perto o bastante para dois caberem no cone da Ruptura; pedras caem do teto com aviso |
+| Bastião | O Aprendiz no Centro (60 s) | o aprendiz Brás no meio; 6 construtos em duas levas; uma investida avisada |
+| Lanceiro | Duas Filas de Bonecos (120 s) | dois fossos de lado a lado da arena (só o Avanço do Fosso cruza) e uma fila de 4 bonecos depois de cada um |
+| Vigia | Alvos em Movimento (90 s) | o posto de tiro (faixa marcada perto da entrada; fora dele o tiro não vale e o painel avisa) e 4 filas de 8 alvos em trilhos no fundo |
+| Escudeiro | A Travessia do Peregrino (150 s) | o peregrino Odilon, a rota pontilhada até o portão do fundo e três marcos de emboscada (construtos, atiradores e a Sentinela); ele espera parado enquanto a emboscada estiver de pé |
+| Andarilha | Percurso do Vento (120 s) | 4 sinos numerados (o aceso acende) e até 3 perseguidores |
+| Cantora | Vigília dos Aprendizes (70 s) | os aprendizes Lia, Duarte e Cora; fuligem contínua e jatos de vapor avisados |
+| Tecelão | Três Ondas de Fagulhas (150 s) | a linha de contenção perto da entrada; ondas de 6, 7 e 8 fagulhas (as duas últimas com um construto) |
+
 ## Morte e resgate
 
 - Ao cair, o personagem fica no chão. Opções: **voltar ao posto de guarda** do mapa (aparece com 50% de vida e mana) ou esperar **resgate por aliado**: qualquer jogador a até 3 m levanta um caído canalizando 5 s fora de combate, com 20% de vida (`revive_ally`; D154), e o Coro do Recomeço da Cantora (nível 20) levanta à distância. Sem resgate, o caído volta sozinho ao posto em 5 min (`death.corpseTimeoutMs`). Não há perda de XP; o custo é tempo e deslocamento.
@@ -203,7 +218,9 @@ z=160└────────────────────────
 - Anel de seleção amarelo sob o alvo; quadro do alvo com nome, nível, tipo (elite/chefe), vida e a descrição do monstro numa linha (o texto inteiro na dica do mouse).
 - Áreas de efeito desenhadas no chão durante toda a duração; perigos de chefe e golpes de área dos monstros sempre com aviso visual + sonoro antes do dano (círculo, cone ou linha vermelha que enche; o monstro recua e treme); explosão, puxão, drenagem de mana e eco com efeito próprio.
 - Efeitos negativos no próprio personagem (Atordoado, Desorientado, Atolado, Sanguessuga, Selado) sob as barras de vida e mana, com o tempo que falta, e como marca sobre o personagem (visível também nos outros).
-- Legibilidade com muitos monstros: nomes e vida só como rótulo curto; cores por família; o próprio personagem com contorno da cor da classe.
+- Legibilidade com muitos monstros: nomes e vida só como rótulo curto; cores por família; o próprio personagem com contorno da cor da classe (Quebraferro laranja-brasa, Bastião bronze, Lanceiro azul-aço, Vigia verde, Escudeiro dourado, Andarilha turquesa, Cantora lavanda, Tecelão vermelho), que engrossa com a distância para continuar visível com a câmera afastada (`client/shaders/outline_self.gdshader`); os outros jogadores, NPCs e monstros seguem com o contorno escuro e fino.
+- Objetos de missão com modelo próprio, parados no chão, de frente para a câmera inicial e com um losango pequeno flutuando em cima (dá para usar): marcos de rota, páginas do registro, caixas de fusíveis, cofre de ordens, medidores de pressão, pontos de medição térmica, válvulas (a principal, da defesa, maior), tubos de voz, a máquina do posto antigo, selos da Porta Funda, a carroça parada da escolta, o quadro de missões das cidades e as pessoas a resgatar no tutorial. O cliente escolhe o modelo pelo `kind` ou pelo prefixo do id (`client/scripts/art.gd`, `quest_object`); objeto que não casa com nenhum continua com o cubo de antes.
+- Prova de classe: painel à esquerda, abaixo da vida e da mana, com objetivo, tempo, progresso e o aviso da vez (investida, jato de vapor, emboscada, fora do posto, a dica do cone da Ruptura); golpe que a peça recusa aparece como texto ("blindado", "apagado", "fora do posto"); aprendizes e peregrino com o nome e a vida em verde, clicáveis para curas e escudos.
 
 ## Interface (telas)
 

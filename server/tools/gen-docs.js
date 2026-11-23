@@ -48,7 +48,12 @@ function classesDoc() {
       const ranged = !!c.startingKit.equip.map((i) => data.items[i]).find((d) => d.slot === 'weapon')?.ranged;
       const tips = (tut?.objectives ?? []).map((o) => o[ranged ? 'tipRanged' : 'tipMelee']).filter(Boolean);
       if (tips.length) out.push(`- **No tutorial (${tut.title}):** classe ${ranged ? 'à distância' : 'corpo a corpo'}; a tecla 1 é ${data.skills[c.skills[0]].name}. Dicas: ${tips.map((t) => `«${t}»`).join(' ')}`);
-      out.push(`- **Kit inicial (tutorial adapta à classe):** equipado ${c.startingKit.equip.map((i) => data.items[i].name).join(', ')}; na bolsa ${c.startingKit.bag.map(([i, q]) => `${data.items[i].name}${q > 1 ? ` ×${q}` : ''}`).join(', ')}\n`);
+      out.push(`- **Kit inicial (tutorial adapta à classe):** equipado ${c.startingKit.equip.map((i) => data.items[i].name).join(', ')}; na bolsa ${c.startingKit.bag.map(([i, q]) => `${data.items[i].name}${q > 1 ? ` ×${q}` : ''}`).join(', ')}`);
+      // prova de classe (data/maps.json → arena_prova.trial.classes; regra em server/src/trial.js)
+      const tr = data.maps.arena_prova?.trial?.classes?.[cid];
+      const sig = c.skills.map((s) => data.skills[s]).find((s) => s.unlockLevel === 10);
+      if (tr) out.push(`- **Prova de classe (nível 10, missão 3.3): ${tr.title}.** ${tr.objective} Limite: ${n1(tr.timeMs / 1000)} s. ${tr.hint} ${sig.name} fica emprestada no grau 1 durante a prova; vencer a libera de vez.`);
+      out.push('');
       const rows = c.skills.map((sid) => {
         const s = data.skills[sid];
         const e = s.effect;

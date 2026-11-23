@@ -16298,29 +16298,501 @@
    "npcs": [],
    "objects": [],
    "trial": {
+    "_doc": "Prova de classe (02-campanha §3.3), uma regra por classe em instância solo. kind escolhe a lógica no servidor (server/src/trial.js); a habilidade do nível 10 da classe fica emprestada no grau 1 enquanto a prova durar. Tempos em ms, posições em metros (x, z). Monstros da arena: data/monsters.json (area arena_prova); \"inert\" não andam nem atacam sozinhos (pilares, bonecos, alvos, sinos, fagulhas: a prova move e confere).",
     "durationMs": 180000,
-    "waves": [
-     [
-      [
-       "trial_construct",
-       2
-      ]
-     ],
-     [
-      [
-       "trial_construct",
-       1
+    "classes": {
+     "breaker": {
+      "kind": "pillars",
+      "title": "Pilares Blindados",
+      "objective": "Rompa os 3 pilares blindados antes que o teto ceda.",
+      "hint": "Só a Ruptura racha a blindagem, e de vez. A mana do nível 10 dá para duas: pare de frente para dois pilares e aponte entre eles — sem alvo selecionado (Esc tira a seleção), a Ruptura sai para onde o cursor aponta e o cone pega os dois. Saia das pedras que caem do teto.",
+      "timeMs": 90000,
+      "monster": "trial_pillar",
+      "pillars": [
+       [
+        15,
+        25
+       ],
+       [
+        18,
+        27.5
+       ],
+       [
+        21,
+        25
+       ]
       ],
-      [
-       "trial_sentinel",
-       1
+      "debris": {
+       "firstMs": 9000,
+       "everyMs": 6500,
+       "warnMs": 1800,
+       "radius": 2.4,
+       "damagePctMaxHp": 12
+      }
+     },
+     "bastion": {
+      "kind": "hold",
+      "title": "O Aprendiz no Centro",
+      "objective": "Mantenha os 6 construtos longe do aprendiz por 60 s.",
+      "hint": "O Pulso de Atração puxa até 3 e prende a atenção deles por alguns segundos. Antes da investida, que o painel avisa, use o Reforço de Campo perto do aprendiz: ele ganha defesa e 20% do dano dele vem para você.",
+      "timeMs": 60000,
+      "ally": {
+       "name": "Aprendiz Brás",
+       "model": "apprentice",
+       "fem": false,
+       "x": 18,
+       "z": 17,
+       "hp": 420,
+       "defense": 10,
+       "evasion": 4
+      },
+      "spawns": [
+       {
+        "atMs": 1000,
+        "monster": "trial_construct",
+        "count": 3,
+        "x": 18,
+        "z": 32,
+        "radius": 3,
+        "hp": 500,
+        "damage": [
+         3,
+         5
+        ]
+       },
+       {
+        "atMs": 9000,
+        "monster": "trial_construct",
+        "count": 3,
+        "x": 6,
+        "z": 25,
+        "radius": 3,
+        "hp": 500,
+        "damage": [
+         3,
+         5
+        ]
+       }
+      ],
+      "rushes": [
+       30000
+      ],
+      "rushMs": 6000,
+      "rushWarnMs": 3000,
+      "threatDecay": {
+       "pctPerSec": 15,
+       "flatPerSec": 5
+      },
+      "rushDamageMult": 2.5
+     },
+     "pikeman": {
+      "kind": "rows",
+      "title": "Duas Filas de Bonecos",
+      "objective": "Do outro lado dos fossos, derrube as duas filas de bonecos: todos os bonecos de uma fila no chão ao mesmo tempo.",
+      "hint": "Os fossos atravessam a arena: só o Avanço do Fosso cruza, saltando até 10 m sobre o alvo e atingindo os vizinhos dele. Boneco caído levanta em 8 s e o que fica 5 s sem apanhar volta inteiro: derrube a fila de uma vez — da ponta, a Linha Partida varre todos. Guarde mana para o salto.",
+      "timeMs": 120000,
+      "monster": "trial_dummy",
+      "rows": [
+       {
+        "from": [
+         12,
+         18.5
+        ],
+        "to": [
+         15.6,
+         18.5
+        ],
+        "count": 4
+       },
+       {
+        "from": [
+         20.4,
+         28.5
+        ],
+        "to": [
+         24,
+         28.5
+        ],
+        "count": 4
+       }
+      ],
+      "standUpMs": 8000,
+      "regenAfterMs": 5000,
+      "blocked": [
+       {
+        "name": "Fosso",
+        "x0": 0,
+        "z0": 14,
+        "x1": 36,
+        "z1": 16.5
+       },
+       {
+        "name": "Fosso",
+        "x0": 0,
+        "z0": 23.5,
+        "x1": 36,
+        "z1": 26
+       }
       ]
-     ]
-    ],
-    "spawnAt": {
-     "x": 18,
-     "z": 26,
-     "radius": 6
+     },
+     "warden": {
+      "kind": "targets",
+      "title": "Alvos em Movimento",
+      "objective": "Do posto de tiro, derrube 16 dos 32 alvos que cruzam a arena.",
+      "hint": "Só valem tiros dados de dentro do posto de tiro. A Chuva de Espinhos cai por 2,5 s: aponte o cursor à frente da fila, onde os alvos vão estar. A Marca da Trilha faz o alvo levar mais dano.",
+      "timeMs": 90000,
+      "monster": "trial_target",
+      "post": {
+       "x0": 3,
+       "z0": 2,
+       "x1": 33,
+       "z1": 13.5
+      },
+      "need": 16,
+      "waves": [
+       {
+        "atMs": 2000,
+        "count": 8,
+        "from": [
+         3,
+         27
+        ],
+        "to": [
+         33,
+         27
+        ],
+        "speed": 2.8,
+        "spacing": 1.2
+       },
+       {
+        "atMs": 22000,
+        "count": 8,
+        "from": [
+         33,
+         29
+        ],
+        "to": [
+         3,
+         29
+        ],
+        "speed": 2.8,
+        "spacing": 1.2
+       },
+       {
+        "atMs": 42000,
+        "count": 8,
+        "from": [
+         3,
+         26
+        ],
+        "to": [
+         33,
+         26
+        ],
+        "speed": 3,
+        "spacing": 1.2
+       },
+       {
+        "atMs": 62000,
+        "count": 8,
+        "from": [
+         33,
+         28
+        ],
+        "to": [
+         3,
+         28
+        ],
+        "speed": 3,
+        "spacing": 1.2
+       }
+      ]
+     },
+     "dawnshield": {
+      "kind": "escort",
+      "title": "A Travessia do Peregrino",
+      "objective": "Leve o peregrino vivo até o portão do outro lado da arena.",
+      "hint": "Clique no peregrino e use o Juramento: 30% do dano que ele sofre vem para você. Os atiradores só miram nele — vá até eles; os construtos largam o peregrino quando você bate neles. Ele só anda com você por perto.",
+      "timeMs": 150000,
+      "ally": {
+       "name": "Peregrino Odilon",
+       "model": "pilgrim",
+       "fem": false,
+       "x": 18,
+       "z": 5,
+       "hp": 480,
+       "defense": 18,
+       "evasion": 4,
+       "speed": 1.6,
+       "followRadius": 8
+      },
+      "route": [
+       [
+        18,
+        11,
+        1
+       ],
+       [
+        11,
+        16
+       ],
+       [
+        11,
+        23,
+        2
+       ],
+       [
+        19,
+        27,
+        3
+       ],
+       [
+        27,
+        33
+       ]
+      ],
+      "ambush": [
+       {
+        "at": 1,
+        "spawns": [
+         {
+          "monster": "trial_construct",
+          "count": 1,
+          "x": 15,
+          "z": 18,
+          "hp": 140
+         },
+         {
+          "monster": "trial_construct",
+          "count": 1,
+          "x": 21,
+          "z": 18,
+          "hp": 140
+         }
+        ]
+       },
+       {
+        "at": 2,
+        "spawns": [
+         {
+          "monster": "trial_archer",
+          "count": 1,
+          "x": 5,
+          "z": 29
+         },
+         {
+          "monster": "trial_archer",
+          "count": 1,
+          "x": 17,
+          "z": 30
+         },
+         {
+          "monster": "trial_construct",
+          "count": 1,
+          "x": 11,
+          "z": 31,
+          "hp": 140
+         }
+        ]
+       },
+       {
+        "at": 3,
+        "spawns": [
+         {
+          "monster": "trial_archer",
+          "count": 1,
+          "x": 27,
+          "z": 24
+         },
+         {
+          "monster": "trial_archer",
+          "count": 1,
+          "x": 24,
+          "z": 33
+         },
+         {
+          "monster": "trial_sentinel",
+          "count": 1,
+          "x": 19,
+          "z": 33,
+          "damage": [
+           10,
+           13
+          ],
+          "hp": 260
+         }
+        ]
+       }
+      ]
+     },
+     "windwalker": {
+      "kind": "course",
+      "title": "Percurso do Vento",
+      "objective": "Derrube os 4 sinos do percurso, em ordem, sem deixar os perseguidores te pegarem.",
+      "hint": "Bata e recue: arremesse no sino aceso e saia antes que os perseguidores cheguem. Eles aceleram a cada sino, mas nunca correm mais que você: o perigo é ficar parada no arremesso e ser encurralada. O Vento a Favor (+8% de dano e de velocidade por 15 s) ajuda a abrir distância e a derrubar o sino mais depressa; o Passo Lateral tira você de um aperto.",
+      "timeMs": 120000,
+      "monster": "trial_bell",
+      "bells": [
+       [
+        7,
+        12
+       ],
+       [
+        29,
+        15
+       ],
+       [
+        8,
+        25
+       ],
+       [
+        27,
+        29
+       ]
+      ],
+      "chasers": {
+       "monster": "trial_runner",
+       "start": [
+        [
+         18,
+         32
+        ],
+        [
+         14,
+         33
+        ]
+       ],
+       "spawnAt": [
+        [
+         18,
+         33
+        ],
+        [
+         4,
+         33
+        ],
+        [
+         32,
+         3
+        ]
+       ],
+       "addPerBell": 1,
+       "speedBase": 3.4,
+       "speedPerBell": 0.3,
+       "max": 3
+      }
+     },
+     "veilsinger": {
+      "kind": "vigil",
+      "title": "Vigília dos Aprendizes",
+      "objective": "Mantenha os três aprendizes vivos sob a fuligem por 70 s.",
+      "hint": "O jato de vapor é mais forte que a vida de um aprendiz: clique no aprendiz marcado e ponha o Selo do Véu nele antes do estouro. A fuligem não para: o Canto de Amparo cura (recarga 3 s).",
+      "timeMs": 70000,
+      "allies": [
+       {
+        "name": "Aprendiz Lia",
+        "model": "apprentice",
+        "fem": true,
+        "x": 12,
+        "z": 20,
+        "hp": 110,
+        "defense": 10,
+        "evasion": 0
+       },
+       {
+        "name": "Aprendiz Duarte",
+        "model": "apprentice",
+        "fem": false,
+        "x": 24,
+        "z": 20,
+        "hp": 110,
+        "defense": 10,
+        "evasion": 0
+       },
+       {
+        "name": "Aprendiz Cora",
+        "model": "apprentice",
+        "fem": true,
+        "x": 18,
+        "z": 29,
+        "hp": 110,
+        "defense": 10,
+        "evasion": 0
+       }
+      ],
+      "soot": {
+       "damage": 3,
+       "everyMs": 2500
+      },
+      "jets": {
+       "firstMs": 8000,
+       "everyMs": 14000,
+       "warnMs": 3000,
+       "radius": 1.6,
+       "damage": 115
+      }
+     },
+     "emberweaver": {
+      "kind": "waves",
+      "title": "Três Ondas de Fagulhas",
+      "objective": "Contenha as três ondas: não deixe 3 fagulhas passarem pela linha de contenção.",
+      "hint": "O Círculo de Fuligem prende quem estiver a 5 m de você por 2 s e queima: espere a onda chegar perto. O Chão em Brasa deixa as fagulhas lentas; a Faísca de Vidro acaba com a que escapar.",
+      "timeMs": 150000,
+      "line": 6,
+      "leaks": 3,
+      "waves": [
+       {
+        "atMs": 3000,
+        "spawns": [
+         {
+          "monster": "trial_spark",
+          "count": 6,
+          "x": 18,
+          "z": 33,
+          "radius": 6
+         }
+        ]
+       },
+       {
+        "atMs": 27000,
+        "spawns": [
+         {
+          "monster": "trial_spark",
+          "count": 7,
+          "x": 18,
+          "z": 33,
+          "radius": 7
+         },
+         {
+          "monster": "trial_construct",
+          "count": 1,
+          "x": 18,
+          "z": 33,
+          "radius": 2
+         }
+        ]
+       },
+       {
+        "atMs": 51000,
+        "spawns": [
+         {
+          "monster": "trial_spark",
+          "count": 8,
+          "x": 18,
+          "z": 33,
+          "radius": 8
+         },
+         {
+          "monster": "trial_construct",
+          "count": 1,
+          "x": 18,
+          "z": 33,
+          "radius": 2
+         }
+        ]
+       }
+      ]
+     }
     }
    }
   }

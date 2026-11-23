@@ -77,6 +77,9 @@ export class Zone {
     // perigos do mapa (a esteira da Oficina): estado de cada um; só ligam com alguém que precise deles. Lista
     // própria, separada de this.hazards (os golpes avisados dos monstros, mechanics.js), que tem outro formato.
     this.mapHazards = Object.entries(this.map.hazards ?? {}).map(([id, def]) => ({ id, def, state: 'idle', at: 0, pattern: 0, list: [] }));
+    // aliados que não são jogadores (prova de classe: aprendizes, peregrino — trial.js TrialAlly): têm vida,
+    // os monstros os atacam e as habilidades de aliado (cura, escudo, Juramento, reforços) valem neles
+    this.allies = new Map(); // eid -> aliado
     this.duels = new DuelManager(this);
     for (const sp of this.map.spawns ?? []) for (let i = 0; i < sp.count; i++) this.spawnMonster(sp);
   }
@@ -264,6 +267,7 @@ export class Zone {
   entityById(eid) {
     if (eid?.startsWith('p')) return this.players.get(Number(eid.slice(1))) ?? null;
     if (eid?.startsWith('e')) return null; // carroça de escolta não é alvo de jogador
+    if (eid?.startsWith('a')) return this.allies.get(eid) ?? null; // aliado da prova (só habilidades de aliado)
     return this.monsters.get(eid) ?? null;
   }
 
@@ -503,7 +507,8 @@ export class Zone {
     if (c.dead) return { ok: false, code: 'dead', reason: 'Você está caído.' };
     if (p.channel) this.cancelChannel(p, 'Interrompido: você usou uma habilidade.');
     if (!s || s.classId !== c.classId) return { ok: false, code: 'bad_skill', reason: 'Habilidade desconhecida para sua classe.' };
-    const rank = c.skills[skillId] || 0;
+    // na prova de classe, a habilidade do nível 10 fica emprestada no grau 1 (trial.js; não vai para a ficha)
+    const rank = c.skills[skillId] || (p.trialSkill === skillId ? 1 : 0);
     if (rank < 1) {
       if (s.unlockLevel === 10 && c.level >= 10) return { ok: false, code: 'not_learned', reason: `${s.name} é liberada pela prova de classe.` };
       return { ok: false, code: 'not_learned', reason: `Nível ${s.unlockLevel} exigido para ${s.name}. Seu nível atual é ${c.level}.` };
@@ -634,6 +639,8 @@ export class Zone {
 
   alliesNear(p, r) {
     const out = [p];
+    // aliados da prova de classe (aprendizes, peregrino) contam como o grupo de quem está na arena
+    for (const a of this.allies.values()) if (!a.char.dead && dist(a.char, p.char) <= r) out.push(a);
     const pid = this.hooks.partyIdOf?.(p.char.id);
     if (pid == null) return out;
     for (const o of this.players.values()) {
@@ -650,6 +657,7 @@ export class Zone {
   }
 
   pullMonster(m, p, keep) {
+    if (m.inert) return; // pilar, boneco, alvo: presos no lugar
     const dx = m.x - p.char.x, dz = m.z - p.char.z;
     const d = Math.hypot(dx, dz) || 1;
     const nx = p.char.x + (dx / d) * keep, nz = p.char.z + (dz / d) * keep;
@@ -657,6 +665,7 @@ export class Zone {
   }
 
   pushMonster(m, from, meters) {
+    if (m.inert) return;
     const dx = m.x - from.x, dz = m.z - from.z;
     const d = Math.hypot(dx, dz) || 1;
     const nx = m.x + (dx / d) * meters, nz = m.z + (dz / d) * meters;
@@ -666,7 +675,7 @@ export class Zone {
   addBuff(p, buff) {
     p.buffs = p.buffs.filter((b) => b.id !== buff.id);
     p.buffs.push(buff);
-    this.recalc(p);
+    if (p.isAlly) p.recalc(); else this.recalc(p);
     this.broadcast({ t: 'buff', eid: p.eid, skill: buff.id, ms: Math.round(buff.until - this.now) });
   }
 
@@ -724,7 +733,8 @@ export class Zone {
 
   // participação: soma ao placar do monstro (usado para XP e saque)
   credit(m, charId, amount) {
-    if (amount > 0 && m.state !== 'dead') m.score.set(charId, (m.score.get(charId) || 0) + amount);
+    // sem monstro: dano do ambiente (pedras do teto, jato de vapor da prova) não dá participação a ninguém
+    if (m && amount > 0 && m.state !== 'dead') m.score.set(charId, (m.score.get(charId) || 0) + amount);
   }
 
   creditControl(m, p, seconds) {
@@ -766,6 +776,7 @@ export class Zone {
     this.duels.tick();
     for (const m of this.monsters.values()) this.tickMonster(m, dt);
     tickHazards(this);
+    for (const a of this.allies.values()) a.tick(dt);
     for (const [eid, e] of this.escorts) {
       const r = e.tick(dt);
       if (r === 'abandoned' || r === 'done') {
@@ -864,8 +875,12 @@ export class Zone {
           brake(c, dt, this.mv.decel * 1.5);
           if (this.now >= p.nextAttackAt) {
             p.nextAttackAt = this.now + p.stats.attackIntervalMs;
+            const wasCombatAt = p.lastCombatAt;
             p.lastCombatAt = this.now;
-            this.hitMonster(p, t, null, null);
+            // golpe que a peça da prova recusa (pilar blindado, sino apagado, tiro de fora do posto) não causa
+            // dano: não prende em combate ("5 s sem causar ou receber dano", docs/04) — quem espera a mana da
+            // Ruptura batendo na blindagem recupera no ritmo de fora de combate
+            if (this.hitMonster(p, t, null, null).immune) p.lastCombatAt = wasCombatAt;
             const pierce = this.buffMod(p, 'basicPierce');
             if (pierce > 0) {
               // a estocada atravessa: atinge até N monstros logo atrás do alvo
@@ -927,6 +942,13 @@ export class Zone {
   // Ataque de jogador (básico se skill = null). Aplica dano, ameaça e participação.
   hitMonster(p, m, skill, skillId) {
     if (m.state === 'dead') return { hit: false, damage: 0 };
+    // alvo da prova de classe que recusa o golpe (pilar blindado, sino apagado, tiro de fora do posto): o
+    // motivo vai no 'hit' (note) e nada do golpe vale — nem efeito secundário, nem ameaça
+    const note = m.shieldHit?.(p, skillId);
+    if (note) {
+      this.broadcast({ t: 'hit', src: p.eid, dst: m.eid, dmg: 0, crit: false, miss: false, skill: skillId, magic: false, note });
+      return { hit: false, damage: 0, immune: note };
+    }
     let stats = p.stats;
     if (p.nextAttackPct && (!skill || skill.def.effect.damageType !== 'magic')) {
       stats = { ...stats, physDamagePct: (stats.physDamagePct || 0) + p.nextAttackPct };
@@ -945,6 +967,7 @@ export class Zone {
   }
 
   addThreat(m, p, amount) {
+    if (m.inert) return; // pilar, boneco, alvo: não perseguem ninguém
     m.threat.set(p.char.id, (m.threat.get(p.char.id) || 0) + amount);
     if (m.state === 'idle' || m.state === 'return') m.state = 'chase';
     if (!m.targetId) m.targetId = p.eid;
@@ -976,6 +999,8 @@ export class Zone {
     this.broadcast({ t: 'death', eid: m.eid });
     onMonsterDeath(this, m); // o golpe que preparava não sai; explosão avisada (Sapo-Bomba, Escória)
     this.hooks.onMonsterDeath?.(m);
+    // alvos e monstros da prova de classe: sem XP, saque nem crédito de missão (a prova confere o estado)
+    if (m.noReward) return;
     const radius = this.f.xp.shareRadius;
     // chefe: quem caiu na reta final também leva XP, saque e o crédito da missão (a participação já está
     // registrada); nos demais monstros, só quem está de pé
@@ -1088,6 +1113,8 @@ export class Zone {
       if (this.now >= m.respawnAt) { this.placeMonster(m); this.broadcast({ t: 'spawn', eid: m.eid }); }
       return;
     }
+    // blindagem fechada (pilar da prova): o sangramento não atravessa
+    if (m.dots.length && m.shieldHit?.(null, 'dot')) m.dots = [];
     if (m.dots.length) {
       for (const d of m.dots) {
         while (d.nextAt <= this.now && d.nextAt <= d.until && m.state !== 'dead') {
@@ -1108,6 +1135,7 @@ export class Zone {
       return;
     }
     if (m.fx.length) m.fx = m.fx.filter((f) => f.until > this.now);
+    if (m.inert) return; // pilar, boneco, alvo, sino, fagulha: a prova de classe move e confere (trial.js)
     // atordoado: não anda nem bate, e o golpe avisado que preparava não sai
     if (this.monsterFx(m, 'stun')) { if (m.windup) cancelWindup(this, m); brake(m, dt, 30); return; }
     // preparando um golpe avisado: parado até a área resolver (tickHazards)
@@ -1129,6 +1157,12 @@ export class Zone {
       if (esc && esc.state !== 'broken' && esc.state !== 'arrived') { esc.monsterTick(m, dt, speed, mopts); return; }
       m.state = 'dead'; m.hp = 0; m.removeAt = this.now + 500; // carroça sumiu: a emboscada se desfaz
       return;
+    }
+    // prova de classe: quem mira um aliado (aprendiz, peregrino) vai nele enquanto nenhum jogador segura a
+    // atenção (ameaça); os fixos (atiradores, investida) não largam o aliado mesmo apanhando
+    if (m.allyTarget && (m.fixated || !m.threat.size)) {
+      const a = this.allies.get(m.allyTarget);
+      if (a && !a.char.dead) { a.monsterTick(m, dt, speed, mopts); return; }
     }
     let target = m.targetId ? this.entityById(m.targetId) : null;
     if (target && (target.char.dead || !this.players.has(target.char.id))) {
@@ -1204,7 +1238,8 @@ export class Zone {
     }
   }
 
-  // Dano em jogador: guardiões (redirecionamento) → escudo → vida. Proteção conta como participação.
+  // Dano em jogador (ou aliado da prova): guardiões (redirecionamento) → escudo → vida. Proteção conta como
+  // participação. m = null: dano do ambiente (pedras do teto, jato de vapor da prova de classe).
   damagePlayer(p, amount, m) {
     p.lastHitAt = this.now;
     if (m?.defId) p.lastHitBy = m.defId; // telemetria de mortes: o último monstro que acertou
@@ -1220,7 +1255,7 @@ export class Zone {
       amount -= portion;
       this.applyRawDamage(gp, portion);
       this.credit(m, gp.char.id, portion * prot);
-      this.broadcast({ t: 'hit', src: m.eid, dst: gp.eid, dmg: portion, crit: false, miss: false, skill: 'redirect', magic: false });
+      this.broadcast({ t: 'hit', src: m?.eid ?? null, dst: gp.eid, dmg: portion, crit: false, miss: false, skill: 'redirect', magic: false });
     }
     if (p.shield && amount > 0) {
       const absorbed = Math.min(p.shield.amount, amount);
@@ -1240,7 +1275,7 @@ export class Zone {
     if (amount <= 0 || p.char.dead) return;
     p.char.hp -= amount;
     p.lastCombatAt = this.now;
-    if (p.char.hp <= 0) this.killPlayer(p);
+    if (p.char.hp <= 0) { if (p.isAlly) p.die(); else this.killPlayer(p); }
   }
 
   killPlayer(p) {
@@ -1286,6 +1321,7 @@ export class Zone {
       ents.push({ id: m.eid, k: 'm', def: m.defId, lvl: m.def.level, x: r2(m.x), z: r2(m.z), vx: r2(m.vx || 0), vz: r2(m.vz || 0), hp: Math.ceil(m.hp), mhp: m.def.hp, st: m.state, tgt: m.targetId, fx: fx.length ? fx : undefined });
     }
     for (const e of this.escorts.values()) if (!e.ownerOnly || e.ownerCharId === forCharId) ents.push(e.view());
+    for (const a of this.allies.values()) ents.push(a.view());
     return { t: 'snap', now: Math.round(this.now), map: this.mapId, ents };
   }
 
@@ -1335,6 +1371,7 @@ export class Zone {
         C: `"hp":${Math.ceil(e.hp)},"st":"${e.state}"`,
       });
     }
+    for (const a of this.allies.values()) recs.push(a.record());
     return recs;
   }
 
@@ -1344,7 +1381,9 @@ export class Zone {
     return {
       id: c.id, eid: p.eid, name: c.name, classId: c.classId, level: c.level, xp: c.xp,
       xpLevelStart: cum[c.level - 1], xpNext: c.level >= this.data.levelCap ? null : cum[c.level],
-      unspent: c.unspent, skillPoints: c.skillPoints, skills: c.skills, alloc: c.alloc, trialDone: !!c.trialDone, title: c.title ?? null,
+      // prova de classe: a habilidade do nível 10 emprestada aparece no grau 1 (trialSkill diz qual é)
+      unspent: c.unspent, skillPoints: c.skillPoints, skills: p.trialSkill && !c.skills[p.trialSkill] ? { ...c.skills, [p.trialSkill]: 1 } : c.skills,
+      trialSkill: p.trialSkill ?? null, alloc: c.alloc, trialDone: !!c.trialDone, title: c.title ?? null,
       titles: this.hooks.titlesOf?.(c) ?? (c.title ? [c.title] : []),
       permanent: s.permanent, attrs: s.attrs, hp: Math.ceil(c.hp), mp: Math.floor(c.mp), gold: c.gold, dead: c.dead,
       x: r2(c.x), z: r2(c.z), mapId: this.mapId, instance: this.instanceId,

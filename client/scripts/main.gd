@@ -1247,6 +1247,8 @@ func _on_zone(m: Dictionary) -> void:
 		hud.clear_boss()
 		hud.clear_debuffs()  # os efeitos negativos ficam na zona de onde se saiu (o servidor também os tira)
 		hud.clear_defense()
+		if m.get("instance", null) == null:
+			hud.hide_trial()  # saiu da arena (vitória, derrota ou queda): o painel da prova não fica
 		if not m["char"].get("dead", false):
 			hud.hide_death()
 	show_loading(map_def().get("name", map_id))
@@ -1461,6 +1463,17 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif state == "world" and in_world:
 			if hud and hud.close_top_panel():
 				pass
+			elif world and world.selected != "":
+				# Esc tira a seleção do alvo antes de abrir o menu: sem alvo, golpes em cone ou em linha (Ruptura,
+				# Linha Partida...) saem para onde o cursor aponta. Se o personagem estava batendo nele, para também:
+				# o servidor seguiria atacando (e indo atrás de) um alvo que a tela já não mostra
+				var mine: Dictionary = world.me()
+				if not mine.is_empty() and str(mine["data"].get("tgt", "")) == world.selected:
+					Net.request("stop")
+				world.selected = ""
+				world.pending_cast = {}
+				if hud:
+					hud.refresh_target()
 			else:
 				toggle_pause_menu()
 		elif state == "create":
@@ -1618,25 +1631,31 @@ func _on_message(m: Dictionary) -> void:
 			if hud and hud.social:
 				hud.social.on_message(m)
 		"trial":
+			# prova de classe (server/src/trial.js): objetivo e progresso no painel do alto da tela, marcas no chão
 			match m["state"]:
 				"started":
 					Sfx.warn("line")
-				"wave":
-					Sfx.warn("valve")
 				"success":
 					Sfx.ui("quest_done")
 				"failed":
 					Sfx.ui("refine_fail")
-			if hud:
-				match m["state"]:
-					"started":
-						hud.system("Prova de classe: onda 1 de %d. Tempo: %d s." % [int(m["waves"]), int(m["ms"]) / 1000])
-					"wave":
-						hud.system("Onda %d de %d!" % [int(m["wave"]), int(m["waves"])])
-					_:
-						hud.system(m.get("message", ""))
-				if m.has("char"):
-					set_char(m["char"])
+			if m.has("char"):
+				set_char(m["char"])
+			match m["state"]:
+				"started":
+					if world:
+						world.trial_marks(m.get("marks", []))
+					if hud:
+						hud.show_trial(m)
+				"status":
+					if world and m.get("marks", null) is Array:
+						world.update_trial_marks(m["marks"])
+					if hud:
+						hud.update_trial(m)
+				_:
+					if hud:
+						hud.hide_trial()
+						hud.system(str(m.get("message", "")))
 		"system":
 			if hud:
 				hud.system(m["text"])

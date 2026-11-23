@@ -5,6 +5,7 @@ extends RefCounted
 
 const TOON := preload("res://shaders/toon.gdshader")
 const OUTLINE := preload("res://shaders/outline.gdshader")
+const OUTLINE_SELF := preload("res://shaders/outline_self.gdshader")
 const GROUND := preload("res://shaders/ground.gdshader")
 const WATER := preload("res://shaders/water.gdshader")
 const Rig := preload("res://scripts/rig.gd")
@@ -36,6 +37,12 @@ const CLASS_LOOK := {
 	"windwalker":  {"outfit": Color("#4f9ea3"), "trim": Color("#e8e2d6"), "hair": Color("#ecebf2"), "eyes": Color("#3ab0b0"), "hairstyle": "long",     "garb": "skirt", "headgear": "",       "fem": true},
 	"veilsinger":  {"outfit": Color("#cdbde9"), "trim": Color("#ffffff"), "hair": Color("#5a3d78"), "eyes": Color("#9a5ad0"), "hairstyle": "long",     "garb": "robe",  "headgear": "veil",   "fem": true},
 	"emberweaver": {"outfit": Color("#a8322a"), "trim": Color("#ffd27a"), "hair": Color("#f2a33a"), "eyes": Color("#e0482c"), "hairstyle": "spiky",    "garb": "robe",  "headgear": "hat",    "fem": false},
+}
+## Contorno do próprio personagem na cor da classe (docs/06: legibilidade com muitos monstros). Os outros
+## jogadores, NPCs e monstros seguem com o contorno escuro.
+const CLASS_OUTLINE := {
+	"breaker": Color("#ff7b3a"), "bastion": Color("#e8b34e"), "pikeman": Color("#7fb2ff"), "warden": Color("#8fd65a"),
+	"dawnshield": Color("#ffe27a"), "windwalker": Color("#5fe0d0"), "veilsinger": Color("#c9a2ff"), "emberweaver": Color("#ff4d5a"),
 }
 const NPC_HAIR := [Color("#3a2a22"), Color("#7a4a2a"), Color("#c9a060"), Color("#6a6a70"), Color("#2a2a3a")]
 const NPC_STYLES := ["short", "swept", "long", "ponytail", "bald"]
@@ -496,6 +503,8 @@ const MONSTER_COLORS := {
 	# A Cava Primeira (pós-v1): famílias existentes, só cores novas
 	"cistern_salamander": Color("#c8623a"), "bronze_bellringer": Color("#b0823a"), "buried_voice": Color("#c8a8e8"),
 	"basalt_mole": Color("#45403f"), "deep_sealer": Color("#5f8a84"),
+	# prova de classe
+	"trial_sentinel": Color("#6a6f80"), "trial_archer": Color("#8a7a5a"), "trial_runner": Color("#5a7a8a"), "trial_spark": Color("#ff8a3a"),
 }
 
 ## Monstro por espécie (rato, besouro, cão, lagarto, javali) ou por família, com olhos
@@ -522,6 +531,11 @@ static func cart() -> Node3D:
 	return root
 
 static func monster(def: Dictionary) -> Node3D:
+	# peças paradas da prova de classe (pilar, boneco, alvo, sino) têm modelo próprio, sem esqueleto
+	var model: String = def.get("model", "")
+	var piece := trial_piece(model)
+	if piece != null:
+		return piece
 	var root: Node3D = Rig.new()
 	root.step_speed = 12.0
 	root.stride = 0.55
@@ -536,6 +550,19 @@ static func monster(def: Dictionary) -> Node3D:
 	root.cycle_len = (1.6 if fam == "machine" else 1.15) * s
 	if fam == "machine":
 		_robot(root, body, s, col, rank)
+		if model == "archer" and root.weapon_arm != null:
+			# atirador: besta na mão — coronha de madeira para a frente, arco de ferro atravessado e a corda
+			var stock = toon(Color("#8a5a32"))
+			var iron = toon(Color("#9aa3ad"))
+			part(root.weapon_arm, box(Vector3(0.09, 0.09, 0.8) * s), stock, Vector3(0, -0.48 * s, 0.3 * s))
+			part(root.weapon_arm, box(Vector3(0.9, 0.06, 0.07) * s), iron, Vector3(0, -0.48 * s, 0.66 * s))
+			for sx2 in [-1, 1]:
+				part(root.weapon_arm, box(Vector3(0.08, 0.06, 0.12) * s), iron, Vector3(sx2 * 0.44 * s, -0.48 * s, 0.6 * s), Vector3.ONE, Vector3(0, sx2 * -30, 0))
+			part(root.weapon_arm, box(Vector3(0.84, 0.015, 0.015) * s), toon(Color("#efe4c8"), false), Vector3(0, -0.46 * s, 0.52 * s))
+		elif model == "runner":
+			# perseguidor: barbatanas de vento nas costas
+			for sx in [-1, 1]:
+				part(body, box(Vector3(0.04, 0.32, 0.55) * s), toon(col.darkened(0.3)), Vector3(sx * 0.3 * s, 1.15 * s, -0.25 * s), Vector3.ONE, Vector3(25, sx * 12, 0))
 	elif fam == "spirit":
 		_spirit(root, body, s, col)
 	elif id == "ember_beetle":
@@ -663,6 +690,387 @@ static func _spirit(root: Node3D, body: Node3D, s: float, col: Color) -> void:
 	var head = pivot(body, Vector3(0, 1.0 * s, 0), "Head")
 	root.head = head
 	face_decal(head, 0.42 * s, Color("#ffffff"), false, true, 1.1)
+
+# ---------------- contorno na cor da classe ----------------
+static var _tinted := {}
+
+## Troca o contorno escuro (casca invertida, OUTLINE) de todas as malhas do nó por um na cor dada, com a
+## espessura crescendo com a distância da câmera (outline_self.gdshader: 2 a 3 pixels também na distância
+## normal de jogo, onde o contorno fino some). Os materiais são compartilhados entre personagens: cada material
+## ganha uma cópia própria, guardada por cor, então só este nó (o personagem do jogador) muda.
+static func tint_outline(root: Node, color: Color) -> void:
+	for mi in root.find_children("*", "MeshInstance3D", true, false):
+		var m := mi as MeshInstance3D
+		if m.material_override != null:
+			m.material_override = _tinted_mat(m.material_override, color)
+		if m.mesh == null:
+			continue
+		for i in m.mesh.get_surface_count():
+			var src: Material = m.get_surface_override_material(i)
+			if src != null:
+				m.set_surface_override_material(i, _tinted_mat(src, color))
+
+static func _tinted_mat(src: Material, color: Color) -> Material:
+	if not (src is ShaderMaterial):
+		return src
+	var o = (src as ShaderMaterial).next_pass
+	if not (o is ShaderMaterial) or (o as ShaderMaterial).shader == null or not String((o as ShaderMaterial).shader.resource_path).ends_with("outline.gdshader"):
+		return src
+	var key := "%d|%s" % [src.get_instance_id(), color.to_html()]
+	if _tinted.has(key):
+		return _tinted[key]
+	var m2 := (src as ShaderMaterial).duplicate() as ShaderMaterial
+	var o2 := ShaderMaterial.new()
+	o2.shader = OUTLINE_SELF
+	o2.set_shader_parameter("outline_color", color)
+	# de perto, um pouco mais grosso que o contorno de antes (peças do corpo procedural têm 0,018; VRM, 0,0035)
+	var t = (o as ShaderMaterial).get_shader_parameter("thickness")
+	o2.set_shader_parameter("min_thickness", maxf((float(t) if t != null else 0.018) * 1.5, 0.005))
+	m2.next_pass = o2
+	_tinted[key] = m2
+	return m2
+
+# ---------------- prova de classe: peças e aliados ----------------
+## Peça parada da prova (data/monsters.json "model"): pilar blindado, boneco de treino, alvo móvel, sino.
+## Partes que mudam com o estado ficam em metadados: "armor"/"cracks" (pilar) e "glow" (sino aceso).
+static func trial_piece(model: String) -> Node3D:
+	match model:
+		"pillar":
+			return _trial_pillar()
+		"dummy":
+			return _trial_dummy()
+		"target":
+			return _trial_target()
+		"bell":
+			return _trial_bell()
+	return null
+
+static func _trial_pillar() -> Node3D:
+	var root := Node3D.new()
+	var stone := toon(Color("#8d8378"))
+	var dark := toon(Color("#5e564e"))
+	part(root, box(Vector3(1.7, 0.3, 1.7)), dark, Vector3(0, 0.15, 0))
+	part(root, cyl(0.52, 0.58, 3.4, 12), stone, Vector3(0, 2.0, 0))
+	part(root, box(Vector3(1.5, 0.4, 1.5)), dark, Vector3(0, 3.85, 0))
+	# blindagem: placas de ferro rebitadas e duas cintas (somem quando a Ruptura racha)
+	var armor := Node3D.new()
+	armor.name = "Armor"
+	root.add_child(armor)
+	var iron := toon(Color("#5d636c"))
+	var rivet := toon(Color("#a9b0b8"))
+	for i in 4:
+		var a := i * PI / 2.0 + PI / 4.0
+		var pl := part(armor, box(Vector3(0.42, 2.5, 0.12)), iron, Vector3(sin(a) * 0.58, 1.95, cos(a) * 0.58), Vector3.ONE, Vector3(0, rad_to_deg(a), 0))
+		for k in 2:
+			part(pl, sphere(0.05, 6), rivet, Vector3(-0.12 + k * 0.24, 0.95, 0.07))
+			part(pl, sphere(0.05, 6), rivet, Vector3(-0.12 + k * 0.24, -0.95, 0.07))
+	for y in [1.05, 2.85]:
+		part(armor, cyl(0.66, 0.66, 0.16, 16), iron, Vector3(0, y, 0))
+	# rachaduras incandescentes (aparecem com a blindagem rachada)
+	var cracks := Node3D.new()
+	cracks.name = "Cracks"
+	cracks.visible = false
+	root.add_child(cracks)
+	var hot := toon(Color("#ffb04a"), false, Color(1.0, 0.45, 0.1))
+	for i in 5:
+		var a := i * TAU / 5.0 + 0.3
+		var y := 1.0 + float(i % 3) * 0.8
+		part(cracks, box(Vector3(0.06, 0.9, 0.04)), hot, Vector3(sin(a) * 0.56, y, cos(a) * 0.56), Vector3.ONE, Vector3(0, rad_to_deg(a), 18 if i % 2 == 0 else -22))
+	root.set_meta("armor", armor)
+	root.set_meta("cracks", cracks)
+	return root
+
+static func _trial_dummy() -> Node3D:
+	var root := Node3D.new()
+	var wood := toon(Color("#7a5232"))
+	var straw := toon(Color("#d8b45a"))
+	var burlap := toon(Color("#c9a66b"))
+	var strap := toon(Color("#5a3a26"))
+	for k in [0.0, 90.0]:
+		part(root, box(Vector3(1.0, 0.12, 0.16)), wood, Vector3(0, 0.06, 0), Vector3.ONE, Vector3(0, k, 0))
+	part(root, cyl(0.07, 0.08, 1.9, 8), wood, Vector3(0, 0.95, 0))
+	part(root, capsule(0.3, 1.0), straw, Vector3(0, 1.25, 0), Vector3(1.0, 1.0, 0.8))
+	part(root, cyl(0.06, 0.06, 1.2, 8), wood, Vector3(0, 1.5, 0), Vector3.ONE, Vector3(0, 0, 90))
+	for sx in [-0.62, 0.62]:
+		part(root, sphere(0.1, 8), straw, Vector3(sx, 1.5, 0))
+	for y in [1.0, 1.4]:
+		part(root, cyl(0.31, 0.31, 0.06, 12), strap, Vector3(0, y, 0), Vector3(1.0, 1.0, 0.8))
+	part(root, sphere(0.22, 10), burlap, Vector3(0, 1.92, 0))
+	# olhos de pano costurados em X
+	for sx in [-0.08, 0.08]:
+		for r in [45.0, -45.0]:
+			part(root, box(Vector3(0.09, 0.02, 0.02)), strap, Vector3(sx, 1.96, 0.21), Vector3.ONE, Vector3(0, 0, r))
+	return root
+
+static func _trial_target() -> Node3D:
+	var root := Node3D.new()
+	var wood := toon(Color("#6e4a2c"))
+	part(root, box(Vector3(1.1, 0.22, 0.7)), wood, Vector3(0, 0.25, 0))
+	for sx in [-0.42, 0.42]:
+		for sz in [-0.3, 0.3]:
+			part(root, cyl(0.14, 0.14, 0.08, 10), toon(Color("#3a2a20")), Vector3(sx, 0.14, sz), Vector3.ONE, Vector3(90, 0, 0))
+	part(root, cyl(0.05, 0.05, 1.0, 6), wood, Vector3(0, 0.85, 0))
+	# disco pintado (anéis concêntricos dos dois lados), de lado para o trilho: encara quem atira
+	var disc := pivot(root, Vector3(0, 1.45, 0))
+	disc.rotation_degrees = Vector3(0, 0, 90)
+	var rings := [[0.6, Color("#f2ead8")], [0.46, Color("#c0392b")], [0.32, Color("#f2ead8")], [0.17, Color("#c0392b")]]
+	for i in rings.size():
+		part(disc, cyl(rings[i][0], rings[i][0], 0.06 + i * 0.012, 20), toon(rings[i][1], i == 0), Vector3.ZERO)
+	return root
+
+static func _trial_bell() -> Node3D:
+	var root := Node3D.new()
+	var wood := toon(Color("#6b4a2e"))
+	var bronze := toon(Color("#b8803a"))
+	part(root, box(Vector3(0.9, 0.12, 0.9)), toon(Color("#4a3a2c")), Vector3(0, 0.06, 0))
+	part(root, cyl(0.08, 0.1, 2.5, 8), wood, Vector3(0, 1.25, 0))
+	part(root, box(Vector3(1.2, 0.12, 0.14)), wood, Vector3(0.35, 2.45, 0))
+	part(root, cyl(0.16, 0.42, 0.6, 14), bronze, Vector3(0.75, 1.98, 0))
+	part(root, cyl(0.43, 0.43, 0.05, 14), toon(Color("#8a5a28")), Vector3(0.75, 1.68, 0))
+	part(root, sphere(0.08, 8), toon(Color("#3a2a20")), Vector3(0.75, 1.62, 0))
+	# sino aceso (o da vez): chama âmbar no alto do poste e um halo
+	var glow := Node3D.new()
+	glow.name = "Glow"
+	root.add_child(glow)
+	part(glow, sphere(0.16, 10), toon(Color("#ffcf6a"), false, Color(1.0, 0.65, 0.2)), Vector3(0, 2.75, 0))
+	var halo := TorusMesh.new()
+	halo.inner_radius = 0.5
+	halo.outer_radius = 0.58
+	part(glow, halo, toon(Color("#ffcf6a"), false, Color(1.0, 0.7, 0.25)), Vector3(0.75, 1.98, 0), Vector3(1, 0.4, 1))
+	root.set_meta("glow", glow)
+	return root
+
+## Aliado da prova (aprendiz, peregrino): morador com roupa e acessório próprios — o aprendiz com uma
+## varinha de estudo, o peregrino de roupa parda com o cajado de caminhada. fem: o corpo que os dados pedem.
+static func trial_ally(model: String, seed: int, fem := false) -> Node3D:
+	var s := _npc_seed(fem, seed)
+	if model == "pilgrim":
+		return character("", "staff_2h", true, Color("#a8865a"), s)
+	return character("", "wand", true, Color("#4f8f86"), s)
+
+## Semente de morador com o corpo pedido: os moradores sorteiam o corpo pela semente, e vrm_character e
+## proc_character sorteiam em ordens diferentes (o mesmo número daria corpos trocados entre os dois).
+static func _npc_seed(fem: bool, base: int) -> int:
+	for i in 64:
+		var s := base + i * 7919
+		var rng := RandomNumberGenerator.new()
+		rng.seed = s
+		var is_fem: bool
+		if VrmChar.available():
+			is_fem = rng.randf() < 0.5
+		else:
+			rng.randi()
+			rng.randf()
+			rng.randi()
+			rng.randi()
+			is_fem = rng.randf() < 0.5
+		if is_fem == fem:
+			return s
+	return base
+
+# ---------------- objetos de missão ----------------
+## Modelo de um objeto de missão (data/maps.json "objects"): pelo kind (quadro, carroça, defesa) ou pelo
+## prefixo do id (marcos, páginas, fusíveis, medidores, válvulas, selos, tubos de voz, a máquina do posto,
+## pessoas a resgatar). A base fica no chão (y = 0); o losango que indica "dá para usar" é do world.gd.
+static func quest_object(o: Dictionary) -> Node3D:
+	var id: String = o.get("id", "")
+	match o.get("kind", ""):
+		"board":
+			return _obj_board()
+		"escort":
+			return cart()
+		"defense":
+			return _obj_valve(true)
+	if id.begins_with("rescue_"):
+		return _obj_person(id)
+	if id.begins_with("marker_"):
+		return _obj_marker()
+	if id.begins_with("page_"):
+		return _obj_pages()
+	if id.begins_with("fuse_box"):
+		return _obj_fuse_box()
+	if id == "order_vault" or id.ends_with("_vault"):
+		return _obj_vault()
+	if id.begins_with("gauge_"):
+		return _obj_gauge()
+	if id.begins_with("thermo_"):
+		return _obj_thermo()
+	if id.begins_with("valve_"):
+		return _obj_valve(false)
+	if id.begins_with("voice_tube") or id.ends_with("_tube"):
+		return _obj_tube(id == "reply_tube")
+	if id == "old_post":
+		return _obj_machine()
+	if id.begins_with("deep_seal") or id.begins_with("seal_"):
+		return _obj_seal()
+	return _obj_crate()
+
+static func _obj_crate() -> Node3D:
+	var root := Node3D.new()
+	part(root, box(Vector3(0.7, 0.7, 0.7)), toon(Color("#9fd3d1"), true, Color(0.15, 0.35, 0.35)), Vector3(0, 0.35, 0), Vector3.ONE, Vector3(0, 30, 0))
+	return root
+
+static func _obj_marker() -> Node3D:
+	# marco de rota: pedra talhada com faixa pintada e uma bandeirola
+	var root := Node3D.new()
+	var stone := toon(Color("#a39a8c"))
+	part(root, box(Vector3(0.7, 0.18, 0.7)), toon(Color("#7d7468")), Vector3(0, 0.09, 0))
+	part(root, cyl(0.2, 0.26, 1.1, 6), stone, Vector3(0, 0.7, 0))
+	part(root, cyl(0.0, 0.21, 0.22, 6), stone, Vector3(0, 1.36, 0))
+	part(root, cyl(0.265, 0.265, 0.14, 6), toon(Color("#c0392b")), Vector3(0, 0.95, 0))
+	part(root, cyl(0.02, 0.02, 0.9, 5), toon(Color("#5a3e2a")), Vector3(0.22, 1.5, 0))
+	part(root, box(Vector3(0.02, 0.22, 0.34)), toon(Color("#e3b23c")), Vector3(0.23, 1.82, 0.17))
+	return root
+
+static func _obj_pages() -> Node3D:
+	# páginas do registro: maço de folhas amarradas sobre um toco, uma folha solta presa por uma pedra
+	var root := Node3D.new()
+	part(root, cyl(0.42, 0.48, 0.7, 10), toon(Color("#6b4a2e")), Vector3(0, 0.35, 0))
+	part(root, cyl(0.4, 0.4, 0.03, 10), toon(Color("#a8865a")), Vector3(0, 0.71, 0))
+	for i in 5:
+		part(root, box(Vector3(0.58, 0.03, 0.42)), toon(Color("#efe4c8").darkened(i * 0.04), false), Vector3(0.0, 0.74 + i * 0.032, 0.0), Vector3.ONE, Vector3(0, i * 9 - 18, 0))
+	part(root, box(Vector3(0.06, 0.2, 0.44)), toon(Color("#8a2a2a")), Vector3(0, 0.82, 0))
+	part(root, box(Vector3(0.44, 0.02, 0.32)), toon(Color("#efe4c8"), false), Vector3(0.6, 0.02, 0.25), Vector3.ONE, Vector3(0, 25, 0))
+	part(root, sphere(0.1, 6), toon(Color("#8a8278")), Vector3(0.6, 0.08, 0.25))
+	return root
+
+static func _obj_fuse_box() -> Node3D:
+	# caixa de fusíveis num poste: porta de metal, três fusíveis de vidro e uma lâmpada
+	var root := Node3D.new()
+	var metal := toon(Color("#6f7a80"))
+	part(root, cyl(0.06, 0.07, 1.6, 6), toon(Color("#4a3a2c")), Vector3(0, 0.8, 0))
+	part(root, box(Vector3(0.6, 0.7, 0.28)), metal, Vector3(0, 1.3, 0.1))
+	part(root, box(Vector3(0.5, 0.6, 0.03)), toon(Color("#56606a")), Vector3(0, 1.3, 0.25))
+	for i in 3:
+		part(root, cyl(0.04, 0.04, 0.22, 6), toon(Color("#9fd3e8"), false, Color(0.15, 0.3, 0.4)), Vector3(-0.15 + i * 0.15, 1.32, 0.28))
+	part(root, box(Vector3(0.06, 0.18, 0.06)), toon(Color("#c0392b")), Vector3(0.33, 1.18, 0.18))
+	part(root, sphere(0.06, 8), toon(Color("#ffcf4a"), false, Color(1.0, 0.7, 0.2)), Vector3(0, 1.72, 0.12))
+	return root
+
+static func _obj_vault() -> Node3D:
+	# cofre de ordens: caixa de ferro com roda de segredo e dobradiças
+	var root := Node3D.new()
+	var iron := toon(Color("#4f565e"))
+	part(root, box(Vector3(1.0, 1.1, 0.8)), iron, Vector3(0, 0.55, 0))
+	part(root, box(Vector3(0.84, 0.94, 0.04)), toon(Color("#5c646d")), Vector3(0, 0.56, 0.41))
+	part(root, cyl(0.16, 0.16, 0.06, 14), toon(Color("#b8a46a")), Vector3(0.1, 0.62, 0.45), Vector3.ONE, Vector3(90, 0, 0))
+	part(root, box(Vector3(0.04, 0.2, 0.04)), toon(Color("#b8a46a")), Vector3(-0.22, 0.45, 0.44))
+	for y in [0.25, 0.85]:
+		part(root, box(Vector3(0.06, 0.12, 0.08)), toon(Color("#2f343a")), Vector3(-0.44, y, 0.42))
+	return root
+
+static func _obj_gauge() -> Node3D:
+	# medidor de pressão: cano saindo do chão com o mostrador redondo e o ponteiro
+	var root := Node3D.new()
+	var pipe := toon(Color("#8a6a4a"))
+	part(root, cyl(0.1, 0.1, 1.2, 8), pipe, Vector3(0, 0.6, 0))
+	part(root, cyl(0.1, 0.1, 0.8, 8), pipe, Vector3(0.35, 0.15, 0), Vector3.ONE, Vector3(0, 0, 90))
+	part(root, cyl(0.3, 0.3, 0.1, 18), toon(Color("#b8803a")), Vector3(0, 1.35, 0.06), Vector3.ONE, Vector3(90, 0, 0))
+	part(root, cyl(0.25, 0.25, 0.02, 18), toon(Color("#f2ead8"), false), Vector3(0, 1.35, 0.12), Vector3.ONE, Vector3(90, 0, 0))
+	part(root, box(Vector3(0.03, 0.2, 0.02)), toon(Color("#c0392b"), false), Vector3(0.05, 1.4, 0.14), Vector3.ONE, Vector3(0, 0, -35))
+	return root
+
+static func _obj_thermo() -> Node3D:
+	# ponto de medição térmica: estaca com tubo de vidro e bulbo vermelho
+	var root := Node3D.new()
+	part(root, box(Vector3(0.4, 0.08, 0.4)), toon(Color("#8a8278")), Vector3(0, 0.04, 0))
+	part(root, cyl(0.08, 0.11, 1.5, 8), toon(Color("#5a4a3a")), Vector3(0, 0.75, 0))
+	part(root, box(Vector3(0.34, 0.9, 0.16)), toon(Color("#6a5a48")), Vector3(0, 1.15, 0.1))
+	part(root, box(Vector3(0.24, 0.8, 0.02)), toon(Color("#f2ead8"), false), Vector3(0, 1.15, 0.19))
+	part(root, cyl(0.04, 0.04, 0.62, 8), toon(Color("#dff2f4"), false), Vector3(0, 1.2, 0.21))
+	part(root, cyl(0.025, 0.025, 0.45, 6), toon(Color("#e04a3a"), false, Color(0.6, 0.1, 0.05)), Vector3(0, 1.12, 0.22))
+	part(root, sphere(0.07, 8), toon(Color("#e04a3a"), false, Color(0.6, 0.1, 0.05)), Vector3(0, 0.86, 0.22))
+	for k in 4:
+		part(root, box(Vector3(0.07, 0.012, 0.01)), toon(Color("#2a2018"), false), Vector3(0.07, 0.98 + k * 0.12, 0.2))
+	return root
+
+static func _obj_valve(big: bool) -> Node3D:
+	# válvula: cano em cotovelo com o volante de manobra (a válvula principal da defesa é maior)
+	var root := Node3D.new()
+	var k := 1.5 if big else 1.0
+	var pipe := toon(Color("#7a6a5a"))
+	part(root, cyl(0.16 * k, 0.16 * k, 1.0 * k, 10), pipe, Vector3(0, 0.5 * k, 0))
+	part(root, cyl(0.16 * k, 0.16 * k, 1.2 * k, 10), pipe, Vector3(0.5 * k, 0.2 * k, 0), Vector3.ONE, Vector3(0, 0, 90))
+	part(root, cyl(0.22 * k, 0.22 * k, 0.12 * k, 10), toon(Color("#5a4a3a")), Vector3(0, 1.0 * k, 0))
+	part(root, cyl(0.04 * k, 0.04 * k, 0.35 * k, 6), toon(Color("#4a3a2c")), Vector3(0, 1.2 * k, 0))
+	var wheel := TorusMesh.new()
+	wheel.inner_radius = 0.26 * k
+	wheel.outer_radius = 0.32 * k
+	part(root, wheel, toon(Color("#c0392b")), Vector3(0, 1.38 * k, 0))
+	for i in 3:
+		part(root, box(Vector3(0.58 * k, 0.04 * k, 0.04 * k)), toon(Color("#c0392b")), Vector3(0, 1.38 * k, 0), Vector3.ONE, Vector3(0, i * 60, 0))
+	return root
+
+static func _obj_tube(big: bool) -> Node3D:
+	# tubo de voz: cano de latão saindo do chão, curvado, com a boca em corneta
+	var root := Node3D.new()
+	var k := 1.35 if big else 1.0
+	var brass := toon(Color("#c39a4a"))
+	part(root, cyl(0.12 * k, 0.14 * k, 1.3 * k, 10), brass, Vector3(0, 0.65 * k, 0))
+	part(root, cyl(0.12 * k, 0.12 * k, 0.4 * k, 10), brass, Vector3(0, 1.42 * k, 0.12 * k), Vector3.ONE, Vector3(50, 0, 0))
+	part(root, cyl(0.38 * k, 0.12 * k, 0.45 * k, 14), brass, Vector3(0, 1.62 * k, 0.4 * k), Vector3.ONE, Vector3(80, 0, 0))
+	part(root, cyl(0.31 * k, 0.31 * k, 0.03 * k, 14), toon(Color("#2a2018"), false), Vector3(0, 1.66 * k, 0.645 * k), Vector3.ONE, Vector3(80, 0, 0))
+	part(root, cyl(0.2 * k, 0.24 * k, 0.12 * k, 10), toon(Color("#8a6a3a")), Vector3(0, 0.06, 0))
+	return root
+
+static func _obj_machine() -> Node3D:
+	# máquina do posto antigo: armário de metal com mostradores, alavanca e um rolo de fita perfurada
+	var root := Node3D.new()
+	var body := toon(Color("#6a6f5a"))
+	part(root, box(Vector3(1.3, 1.5, 0.8)), body, Vector3(0, 0.75, 0))
+	part(root, box(Vector3(1.4, 0.12, 0.9)), toon(Color("#4a4e40")), Vector3(0, 1.56, 0))
+	for i in 3:
+		part(root, cyl(0.13, 0.13, 0.05, 14), toon(Color("#efe4c8"), false), Vector3(-0.4 + i * 0.4, 1.15, 0.42), Vector3.ONE, Vector3(90, 0, 0))
+		part(root, box(Vector3(0.02, 0.1, 0.02)), toon(Color("#2a2018"), false), Vector3(-0.4 + i * 0.4, 1.17, 0.45), Vector3.ONE, Vector3(0, 0, 20 - i * 30))
+	part(root, cyl(0.03, 0.03, 0.5, 6), toon(Color("#3a3a3a")), Vector3(0.72, 1.0, 0.1), Vector3.ONE, Vector3(0, 0, -20))
+	part(root, sphere(0.07, 8), toon(Color("#c0392b")), Vector3(0.8, 1.24, 0.1))
+	part(root, cyl(0.12, 0.12, 0.6, 10), toon(Color("#d8c89a")), Vector3(0, 0.6, 0.42), Vector3.ONE, Vector3(0, 0, 90))
+	part(root, sphere(0.06, 8), toon(Color("#ffcf4a"), false, Color(1.0, 0.65, 0.2)), Vector3(0.5, 1.4, 0.42))
+	return root
+
+static func _obj_seal() -> Node3D:
+	# selo da Porta Funda: disco de bronze num pedestal de pedra, com marcas que brilham verde-água
+	var root := Node3D.new()
+	part(root, box(Vector3(0.9, 0.6, 0.5)), toon(Color("#6d665e")), Vector3(0, 0.3, 0))
+	part(root, cyl(0.55, 0.55, 0.14, 20), toon(Color("#9a7a3a")), Vector3(0, 1.15, 0), Vector3.ONE, Vector3(90, 0, 0))
+	part(root, cyl(0.42, 0.42, 0.16, 20), toon(Color("#7a5e2a")), Vector3(0, 1.15, 0.01), Vector3.ONE, Vector3(90, 0, 0))
+	var glyph := toon(Color("#7fe3d0"), false, Color(0.2, 0.6, 0.55))
+	for i in 6:
+		var a := i * TAU / 6.0
+		part(root, box(Vector3(0.05, 0.16, 0.02)), glyph, Vector3(cos(a) * 0.32, 1.15 + sin(a) * 0.32, 0.1), Vector3.ONE, Vector3(0, 0, rad_to_deg(a)))
+	part(root, sphere(0.08, 8), glyph, Vector3(0, 1.15, 0.1))
+	return root
+
+static func _obj_board() -> Node3D:
+	# quadro de missões: dois postes, telhadinho, tábua com folhas presas por pregos
+	var root := Node3D.new()
+	var wood := toon(Color("#7a5232"))
+	for sx in [-0.85, 0.85]:
+		part(root, cyl(0.07, 0.08, 2.3, 6), wood, Vector3(sx, 1.15, 0))
+	part(root, box(Vector3(1.8, 1.1, 0.08)), toon(Color("#8e6440")), Vector3(0, 1.45, 0))
+	part(root, box(Vector3(2.1, 0.08, 0.5)), toon(Color("#5a3a26")), Vector3(0, 2.3, 0.02), Vector3.ONE, Vector3(-14, 0, 0))
+	var papers := [[-0.55, 1.65, 4.0], [-0.1, 1.55, -6.0], [0.4, 1.7, 3.0], [-0.35, 1.2, -3.0], [0.25, 1.22, 7.0], [0.62, 1.35, -5.0]]
+	for p in papers:
+		part(root, box(Vector3(0.36, 0.42, 0.01)), toon(Color("#efe4c8"), false), Vector3(p[0], p[1], 0.05), Vector3.ONE, Vector3(0, 0, p[2]))
+		part(root, sphere(0.025, 5), toon(Color("#c0392b"), false), Vector3(p[0], p[1] + 0.17, 0.065))
+	return root
+
+static func _obj_person(id: String) -> Node3D:
+	# pessoa a resgatar (tutorial): morador comum; Bento preso no entulho, Caio é criança
+	var root := Node3D.new()
+	var p := character("", "", true, Color("#8a9a6a") if id.ends_with("caio") else Color("#a87a5a"), hash(id))
+	root.add_child(p)
+	if id.ends_with("caio"):
+		p.scale = Vector3.ONE * 0.95
+	else:
+		p.scale = Vector3.ONE * 1.25
+	if id.ends_with("bento"):
+		var rubble := toon(Color("#8a8278"))
+		for i in 6:
+			var a := i * TAU / 6.0
+			part(root, sphere(0.25 + (i % 3) * 0.06, 6), rubble, Vector3(cos(a) * 0.55, 0.15, sin(a) * 0.55), Vector3(1.2, 0.7, 1.0), Vector3(0, i * 40, 0))
+		part(root, box(Vector3(1.4, 0.12, 0.2)), toon(Color("#5a3e2a")), Vector3(0.1, 0.4, 0.35), Vector3.ONE, Vector3(0, 20, 12))
+	return root
 
 # ---------------- cenário ----------------
 static func tree(rng: RandomNumberGenerator, palette: Array) -> Node3D:
