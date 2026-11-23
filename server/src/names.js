@@ -5,7 +5,7 @@
 // primeiro espaço) e sem × ÷. Nomes antigos com espaço continuam valendo (o cliente aceita "entre aspas").
 export const NAME_RE = /^[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ0-9_-]{2,15}$/;
 // prefixos que a exclusão de personagem usa para renomear (excluido_<id>, store.deleteCharacter) e que a de conta
-// usava (excluida_<id>; hoje ela grava excluida#<id>): reservados para personagem, clã e conta (D125, D176)
+// usava (excluida_<id>; hoje ela grava excluida#<id>): reservados para personagem, clã e conta (D125, D178)
 export const DELETED_PREFIX_RE = /^exclu[ií]d[oa]_/i;
 // Palavras da equipe (D145). Longas: nenhum nome de personagem ou de clã pode ser uma delas, nem começar ou
 // terminar com uma. Curtas: só o nome inteiro ou um pedaço separado do resto (GM_Ana, Ana-Mod, Dev1, AdmLia,

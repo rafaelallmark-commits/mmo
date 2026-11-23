@@ -1036,7 +1036,7 @@ func _nav_tick() -> void:
 # a tela volta sem "Sem conexão" e com a conexão aberta), pede outro código (barrado: um e-mail por minuto),
 # confirma com o código lido do e-mail, entra pela mesma conexão, baixa os dados (arquivo em user://dados), salva
 # uma cópia pelo diálogo de arquivo (na pasta dos e-mails) e, com --termos=conta:senha (conta que aceitou uma
-# versão anterior dos termos), aceita os termos novos e entra. Confere também (D177, D178) que a tela de personagens tem
+# versão anterior dos termos), aceita os termos novos e entra. Confere também (D179, D180) que a tela de personagens tem
 # um botão Excluir conta só, que "Wss://" leva ao serviço de contas em https, e que, com a conexão caída na tela de
 # personagens, Jogar avisa na linha de status sem deixar a tela Carregando presa.
 var ac_step := 0
@@ -1192,12 +1192,12 @@ func _accounts_tick() -> void:
 			if main.state != "chars":
 				return
 			say("lista de personagens de %s" % main.account)
-			# um botão "Excluir conta" só (D178: a junção deixou dois, e o painel passava da janela padrão)
+			# um botão "Excluir conta" só (D180: a junção deixou dois, e o painel passava da janela padrão)
 			var excl := _ui_nodes("Button").filter(func(b): return (b as Button).text == "Excluir conta").size()
 			if excl != 1:
 				fail("a tela de personagens tem %d botões Excluir conta" % excl)
 				return
-			# o serviço de contas também é o https://HOST/contas com o esquema em maiúscula ("Wss://", D177)
+			# o serviço de contas também é o https://HOST/contas com o esquema em maiúscula ("Wss://", D179)
 			var keep_srv: String = main.server_url
 			var keep_acc: String = main.accounts_url
 			main.accounts_url = ""
@@ -1242,7 +1242,7 @@ func _accounts_tick() -> void:
 				return
 			say("cópia salva pelo diálogo em " + copy)
 			if not main.args.has("termos"):
-				ac_step = 30  # conexão que cai na tela de personagens (D178), depois OK
+				ac_step = 30  # conexão que cai na tela de personagens (D180), depois OK
 				return
 			if not _ui_press("Voltar"):
 				return
@@ -1274,7 +1274,7 @@ func _accounts_tick() -> void:
 			if main.state != "chars":
 				return
 			say("termos aceitos; lista de personagens de %s" % main.account)
-			ac_step = 30  # conexão que cai na tela de personagens (D178), depois OK
+			ac_step = 30  # conexão que cai na tela de personagens (D180), depois OK
 			return
 		30:
 			# a conexão cai com o jogador na tela de personagens (servidor reiniciado, outra conexão na conta)
@@ -1283,7 +1283,7 @@ func _accounts_tick() -> void:
 		31:
 			if Net.state != "closed":
 				return
-			# "Jogar" com a conexão fechada: recusa na linha de status, sem a tela Carregando presa por cima (D178)
+			# "Jogar" com a conexão fechada: recusa na linha de status, sem a tela Carregando presa por cima (D180)
 			main.enter_world(1)
 			if main.loading != null and is_instance_valid(main.loading):
 				fail("Jogar sem conexão abriu a tela Carregando")

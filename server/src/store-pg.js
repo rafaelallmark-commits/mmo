@@ -567,7 +567,7 @@ export class PgStore {
         [`DELETE FROM char_ignores WHERE char_id IN (${mine}) OR ignored_id IN (${mine})`, [accountId]],
         ["UPDATE characters SET name = 'excluido_' || id, gold = 0, flags_json = '{}' WHERE account_id = $1", [accountId]],
         ['DELETE FROM account_codes WHERE account_id = $1', [accountId]],
-        ["UPDATE accounts SET name = $1, email = NULL, pass_hash = '', salt = '', deleted_at = $2 WHERE id = $3", [`excluida#${accountId}`, Date.now(), accountId]], // nome que o cadastro nunca aceita (D176)
+        ["UPDATE accounts SET name = $1, email = NULL, pass_hash = '', salt = '', deleted_at = $2 WHERE id = $3", [`excluida#${accountId}`, Date.now(), accountId]], // nome que o cadastro nunca aceita (D178)
       ]);
       return chars.length;
     });
@@ -601,7 +601,7 @@ export class PgStore {
       [`SELECT i.char_id, c.name AS ignorado, i.created_at FROM char_ignores i JOIN characters c ON c.id = i.ignored_id WHERE i.char_id IN (${mine}) ORDER BY i.char_id, i.created_at, i.ignored_id`, [accountId], 'all'],
       // a conta e os personagens dela (as linhas do jogo — saque, compra, venda, refino, troca, clã — têm só o personagem)
       [`SELECT at, kind, char_id, ip, data_json FROM audit_log WHERE account_id = $1 OR char_id IN (${mine}) ORDER BY at, id`, [accountId], 'all'],
-      // ações da equipe contra a conta, sem as colunas de quem moderou (EXPORT_MOD_KINDS em store.js, D176)
+      // ações da equipe contra a conta, sem as colunas de quem moderou (EXPORT_MOD_KINDS em store.js, D178)
       [`SELECT at, kind, data_json FROM audit_log WHERE kind = ANY($2::text[])
         AND CASE WHEN kind = ANY($2::text[]) THEN data_json::jsonb -> 'targetAccount' = to_jsonb($1::bigint)
           OR data_json::jsonb -> 'target' IN (SELECT to_jsonb(id) FROM characters WHERE account_id = $1) END

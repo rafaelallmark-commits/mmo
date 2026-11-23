@@ -232,7 +232,7 @@ test('CINZAS_SMTP_CA: autoridade a mais para um relé com CA privada, sem deslig
   assert.match(r.stderr, /CINZAS_SMTP_CA/);
 });
 
-// ---------- revisão final antes do teste público (D176) ----------
+// ---------- revisão final antes do teste público (D178) ----------
 
 test('destinatário vai ao RCPT TO como está gravado na conta: "a<b@c.com>" não é entregue a b@c.com', async () => {
   const f = await fakeSmtp();

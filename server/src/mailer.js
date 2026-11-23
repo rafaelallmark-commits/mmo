@@ -57,7 +57,7 @@ export function createMailer(cfg = { kind: 'console' }) {
 
 // Prazo de um envio inteiro (conexão, TLS, autenticação e mensagem). Fica bem abaixo do prazo do cliente
 // (client/scripts/main.gd, _accounts_post): com o SMTP preso, o cadastro responde o 202 'email' (D174) antes
-// de o cliente desistir, e o jogador vê a tela do código em vez de "Serviço de contas indisponível" (D176).
+// de o cliente desistir, e o jogador vê a tela do código em vez de "Serviço de contas indisponível" (D178).
 export const SMTP_TIMEOUT_MS = 10_000;
 
 // Cliente SMTP mínimo (sem dependências). cfg: host, port, secure (TLS direto, 465), starttls (587),

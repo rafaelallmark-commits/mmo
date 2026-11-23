@@ -335,7 +335,7 @@ test('versão dos termos: TERMS_VERSION é o número no topo de docs/TERMOS.md e
   }
 });
 
-// ---------- revisão final antes do teste público (D176) ----------
+// ---------- revisão final antes do teste público (D178) ----------
 
 // conta confirmada, criada direto no banco (o cadastro e a confirmação já têm testes próprios)
 const confirmada = (st, conta) => st.createAccount(conta, SENHA, { email: `${conta}@exemplo.com`, verified: true, termsVersion: TERMS_VERSION, termsAt: Date.now() });

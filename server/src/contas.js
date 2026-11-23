@@ -42,7 +42,7 @@ const DAY_MS = 86_400_000;
 
 const ACCOUNT_RE = /^[a-zA-Z0-9_]{3,20}$/;
 // Sem espaços e sem os caracteres especiais do endereço de e-mail (< > ( ) [ ] , ; : " \): com eles, "a<b@c.com>"
-// passava como um endereço próprio (unicidade e limites por endereço) e era entregue a b@c.com (D176).
+// passava como um endereço próprio (unicidade e limites por endereço) e era entregue a b@c.com (D178).
 const EMAIL_RE = /^[^\s@<>()[\],;:"\\]{1,64}@[^\s@<>()[\],;:"\\]{1,190}\.[^\s@<>()[\],;:"\\]{2,24}$/;
 
 // tempo restante para a mensagem ("40 s", "12 min", "cerca de 5 h")
@@ -187,7 +187,7 @@ export class AccountsService {
         const { conta, email, senha } = b;
         if (typeof conta !== 'string' || !ACCOUNT_RE.test(conta)) return { ok: false, erro: 'Conta: 3 a 20 letras, números ou _.' };
         // os prefixos da exclusão (excluido_, excluida_) são reservados: uma conta com o nome que a exclusão grava
-        // travava a exclusão da conta daquele número (D176)
+        // travava a exclusão da conta daquele número (D178)
         if (DELETED_PREFIX_RE.test(conta)) return { ok: false, erro: 'Esse nome de conta é reservado. Escolha outro.' };
         if (typeof email !== 'string' || !EMAIL_RE.test(email)) return { ok: false, erro: 'E-mail inválido.' };
         if (typeof senha !== 'string' || senha.length < this.opts.minPassword) return { ok: false, erro: `A senha precisa de pelo menos ${this.opts.minPassword} caracteres.` };

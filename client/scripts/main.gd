@@ -831,13 +831,13 @@ func _accounts_base() -> String:
 		return accounts_url.trim_suffix("/")
 	var u := server_url
 	var host := u.get_slice("://", 1).get_slice("/", 0).get_slice(":", 0)
-	# o esquema em qualquer caixa ("Wss://", como um app de mensagens deixa): o WebSocket do Godot o aceita assim (D177)
+	# o esquema em qualquer caixa ("Wss://", como um app de mensagens deixa): o WebSocket do Godot o aceita assim (D179)
 	if u.to_lower().begins_with("wss://"):
 		return "https://%s/contas" % host
 	return "http://%s:7780" % host
 
 ## Prazo de 30 s: bem acima do prazo do envio de e-mail no servidor (SMTP_TIMEOUT_MS, 10 s em server/src/mailer.js),
-## para o cadastro com o SMTP preso chegar como 202 (tela do código) e não como "Serviço de contas indisponível" (D176).
+## para o cadastro com o SMTP preso chegar como 202 (tela do código) e não como "Serviço de contas indisponível" (D178).
 func _accounts_post(path: String, body: Dictionary, cb: Callable) -> void:
 	var http := HTTPRequest.new()
 	add_child(http)
@@ -1042,7 +1042,7 @@ func hide_loading(delay := 0.0) -> void:
 # ---------------- MUNDO ----------------
 func enter_world(cid: int) -> void:
 	# conexão já fechada (servidor reiniciado, outra conexão na conta, queda): o pedido não sairia e a tela
-	# Carregando ficaria sobre tudo, sem resposta (D178)
+	# Carregando ficaria sobre tudo, sem resposta (D180)
 	if not Net.is_open():
 		set_status("Sem conexão com o servidor. Use Voltar e entre de novo.", true)
 		return
@@ -1306,7 +1306,7 @@ func leave_world(to_title: bool, keep_conn := false) -> void:
 
 ## Volta do mundo para Personagens: o login é refeito numa conexão nova. Um painel com a linha de status e o
 ## Voltar fica na tela enquanto isso, para a recusa (senha trocada em outro aparelho, servidor reiniciando,
-## serviço de contas fora do ar) ou a queda da conexão aparecerem, com a saída para a tela Entrar (D178).
+## serviço de contas fora do ar) ou a queda da conexão aparecerem, com a saída para a tela Entrar (D180).
 func _show_returning() -> void:
 	state = "login"
 	menu_scene.set_view("login")
@@ -1769,7 +1769,7 @@ func _on_disconnected(reason: String) -> void:
 	if not _transfer.is_empty():
 		_transfer_failed("a conexão caiu (%s)" % reason)
 		return
-	# a tela Carregando (Jogar, troca de mapa, volta aos personagens) não fica presa sobre o motivo da queda (D178)
+	# a tela Carregando (Jogar, troca de mapa, volta aos personagens) não fica presa sobre o motivo da queda (D180)
 	hide_loading()
 	if _kicked_reason != "":
 		return

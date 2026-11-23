@@ -2,7 +2,7 @@
 ; Projeto Godot 4 do cliente de CINZAS DO MERIDIANO. A release grava aqui, só na cópia de trabalho dela,
 ; config/version e a seção [cinzas] (versão inteira, servidor padrão e página de download; D150).
 ; [network] tls/certificate_bundle_override: o cliente confere o certificado do servidor com a lista de
-; autoridades de certs/ca-certificates.crt (a da Mozilla), não com o repositório do sistema (D177).
+; autoridades de certs/ca-certificates.crt (a da Mozilla), não com o repositório do sistema (D179).
 
 config_version=5
 

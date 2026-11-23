@@ -41,7 +41,7 @@ Como o jogador se move entre telas, painéis e mapas. Este documento manda: o cl
 | **Confirmar e-mail** | explicação, conta, código; Confirmar, Reenviar código, Esqueci a senha, Voltar; dica (validade, lixo eletrônico, limites) | Confirmar → Entrar com o aviso; Esqueci a senha → Esqueci a senha; Voltar → Entrar |
 | **Esqueci a senha** | e-mail, Enviar código; código, nova senha, Trocar a senha | Trocar → Entrar; Voltar → Entrar |
 | **Termos atualizados** | aviso com a versão nova, links dos Termos e da Política, caixa de aceite; Aceitar e entrar, Não aceito: baixar meus dados, Não aceito: excluir a conta, Voltar | Aceitar → Personagens; os dois "Não aceito" voltam aqui; Voltar → Entrar |
-| **Personagens** | até 4 cartões (nome, classe, nível, mapa); personagem selecionado em 3D no centro, girando; Baixar meus dados, Excluir personagem, Excluir conta | Jogar → Carregando (com a conexão caída, o aviso fica na linha de status e Voltar leva a Entrar, D178); Criar novo → Criação; Baixar meus dados → Baixar meus dados; Excluir personagem → Excluir personagem; Excluir conta → Excluir conta; Voltar → Entrar |
+| **Personagens** | até 4 cartões (nome, classe, nível, mapa); personagem selecionado em 3D no centro, girando; Baixar meus dados, Excluir personagem, Excluir conta | Jogar → Carregando (com a conexão caída, o aviso fica na linha de status e Voltar leva a Entrar, D180); Criar novo → Criação; Baixar meus dados → Baixar meus dados; Excluir personagem → Excluir personagem; Excluir conta → Excluir conta; Voltar → Entrar |
 | **Baixar meus dados** | o que vem no arquivo, senha, Baixar; depois: caminho do arquivo em `user://dados`, Abrir a pasta, Salvar uma cópia em outro lugar... | Voltar → Personagens (ou Termos atualizados) |
 | **Excluir personagem** | aviso (itens, ouro, missões e clã; o depósito da conta fica), nome do personagem, senha da conta, Excluir personagem para sempre, Cancelar | Excluir → Personagens, com o aviso; Cancelar → Personagens |
 | **Excluir conta** | aviso, senha, Excluir para sempre, Cancelar | Excluir → Título; Cancelar → Personagens (ou Termos atualizados) |
@@ -65,7 +65,7 @@ Da mais baixa para a mais alta. Uma camada de cima bloqueia o clique nas de baix
 
 **Esc** fecha a camada aberta mais alta; sem nada aberto, abre o menu de pausa. O jogo não pausa (é online): o menu só cobre a tela.
 
-**Trocar de personagem** desconecta e volta para Personagens (login refeito automaticamente); enquanto isso fica o painel **Voltando aos personagens**, com a linha de status e Voltar (→ Entrar): uma recusa do login (senha trocada em outro aparelho, servidor reiniciando) ou a queda da conexão aparecem nele (D178). **Sair para o título** desconecta e vai ao Título.
+**Trocar de personagem** desconecta e volta para Personagens (login refeito automaticamente); enquanto isso fica o painel **Voltando aos personagens**, com a linha de status e Voltar (→ Entrar): uma recusa do login (senha trocada em outro aparelho, servidor reiniciando) ou a queda da conexão aparecem nele (D180). **Sair para o título** desconecta e vai ao Título.
 
 **Reconectar** (aviso de conexão perdida) refaz o login e volta ao mundo. Se o serviço de contas recusar pedindo o código do e-mail ou o aceite de termos novos, o jogo sai do mundo e abre *Confirmar e-mail* ou *Termos atualizados*, com a conexão nova aberta para a próxima tentativa; aceitos os termos, segue para Personagens.
 

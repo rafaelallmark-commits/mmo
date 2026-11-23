@@ -273,7 +273,7 @@ export function charSaveValues(c, now = Date.now()) {
 
 // Exportação dos dados da conta (LGPD): a denúncia que a conta fez sai sem as falas do denunciado e sem o id
 // da conta dele (dados de outra pessoa, guardados só para a equipe analisar); fica o número de falas.
-// Ações da equipe contra a conta que entram na exportação (D176). As linhas mod_* têm nas colunas a conta, o
+// Ações da equipe contra a conta que entram na exportação (D178). As linhas mod_* têm nas colunas a conta, o
 // personagem e o IP de quem moderou; o alvo fica em data_json (targetAccount; na expulsão, só target, o
 // personagem). A exportação do alvo leva só instante, tipo e data_json — nunca as colunas de quem moderou.
 // Lista fechada: denúncias ('report') também têm targetAccount, e o denunciado não recebe os dados de quem
@@ -448,7 +448,7 @@ export class Store {
 
   // Exclusão de conta (privacidade): apaga dados pessoais e itens, mantém linhas anônimas para a
   // integridade das referências (saque, auditoria). O nome vira excluida#<id>, que o cadastro nunca aceita
-  // (só letras, números e _): ninguém ocupa antes o nome que a exclusão vai gravar (D176).
+  // (só letras, números e _): ninguém ocupa antes o nome que a exclusão vai gravar (D178).
   deleteAccount(accountId) {
     return this.tx(() => {
       const chars = this.prep('SELECT id FROM characters WHERE account_id = ?').all(accountId);

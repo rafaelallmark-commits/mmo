@@ -421,7 +421,7 @@ for cinzas-servidor" antes do build).
 
 - **Versão**: a imagem da release traz a tag em `CINZAS_VERSION` (`hello`, registro de início e `/bug`; D150).
   Construindo aqui, ponha a mesma no `.env` (`CINZAS_VERSION=0.4.0-teste.2`, a tag sem o `v`): o compose a passa
-  como argumento de build do serviço `servidor` no `up --build` (D179); fora do compose,
+  como argumento de build do serviço `servidor` no `up --build` (D181); fora do compose,
   `docker build --build-arg CINZAS_VERSION=0.4.0-teste.2`. Sem ela vale a do `package.json`. Um valor que não pareça
   uma tag (espaço, aspas) faz o servidor recusar subir. Para conferir uma imagem como o CI confere:
   `deploy/teste-conteiner.sh cinzas-servidor:local 0.4.0-teste.2` (com a pilha no ar, que já ocupa a 9100 no
@@ -575,7 +575,7 @@ máquina de verdade tem: o volume, as permissões e as cópias reais.
   os certificados; não o apague (há limite de emissões).
 - Os jogadores conectam em `wss://jogo.exemplo.com.br` (campo **Servidor** da tela de entrada, ou
   `CinzasDoMeridiano.x86_64 -- --server=wss://jogo.exemplo.com.br`).
-- **Certificado do servidor no cliente** (D177): o cliente confere o certificado (do `wss://` e do serviço de contas)
+- **Certificado do servidor no cliente** (D179): o cliente confere o certificado (do `wss://` e do serviço de contas)
   com a lista de autoridades da Mozilla que vai dentro dele, `client/certs/ca-certificates.crt`, apontada por
   `network/tls/certificate_bundle_override` no `client/project.godot` — e **não** com o repositório do sistema. Sem
   isso, o Godot 4.3 usaria só o repositório do sistema, e no Windows ele só tem as raízes que aquela máquina já
@@ -864,11 +864,11 @@ público a zona roda com `--auth token`.
 **Privacidade**: política em [PRIVACIDADE.md](PRIVACIDADE.md). Na tela de personagens, *Baixar meus dados* chama
 `POST /contas/dados` e grava o JSON em `user://dados` (com botão para abrir a pasta e opção de salvar uma cópia em
 outro lugar); `acoes_da_equipe` traz as ações da equipe contra a conta (expulsão, suspensão, silêncio, nome trocado,
-itens ou ouro retirados, com o motivo) sem a conta, o personagem e o IP de quem moderou, e sem denúncias (D176).
+itens ou ouro retirados, com o motivo) sem a conta, o personagem e o IP de quem moderou, e sem denúncias (D178).
 Exclusão de conta pelo jogo (tela de personagens) ou pelo serviço de contas apaga e-mail, senha, itens e
 missões na hora e anonimiza os nomes (a conta vira `excluida#<id>`, nome que o cadastro nunca aceita). Com a conta
 excluída pelo serviço de contas ou pela ferramenta enquanto uma sessão dela está aberta na zona, essa sessão não
-cria personagem nem entra no mundo, e a conferência de cada minuto a derruba sem gravar a saída (D176).
+cria personagem nem entra no mundo, e a conferência de cada minuto a derruba sem gravar a saída (D178).
 Na tela de personagens também dá para **excluir um personagem só** (D144): o
 jogador digita o nome dele e a senha da conta; saem os itens, o ouro, as missões e as listas de ignorados, ele sai do
 grupo e do clã (o clã que ele liderava passa ao membro de maior cargo; sem ninguém, acaba) e o nome fica livre; as

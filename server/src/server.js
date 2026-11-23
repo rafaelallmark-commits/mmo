@@ -429,7 +429,7 @@ export class GameServer {
   }
 
   // closeAfterMs > 0: a sessão sai na hora (mapas, mundo, posse), mas o WebSocket só fecha depois, para a última
-  // mensagem mandada a ela (kicked, resposta do delete_account) chegar ao cliente Godot (KICK_CLOSE_MS, D176).
+  // mensagem mandada a ela (kicked, resposta do delete_account) chegar ao cliente Godot (KICK_CLOSE_MS, D178).
   // O que ela mandar nesse meio-tempo é ignorado (onMessage confere this.sessions).
   dropSession(s, closeAfterMs = 0, code = undefined, reason = undefined) {
     if (!this.sessions.has(s)) return;
@@ -880,7 +880,7 @@ export class GameServer {
 
   hRegister(s, { account, password }) {
     if (typeof account !== 'string' || !/^[a-zA-Z0-9_]{3,20}$/.test(account)) return { ok: false, code: 'bad_account', reason: 'Conta: 3 a 20 letras, números ou _.' };
-    // prefixos da exclusão reservados, como no serviço de contas (D176)
+    // prefixos da exclusão reservados, como no serviço de contas (D178)
     if (DELETED_PREFIX_RE.test(account)) return { ok: false, code: 'bad_account', reason: 'Esse nome de conta é reservado. Escolha outro.' };
     if (typeof password !== 'string' || password.length < 4) return { ok: false, code: 'bad_password', reason: 'Senha precisa de pelo menos 4 caracteres.' };
     if (this.store.findAccount(account)) return { ok: false, code: 'account_exists', reason: 'Essa conta já existe.' };
@@ -931,7 +931,7 @@ export class GameServer {
   }
 
   // Conta excluída fora deste servidor (serviço de contas, ferramenta) com a sessão ainda aberta aqui: a varredura
-  // de cada minuto a derruba; até lá, nada de criar personagem nem entrar (D176).
+  // de cada minuto a derruba; até lá, nada de criar personagem nem entrar (D178).
   accountGone(s) {
     if (this.store.findAccountById(s.accountId)) return null;
     return { ok: false, code: 'account_deleted', reason: 'Esta conta foi excluída.' };

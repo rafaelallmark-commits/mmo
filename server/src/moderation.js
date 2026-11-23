@@ -15,7 +15,7 @@ export const STAFF_ROLES = new Set(['gm', 'admin']); // papéis com a marca [Equ
 // Expulsão e "última mensagem antes de fechar" (kicked, resposta do delete_account): a sessão sai na hora (mapas,
 // mundo, posse), mas o WebSocket só fecha este tempo depois. O WebSocketPeer do Godot 4.3 descarta a mensagem
 // que chega no mesmo instante do fechamento: sem a espera, o jogador na tela de personagens via só
-// "Sem conexão" no lugar do motivo (D176).
+// "Sem conexão" no lugar do motivo (D178).
 export const KICK_CLOSE_MS = 500;
 const CHAT_KEEP = 20;          // últimas falas por personagem guardadas para dar contexto às denúncias
 const REPORTS_PER_HOUR = 5;
@@ -133,7 +133,7 @@ export class Moderation {
     for (const s of sessions) {
       const acc = accounts.get(s.accountId);
       // conta excluída fora deste servidor (serviço de contas, ferramenta): a sessão cai sem gravar (o personagem
-      // já foi anonimizado no banco; gravar a saída traria de volta o ouro e as marcas dele, D176)
+      // já foi anonimizado no banco; gravar a saída traria de volta o ouro e as marcas dele, D178)
       if (!acc) { s.noSave = true; this.kickSession(s, 'Esta conta foi excluída.'); continue; }
       s.mutedUntil = acc.muted_until ?? 0;
       const ban = banMessage(acc, now);
@@ -156,7 +156,7 @@ export class Moderation {
 
   kickSession(s, reason) {
     this.s.sendTo(s, { t: 'kicked', reason });
-    this.s.dropSession(s, KICK_CLOSE_MS, 4003, 'moderação'); // fecha depois: o motivo chega antes (D176)
+    this.s.dropSession(s, KICK_CLOSE_MS, 4003, 'moderação'); // fecha depois: o motivo chega antes (D178)
   }
 
   // alvo por nome de personagem: on-line (sessão), on-line em outra zona (remote) ou só a conta
