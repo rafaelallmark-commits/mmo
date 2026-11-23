@@ -1082,7 +1082,7 @@ export class BotProgressao {
     this.viajar(destino.mapId, this.data.maps[destino.mapId].guardPost.x, this.data.maps[destino.mapId].guardPost.z, 'caca');
   }
 
-  // Prova de classe: a regra muda por classe (pilares, aprendiz, filas, alvos, peregrina, percurso, vigília,
+  // Prova de classe: a regra muda por classe (pilares, aprendiz, filas, alvos, peregrino, percurso, vigília,
   // ondas); o piloto compartilhado com os testes joga como a dica de cada prova ensina.
   lutarNaProva(eu, mundo) {
     this.atividade = 'prova';

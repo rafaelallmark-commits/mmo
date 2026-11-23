@@ -86,6 +86,9 @@ export function runBuild(build, data) {
 // classe, com os campos que a regra (kind) usa, monstros da arena e posições dentro dela, e as premissas que
 // cada prova ensina (o cone da Ruptura pega dois pilares, o salto do Avanço do Fosso cruza o fosso, o jato
 // passa da vida do aprendiz, a fila de alvos está ao alcance do arco, o tempo cabe na instância).
+// modelos que o cliente sabe desenhar para as peças e os monstros da prova (art.gd)
+export const TRIAL_MODELS = ['pillar', 'dummy', 'target', 'bell', 'archer', 'runner'];
+
 export function validateTrials(data) {
   const errors = [];
   const arena = data.maps.arena_prova;
@@ -103,9 +106,16 @@ export function validateTrials(data) {
   const aliado = (where, a) => {
     if (!a || typeof a.name !== 'string' || !a.name) { errors.push(`${where}: aliado sem nome`); return; }
     if (!['apprentice', 'pilgrim'].includes(a.model)) errors.push(`${where}: modelo ${a.model} desconhecido (apprentice, pilgrim)`);
+    if (typeof a.fem !== 'boolean') errors.push(`${where}: ${a.name} sem "fem" (true/false: o corpo do morador no cliente)`);
     num(`${where}: vida`, a.hp, 1);
     dentro(where, a.x, a.z);
   };
+  // peças da arena: aparência própria no cliente (client/scripts/art.gd trial_piece e monster) e peças paradas
+  // (inert) só dentro da prova
+  for (const [id, m] of Object.entries(data.monsters)) {
+    if (m.model !== undefined && !TRIAL_MODELS.includes(m.model)) errors.push(`monstro ${id}: model ${m.model} desconhecido (${TRIAL_MODELS.join(', ')})`);
+    if (m.inert && m.area !== 'arena_prova') errors.push(`monstro ${id}: peça parada (inert) fora da Arena da Prova`);
+  }
   for (const [cid, cls] of Object.entries(data.classes)) {
     const c = trial.classes[cid];
     const w = `prova ${cid}`;
@@ -173,7 +183,7 @@ export function validateTrials(data) {
       }
       case 'escort': {
         aliado(w, c.ally);
-        num(`${w}: velocidade da peregrina`, c.ally?.speed, 0.1);
+        num(`${w}: velocidade do peregrino`, c.ally?.speed, 0.1);
         if (!(c.route?.length >= 2)) errors.push(`${w}: rota com menos de 2 pontos`);
         for (const [x, z] of c.route ?? []) dentro(w, x, z);
         const marks = new Set((c.route ?? []).map((pt) => pt[2]).filter((x) => x != null));

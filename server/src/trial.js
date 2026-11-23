@@ -15,9 +15,9 @@ const secs = (ms) => Math.max(0, Math.ceil(ms / 1000));
 export const TRIAL_KINDS = ['pillars', 'hold', 'rows', 'targets', 'escort', 'course', 'vigil', 'waves'];
 
 // ---------------------------------------------------------------- aliado com vida
-// Aprendiz ou peregrina: não é jogador (não vai ao banco), mas tem a mesma forma que as habilidades de aliado
+// Aprendiz ou peregrino: não é jogador (não vai ao banco), mas tem a mesma forma que as habilidades de aliado
 // usam (char, stats, buffs, guards, shield): curar, pôr escudo, Juramento e Reforço de Campo valem nele, e
-// zone.damagePlayer aplica o dano com redirecionamento e escudo. Pode andar por uma rota (peregrina).
+// zone.damagePlayer aplica o dano com redirecionamento e escudo. Pode andar por uma rota (peregrino).
 export class TrialAlly {
   constructor(zone, n, def) {
     this.zone = zone;
@@ -63,13 +63,14 @@ export class TrialAlly {
     else brake(c, dt, 8);
   }
 
-  // Segue a rota só com um jogador por perto e para (encolhida) enquanto houver monstro em cima dela.
+  // Segue a rota só com um jogador por perto e espera, parado, enquanto houver monstro de pé (uma emboscada
+  // de cada vez: seguir andando com a anterior viva juntava duas em cima de quem protege).
   walk(dt) {
     const z = this.zone, r = this.route, c = this.char;
     if (r.next >= r.points.length) { brake(c, dt, 6); return; }
     const guarded = [...z.players.values()].some((p) => !p.char.dead && dist(p.char, c) <= r.followRadius);
-    const cornered = [...z.monsters.values()].some((m) => m.state !== 'dead' && !m.inert && dist(m, c) < 2.6);
-    r.waiting = !guarded ? 'longe' : cornered ? 'encurralada' : null;
+    const ambush = [...z.monsters.values()].some((m) => m.state !== 'dead' && !m.inert);
+    r.waiting = !guarded ? 'far' : ambush ? 'ambush' : null;
     if (r.waiting) { c.speed = 0; c.vx = 0; c.vz = 0; return; }
     if (!r.path || !r.path.length) {
       const g = r.points[r.next];
@@ -109,9 +110,10 @@ export class TrialAlly {
     z.broadcast({ t: 'player_dead', eid: this.eid });
   }
 
+  // fem: corpo do morador no cliente (Aprendiz Lia, Aprendiz Brás...)
   view() {
     const c = this.char;
-    return { id: this.eid, k: 'a', def: this.model, n: c.name, x: r2(c.x), z: r2(c.z), vx: r2(c.vx || 0), vz: r2(c.vz || 0), hp: Math.ceil(c.hp), mhp: this.stats.maxHp, dead: !!c.dead, sh: this.shield ? Math.round(this.shield.amount) : 0 };
+    return { id: this.eid, k: 'a', def: this.model, n: c.name, fem: !!this.def.fem, x: r2(c.x), z: r2(c.z), vx: r2(c.vx || 0), vz: r2(c.vz || 0), hp: Math.ceil(c.hp), mhp: this.stats.maxHp, dead: !!c.dead, sh: this.shield ? Math.round(this.shield.amount) : 0 };
   }
 
   // registro para os snapshots por diferença (mesmos grupos de server.js sendSnapshots)
@@ -120,7 +122,7 @@ export class TrialAlly {
     const px = r2(c.x), pz = r2(c.z), vx = r2(c.vx || 0), vz = r2(c.vz || 0);
     return {
       id: this.eid, x: c.x, z: c.z, px, pz, vx, vz,
-      A: `"k":"a","def":"${this.model}","n":${JSON.stringify(c.name)},"mhp":${this.stats.maxHp}`,
+      A: `"k":"a","def":"${this.model}","n":${JSON.stringify(c.name)},"fem":${!!this.def.fem},"mhp":${this.stats.maxHp}`,
       P: `"x":${px},"z":${pz}`,
       V: `"vx":${vx},"vz":${vz}`,
       C: `"hp":${Math.ceil(c.hp)},"dead":${!!c.dead},"sh":${this.shield ? Math.round(this.shield.amount) : 0}`,
@@ -267,6 +269,8 @@ const KINDS = {
       t.s.down = 0;
       t.s.falling = [];
       t.s.debrisAt = t.zone.now + (c.debris.firstMs ?? c.debris.everyMs);
+      t.s.batch = null; // pilares rachados pela mesma Ruptura ({ at, n }), para a dica do cone
+      t.s.coneTip = false;
       t.s.pillars = c.pillars.map(([x, z]) => {
         const m = t.spawn({ monster: c.monster, x, z });
         m.cracked = false;
@@ -276,7 +280,8 @@ const KINDS = {
             m.cracked = true;
             setFx(m, 'armor', false);
             t.dirty = true;
-            t.say('A Ruptura rachou a blindagem de um pilar: agora os golpes entram.');
+            if (t.s.batch?.at === t.zone.now) t.s.batch.n++;
+            else t.s.batch = { at: t.zone.now, n: 1 };
             return null;
           }
           return m.cracked ? null : 'blindado';
@@ -286,6 +291,17 @@ const KINDS = {
     },
     tick(t, p) {
       const z = t.zone, c = t.cfg, s = t.s;
+      // Ruptura terminada: quantos pilares o cone pegou (um só, com dois ou mais ainda blindados, ganha a dica)
+      if (s.batch && s.batch.at < z.now) {
+        const armored = s.pillars.filter((m) => m.state !== 'dead' && !m.cracked).length;
+        t.say(s.batch.n > 1 ? `A Ruptura rachou ${s.batch.n} pilares de uma vez: agora os golpes entram.` : 'A Ruptura rachou a blindagem de um pilar: agora os golpes entram.');
+        if (s.batch.n === 1 && armored >= 2 && !s.coneTip) {
+          s.coneTip = true;
+          t.say('Dica: a mana não dá para uma Ruptura por pilar. Sem alvo selecionado (Esc tira a seleção), a Ruptura sai para onde o cursor aponta: de frente para dois pilares, aponte entre eles.');
+          t.warnNow('Pegue dois pilares no mesmo cone: aponte a Ruptura entre eles.', 5000);
+        }
+        s.batch = null;
+      }
       const down = s.pillars.filter((m) => m.state === 'dead').length;
       if (down !== s.down) {
         s.down = down;
@@ -448,9 +464,14 @@ const KINDS = {
       t.marks = [{ id: 'post', kind: 'zone', x: post.x0, z: post.z0, x2: post.x1, z2: post.z1, label: 'Posto de tiro' }];
       t.s.inPost = (pc) => pc.x >= post.x0 && pc.x <= post.x1 && pc.z >= post.z0 && pc.z <= post.z1;
     },
-    tick(t) {
+    tick(t, p) {
       const z = t.zone, c = t.cfg, s = t.s, el = t.elapsed;
       const dt = (z.lastDt || 100) / 1000;
+      // fora do posto (o ataque automático anda atrás do alvo que saiu do alcance): aviso na tela enquanto durar
+      if (!s.inPost(p.char) && s.waves.some((w) => w.spawned && w.list.some((m) => m.state !== 'dead')) && z.now - (s.outWarnAt ?? -1e9) >= 1000) {
+        s.outWarnAt = z.now;
+        t.warnNow('Fora do posto de tiro: daqui os tiros não valem. Volte para a faixa marcada.', 1200);
+      }
       for (const w of s.waves) {
         if (!w.spawned && el >= w.atMs) {
           w.spawned = true;
@@ -501,8 +522,8 @@ const KINDS = {
     },
   },
 
-  // Escudeiro: a peregrina atravessa a arena por uma rota (só anda com o Escudeiro perto e para quando há
-  // monstro em cima dela); em cada marco, uma emboscada mira nela — os atiradores não largam nunca.
+  // Escudeiro: o peregrino atravessa a arena por uma rota (só anda com o Escudeiro perto e espera parado
+  // enquanto a emboscada estiver de pé); em cada marco, uma emboscada mira nele — os atiradores não largam nunca.
   escort: {
     setup(t) {
       const c = t.cfg;
@@ -513,6 +534,8 @@ const KINDS = {
       t.s.monsters = [];
       t.s.ends = c.route.length;
       t.marks = c.route.map(([x, z, mark], i) => ({ id: `wp${i}`, kind: 'goal', x, z, r: 1.4, label: i === c.route.length - 1 ? 'Portão' : mark ? `Marco ${mark}` : '' })).filter((m) => m.label);
+      // o caminho que ele vai fazer, pontilhado no chão
+      t.marks.push({ id: 'route', kind: 'path', x: c.ally.x, z: c.ally.z, pts: [[c.ally.x, c.ally.z], ...c.route.map(([x, z]) => [x, z])] });
     },
     tick(t) {
       const c = t.cfg, s = t.s, a = s.ally, r = a.route;
@@ -524,7 +547,7 @@ const KINDS = {
         for (const sp of amb?.spawns ?? []) {
           for (let i = 0; i < sp.count; i++) {
             const m = t.spawn(sp, { allyTarget: a.eid, state: 'chase' });
-            if (m.def.attackRange > 4) m.fixated = true; // atirador: só mira a peregrina
+            if (m.def.attackRange > 4) m.fixated = true; // atirador: só mira o peregrino
             s.monsters.push(m);
           }
         }
@@ -536,8 +559,9 @@ const KINDS = {
     timeout(t) { return { success: false, message: `O tempo acabou antes de ${t.s.ally.char.name} chegar ao portão. Fale com o mestre para tentar de novo.` }; },
     status(t) {
       const a = t.s.ally, r = a.route;
-      const why = r.waiting === 'longe' ? 'esperando você chegar perto' : r.waiting === 'encurralada' ? 'parada: monstro em cima dela' : 'andando';
-      return { text: `${a.char.name}: ${Math.ceil(a.char.hp)}/${a.stats.maxHp}`, sub: `Trecho ${Math.max(0, r.reached + 1)}/${r.points.length} · ${why} · ${secs(t.left)} s`, frac: a.char.hp / a.stats.maxHp, bar: 'Peregrina', ally: a.eid };
+      const fem = !!a.def.fem;
+      const why = r.waiting === 'far' ? 'esperando você chegar perto' : r.waiting === 'ambush' ? `${fem ? 'parada' : 'parado'} até a emboscada acabar` : 'andando';
+      return { text: `${a.char.name}: ${Math.ceil(a.char.hp)}/${a.stats.maxHp}`, sub: `Trecho ${Math.max(0, r.reached + 1)}/${r.points.length} · ${why} · ${secs(t.left)} s`, frac: a.char.hp / a.stats.maxHp, bar: fem ? 'Peregrina' : 'Peregrino', ally: a.eid };
     },
   },
 

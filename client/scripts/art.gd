@@ -5,6 +5,7 @@ extends RefCounted
 
 const TOON := preload("res://shaders/toon.gdshader")
 const OUTLINE := preload("res://shaders/outline.gdshader")
+const OUTLINE_SELF := preload("res://shaders/outline_self.gdshader")
 const GROUND := preload("res://shaders/ground.gdshader")
 const WATER := preload("res://shaders/water.gdshader")
 const Rig := preload("res://scripts/rig.gd")
@@ -543,10 +544,14 @@ static func monster(def: Dictionary) -> Node3D:
 	if fam == "machine":
 		_robot(root, body, s, col, rank)
 		if model == "archer" and root.weapon_arm != null:
-			# atirador: besta de ferro presa ao braço
-			var metal = toon(Color("#3a3f46"))
-			part(root.weapon_arm, cyl(0.05 * s, 0.06 * s, 0.75 * s, 8), metal, Vector3(0, -0.5 * s, 0.22 * s), Vector3.ONE, Vector3(80, 0, 0))
-			part(root.weapon_arm, box(Vector3(0.7, 0.04, 0.06) * s), metal, Vector3(0, -0.46 * s, 0.34 * s))
+			# atirador: besta na mão — coronha de madeira para a frente, arco de ferro atravessado e a corda
+			var stock = toon(Color("#8a5a32"))
+			var iron = toon(Color("#9aa3ad"))
+			part(root.weapon_arm, box(Vector3(0.09, 0.09, 0.8) * s), stock, Vector3(0, -0.48 * s, 0.3 * s))
+			part(root.weapon_arm, box(Vector3(0.9, 0.06, 0.07) * s), iron, Vector3(0, -0.48 * s, 0.66 * s))
+			for sx2 in [-1, 1]:
+				part(root.weapon_arm, box(Vector3(0.08, 0.06, 0.12) * s), iron, Vector3(sx2 * 0.44 * s, -0.48 * s, 0.6 * s), Vector3.ONE, Vector3(0, sx2 * -30, 0))
+			part(root.weapon_arm, box(Vector3(0.84, 0.015, 0.015) * s), toon(Color("#efe4c8"), false), Vector3(0, -0.46 * s, 0.52 * s))
 		elif model == "runner":
 			# perseguidor: barbatanas de vento nas costas
 			for sx in [-1, 1]:
@@ -682,22 +687,23 @@ static func _spirit(root: Node3D, body: Node3D, s: float, col: Color) -> void:
 # ---------------- contorno na cor da classe ----------------
 static var _tinted := {}
 
-## Troca o contorno escuro (casca invertida, OUTLINE) de todas as malhas do nó por um na cor dada e um pouco
-## mais grosso. Os materiais são compartilhados entre personagens: cada material ganha uma cópia própria,
-## guardada por cor, então só este nó (o personagem do jogador) muda.
-static func tint_outline(root: Node, color: Color, thickness_mult := 1.7) -> void:
+## Troca o contorno escuro (casca invertida, OUTLINE) de todas as malhas do nó por um na cor dada, com a
+## espessura crescendo com a distância da câmera (outline_self.gdshader: 2 a 3 pixels também na distância
+## normal de jogo, onde o contorno fino some). Os materiais são compartilhados entre personagens: cada material
+## ganha uma cópia própria, guardada por cor, então só este nó (o personagem do jogador) muda.
+static func tint_outline(root: Node, color: Color) -> void:
 	for mi in root.find_children("*", "MeshInstance3D", true, false):
 		var m := mi as MeshInstance3D
 		if m.material_override != null:
-			m.material_override = _tinted_mat(m.material_override, color, thickness_mult)
+			m.material_override = _tinted_mat(m.material_override, color)
 		if m.mesh == null:
 			continue
 		for i in m.mesh.get_surface_count():
 			var src: Material = m.get_surface_override_material(i)
 			if src != null:
-				m.set_surface_override_material(i, _tinted_mat(src, color, thickness_mult))
+				m.set_surface_override_material(i, _tinted_mat(src, color))
 
-static func _tinted_mat(src: Material, color: Color, mult: float) -> Material:
+static func _tinted_mat(src: Material, color: Color) -> Material:
 	if not (src is ShaderMaterial):
 		return src
 	var o = (src as ShaderMaterial).next_pass
@@ -707,10 +713,12 @@ static func _tinted_mat(src: Material, color: Color, mult: float) -> Material:
 	if _tinted.has(key):
 		return _tinted[key]
 	var m2 := (src as ShaderMaterial).duplicate() as ShaderMaterial
-	var o2 := (o as ShaderMaterial).duplicate() as ShaderMaterial
+	var o2 := ShaderMaterial.new()
+	o2.shader = OUTLINE_SELF
 	o2.set_shader_parameter("outline_color", color)
-	var t = o2.get_shader_parameter("thickness")
-	o2.set_shader_parameter("thickness", (float(t) if t != null else 0.025) * mult)
+	# de perto, um pouco mais grosso que o contorno de antes (peças do corpo procedural têm 0,018; VRM, 0,0035)
+	var t = (o as ShaderMaterial).get_shader_parameter("thickness")
+	o2.set_shader_parameter("min_thickness", maxf((float(t) if t != null else 0.018) * 1.5, 0.005))
 	m2.next_pass = o2
 	_tinted[key] = m2
 	return m2
@@ -825,12 +833,33 @@ static func _trial_bell() -> Node3D:
 	root.set_meta("glow", glow)
 	return root
 
-## Aliado da prova (aprendiz, peregrina): morador com roupa e acessório próprios — o aprendiz com uma
-## varinha de estudo, a peregrina de capa parda com o cajado de caminhada.
-static func trial_ally(model: String, seed: int) -> Node3D:
+## Aliado da prova (aprendiz, peregrino): morador com roupa e acessório próprios — o aprendiz com uma
+## varinha de estudo, o peregrino de roupa parda com o cajado de caminhada. fem: o corpo que os dados pedem.
+static func trial_ally(model: String, seed: int, fem := false) -> Node3D:
+	var s := _npc_seed(fem, seed)
 	if model == "pilgrim":
-		return character("", "staff_2h", true, Color("#a8865a"), seed)
-	return character("", "wand", true, Color("#4f8f86"), seed)
+		return character("", "staff_2h", true, Color("#a8865a"), s)
+	return character("", "wand", true, Color("#4f8f86"), s)
+
+## Semente de morador com o corpo pedido: os moradores sorteiam o corpo pela semente, e vrm_character e
+## proc_character sorteiam em ordens diferentes (o mesmo número daria corpos trocados entre os dois).
+static func _npc_seed(fem: bool, base: int) -> int:
+	for i in 64:
+		var s := base + i * 7919
+		var rng := RandomNumberGenerator.new()
+		rng.seed = s
+		var is_fem: bool
+		if VrmChar.available():
+			is_fem = rng.randf() < 0.5
+		else:
+			rng.randi()
+			rng.randf()
+			rng.randi()
+			rng.randi()
+			is_fem = rng.randf() < 0.5
+		if is_fem == fem:
+			return s
+	return base
 
 # ---------------- objetos de missão ----------------
 ## Modelo de um objeto de missão (data/maps.json "objects"): pelo kind (quadro, carroça, defesa) ou pelo
@@ -889,12 +918,13 @@ static func _obj_marker() -> Node3D:
 static func _obj_pages() -> Node3D:
 	# páginas do registro: maço de folhas amarradas sobre um toco, uma folha solta presa por uma pedra
 	var root := Node3D.new()
-	part(root, cyl(0.32, 0.36, 0.5, 10), toon(Color("#6b4a2e")), Vector3(0, 0.25, 0))
-	for i in 4:
-		part(root, box(Vector3(0.42, 0.025, 0.3)), toon(Color("#efe4c8").darkened(i * 0.04), false), Vector3(0.0, 0.52 + i * 0.026, 0.0), Vector3.ONE, Vector3(0, i * 9 - 12, 0))
-	part(root, box(Vector3(0.05, 0.14, 0.32)), toon(Color("#8a2a2a")), Vector3(0, 0.58, 0))
-	part(root, box(Vector3(0.36, 0.02, 0.26)), toon(Color("#efe4c8"), false), Vector3(0.45, 0.02, 0.18), Vector3.ONE, Vector3(0, 25, 0))
-	part(root, sphere(0.08, 6), toon(Color("#8a8278")), Vector3(0.45, 0.07, 0.18))
+	part(root, cyl(0.42, 0.48, 0.7, 10), toon(Color("#6b4a2e")), Vector3(0, 0.35, 0))
+	part(root, cyl(0.4, 0.4, 0.03, 10), toon(Color("#a8865a")), Vector3(0, 0.71, 0))
+	for i in 5:
+		part(root, box(Vector3(0.58, 0.03, 0.42)), toon(Color("#efe4c8").darkened(i * 0.04), false), Vector3(0.0, 0.74 + i * 0.032, 0.0), Vector3.ONE, Vector3(0, i * 9 - 18, 0))
+	part(root, box(Vector3(0.06, 0.2, 0.44)), toon(Color("#8a2a2a")), Vector3(0, 0.82, 0))
+	part(root, box(Vector3(0.44, 0.02, 0.32)), toon(Color("#efe4c8"), false), Vector3(0.6, 0.02, 0.25), Vector3.ONE, Vector3(0, 25, 0))
+	part(root, sphere(0.1, 6), toon(Color("#8a8278")), Vector3(0.6, 0.08, 0.25))
 	return root
 
 static func _obj_fuse_box() -> Node3D:
@@ -936,11 +966,15 @@ static func _obj_gauge() -> Node3D:
 static func _obj_thermo() -> Node3D:
 	# ponto de medição térmica: estaca com tubo de vidro e bulbo vermelho
 	var root := Node3D.new()
-	part(root, cyl(0.05, 0.08, 1.3, 6), toon(Color("#5a4a3a")), Vector3(0, 0.65, 0))
-	part(root, cyl(0.05, 0.05, 0.7, 8), toon(Color("#dff2f4"), false), Vector3(0.1, 1.1, 0.05))
-	part(root, cyl(0.025, 0.025, 0.45, 6), toon(Color("#e04a3a"), false, Color(0.6, 0.1, 0.05)), Vector3(0.1, 1.0, 0.05))
-	part(root, sphere(0.08, 8), toon(Color("#e04a3a"), false, Color(0.6, 0.1, 0.05)), Vector3(0.1, 0.75, 0.05))
-	part(root, box(Vector3(0.18, 0.05, 0.18)), toon(Color("#8a8278")), Vector3(0, 0.03, 0))
+	part(root, box(Vector3(0.4, 0.08, 0.4)), toon(Color("#8a8278")), Vector3(0, 0.04, 0))
+	part(root, cyl(0.08, 0.11, 1.5, 8), toon(Color("#5a4a3a")), Vector3(0, 0.75, 0))
+	part(root, box(Vector3(0.34, 0.9, 0.16)), toon(Color("#6a5a48")), Vector3(0, 1.15, 0.1))
+	part(root, box(Vector3(0.24, 0.8, 0.02)), toon(Color("#f2ead8"), false), Vector3(0, 1.15, 0.19))
+	part(root, cyl(0.04, 0.04, 0.62, 8), toon(Color("#dff2f4"), false), Vector3(0, 1.2, 0.21))
+	part(root, cyl(0.025, 0.025, 0.45, 6), toon(Color("#e04a3a"), false, Color(0.6, 0.1, 0.05)), Vector3(0, 1.12, 0.22))
+	part(root, sphere(0.07, 8), toon(Color("#e04a3a"), false, Color(0.6, 0.1, 0.05)), Vector3(0, 0.86, 0.22))
+	for k in 4:
+		part(root, box(Vector3(0.07, 0.012, 0.01)), toon(Color("#2a2018"), false), Vector3(0.07, 0.98 + k * 0.12, 0.2))
 	return root
 
 static func _obj_valve(big: bool) -> Node3D:
@@ -968,7 +1002,7 @@ static func _obj_tube(big: bool) -> Node3D:
 	part(root, cyl(0.12 * k, 0.14 * k, 1.3 * k, 10), brass, Vector3(0, 0.65 * k, 0))
 	part(root, cyl(0.12 * k, 0.12 * k, 0.4 * k, 10), brass, Vector3(0, 1.42 * k, 0.12 * k), Vector3.ONE, Vector3(50, 0, 0))
 	part(root, cyl(0.38 * k, 0.12 * k, 0.45 * k, 14), brass, Vector3(0, 1.62 * k, 0.4 * k), Vector3.ONE, Vector3(80, 0, 0))
-	part(root, cyl(0.3 * k, 0.3 * k, 0.03 * k, 14), toon(Color("#2a2018"), false), Vector3(0, 1.66 * k, 0.6 * k), Vector3.ONE, Vector3(80, 0, 0))
+	part(root, cyl(0.31 * k, 0.31 * k, 0.03 * k, 14), toon(Color("#2a2018"), false), Vector3(0, 1.66 * k, 0.645 * k), Vector3.ONE, Vector3(80, 0, 0))
 	part(root, cyl(0.2 * k, 0.24 * k, 0.12 * k, 10), toon(Color("#8a6a3a")), Vector3(0, 0.06, 0))
 	return root
 

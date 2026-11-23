@@ -94,7 +94,7 @@ Fora da tabela vale o extremo (−6 ou menos: ×0,1; +5 ou mais: ×1,4).
 | Boneco de Treino | Arena da Prova | 10 | normal | passivo | 35 | 0–0 | 14 | 0 | 0 |
 | Alvo Móvel | Arena da Prova | 10 | normal | passivo | 40 | 0–0 | 16 | 0 | 0 |
 | Sino do Percurso | Arena da Prova | 10 | normal | passivo | 70 | 0–0 | 12 | 0 | 0 |
-| Atirador de Prova | Arena da Prova | 10 | normal | agressivo (40 m) | 150 | 12–15 | 18 | 0 | 0 |
+| Atirador de Prova | Arena da Prova | 10 | normal | agressivo (40 m) | 150 | 10–13 | 18 | 0 | 0 |
 | Fagulha de Prova | Arena da Prova | 10 | normal | passivo | 40 | 0–0 | 6 | 0 | 0 |
 | Perseguidor de Prova | Arena da Prova | 10 | normal | agressivo (40 m) | 900 | 6–9 | 24 | 0 | 0 |
 | Trava da Comporta | A Última Eclusa (calabouço) | 20 | normal | passivo | 900 | 0–0 | 60 | 0 | 0 |

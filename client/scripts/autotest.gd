@@ -460,6 +460,9 @@ func _scene_tick() -> void:
 	if main.args.has("trial") and scene_i == 0 and not trial_done:
 		_trial_tick()
 		return
+	if main.args.has("objetos") and scene_i == 0 and not obj_done:
+		_obj_tick()
+		return
 	if main.args.has("dungeon") and scene_i == 0 and not dungeon_done:
 		_dungeon_tick()
 		return
@@ -568,6 +571,68 @@ func _motion_report(log: Array) -> void:
 		say("fluidez %s: %d quadros, corrida a %.2f m/s (desvio %.2f, maior salto %.2f), recuos %d" % [series[1], speeds.size(), mean, dev, max_jump, reversals])
 
 
+# ---------------- objetos de missão vistos no cliente (--sceneshots=pasta --objetos) ----------------
+# Um objeto de cada modelo (art.gd quest_object: o kind ou o prefixo do id), em cada mapa aberto: teleporta para
+# perto dele e salva a visão de jogo (câmera inicial, a 12 m).
+var obj_list := []
+var obj_i := 0
+var obj_step := 0
+var obj_until := 0
+var obj_done := false
+
+func _obj_tick() -> void:
+	if Time.get_ticks_msec() < obj_until:
+		return
+	if obj_list.is_empty():
+		var seen := {}
+		for mid in main.defs["maps"].keys():
+			var md: Dictionary = main.defs["maps"][mid]
+			if md.get("instanced", false):
+				continue
+			for o in md.get("objects", []):
+				# o modelo sai do kind ou do id sem o número do fim (marker_1, marker_2... são o mesmo)
+				var key := "%s|%s" % [str(o.get("kind", "")), str(o["id"]).rstrip("0123456789")]
+				if o.get("kind", "") == "dungeon" or seen.has(key):
+					continue
+				seen[key] = true
+				obj_list.append([mid, o])
+		say("objetos de missão: %d modelos para conferir" % obj_list.size())
+		# nível do teto, para os monstros dos mapas altos não derrubarem o personagem no meio das capturas
+		Net.request("gm", {"cmd": "xp", "level": 25})
+	if obj_i >= obj_list.size():
+		obj_done = true
+		scene_i = SCENE_SPOTS.size()
+		return
+	var mid: String = obj_list[obj_i][0]
+	var o: Dictionary = obj_list[obj_i][1]
+	var wait := 1500
+	match obj_step:
+		0:
+			# o personagem fica 3 m ao lado (+x): com a câmera inicial (de +z e −x), o objeto aparece à esquerda dele
+			var x := float(o["x"]) + 3.0
+			var z := float(o["z"]) + 0.5
+			if main.map_def().get("id", "") != mid:
+				Net.request("gm", {"cmd": "teleport", "mapId": mid, "x": x, "z": z})
+				wait = 3500
+			else:
+				Net.request("gm", {"cmd": "teleport", "x": x, "z": z})
+				wait = 1500
+		1:
+			if not main.in_world or main.world == null or main.map_def().get("id", "") != mid or main.world.me().is_empty():
+				return
+			main.world.cam_yaw = -0.6
+			main.world.cam_dist = 12.0
+			main.world.cam_pitch = 0.7
+			wait = 2200
+		2:
+			_scene_shot("80_objeto_%s_%s" % [mid, str(o["id"])])
+			obj_i += 1
+			obj_step = 0
+			obj_until = Time.get_ticks_msec() + 200
+			return
+	obj_step += 1
+	obj_until = Time.get_ticks_msec() + wait
+
 # ---------------- prova de classe vista no cliente (--sceneshots=pasta --trial) ----------------
 var trial_step := 0
 var trial_done := false
@@ -605,10 +670,19 @@ func _trial_tick() -> void:
 				say("prova aceita: %s" % str(r.get("ok")) + ("" if r.get("ok") else " " + str(r.get("reason")))))
 			wait = 1200
 		2:
+			# a conversa com o mestre mostra a prova antes do botão (título, tempo, objetivo e a habilidade emprestada)
+			Net.request("talk", {"npc": master}, func(r):
+				if r.get("ok", false):
+					main.hud.show_npc(r))
+			wait = 1500
+		3:
+			_scene_shot("89_%s_mestre" % str(main.ch["classId"]))
+			if main.hud.npc_panel:
+				main.hud.npc_panel.visible = false
 			Net.request("trial_start", {"npc": master}, func(r):
 				say("prova iniciada: %s" % str(r.get("ok")) + ("" if r.get("ok") else " " + str(r.get("reason")))))
 			wait = 4000
-		3:
+		4:
 			if main.map_def().get("id", "") != "arena_prova" or main.world == null or main.world.me().is_empty():
 				return
 			# visão ampla da arena (de frente para o fundo) com as peças e as marcas da prova desta classe; o
@@ -621,16 +695,16 @@ func _trial_tick() -> void:
 			if main.hud.trial_panel:
 				main.hud.trial_panel.visible = false
 			wait = 2500
-		4:
+		5:
 			_scene_shot("90_%s_arena" % str(main.ch["classId"]))
 			if main.hud.trial_panel:
 				main.hud.trial_panel.visible = true
 			main.world.cam_dist = 16.0
 			main.world.cam_pitch = 0.75
 			wait = 1800
-		5, 6, 7, 8, 9, 10, 11:
+		6, 7, 8, 9, 10, 11, 12:
 			# ataca o monstro (ou peça) mais próximo; sem monstro, escolhe um aliado da prova (aprendiz,
-			# peregrina) para as curas e escudos; usa as habilidades disponíveis, a emprestada inclusive
+			# peregrino) para as curas e escudos; usa as habilidades disponíveis, a emprestada inclusive
 			var best := ""
 			var bd := 1e9
 			var ally := ""
@@ -646,7 +720,7 @@ func _trial_tick() -> void:
 				main.world.ally_selected = ally
 			if best != "":
 				main.world.selected = best
-				if trial_step == 5 or main.world.entities[best]["data"].get("tgt", null) == null:
+				if trial_step == 6 or main.world.entities[best]["data"].get("tgt", null) == null:
 					Net.request("attack", {"target": best})
 			var sk: Array = main.class_skills()
 			var learned: Dictionary = main.ch.get("skills", {})
@@ -660,10 +734,10 @@ func _trial_tick() -> void:
 				main.world.use_skill(usable[trial_casts % usable.size()])
 				trial_casts += 1
 			wait = 900
-			if trial_step in [7, 9, 11]:
-				var tag := "9%d_%s_prova" % [trial_step, str(main.ch["classId"])]
+			if trial_step in [8, 10, 12]:
+				var tag := "91_%s_luta_%d" % [str(main.ch["classId"]), (trial_step - 6) / 2]
 				get_tree().create_timer(0.25).timeout.connect(func(): _scene_shot(tag))
-		12:
+		13:
 			say("prova vista no cliente: %d habilidades usadas, mapa %s" % [trial_casts, main.map_def().get("id", "")])
 			trial_done = true
 			scene_i = SCENE_SPOTS.size()

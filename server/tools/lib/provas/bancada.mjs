@@ -52,9 +52,10 @@ export function prepararProva({ classId, faixa = 1, seed = 1, nivel = 10, server
   return { server, cli, eid: e.char.eid, data, mestre: mestre.id };
 }
 
-// Roda a prova inteira com o piloto. opcoes: { semHabilidade, maxS, aoPasso(v), manter } — manter: devolve o
-// servidor aberto (server, cli, mestre) para o chamador seguir (ex.: entregar a missão).
-export function rodarProva({ classId, faixa = 1, seed = 1, semHabilidade = false, maxS = 200, aoPasso = null, manter = false }) {
+// Roda a prova inteira com o piloto. opcoes: { semHabilidade, miraNoAlvo, reacaoMs, maxS, aoPasso(v), manter } —
+// reacaoMs: o piloto só decide a cada tantos ms (100 = todo passo; 300 a 500 lembra um jogador humano);
+// manter: devolve o servidor aberto (server, cli, mestre) para o chamador seguir (ex.: entregar a missão).
+export function rodarProva({ classId, faixa = 1, seed = 1, semHabilidade = false, miraNoAlvo = false, reacaoMs = 100, maxS = 200, aoPasso = null, manter = false }) {
   const { server, cli, eid, data, mestre } = prepararProva({ classId, faixa, seed });
   const prova = { iniciada: null, status: null, fim: null };
   const avisos = [];
@@ -75,7 +76,8 @@ export function rodarProva({ classId, faixa = 1, seed = 1, semHabilidade = false
   char = cli.pedir('char').char;
   const inicio = cli.pedir('trial_start', { npc: mestre });
   if (!inicio.ok) throw new Error(`trial_start: ${inicio.reason}`);
-  const piloto = criarPiloto(classId, data, { semHabilidade });
+  const piloto = criarPiloto(classId, data, { semHabilidade, miraNoAlvo });
+  let decideEm = 0;
   // ações (uma por tipo por passo; recargas conferidas pelas respostas do servidor)
   const cd = {};
   let gcdAte = 0, alvo = null, destino = null, destinoEm = -1e9, tonicoEm = -1e9;
@@ -119,7 +121,7 @@ export function rodarProva({ classId, faixa = 1, seed = 1, semHabilidade = false
     },
   };
   const passos = Math.round((maxS * 1000) / 100);
-  let minHp = Infinity;
+  let minHp = Infinity, minAliado = Infinity;
   for (let i = 0; i < passos && !prova.fim; i++) {
     agora += 100;
     server.step(100);
@@ -128,9 +130,10 @@ export function rodarProva({ classId, faixa = 1, seed = 1, semHabilidade = false
     const ents = cli.mundo();
     const eu = ents.get(eid);
     if (eu && prova.status) minHp = Math.min(minHp, eu.hp / eu.mhp);
+    for (const e of ents.values()) if (e.k === 'a' && prova.status) minAliado = Math.min(minAliado, e.hp / e.mhp);
     const v = { agora, eu, ents, char, prova, avisos: avisos.filter((w) => w.ate > agora), ultimoGolpe };
-    // a arena só depois do 'started'
-    if (prova.iniciada && eu) piloto.decidir(v, acoes);
+    // a arena só depois do 'started'; uma decisão a cada reacaoMs
+    if (prova.iniciada && eu && agora >= decideEm) { decideEm = agora + reacaoMs; piloto.decidir(v, acoes); }
     aoPasso?.(v, server);
   }
   const fim = prova.fim ?? { state: 'timeout', message: 'sem resultado' };
@@ -139,6 +142,6 @@ export function rodarProva({ classId, faixa = 1, seed = 1, semHabilidade = false
   return {
     ...(manter ? { server, cli, mestre } : {}),
     classId, faixa, seed, success: fim.state === 'success', message: fim.message, segundos: Math.round(agora / 100) / 10,
-    usadas, minHpPct: Math.round(minHp * 100), trialDone: !!ch?.trialDone, skills: ch?.skills, kind: piloto.kind, ultimoStatus: prova.status, eventos,
+    usadas, minHpPct: Math.round(minHp * 100), minAliadoPct: Number.isFinite(minAliado) ? Math.round(minAliado * 100) : null, trialDone: !!ch?.trialDone, skills: ch?.skills, kind: piloto.kind, ultimoStatus: prova.status, eventos,
   };
 }

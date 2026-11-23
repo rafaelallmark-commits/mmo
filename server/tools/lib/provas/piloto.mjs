@@ -4,7 +4,9 @@
 // de progressão. Não lê o estado interno da zona.
 //
 // Interface:
-//   const piloto = criarPiloto(classId, data, { semHabilidade })  // semHabilidade: nunca usa a do nível 10
+//   const piloto = criarPiloto(classId, data, { semHabilidade, miraNoAlvo })
+//     semHabilidade: nunca usa a do nível 10; miraNoAlvo: a Ruptura vai com o pilar selecionado (um por vez),
+//     como faria quem não descobriu o cone sem alvo
 //   piloto.decidir(v, a)
 //     v: { agora, eu: entidade do snapshot, ents: Map, char, prova: { iniciada, status }, avisos: [{x, z, radius, ate, kind}] }
 //     a: { mover(x, z), atacar(eid), parar(), lancar(skill, { target, x, z, ally }) -> resposta, tonico(), pronta(skill) }
@@ -57,6 +59,14 @@ const REGRAS = {
       return;
     }
     if (!blindados.length) return;
+    if (o.miraNoAlvo && !o.semHabilidade) {
+      // como quem clica no pilar e usa a Ruptura com ele selecionado: o cone sai na direção do alvo e racha um
+      // pilar por vez; esperando a mana, fica parado (bater na blindagem prende a mana em combate)
+      const p = perto(v, blindados, v.eu)[0];
+      if (dist(v.eu, p) > 2.4) { const d = norm(v.eu.x - p.x, v.eu.z - p.z); const q = dentro({ x: p.x + d.x * 2.1, z: p.z + d.z * 2.1 }); a.mover(q.x, q.z); return; }
+      if (a.pronta('rupture') && mp >= 20) a.lancar('rupture', { target: p.id });
+      return;
+    }
     // posição para pegar dois blindados no cone (ponto a 2,3 m do meio do par, do lado de cá)
     let melhor = null;
     for (let i = 0; i < blindados.length; i++) {
@@ -200,7 +210,7 @@ const REGRAS = {
     a.atacar(alvo.id);
   },
 
-  // Escudeiro: Juramento na peregrina, atiradores primeiro (só miram nela), construtos que vão nela depois.
+  // Escudeiro: Juramento no peregrino, atiradores primeiro (só miram nele), construtos que vão nele depois.
   escort(v, a, o) {
     const al = aliados(v)[0];
     if (!al || al.dead) return;

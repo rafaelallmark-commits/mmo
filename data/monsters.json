@@ -1034,8 +1034,8 @@
    "aggro": "aggressive",
    "hp": 150,
    "damage": [
-    12,
-    15
+    10,
+    13
    ],
    "attackIntervalMs": 2200,
    "attackRange": 9,
@@ -1051,7 +1051,7 @@
    "lootTable": "lt_none",
    "name": "Atirador de Prova",
    "model": "archer",
-   "description": "Construto de tiro que só mira a peregrina, a até 9 m (prova do Escudeiro)."
+   "description": "Construto de tiro que só mira o peregrino, a até 9 m (prova do Escudeiro)."
   },
   "trial_spark": {
    "level": 10,

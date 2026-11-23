@@ -1082,6 +1082,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif state == "world" and in_world:
 			if hud and hud.close_top_panel():
 				pass
+			elif world and world.selected != "":
+				# Esc tira a seleção do alvo antes de abrir o menu: sem alvo, golpes em cone ou em linha (Ruptura,
+				# Linha Partida...) saem para onde o cursor aponta
+				world.selected = ""
+				world.pending_cast = {}
+				if hud:
+					hud.refresh_target()
 			else:
 				toggle_pause_menu()
 		elif state == "create":

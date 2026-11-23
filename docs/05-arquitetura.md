@@ -74,7 +74,7 @@ mmo/
 │   │   ├── worldlink.js           ligação da zona com o mundo: hello com HMAC, sinal de vida, pedidos, cerca
 │   │   ├── token.js · mailer.js · metrics.js   token HMAC de uso único · SMTP mínimo · métricas/saúde
 │   │   ├── dungeon.js             A Última Eclusa: o Custódio em três fases, avisos, comportas
-│   │   ├── trial.js               provas de classe: uma regra por classe, aliados com vida (aprendiz, peregrina)
+│   │   ├── trial.js               provas de classe: uma regra por classe, aliados com vida (aprendiz, peregrino)
 │   │   ├── rules.js               regras puras: atributos, estatísticas, dano, acerto, crítico, XP
 │   │   ├── equipment.js           validação de nível/classe/atributos/espaço/empunhadura
 │   │   ├── store.js               SQLite: contas, personagens, instâncias de item, saques, missões
@@ -180,7 +180,7 @@ Todo pedido do cliente leva `rid` (texto único por pedido). A resposta é `{ t:
 | `respawn` | — | volta ao posto de guarda |
 | `chat` | text | canal da zona |
 | `char` | — | ficha atual |
-| `talk`, `interact`, `buy`, `quests`, `quest_accept`, `quest_turnin` | npc / object / item | NPCs, objetos de missão, loja e diário |
+| `talk`, `interact`, `buy`, `quests`, `quest_accept`, `quest_turnin` | npc / object / item | NPCs, objetos de missão, loja e diário (no mestre da classe, com a prova liberada, o `talk` traz `trial`: `kind`, `title`, `objective`, `hint`, `ms`, `skill`, `skillName`) |
 | `trial_start` | npc | prova de classe (instância solo): devolve `kind` e `title`; a regra da classe roda em `trial.js` |
 | `party_invite`, `party_accept`, `party_decline`, `party_leave`, `party_kick` | name / from | grupos de até 5 |
 | `enhance_quote`, `enhance` | npc (ferreiro), instance | custo, chance e prévia; refino com RNG semeado (falha mantém o grau e gasta ouro e materiais) |
@@ -193,7 +193,7 @@ Com várias zonas, o `enter` de um personagem cujo mapa é de outra zona respond
 
 Eventos do servidor: `hello`, `defs`, `snap` (10 Hz: `now` = relógio da zona em ms; por entidade id, tipo, posição, velocidade `vx`/`vz`, vida, alvo), `hit` (origem, destino, dano, crítico, errou, habilidade), `death`, `spawn`, `loot` (só para o dono), `xp`, `level_up`, `char`, `buff`, `ground`, `cast`, `player_dead`, `respawn`, `joined`, `left`, `chat`, `kicked`, `cast` (habilidade usada, para os efeitos), `shield`, `quest_update`, `party`, `trial`, `boss` (fase, vida, proteção, válvula, comportas) e `warn` (aviso de perigo: círculo ou linha, duração).
 
-Prova de classe (`server/src/trial.js`, D167–D168): `trial` chega com `state` `started` (classe, `kind`, `title`, `objective`, `hint`, `skill` emprestada, `ms`, `marks` — filas, fossos, posto de tiro, marcos e sinos para o chão — e a ficha com a habilidade emprestada, `trialSkill`), `status` a cada 0,5 s ou quando algo muda (`text` e `sub` do progresso, `frac`/`bar` da barra, `left`, `alert` — investida, jato, emboscada —, estados das marcas e, na Cantora, `allies` e o `jet` pendente) e `success`/`failed` (`message`, ficha). Nos snapshots, aprendizes e peregrina vêm como entidades `k: 'a'` (`def` = modelo, `n`, vida, `dead`, `sh` do escudo), alvos das habilidades de aliado pelo `ally` do `cast`; peças paradas são monstros com `model` nas definições e `fx` de estado (`armor` no pilar blindado, `idle` no sino apagado); golpe recusado chega como `hit` com `dmg` 0 e `note` (`blindado`, `apagado`, `fora do posto`). Uma instância pode nascer com áreas bloqueadas próprias (os fossos do Lanceiro: `createZone(..., mapOverride)`).
+Prova de classe (`server/src/trial.js`, D167–D168): `trial` chega com `state` `started` (classe, `kind`, `title`, `objective`, `hint`, `skill` emprestada, `ms`, `marks` — filas e linha de contenção `line`, fossos `ditch`, posto de tiro `zone`, marcos e sinos `goal`, o caminho do peregrino `path` com `pts` — e a ficha com a habilidade emprestada, `trialSkill`), `status` a cada 0,5 s ou quando algo muda (`text` e `sub` do progresso, `frac`/`bar` da barra, `left`, `alert` — investida, jato, emboscada, fora do posto, a dica do cone —, estados das marcas e, na Cantora, `allies` e o `jet` pendente) e `success`/`failed` (`message`, ficha). Nos snapshots, aprendizes e peregrino vêm como entidades `k: 'a'` (`def` = modelo, `n`, `fem` = corpo, vida, `dead`, `sh` do escudo), alvos das habilidades de aliado pelo `ally` do `cast`; peças paradas são monstros com `model` nas definições e `fx` de estado (`armor` no pilar blindado, `idle` no sino apagado); golpe recusado chega como `hit` com `dmg` 0 e `note` (`blindado`, `apagado`, `fora do posto`). Uma instância pode nascer com áreas bloqueadas próprias (os fossos do Lanceiro: `createZone(..., mapOverride)`); se o personagem sai da arena sem a prova acabar (teleporte de mestre), em 5 s a prova é dada como abandonada e a instância some.
 
 ## Movimento no cliente
 

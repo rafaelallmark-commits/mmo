@@ -532,17 +532,23 @@ func on_warn(m: Dictionary) -> void:
 	var at: Vector3 = world._gpos(float(m["x"]), float(m["z"]))
 	var c: Color = Color(1.0, 0.7, 0.2) if m.get("color", "") == "amber" else COLORS["danger"]
 	var kind: String = m.get("kind", "line" if m.get("shape", "circle") == "line" else "circle")
+	if kind in ["rock", "steam"]:
+		_trial_warn(m, at, kind)
+		return
 	Sfx.warn(kind)
 	if kind == "valve":
 		Sfx.play("steam_vent", at)
-	# prova de classe: pedra que cai do teto (Quebraferro) e jato de vapor no aprendiz (Cantora)
-	var end_sound := "" if kind == "valve" else "spell_impact"
-	if kind == "rock":
-		end_sound = "hit_blunt"
-	elif kind == "steam":
-		c = Color(0.85, 0.95, 1.0)
-		end_sound = "steam_vent"
 	if m.get("shape", "circle") == "line":
 		warn_line(at, float(m.get("yaw", 0.0)), float(m.get("length", 10.0)), float(m.get("width", 2.0)), float(m.get("ms", 1500)), c)
 	else:
-		warn_circle(at, float(m.get("radius", 3.0)), float(m.get("ms", 1500)), c, end_sound)
+		warn_circle(at, float(m.get("radius", 3.0)), float(m.get("ms", 1500)), c, "" if kind == "valve" else "spell_impact")
+
+## Avisos da prova de classe (server/src/trial.js): a pedra que cai do teto onde o Quebraferro está (âmbar,
+## pancada surda ao cair) e o jato de vapor no aprendiz marcado da Cantora (branco-azulado, assobio de vapor).
+func _trial_warn(m: Dictionary, at: Vector3, kind: String) -> void:
+	Sfx.warn(kind)
+	var steam := kind == "steam"
+	var c: Color = Color(0.85, 0.95, 1.0) if steam else Color(1.0, 0.7, 0.2)
+	if steam:
+		Sfx.play("steam_vent", at, -4.0)
+	warn_circle(at, float(m.get("radius", 2.0)), float(m.get("ms", 1500)), c, "steam_vent" if steam else "hit_blunt")

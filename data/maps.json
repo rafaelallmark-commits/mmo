@@ -16030,7 +16030,7 @@
       "kind": "pillars",
       "title": "Pilares Blindados",
       "objective": "Rompa os 3 pilares blindados antes que o teto ceda.",
-      "hint": "Só a Ruptura racha a blindagem, e de vez. A mana do nível 10 dá para duas: de frente para dois pilares, o cone pega os dois. Saia das pedras que caem do teto.",
+      "hint": "Só a Ruptura racha a blindagem, e de vez. A mana do nível 10 dá para duas: pare de frente para dois pilares e aponte entre eles — sem alvo selecionado (Esc tira a seleção), a Ruptura sai para onde o cursor aponta e o cone pega os dois. Saia das pedras que caem do teto.",
       "timeMs": 90000,
       "monster": "trial_pillar",
       "pillars": [
@@ -16047,7 +16047,6 @@
         25
        ]
       ],
-      "openMs": 6000,
       "debris": {
        "firstMs": 9000,
        "everyMs": 6500,
@@ -16065,9 +16064,10 @@
       "ally": {
        "name": "Aprendiz Brás",
        "model": "apprentice",
+       "fem": false,
        "x": 18,
        "z": 17,
-       "hp": 340,
+       "hp": 420,
        "defense": 10,
        "evasion": 4
       },
@@ -16164,7 +16164,7 @@
       "kind": "targets",
       "title": "Alvos em Movimento",
       "objective": "Do posto de tiro, derrube 16 dos 32 alvos que cruzam a arena.",
-      "hint": "Só valem tiros dados de dentro do posto de tiro. A Chuva de Espinhos cai por 2,5 s: mire à frente da fila, onde os alvos vão estar. A Marca da Trilha faz o alvo levar mais dano.",
+      "hint": "Só valem tiros dados de dentro do posto de tiro. A Chuva de Espinhos cai por 2,5 s: aponte o cursor à frente da fila, onde os alvos vão estar. A Marca da Trilha faz o alvo levar mais dano.",
       "timeMs": 90000,
       "monster": "trial_target",
       "post": {
@@ -16186,7 +16186,7 @@
          33,
          27
         ],
-        "speed": 3,
+        "speed": 2.8,
         "spacing": 1.2
        },
        {
@@ -16200,7 +16200,7 @@
          3,
          29
         ],
-        "speed": 3,
+        "speed": 2.8,
         "spacing": 1.2
        },
        {
@@ -16214,7 +16214,7 @@
          33,
          26
         ],
-        "speed": 3.2,
+        "speed": 3,
         "spacing": 1.2
        },
        {
@@ -16228,23 +16228,24 @@
          3,
          28
         ],
-        "speed": 3.2,
+        "speed": 3,
         "spacing": 1.2
        }
       ]
      },
      "dawnshield": {
       "kind": "escort",
-      "title": "A Travessia da Peregrina",
-      "objective": "Leve a peregrina viva até o portão do outro lado da arena.",
-      "hint": "Juramento na peregrina: 30% do dano que ela sofre vem para você. Os atiradores só miram nela — vá até eles; os construtos largam a peregrina quando você bate neles. Ela só anda com você por perto.",
+      "title": "A Travessia do Peregrino",
+      "objective": "Leve o peregrino vivo até o portão do outro lado da arena.",
+      "hint": "Clique no peregrino e use o Juramento: 30% do dano que ele sofre vem para você. Os atiradores só miram nele — vá até eles; os construtos largam o peregrino quando você bate neles. Ele só anda com você por perto.",
       "timeMs": 150000,
       "ally": {
-       "name": "Peregrina Odila",
+       "name": "Peregrino Odilon",
        "model": "pilgrim",
+       "fem": false,
        "x": 18,
        "z": 5,
-       "hp": 460,
+       "hp": 480,
        "defense": 18,
        "evasion": 4,
        "speed": 1.6,
@@ -16283,13 +16284,15 @@
           "monster": "trial_construct",
           "count": 1,
           "x": 15,
-          "z": 18
+          "z": 18,
+          "hp": 140
          },
          {
           "monster": "trial_construct",
           "count": 1,
           "x": 21,
-          "z": 18
+          "z": 18,
+          "hp": 140
          }
         ]
        },
@@ -16312,7 +16315,8 @@
           "monster": "trial_construct",
           "count": 1,
           "x": 11,
-          "z": 31
+          "z": 31,
+          "hp": 140
          }
         ]
        },
@@ -16335,7 +16339,12 @@
           "monster": "trial_sentinel",
           "count": 1,
           "x": 19,
-          "z": 33
+          "z": 33,
+          "damage": [
+           10,
+           13
+          ],
+          "hp": 260
          }
         ]
        }
@@ -16346,7 +16355,7 @@
       "title": "Percurso do Vento",
       "objective": "Derrube os 4 sinos do percurso, em ordem, sem deixar os perseguidores te pegarem.",
       "hint": "Bata e recue: arremesse no sino aceso e saia antes que os perseguidores cheguem. Eles aceleram a cada sino; com o Vento a Favor (+8% de velocidade) você corre mais que eles. O Passo Lateral tira você de um aperto.",
-      "timeMs": 100000,
+      "timeMs": 120000,
       "monster": "trial_bell",
       "bells": [
        [
@@ -16394,7 +16403,7 @@
        ],
        "addPerBell": 1,
        "speedBase": 3.4,
-       "speedPerBell": 0.35,
+       "speedPerBell": 0.3,
        "max": 3
       }
      },
@@ -16402,12 +16411,13 @@
       "kind": "vigil",
       "title": "Vigília dos Aprendizes",
       "objective": "Mantenha os três aprendizes vivos sob a fuligem por 70 s.",
-      "hint": "O jato de vapor é mais forte que a vida de um aprendiz: ponha o Selo do Véu no aprendiz marcado antes do estouro. A fuligem não para: o Canto de Amparo cura (recarga 3 s).",
+      "hint": "O jato de vapor é mais forte que a vida de um aprendiz: clique no aprendiz marcado e ponha o Selo do Véu nele antes do estouro. A fuligem não para: o Canto de Amparo cura (recarga 3 s).",
       "timeMs": 70000,
       "allies": [
        {
         "name": "Aprendiz Lia",
         "model": "apprentice",
+        "fem": true,
         "x": 12,
         "z": 20,
         "hp": 110,
@@ -16417,6 +16427,7 @@
        {
         "name": "Aprendiz Duarte",
         "model": "apprentice",
+        "fem": false,
         "x": 24,
         "z": 20,
         "hp": 110,
@@ -16426,6 +16437,7 @@
        {
         "name": "Aprendiz Cora",
         "model": "apprentice",
+        "fem": true,
         "x": 18,
         "z": 29,
         "hp": 110,
@@ -16442,7 +16454,7 @@
        "everyMs": 14000,
        "warnMs": 3000,
        "radius": 1.6,
-       "damage": 125
+       "damage": 115
       }
      },
      "emberweaver": {

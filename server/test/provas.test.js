@@ -32,15 +32,35 @@ for (const classId of CLASSES) {
 }
 
 test('provas que só fecham com a habilidade do nível 10 (kit inicial)', { timeout: 120000 }, () => {
-  // Quebraferro (blindagem), Lanceiro (fossos), Vigia (alvos rápidos demais para um a um), Cantora (jato
-  // maior que a vida do aprendiz) e Tecelão (ondas largas demais sem enraizar)
-  for (const classId of ['breaker', 'pikeman', 'warden', 'veilsinger', 'emberweaver']) {
+  // Quebraferro (blindagem), Lanceiro (fossos), Cantora (jato maior que a vida do aprendiz) e Tecelão (ondas
+  // largas demais sem enraizar) perdem sempre; o Vigia com o arco inicial perde quase sempre (alvos rápidos
+  // demais para um a um)
+  for (const classId of ['breaker', 'pikeman', 'veilsinger', 'emberweaver']) {
     const r = rodarProva({ classId, faixa: 1, seed: 11, semHabilidade: true });
     assert.equal(r.success, false, `${classId} venceu sem ${data.skills[sig(classId)].name}`);
     assert.equal(r.trialDone, false);
     assert.equal(r.skills[sig(classId)], undefined, 'derrota não deixa a habilidade na ficha');
     log(`${data.classes[classId].name} sem ${data.skills[sig(classId)].name}: ${r.message}`);
   }
+  const vigia = [11, 12, 13, 14, 15].map((seed) => rodarProva({ classId: 'warden', faixa: 1, seed, semHabilidade: true }));
+  assert.ok(vigia.filter((r) => r.success).length <= 1, `Vigia sem Chuva de Espinhos venceu ${vigia.filter((r) => r.success).length} de 5`);
+  log(`Vigia sem Chuva de Espinhos: ${vigia.filter((r) => !r.success).length} derrotas em 5 (${vigia.find((r) => !r.success)?.message})`);
+});
+
+test('provas com reação de jogador: uma decisão a cada 400 ms, kit inicial, todas as classes vencem', { timeout: 120000 }, () => {
+  // o piloto perfeito decide a cada 100 ms; quem joga de verdade reage mais devagar
+  for (const classId of CLASSES) {
+    const r = rodarProva({ classId, faixa: 1, seed: 21, reacaoMs: 400 });
+    assert.equal(r.success, true, `${classId} com 400 ms: ${r.message}`);
+    log(`${data.classes[classId].name}: ${r.message} (${r.segundos} s)`);
+  }
+  // Quebraferro que não descobriu o cone sem alvo: Ruptura com o pilar selecionado, um pilar por vez, esperando
+  // a mana sem bater na blindagem — ainda dá tempo (a dica aparece depois da primeira)
+  const ing = rodarProva({ classId: 'breaker', faixa: 1, seed: 21, reacaoMs: 400, miraNoAlvo: true });
+  assert.equal(ing.success, true, ing.message);
+  assert.equal(ing.usadas.rupture, 3, 'uma Ruptura por pilar');
+  assert.ok(ing.eventos.some((m) => m.t === 'system' && /^Dica: a mana não dá/.test(m.text)), 'a dica do cone aparece');
+  log(`Quebraferro mirando um pilar por vez: ${ing.message} (${ing.segundos} s)`);
 });
 
 test('prova: habilidade emprestada, mensagens, peças e aliados vistos pelo protocolo', { timeout: 60000 }, () => {
@@ -66,6 +86,8 @@ test('prova: habilidade emprestada, mensagens, peças e aliados vistos pelo prot
   const aprendizes = ents.filter((e) => e.k === 'a');
   assert.equal(aprendizes.length, 3, 'três aprendizes no snapshot');
   assert.ok(aprendizes.every((a) => a.def === 'apprentice' && a.hp > 0 && a.mhp === 110 && a.n.startsWith('Aprendiz')));
+  // o corpo de cada um vem nos dados (fem): Lia e Cora, Duarte
+  assert.deepEqual(aprendizes.map((a) => [a.n, a.fem]).sort(), [['Aprendiz Cora', true], ['Aprendiz Duarte', false], ['Aprendiz Lia', true]]);
   const st = ev.filter((m) => m.t === 'trial' && m.state === 'status').at(-1);
   assert.match(st.text, /Aprendizes de pé: 3\/3/);
   assert.ok(st.left > 0 && st.left <= 70000);
@@ -116,10 +138,11 @@ test('prova: recompensa uma vez — depois de vencer, nova prova é recusada e a
   const r = rodarProva({ classId: 'breaker', seed: 9, manter: true });
   const { server, cli, mestre } = r;
   assert.equal(r.success, true, r.message);
-  // a primeira Ruptura rachou dois pilares de uma vez (o cone pega o par)
-  const rachados = r.eventos.filter((m) => m.t === 'system' && /rachou a blindagem/.test(m.text));
-  assert.equal(rachados.length, 3, 'três pilares rachados');
+  // a primeira Ruptura rachou dois pilares de uma vez (o cone pega o par), a segunda o terceiro; sem a dica
+  const rachou = r.eventos.filter((m) => m.t === 'system' && /^A Ruptura rachou/.test(m.text)).map((m) => m.text);
+  assert.deepEqual(rachou, ['A Ruptura rachou 2 pilares de uma vez: agora os golpes entram.', 'A Ruptura rachou a blindagem de um pilar: agora os golpes entram.']);
   assert.equal(r.usadas.rupture, 2, 'duas Rupturas para três pilares');
+  assert.ok(!r.eventos.some((m) => m.t === 'system' && /^Dica:/.test(m.text)), 'quem pegou dois no cone não recebe a dica');
   const ch = cli.pedir('char').char;
   assert.equal(ch.trialDone, true);
   assert.equal(ch.skills.rupture, 1);
@@ -132,6 +155,69 @@ test('prova: recompensa uma vez — depois de vencer, nova prova é recusada e a
   assert.equal(cli.pedir('char').char.xp, xp + 1800);
   server.store.close();
   log('Quebraferro: duas Rupturas rompem os três pilares; a vitória libera a Ruptura, nova prova recusada, 1.800 XP uma vez');
+});
+
+test('prova: o mestre conta a prova antes, fora do posto há aviso e tiro recusado, instância abandonada some', { timeout: 60000 }, async () => {
+  const { server, cli, eid, mestre } = prepararProva({ classId: 'warden', seed: 4 });
+  // a conversa com o mestre já traz a prova da classe (o cliente mostra antes do botão)
+  const talk = cli.pedir('talk', { npc: mestre });
+  assert.equal(talk.trialAvailable, true);
+  assert.equal(talk.trial.kind, 'targets');
+  assert.equal(talk.trial.title, 'Alvos em Movimento');
+  assert.equal(talk.trial.skillName, 'Chuva de Espinhos');
+  assert.equal(talk.trial.ms, 90000);
+  assert.match(talk.trial.objective, /posto de tiro/);
+  const ev = [];
+  const golpes = [];
+  cli.aoEvento = (m) => ev.push(m);
+  cli.aoCombate = (m) => golpes.push(m);
+  assert.equal(cli.pedir('trial_start', { npc: mestre }).ok, true);
+  for (let i = 0; i < 30; i++) server.step(100); // a primeira fila entra aos 2 s
+  const status = () => ev.filter((m) => m.t === 'trial' && m.state === 'status').at(-1);
+  assert.equal(status().alert ?? null, null, 'no posto, sem aviso');
+  // fora do posto (z > 13,5): aviso no painel e o tiro não vale
+  assert.equal(cli.pedir('move', { x: 18, z: 17 }).ok, true);
+  for (let i = 0; i < 30; i++) server.step(100);
+  assert.match(status().alert ?? '', /Fora do posto de tiro/);
+  const alvo = [...cli.mundo().values()].find((e) => e.k === 'm' && e.def === 'trial_target' && !e.dead);
+  assert.ok(alvo, 'alvo no trilho');
+  assert.equal(cli.pedir('attack', { target: alvo.id }).ok, true);
+  for (let i = 0; i < 25; i++) server.step(100);
+  assert.ok(golpes.some((m) => m.t === 'hit' && m.src === eid && m.note === 'fora do posto' && m.dmg === 0), 'tiro de fora do posto recusado com o motivo');
+  // teleporte de mestre para fora da arena sem a prova acabar: em 5 s a instância vazia some
+  const zonaProva = [...server.zones.keys()].find((k) => k.startsWith('trial:'));
+  assert.equal(cli.pedir('gm', { cmd: 'teleport', mapId: 'pedrambar', x: 30, z: 20 }).ok, true);
+  for (let i = 0; i < 60; i++) server.step(100);
+  await new Promise((r) => setImmediate(r));
+  assert.equal(server.trials.size, 0, 'a prova abandonada sai da lista');
+  assert.equal(server.zones.has(zonaProva), false, 'e a instância vazia some');
+  assert.equal(cli.pedir('char').char.trialDone, false);
+  server.store.close();
+  log('Vigia: o mestre conta a prova; fora do posto, aviso e "fora do posto" no golpe; instância abandonada removida');
+});
+
+test('prova: o peregrino espera parado enquanto a emboscada estiver de pé', { timeout: 60000 }, () => {
+  const { server, cli, mestre } = prepararProva({ classId: 'dawnshield', seed: 6 });
+  const ev = [];
+  cli.aoEvento = (m) => ev.push(m);
+  assert.equal(cli.pedir('trial_start', { npc: mestre }).ok, true);
+  const construtos = () => [...cli.mundo().values()].filter((e) => e.k === 'm' && e.def === 'trial_construct' && !e.dead);
+  for (let i = 0; i < 120 && !construtos().length; i++) server.step(100); // ele anda até o marco 1 com o Escudeiro perto
+  assert.equal(construtos().length, 2, 'emboscada do marco 1');
+  const peregrino = () => [...cli.mundo().values()].find((e) => e.k === 'a');
+  for (let i = 0; i < 10; i++) server.step(100);
+  const p0 = peregrino();
+  assert.equal(p0.n, 'Peregrino Odilon');
+  assert.equal(p0.fem, false);
+  for (let i = 0; i < 30; i++) server.step(100);
+  const p1 = peregrino();
+  assert.ok(Math.hypot(p1.x - p0.x, p1.z - p0.z) < 0.05, 'parado durante a emboscada');
+  assert.ok(p1.hp < p1.mhp, 'os construtos vão nele');
+  const st = ev.filter((m) => m.t === 'trial' && m.state === 'status').at(-1);
+  assert.match(st.sub, /parado até a emboscada acabar/);
+  assert.match(ev.find((m) => m.t === 'system' && /Emboscada/.test(m.text))?.text ?? '', /Emboscada no marco 1! Protejam Peregrino Odilon\./);
+  server.store.close();
+  log('Escudeiro: o peregrino para no marco 1 até a emboscada acabar');
 });
 
 // ---------------------------------------------------------------- ganchos da zona
@@ -178,13 +264,13 @@ test('zona: aliado da prova leva dano pelo escudo e pelo Juramento, cai sem ir a
   const { zone, sent, mk } = arena();
   const p = mk('dawnshield', 'Tjura', 18, 10);
   p.trialSkill = 'oath';
-  const a = new TrialAlly(zone, 1, { name: 'Peregrina Teste', model: 'pilgrim', x: 19, z: 10, hp: 200, defense: 10 });
+  const a = new TrialAlly(zone, 1, { name: 'Peregrino Teste', model: 'pilgrim', fem: false, x: 19, z: 10, hp: 200, defense: 10 });
   zone.allies.set(a.eid, a);
   assert.equal(zone.entityById('a1'), a);
   assert.ok(zone.alliesNear(p, 10).includes(a), 'conta como aliado de quem está na arena');
   const r = zone.castNow(p, 'oath', null, null, null, a.eid);
   assert.equal(r.ok, true, r.reason);
-  assert.ok(a.guards.some((g) => g.guardianId === p.char.id), 'Juramento guarda a peregrina');
+  assert.ok(a.guards.some((g) => g.guardianId === p.char.id), 'Juramento guarda o peregrino');
   const hp0 = p.char.hp;
   zone.damagePlayer(a, 100, null);
   assert.equal(a.char.hp, 130, '30% do dano foi para o Escudeiro');

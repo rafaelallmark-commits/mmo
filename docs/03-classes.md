@@ -34,7 +34,7 @@ Cidade de pedra, madeira e rotas de superfície.
 - **Atributos iniciais:** Força 17 · Espírito 5 · Talento 11 · Agilidade 10 · Vitalidade 17
 - **Nível 1 com o kit inicial:** vida 111, mana 20, defesa 12, precisão 18, crítico 7,7%
 - **Kit inicial (tutorial adapta à classe):** equipado Machado de Lasca, Couraça de Ferro Batido; na bolsa Machado de Lenhador, Tônico de Vida Pequeno ×5
-- **Prova de classe (nível 10, missão 3.3): Pilares Blindados.** Rompa os 3 pilares blindados antes que o teto ceda. Limite: 90 s. Só a Ruptura racha a blindagem, e de vez. A mana do nível 10 dá para duas: de frente para dois pilares, o cone pega os dois. Saia das pedras que caem do teto. Ruptura fica emprestada no grau 1 durante a prova; vencer a libera de vez.
+- **Prova de classe (nível 10, missão 3.3): Pilares Blindados.** Rompa os 3 pilares blindados antes que o teto ceda. Limite: 90 s. Só a Ruptura racha a blindagem, e de vez. A mana do nível 10 dá para duas: pare de frente para dois pilares e aponte entre eles — sem alvo selecionado (Esc tira a seleção), a Ruptura sai para onde o cursor aponta e o cone pega os dois. Saia das pedras que caem do teto. Ruptura fica emprestada no grau 1 durante a prova; vencer a libera de vez.
 
 | Habilidade | Nível | Mana | Recarga | Alcance | Efeito | Valor principal nos graus 1–5 | Marco |
 |---|---|---|---|---|---|---|---|
@@ -97,7 +97,7 @@ Cidade de pedra, madeira e rotas de superfície.
 - **Atributos iniciais:** Força 9 · Espírito 7 · Talento 13 · Agilidade 18 · Vitalidade 13
 - **Nível 1 com o kit inicial:** vida 84, mana 27, defesa 8, precisão 29, crítico 11,8%
 - **Kit inicial (tutorial adapta à classe):** equipado Arco de Vime, Aljava de Couro Cru, Gibão de Couro Cru; na bolsa Tônico de Vida Pequeno ×5
-- **Prova de classe (nível 10, missão 3.3): Alvos em Movimento.** Do posto de tiro, derrube 16 dos 32 alvos que cruzam a arena. Limite: 90 s. Só valem tiros dados de dentro do posto de tiro. A Chuva de Espinhos cai por 2,5 s: mire à frente da fila, onde os alvos vão estar. A Marca da Trilha faz o alvo levar mais dano. Chuva de Espinhos fica emprestada no grau 1 durante a prova; vencer a libera de vez.
+- **Prova de classe (nível 10, missão 3.3): Alvos em Movimento.** Do posto de tiro, derrube 16 dos 32 alvos que cruzam a arena. Limite: 90 s. Só valem tiros dados de dentro do posto de tiro. A Chuva de Espinhos cai por 2,5 s: aponte o cursor à frente da fila, onde os alvos vão estar. A Marca da Trilha faz o alvo levar mais dano. Chuva de Espinhos fica emprestada no grau 1 durante a prova; vencer a libera de vez.
 
 | Habilidade | Nível | Mana | Recarga | Alcance | Efeito | Valor principal nos graus 1–5 | Marco |
 |---|---|---|---|---|---|---|---|
@@ -123,7 +123,7 @@ Cidade de condutores que atravessam montanhas e rios.
 - **Atributos iniciais:** Força 15 · Espírito 11 · Talento 9 · Agilidade 9 · Vitalidade 16
 - **Nível 1 com o kit inicial:** vida 110, mana 38, defesa 15, precisão 15, crítico 7,3%
 - **Kit inicial (tutorial adapta à classe):** equipado Espada de Guarda, Escudo de Ferro Batido, Couraça de Ferro Batido; na bolsa Montante de Guarda, Tônico de Vida Pequeno ×5
-- **Prova de classe (nível 10, missão 3.3): A Travessia da Peregrina.** Leve a peregrina viva até o portão do outro lado da arena. Limite: 150 s. Juramento na peregrina: 30% do dano que ela sofre vem para você. Os atiradores só miram nela — vá até eles; os construtos largam a peregrina quando você bate neles. Ela só anda com você por perto. Juramento fica emprestada no grau 1 durante a prova; vencer a libera de vez.
+- **Prova de classe (nível 10, missão 3.3): A Travessia do Peregrino.** Leve o peregrino vivo até o portão do outro lado da arena. Limite: 150 s. Clique no peregrino e use o Juramento: 30% do dano que ele sofre vem para você. Os atiradores só miram nele — vá até eles; os construtos largam o peregrino quando você bate neles. Ele só anda com você por perto. Juramento fica emprestada no grau 1 durante a prova; vencer a libera de vez.
 
 | Habilidade | Nível | Mana | Recarga | Alcance | Efeito | Valor principal nos graus 1–5 | Marco |
 |---|---|---|---|---|---|---|---|
@@ -144,7 +144,7 @@ Cidade de condutores que atravessam montanhas e rios.
 - **Atributos iniciais:** Força 10 · Espírito 8 · Talento 12 · Agilidade 17 · Vitalidade 13
 - **Nível 1 com o kit inicial:** vida 87, mana 29, defesa 10, precisão 25, crítico 9,5%
 - **Kit inicial (tutorial adapta à classe):** equipado Azagaia de Junco, Broquel de Couro Cru, Gibão de Couro Cru; na bolsa Tônico de Vida Pequeno ×5
-- **Prova de classe (nível 10, missão 3.3): Percurso do Vento.** Derrube os 4 sinos do percurso, em ordem, sem deixar os perseguidores te pegarem. Limite: 100 s. Bata e recue: arremesse no sino aceso e saia antes que os perseguidores cheguem. Eles aceleram a cada sino; com o Vento a Favor (+8% de velocidade) você corre mais que eles. O Passo Lateral tira você de um aperto. Vento a Favor fica emprestada no grau 1 durante a prova; vencer a libera de vez.
+- **Prova de classe (nível 10, missão 3.3): Percurso do Vento.** Derrube os 4 sinos do percurso, em ordem, sem deixar os perseguidores te pegarem. Limite: 120 s. Bata e recue: arremesse no sino aceso e saia antes que os perseguidores cheguem. Eles aceleram a cada sino; com o Vento a Favor (+8% de velocidade) você corre mais que eles. O Passo Lateral tira você de um aperto. Vento a Favor fica emprestada no grau 1 durante a prova; vencer a libera de vez.
 
 | Habilidade | Nível | Mana | Recarga | Alcance | Efeito | Valor principal nos graus 1–5 | Marco |
 |---|---|---|---|---|---|---|---|
@@ -165,7 +165,7 @@ Cidade de condutores que atravessam montanhas e rios.
 - **Atributos iniciais:** Força 7 · Espírito 19 · Talento 12 · Agilidade 9 · Vitalidade 13
 - **Nível 1 com o kit inicial:** vida 79, mana 66, defesa 7, precisão 18, crítico 5,7%
 - **Kit inicial (tutorial adapta à classe):** equipado Cetro de Latão, Foco de Vidro Bruto, Veste de Linho; na bolsa Cajado de Aprendiz, Tônico de Vida Pequeno ×5
-- **Prova de classe (nível 10, missão 3.3): Vigília dos Aprendizes.** Mantenha os três aprendizes vivos sob a fuligem por 70 s. Limite: 70 s. O jato de vapor é mais forte que a vida de um aprendiz: ponha o Selo do Véu no aprendiz marcado antes do estouro. A fuligem não para: o Canto de Amparo cura (recarga 3 s). Selo do Véu fica emprestada no grau 1 durante a prova; vencer a libera de vez.
+- **Prova de classe (nível 10, missão 3.3): Vigília dos Aprendizes.** Mantenha os três aprendizes vivos sob a fuligem por 70 s. Limite: 70 s. O jato de vapor é mais forte que a vida de um aprendiz: clique no aprendiz marcado e ponha o Selo do Véu nele antes do estouro. A fuligem não para: o Canto de Amparo cura (recarga 3 s). Selo do Véu fica emprestada no grau 1 durante a prova; vencer a libera de vez.
 
 | Habilidade | Nível | Mana | Recarga | Alcance | Efeito | Valor principal nos graus 1–5 | Marco |
 |---|---|---|---|---|---|---|---|

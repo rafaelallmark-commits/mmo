@@ -118,6 +118,24 @@ func _label(text: String, size := 40, color := Color.WHITE) -> Label3D:
 	l.no_depth_test = true
 	return l
 
+## Altura do ponto mais alto das malhas do nó, acima da base dele (transformações locais até o nó, então vale
+## também antes de ele entrar na árvore).
+func _node_top(root: Node3D) -> float:
+	var top := 1.2
+	for mi in root.find_children("*", "MeshInstance3D", true, false):
+		var m := mi as MeshInstance3D
+		if m.mesh == null or not m.visible:
+			continue
+		var xf := Transform3D.IDENTITY
+		var n: Node = m
+		while n != null and n != root:
+			if n is Node3D:
+				xf = (n as Node3D).transform * xf
+			n = n.get_parent()
+		var box: AABB = xf * m.get_aabb()
+		top = maxf(top, box.end.y)
+	return minf(top, 4.0)
+
 func ground_y(x: float, z: float) -> float:
 	return scenery.height(x, z) if scenery else 0.0
 
@@ -192,9 +210,12 @@ func _build_map(map: Dictionary) -> void:
 		# chão; um losango pequeno flutua em cima para dizer que dá para usar
 		var obj: Node3D = Art.quest_object(o)
 		obj.position = op
-		obj.rotation.y = float(hash(o["id"]) % 360) * PI / 180.0 * 0.25
+		# a frente do modelo (+z) virada para a câmera inicial (cam_yaw −0,6), com um pouco de variação
+		obj.rotation.y = -0.6 + float(absi(hash(o["id"])) % 61 - 30) / 100.0
 		add_child(obj)
-		var top := 2.4 if o.get("kind", "") in ["board", "escort"] or str(o["id"]).begins_with("rescue_") else 1.9
+		# o losango fica um pouco acima do ponto mais alto do modelo (a válvula grande, o tubo de resposta e o
+		# quadro passam dos 2 m)
+		var top := _node_top(obj) + 0.45
 		var gem := Art.part(self, Art.sphere(0.13, 4), Art.toon(Color("#9fd3d1"), true, Color(0.2, 0.45, 0.45)), op + Vector3(0, top, 0), Vector3(1.0, 1.6, 1.0))
 		var ol := _label(o["name"], 30, Color("#bfeeee"))
 		ol.position = op + Vector3(0, top + 0.5, 0)
@@ -351,8 +372,8 @@ func _spawn_entity(d: Dictionary) -> Dictionary:
 	elif d["k"] == "e":
 		root = Art.cart()
 	elif d["k"] == "a":
-		# aliado da prova de classe (aprendiz, peregrina)
-		root = Art.trial_ally(str(d.get("def", "apprentice")), hash(str(d.get("n", "")) + str(d["id"])))
+		# aliado da prova de classe (aprendiz, peregrino), com o corpo que os dados pedem (fem)
+		root = Art.trial_ally(str(d.get("def", "apprentice")), hash(str(d.get("n", ""))), bool(d.get("fem", false)))
 	else:
 		var md: Dictionary = main.defs["monsters"].get(d["def"], {}).duplicate()
 		md["id"] = d["def"]
@@ -723,7 +744,7 @@ func _click(screen_pos: Vector2) -> void:
 				pending_pickup = ""
 				request_move(pos.x + 0.8, pos.z + 0.8)
 				return
-	# aliado da prova de classe (aprendiz, peregrina): vira o alvo das habilidades de aliado (cura, escudo, Juramento)
+	# aliado da prova de classe (aprendiz, peregrino): vira o alvo das habilidades de aliado (cura, escudo, Juramento)
 	for eid in entities.keys():
 		var ae: Dictionary = entities[eid]
 		if ae["data"]["k"] == "a" and not ae["data"].get("dead", false) and _flat_dist(ae["node"].position, gp) < 1.2:
@@ -1047,13 +1068,21 @@ func trial_marks(marks: Array) -> void:
 		var label_y := 1.6
 		match kind:
 			"ditch":
-				# vala: fundo escuro rente ao chão, beiradas de pedra e pedras soltas no fundo
+				# vala: fundo escuro rente ao chão, beiradas de pedra e pedras soltas no fundo. Em pedaços de 1 m que
+				# seguem a altura do terreno (o chão da arena ondula alguns centímetros e cobria o fundo inteiriço)
 				var sx := absf(x1 - x0)
 				var sz := absf(z1 - z0)
-				var floor_mi := Art.part(node, Art.box(Vector3(sx, 0.05, sz)), Art.toon(Color("#17110d"), false), center + Vector3(0, 0.02, 0))
-				floor_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-				for edge in [minf(z0, z1), maxf(z0, z1)]:
-					Art.part(node, Art.box(Vector3(sx, 0.28, 0.32)), Art.toon(Color("#6d5e4e")), _gpos(center.x, edge) + Vector3(0, 0.14, 0))
+				var dark := Art.toon(Color("#17110d"), false)
+				var stone := Art.toon(Color("#6d5e4e"))
+				var segs := maxi(1, int(ceil(sx)))
+				var seg_w := sx / float(segs)
+				for i in segs:
+					var sxp := minf(x0, x1) + (i + 0.5) * seg_w
+					var hy := maxf(ground_y(sxp, minf(z0, z1)), maxf(ground_y(sxp, center.z), ground_y(sxp, maxf(z0, z1))))
+					var floor_mi := Art.part(node, Art.box(Vector3(seg_w + 0.02, 0.05, sz)), dark, Vector3(sxp, hy + 0.04, center.z))
+					floor_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+					for edge in [minf(z0, z1), maxf(z0, z1)]:
+						Art.part(node, Art.box(Vector3(seg_w + 0.02, 0.28, 0.32)), stone, Vector3(sxp, hy + 0.14, edge))
 				var rng := RandomNumberGenerator.new()
 				rng.seed = hash(str(mk.get("id", "")))
 				for i in int(sx / 1.6):
@@ -1075,17 +1104,39 @@ func trial_marks(marks: Array) -> void:
 				center = _gpos((x0 + x1) / 2.0, maxf(z0, z1) - 1.0)
 				label_y = 0.8
 			"line":
-				# fila ou linha de contenção: faixa clara no chão de ponta a ponta
+				# fila ou linha de contenção: faixa clara no chão de ponta a ponta, em pedaços de 1 m que seguem o
+				# terreno; todos os pedaços dividem o material (update_trial_marks troca a cor de uma vez)
 				var a := Vector2(x0, z0)
 				var b := Vector2(x1, z1)
-				var len := a.distance_to(b)
-				var strip := Art.part(node, Art.box(Vector3(0.22, 0.04, len + 1.0)), Art.toon(Color("#ffcf7a"), false, Color(0.5, 0.35, 0.1)), center + Vector3(0, 0.03, 0))
-				strip.rotation.y = atan2(b.x - a.x, b.y - a.y)
-				strip.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-				ring = strip
+				var total := a.distance_to(b) + 1.0
+				var dir := (b - a).normalized() if a.distance_to(b) > 0.01 else Vector2(0, 1)
+				var start := a - dir * 0.5
+				var n := maxi(1, int(ceil(total)))
+				var mat := Art.toon(Color("#ffcf7a"), false, Color(0.5, 0.35, 0.1))
+				var parts := []
+				for i in n:
+					var p2 := start + dir * ((i + 0.5) * total / float(n))
+					var strip := Art.part(node, Art.box(Vector3(0.22, 0.04, total / float(n) + 0.02)), mat, _gpos(p2.x, p2.y) + Vector3(0, 0.04, 0))
+					strip.rotation.y = atan2(dir.x, dir.y)
+					strip.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+					parts.append(strip)
+				ring = parts[0]
+				node.set_meta("parts", parts)
 				label_y = 0.9
+			"path":
+				# caminho do peregrino: pontos no chão a cada 1,4 m ao longo da rota
+				var pts: Array = mk.get("pts", [])
+				var dot := Art.toon(Color("#f2ead8"), false, Color(0.25, 0.22, 0.18))
+				for i in range(1, pts.size()):
+					var pa := Vector2(float(pts[i - 1][0]), float(pts[i - 1][1]))
+					var pb := Vector2(float(pts[i][0]), float(pts[i][1]))
+					var steps := int(pa.distance_to(pb) / 1.4)
+					for k in steps:
+						var q := pa.lerp(pb, (k + 0.5) / float(maxi(1, steps)))
+						var d := Art.part(node, Art.cyl(0.13, 0.13, 0.03, 8), dot, _gpos(q.x, q.y) + Vector3(0, 0.05, 0))
+						d.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			_:
-				# marco (rota da peregrina) ou número do sino: anel no chão
+				# marco (rota do peregrino) ou número do sino: anel no chão
 				var r := float(mk.get("r", 1.2))
 				var t := TorusMesh.new()
 				t.inner_radius = r - 0.12
@@ -1107,17 +1158,19 @@ func trial_marks(marks: Array) -> void:
 func update_trial_marks(states: Array) -> void:
 	for st in states:
 		var t: Dictionary = trial_mark_nodes.get(str(st.get("id", "")), {})
-		if t.is_empty() or t["ring"] == null:
+		# só marca com estado (vez ou feita) muda de cor; as outras ficam com a cor de quando foram criadas
+		if t.is_empty() or t["ring"] == null or not (st.has("done") or st.has("active")):
 			continue
-		var col := Color("#f2ead8")
-		var glow := Color(0.3, 0.3, 0.3)
+		var node: Node3D = t["node"]
+		if not node.has_meta("base_mat"):
+			node.set_meta("base_mat", (t["ring"] as MeshInstance3D).material_override)
+		var mat: Material = node.get_meta("base_mat")
 		if st.get("done", false):
-			col = Color("#7fbf6a")
-			glow = Color(0.1, 0.25, 0.05)
+			mat = Art.toon(Color("#7fbf6a"), false, Color(0.1, 0.25, 0.05))
 		elif st.get("active", false):
-			col = Color("#ffb347")
-			glow = Color(0.9, 0.5, 0.1)
-		(t["ring"] as MeshInstance3D).material_override = Art.toon(col, false, glow)
+			mat = Art.toon(Color("#ffb347"), false, Color(0.9, 0.5, 0.1))
+		for mi in (node.get_meta("parts") if node.has_meta("parts") else [t["ring"]]):
+			(mi as MeshInstance3D).material_override = mat
 
 # ---------------- opções gráficas ----------------
 var sun_light: DirectionalLight3D

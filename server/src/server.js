@@ -1066,7 +1066,15 @@ export class GameServer {
       : (n.role === 'shop' || n.role === 'smith') && n.shop ? n.shop.map((defId) => ({ defId, price: this.priceOf(defId) })) : undefined;
     const trialAvailable = n.role === 'master' && n.classId === p.char.classId && p.char.quests.get('c3_trial')?.state === 'active' && !p.char.trialDone && p.char.level >= 10;
     const choice = this.quests.pendingChoice(p.char, n.id) ?? undefined;
-    return { ok: true, npc: { id: n.id, name: n.name, role: n.role, classId: n.classId ?? null }, quests: this.quests.npcQuests(p.char, n.id), shop, trialAvailable, choice, cache: false };
+    return { ok: true, npc: { id: n.id, name: n.name, role: n.role, classId: n.classId ?? null }, quests: this.quests.npcQuests(p.char, n.id), shop, trialAvailable, trial: trialAvailable ? this.trialBrief(p.char.classId) : undefined, choice, cache: false };
+  }
+
+  // O que o mestre conta da prova antes de começar (título, objetivo, dica, tempo e a habilidade emprestada).
+  trialBrief(classId) {
+    const cfg = this.data.maps.arena_prova?.trial?.classes?.[classId];
+    if (!cfg) return undefined;
+    const skill = this.data.classes[classId].skills.find((s) => this.data.skills[s].unlockLevel === 10);
+    return { kind: cfg.kind, title: cfg.title, objective: cfg.objective, hint: cfg.hint, ms: Math.min(cfg.timeMs, this.data.maps.arena_prova.trial.durationMs), skill, skillName: this.data.skills[skill]?.name };
   }
 
   // Resposta escolhida num diálogo de missão (ex.: "Duas Razões"): muda falas futuras e dá um título.
@@ -1395,7 +1403,12 @@ export class GameServer {
       const zone = this.zones.get(key);
       if (!zone || trial.done) continue;
       const p = zone.players.get(trial.charId);
-      if (!p) continue;
+      if (!p) {
+        // o personagem saiu da arena sem a prova acabar (teleporte de mestre para outro mapa): a instância
+        // vazia não fica rodando para sempre
+        if (zone.now - trial.startedAt > 5000) this.endTrial(key, false, 'A prova foi abandonada.', true);
+        continue;
+      }
       if (p.char.dead) { this.endTrial(key, false, 'Você caiu durante a prova. Fale com o mestre para tentar de novo.'); continue; }
       const r = trial.tick(p);
       if (r) this.endTrial(key, r.success, r.message);

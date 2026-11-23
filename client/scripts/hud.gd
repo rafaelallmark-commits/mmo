@@ -1112,6 +1112,12 @@ func show_npc(r: Dictionary) -> void:
 					error(res["reason"])))
 		npc_box.add_child(b)
 	if r.get("trialAvailable", false):
+		# o mestre conta a prova antes: nome, tempo, objetivo, dica e a habilidade emprestada (server.js trialBrief)
+		var tr: Dictionary = r.get("trial", {}) if r.get("trial", null) is Dictionary else {}
+		if not tr.is_empty():
+			_title(npc_box, "Prova de classe: %s (%d s)" % [str(tr.get("title", "")), int(tr.get("ms", 0)) / 1000], 14)
+			_text(npc_box, str(tr.get("objective", "")))
+			_text(npc_box, "%s Durante a prova, %s fica emprestada no grau 1; vencer a libera de vez." % [str(tr.get("hint", "")), str(tr.get("skillName", ""))], Theme_.MUTED)
 		var tb := Button.new()
 		tb.text = "Iniciar a prova de classe"
 		tb.pressed.connect(func():
@@ -1424,45 +1430,47 @@ var trial_hint: Label
 var _trial_skill := ""
 var _trial_hint_until := 0
 
-## Painel da prova no alto da tela (abaixo do quadro do alvo): título e tempo, objetivo, progresso com
-## barra, aviso urgente (investida, jato de vapor, emboscada) e a dica da habilidade emprestada.
+## Painel da prova à esquerda, abaixo do quadro de vida e mana (o centro do alto é do quadro do alvo e das
+## mensagens): título e tempo, objetivo, progresso com barra, aviso urgente (investida, jato de vapor,
+## emboscada, fora do posto) e a dica da habilidade emprestada.
 func _build_trial() -> void:
 	trial_panel = PanelContainer.new()
 	trial_panel.add_theme_stylebox_override("panel", Theme_.panel_style(0.82))
-	trial_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	trial_panel.position = Vector2(-290, 84)
-	trial_panel.custom_minimum_size = Vector2(580, 0)
+	trial_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	trial_panel.position = Vector2(12, 126)
+	trial_panel.custom_minimum_size = Vector2(400, 0)
 	trial_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(trial_panel)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 3)
 	trial_panel.add_child(v)
 	trial_title = Label.new()
-	trial_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	trial_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	trial_title.add_theme_color_override("font_color", Theme_.AMBER)
 	trial_title.add_theme_font_size_override("font_size", 17)
 	v.add_child(trial_title)
 	trial_goal = Label.new()
-	trial_goal.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	trial_goal.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	trial_goal.autowrap_mode = TextServer.AUTOWRAP_WORD
 	trial_goal.add_theme_font_size_override("font_size", 13)
 	v.add_child(trial_goal)
 	trial_prog = Label.new()
-	trial_prog.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	trial_prog.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	trial_prog.add_theme_color_override("font_color", Theme_.NACRE)
 	trial_prog.add_theme_font_size_override("font_size", 15)
 	v.add_child(trial_prog)
-	trial_bar = _bar(v, Theme_.XP, 556)
+	trial_bar = _bar(v, Theme_.XP, 376)
 	trial_bar_text = _overlay_label(trial_bar)
 	trial_alert = Label.new()
-	trial_alert.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	trial_alert.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	trial_alert.autowrap_mode = TextServer.AUTOWRAP_WORD
 	trial_alert.add_theme_color_override("font_color", Color("#ffb347"))
 	trial_alert.add_theme_color_override("font_outline_color", Color("#1a1210"))
 	trial_alert.add_theme_constant_override("outline_size", 5)
-	trial_alert.add_theme_font_size_override("font_size", 17)
+	trial_alert.add_theme_font_size_override("font_size", 15)
 	v.add_child(trial_alert)
 	trial_hint = Label.new()
-	trial_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	trial_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	trial_hint.autowrap_mode = TextServer.AUTOWRAP_WORD
 	trial_hint.add_theme_color_override("font_color", Theme_.MUTED)
 	trial_hint.add_theme_font_size_override("font_size", 11)
@@ -1486,6 +1494,7 @@ func show_trial(m: Dictionary) -> void:
 	trial_hint.visible = true
 	_trial_hint_until = Time.get_ticks_msec() + 15000  # a dica sai depois de 15 s (fica no chat)
 	_refresh_hotbar()
+	_place_party_panel.call_deferred()
 
 func update_trial(m: Dictionary) -> void:
 	if trial_panel == null or not trial_panel.visible:
@@ -1501,11 +1510,20 @@ func update_trial(m: Dictionary) -> void:
 	trial_alert.visible = alert != null and str(alert) != ""
 	trial_alert.text = str(alert) if trial_alert.visible else ""
 	trial_hint.visible = Time.get_ticks_msec() < _trial_hint_until
+	_place_party_panel.call_deferred()
 
 func hide_trial() -> void:
 	if trial_panel:
 		trial_panel.visible = false
 	_trial_skill = ""
+	_place_party_panel()
+
+## O painel do grupo fica no mesmo canto: com o painel da prova aberto, desce para baixo dele.
+func _place_party_panel() -> void:
+	if party_panel == null:
+		return
+	var below := trial_panel != null and trial_panel.visible
+	party_panel.position.y = (trial_panel.position.y + trial_panel.size.y + 8.0) if below else 128.0
 
 ## "120 XP, 40 ouro, Anel de Nácar, 3× Tônico de Vida Pequeno, +1 grau em habilidade"
 func _rewards_text(rw: Dictionary) -> String:

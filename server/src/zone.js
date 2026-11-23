@@ -59,7 +59,7 @@ export class Zone {
     this.monsterSeq = 0;
     this.escorts = new Map(); // eid -> Escort
     this.escortSeq = 0;
-    // aliados que não são jogadores (prova de classe: aprendizes, peregrina — trial.js TrialAlly): têm vida,
+    // aliados que não são jogadores (prova de classe: aprendizes, peregrino — trial.js TrialAlly): têm vida,
     // os monstros os atacam e as habilidades de aliado (cura, escudo, Juramento, reforços) valem neles
     this.allies = new Map(); // eid -> aliado
     this.duels = new DuelManager(this);
@@ -506,7 +506,7 @@ export class Zone {
 
   alliesNear(p, r) {
     const out = [p];
-    // aliados da prova de classe (aprendizes, peregrina) contam como o grupo de quem está na arena
+    // aliados da prova de classe (aprendizes, peregrino) contam como o grupo de quem está na arena
     for (const a of this.allies.values()) if (!a.char.dead && dist(a.char, p.char) <= r) out.push(a);
     const pid = this.hooks.partyIdOf?.(p.char.id);
     if (pid == null) return out;
@@ -946,7 +946,7 @@ export class Zone {
       m.state = 'dead'; m.hp = 0; m.removeAt = this.now + 500; // carroça sumiu: a emboscada se desfaz
       return;
     }
-    // prova de classe: quem mira um aliado (aprendiz, peregrina) vai nele enquanto nenhum jogador segura a
+    // prova de classe: quem mira um aliado (aprendiz, peregrino) vai nele enquanto nenhum jogador segura a
     // atenção (ameaça); os fixos (atiradores, investida) não largam o aliado mesmo apanhando
     if (m.allyTarget && (m.fixated || !m.threat.size)) {
       const a = this.allies.get(m.allyTarget);
