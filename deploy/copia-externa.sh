@@ -73,13 +73,27 @@ grava_metrica() { # sucesso falha
   log "aviso: não deu para gravar a métrica em $METRICA"
 }
 
-ultimo_sucesso=0
-ultima_falha=0
+# Valor de uma métrica na gravação anterior (0 sem arquivo ou sem a linha): reiniciar o contêiner e falhar logo na
+# primeira tentativa não apaga a hora do último sucesso (o alerta CopiaExternaAtrasada dispararia na hora).
+anterior() {
+  v=''
+  if [ -n "$METRICA" ] && [ -r "$METRICA" ]; then
+    v=$(sed -n "s/^$1 \([0-9][0-9]*\)\$/\1/p" "$METRICA" | head -n 1)
+  fi
+  printf '%s\n' "${v:-0}"
+}
+
+# Só as cópias com o nome que os backups dão (<banco>-AAAA-MM-DDTHH-MM-SS.db do SQLite e .dump do PostgreSQL), as
+# mesmas que a rotação de 14 dias apaga: o .parcial de um backup em andamento e qualquer outro arquivo da pasta (a
+# cópia trazida para um ensaio de restauração, um .db guardado à mão) não saem da máquina — lá ficariam para sempre.
+PADRAO='*-[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]-[0-9][0-9]-[0-9][0-9].{db,dump}'
+
+ultimo_sucesso=$(anterior cinzas_offsite_copy_last_success_timestamp_seconds)
+ultima_falha=$(anterior cinzas_offsite_copy_last_failure_timestamp_seconds)
 uma_copia() {
-  # só as cópias (.db do SQLite, .dump do PostgreSQL); os .parcial (backup em andamento) ficam de fora
-  if rclone sync "$ORIGEM" "$ALVO" --include '*.db' --include '*.dump' --stats 0 -v; then
+  if rclone sync "$ORIGEM" "$ALVO" --include "$PADRAO" --stats 0 -v; then
     ultimo_sucesso=$(date -u +%s)
-    log "cópia em $ALVO em dia ($(ls -1 "$ORIGEM" 2>/dev/null | grep -cE '\.(db|dump)$') arquivos na origem)"
+    log "cópia em $ALVO em dia ($(ls -1 "$ORIGEM" 2>/dev/null | grep -cE -- '-[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}\.(db|dump)$') cópias na origem)"
     grava_metrica "$ultimo_sucesso" "$ultima_falha"
     return 0
   fi

@@ -60,6 +60,10 @@ test('métricas: CPU, mensagens, bytes, ticks e espera do banco são contadores 
       assert.equal(first.types[name], 'counter', `${name} é contador`);
     }
     for (const name of ['cinzas_players_online', 'cinzas_tick_ms_p99', 'cinzas_rss_mb', 'cinzas_last_tick_age_seconds', 'cinzas_max_players']) assert.equal(first.types[name], 'gauge', `${name} é medidor`);
+    // espera pelo banco: só no PostgreSQL (npm run test:pg roda este mesmo teste com a zona no PgStore)
+    const pg = typeof zone.store.dbStats === 'function';
+    const DB = ['cinzas_db_calls_total', 'cinzas_db_wait_seconds_total'];
+    for (const name of DB) assert.equal(first.types[name], pg ? 'counter' : undefined, `${name}: ${pg ? 'contador' : 'só com PostgreSQL'}`);
     // médias desde a subida (viravam linha reta depois de horas no ar) saíram do texto do Prometheus
     for (const old of ['cinzas_cpu_pct', 'cinzas_msgs_in_per_s', 'cinzas_msgs_out_per_s', 'cinzas_bytes_in_per_s', 'cinzas_bytes_out_per_s', 'cinzas_db_wait_ms_per_s', 'cinzas_db_calls_per_s']) {
       assert.equal(first.types[old], undefined, `${old} não é mais exportada`);
@@ -75,11 +79,15 @@ test('métricas: CPU, mensagens, bytes, ticks e espera do banco são contadores 
     }
     assert.ok(second.values.cinzas_cpu_seconds_total >= first.values.cinzas_cpu_seconds_total);
     assert.equal(second.values.cinzas_players_online, 1);
+    if (pg) {
+      assert.ok(second.values.cinzas_db_calls_total > first.values.cinzas_db_calls_total, 'cadastro, personagem e entrada passaram pela ponte do banco');
+      assert.ok(second.values.cinzas_db_wait_seconds_total > first.values.cinzas_db_wait_seconds_total, 'o tempo parado esperando o banco subiu');
+    }
     // POST /metrics/reset zera a janela do JSON (ferramenta de carga), não os contadores
     const reset = await fetch(`http://127.0.0.1:${zone.metricsPort}/metrics/reset`, { method: 'POST' });
     assert.equal(reset.status, 204);
     const third = await scrape(zone.metricsPort);
-    for (const name of ['cinzas_msgs_in_total', 'cinzas_bytes_out_total', 'cinzas_ticks_total', 'cinzas_cpu_seconds_total']) {
+    for (const name of ['cinzas_msgs_in_total', 'cinzas_bytes_out_total', 'cinzas_ticks_total', 'cinzas_cpu_seconds_total', ...(pg ? DB : [])]) {
       assert.ok(third.values[name] >= second.values[name], `${name} não voltou depois do reset`);
     }
     const json = await (await fetch(`http://127.0.0.1:${zone.metricsPort}/metrics.json`)).json();
@@ -302,6 +310,14 @@ test('compose e Prometheus ligados: alertas vão para o Alertmanager, contas e m
   }
   for (const s of ['alertmanager:', 'node-exporter:', 'backup:', 'backup-banco:', 'copia-externa:']) assert.ok(compose.includes(`\n  ${s}\n`), `serviço ${s}`);
   assert.match(compose, /- \/:\/host:ro,rslave/, 'node-exporter só lê a máquina');
+  // a imagem do jogo traz o HEALTHCHECK da zona (http://127.0.0.1:9100/health): todo outro serviço dela precisa do
+  // próprio (ou desligado), senão fica "unhealthy" para sempre — o backup, sem rede e sem servidor, inclusive
+  const services = {};
+  for (const m of compose.matchAll(/\n  ([a-z][a-z-]*):\n([\s\S]*?)(?=\n  [a-z][a-z-]*:\n|\n[a-z]+:)/g)) services[m[1]] = m[2];
+  const gameImage = Object.keys(services).filter((n) => /(?:^|\n)    image: \$\{CINZAS_IMAGEM/.test(services[n]));
+  assert.deepEqual(gameImage.sort(), ['backup', 'contas', 'servidor']);
+  for (const n of gameImage.filter((x) => x !== 'servidor')) assert.match(services[n], /\n    healthcheck:\n/, `${n}: healthcheck próprio`);
+  assert.match(services.backup, /\n    healthcheck:\n      disable: true\n/, 'backup: sem o healthcheck da zona');
   // nenhum segredo de alerta no git: o modelo só tem ${...}
   const model = readDeploy('monitoramento', 'alertmanager.yml');
   for (const line of model.split('\n').filter((l) => /^\s*(auth_password|bot_token|webhook_url|chat_id|to|smarthost):/.test(l))) {
@@ -331,6 +347,13 @@ test('modelo do Alertmanager: sem variáveis sobe sem canal; cada canal entra co
   assert.match(out, /chat_id: -1001234567890\n/, 'chat_id sem aspas (o Alertmanager quer número)');
   assert.match(out, /to: 'equipe@exemplo\.com\.br'/);
   assert.ok(!out.includes('${'), 'nenhuma variável sobrando');
+  // TLS do e-mail pela porta: na 587 o STARTTLS é obrigatório; na 465 a conexão já nasce cifrada e o servidor não
+  // anuncia STARTTLS — com require_tls ligado, o Alertmanager (v0.27) recusaria todo envio por essa porta
+  assert.deepEqual(out.match(/require_tls: \w+/g), ['require_tls: true'], '587: STARTTLS obrigatório');
+  r = gen({ ...all, ALERTA_SMTP_SERVIDOR: 'smtp.exemplo.com.br:465' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(body(r.stdout).match(/require_tls: \w+/g), ['require_tls: false'], '465: TLS direto, sem pedir STARTTLS');
+  assert.match(body(r.stdout), /smarthost: 'smtp\.exemplo\.com\.br:465'/);
   // login do SMTP é opcional (relé sem autenticação)
   const { ALERTA_SMTP_USUARIO, ALERTA_SMTP_SENHA, ...semLogin } = all;
   r = gen(semLogin);

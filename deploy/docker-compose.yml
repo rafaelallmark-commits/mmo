@@ -197,6 +197,11 @@ services:
       - dados:/data
       - metricas:/metricas
     network_mode: none           # só lê e grava arquivos: nenhuma rede
+    # O HEALTHCHECK da imagem é o da zona (http://127.0.0.1:9100/health): aqui não há servidor nenhum e o
+    # contêiner ficaria "unhealthy" para sempre. A saúde do backup é a métrica do último backup (alertas
+    # BackupAtrasado e BackupFalhou, docs §8.3).
+    healthcheck:
+      disable: true
     logging:
       driver: json-file
       options:

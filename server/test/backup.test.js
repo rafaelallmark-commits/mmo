@@ -381,20 +381,27 @@ exit 0
     assert.equal(r.status, 2);
     assert.match(r.stderr, /defina COPIA_SENHA_CIFRA/);
     assert.equal(existsSync(calls), false, 'nada foi mandado');
-    // sem cifra de propósito: sync direto para o remoto "externo", só .db e .dump (o .parcial de um backup em
-    // andamento fica de fora)
+    // sem cifra de propósito: sync direto para o remoto "externo", só as cópias com o nome que os backups dão
     r = sh(['--uma-vez'], { COPIA_SEM_CIFRA: 'sim' });
     assert.equal(r.status, 0, r.stderr);
     let log = readFileSync(calls, 'utf8').trim().split('\n');
-    assert.equal(log.at(-1).split('|')[0], `sync ${origem} externo:balde/cinzas --include *.db --include *.dump --stats 0 -v`);
+    const pattern = '*-[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]-[0-9][0-9]-[0-9][0-9].{db,dump}';
+    assert.equal(log.at(-1).split('|')[0], `sync ${origem} externo:balde/cinzas --include ${pattern} --stats 0 -v`);
+    // o padrão lido com a sintaxe do rclone (* sem barra, [classe], {a,b}): entram as cópias que a rotação de 14 dias
+    // apaga; o .parcial de um backup em andamento, a cópia trazida para um ensaio de restauração e qualquer outro
+    // arquivo da pasta ficam na máquina (lá fora ficariam para sempre, passando dos 14 dias da política de privacidade)
+    const globRe = new RegExp(`^${pattern.replace(/[.+^$()|\\]/g, '\\$&').replace(/\*/g, '[^/]*').replace(/\{([^}]*)\}/g, (_, alts) => `(?:${alts.split(',').join('|')})`)}$`);
+    for (const f of ['cinzas-2026-11-20T10-00-00.db', 'cinzas-2026-11-20T10-00-00.dump', 'cinzas-teste-2026-11-20T10-00-00.dump']) assert.match(f, globRe, `${f} vai para fora`);
+    for (const f of ['restaurar.db', 'cinzas-2026-11-20T10-00-00.db.parcial', 'cinzas-antes-da-migracao.db', 'cinzas.db', 'notas.txt']) assert.doesNotMatch(f, globRe, `${f} fica na máquina`);
     const m = readFileSync(metric, 'utf8');
     assert.match(m, /^cinzas_offsite_copy_last_success_timestamp_seconds \d{10}$/m);
     assert.match(m, /^cinzas_offsite_copy_last_failure_timestamp_seconds 0$/m);
+    const okAt = Number(/^cinzas_offsite_copy_last_success_timestamp_seconds (\d+)$/m.exec(m)[1]);
     // com cifra: remoto "cifrado" (crypt) por cima do externo, senha embaralhada pelo rclone obscure
     r = sh(['--uma-vez'], { COPIA_SENHA_CIFRA: 's3nha' });
     assert.equal(r.status, 0, r.stderr);
     log = readFileSync(calls, 'utf8').trim().split('\n');
-    assert.deepEqual(log.at(-1).split('|'), [`sync ${origem} cifrado: --include *.db --include *.dump --stats 0 -v`, 'crypt', 'externo:balde/cinzas', 'embaralhada(s3nha)']);
+    assert.deepEqual(log.at(-1).split('|'), [`sync ${origem} cifrado: --include ${pattern} --stats 0 -v`, 'crypt', 'externo:balde/cinzas', 'embaralhada(s3nha)']);
     // baixar: a cópia vai para a saída padrão (já decifrada pelo rclone)
     r = sh(['baixar', 'cinzas-2026-11-20T10-00-00.db'], { COPIA_SENHA_CIFRA: 's3nha' });
     assert.equal(r.status, 0, r.stderr);
@@ -402,11 +409,17 @@ exit 0
     assert.equal(sh(['baixar'], { COPIA_SENHA_CIFRA: 's3nha' }).status, 2, 'baixar sem arquivo');
     r = sh(['baixar', 'cinzas-2026-11-20T10-00-00.db'], { COPIA_SEM_CIFRA: 'sim' });
     assert.equal(r.stdout, 'conteúdo de externo:balde/cinzas/cinzas-2026-11-20T10-00-00.db');
-    // falha: sai com 1 e marca a hora da falha
+    // falha: sai com 1 e marca a hora da falha; o último sucesso continua o de antes, mesmo num processo novo (o
+    // contêiner reiniciado que falha logo na primeira tentativa não zera a hora do último sucesso, senão o alerta
+    // CopiaExternaAtrasada dispararia na hora dizendo que nada dá certo há mais de 3 h)
+    writeFileSync(metric, readFileSync(metric, 'utf8').replace(/^(cinzas_offsite_copy_last_success_timestamp_seconds) \d+$/m, '$1 1700000000'));
     r = sh(['--uma-vez'], { STUB_FALHA: '1', COPIA_SENHA_CIFRA: 's3nha' });
     assert.equal(r.status, 1);
     assert.match(r.stderr, /a cópia para cifrado: falhou/);
-    assert.match(readFileSync(metric, 'utf8'), /^cinzas_offsite_copy_last_failure_timestamp_seconds \d{10}$/m);
+    const failed = readFileSync(metric, 'utf8');
+    assert.match(failed, /^cinzas_offsite_copy_last_failure_timestamp_seconds \d{10}$/m);
+    assert.match(failed, /^cinzas_offsite_copy_last_success_timestamp_seconds 1700000000$/m, 'o último sucesso continua');
+    assert.ok(okAt > 1700000000);
     // agendado: copia logo ao subir e o TERM encerra limpo
     const p = startProc('sh', [script], { ...env, COPIA_A_CADA: '3600', COPIA_SEM_CIFRA: 'sim' });
     await p.waitFor(/cópia em externo:balde\/cinzas em dia/);
