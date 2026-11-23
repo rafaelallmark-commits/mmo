@@ -224,7 +224,8 @@ test('serviço de contas: pedidos, cadastros e falhas de e-mail em GET /metrics 
     assert.equal((await post('/contas', { conta: 'medida', email: 'medida@exemplo.com', senha: 'senha-forte-1', aceite: true })).status, 201);
     failMail = true;
     const broken = await post('/contas', { conta: 'semcorreio', email: 'semcorreio@exemplo.com', senha: 'senha-forte-1', aceite: true });
-    assert.notEqual(broken.status, 201, 'sem e-mail o cadastro não termina bem');
+    assert.equal(broken.status, 202, 'conta criada, mas sem o e-mail do código');
+    assert.equal((await broken.json()).codigo, 'email');
     assert.equal((await fetch(`http://127.0.0.1:${aport}/qualquer/coisa`)).status, 404);
     assert.equal((await fetch(`http://127.0.0.1:${aport}/saude`)).status, 200);
     // a porta do serviço (a que o proxy repassa) não serve métricas
@@ -234,7 +235,7 @@ test('serviço de contas: pedidos, cadastros e falhas de e-mail em GET /metrics 
     const { values, types } = parseProm(await r.text());
     assert.equal(types.cinzas_accounts_requests_total, 'counter');
     assert.equal(types.cinzas_accounts_email_failures_total, 'counter');
-    assert.equal(values.cinzas_accounts_signups_total, 1);
+    assert.equal(values.cinzas_accounts_signups_total, 2, 'as duas contas foram criadas (uma sem o e-mail)');
     assert.equal(values.cinzas_accounts_emails_sent_total, 1);
     assert.equal(values.cinzas_accounts_email_failures_total, 1);
     assert.equal(values['cinzas_accounts_requests_total{route="/contas",status="201"}'], 1);
@@ -317,7 +318,11 @@ test('compose e Prometheus ligados: alertas vão para o Alertmanager, contas e m
   const gameImage = Object.keys(services).filter((n) => /(?:^|\n)    image: \$\{CINZAS_IMAGEM/.test(services[n]));
   assert.deepEqual(gameImage.sort(), ['backup', 'contas', 'servidor']);
   for (const n of gameImage.filter((x) => x !== 'servidor')) assert.match(services[n], /\n    healthcheck:\n/, `${n}: healthcheck próprio`);
-  assert.match(services.backup, /\n    healthcheck:\n      disable: true\n/, 'backup: sem o healthcheck da zona');
+  // o do backup lê a métrica que o próprio serviço grava (tools/backup.mjs --saude, D175)
+  const backupMetric = services.backup.match(/"tools\/backup\.mjs", "--para"[\s\S]*?"--metrica", "([^"]+)"/)?.[1];
+  assert.ok(backupMetric, 'backup: grava a métrica do último backup');
+  assert.match(services.backup, /\n    healthcheck:\n      test: \["CMD", "node", "--disable-warning=ExperimentalWarning", "tools\/backup\.mjs", "--saude",\s+"--metrica", "([^"]+)"/, 'backup: saúde pelo --saude');
+  assert.equal(services.backup.match(/"--saude",\s+"--metrica", "([^"]+)"/)[1], backupMetric, 'backup: a saúde lê a mesma métrica que o backup grava');
   // nenhum segredo de alerta no git: o modelo só tem ${...}
   const model = readDeploy('monitoramento', 'alertmanager.yml');
   for (const line of model.split('\n').filter((l) => /^\s*(auth_password|bot_token|webhook_url|chat_id|to|smarthost):/.test(l))) {

@@ -2,9 +2,28 @@
 // .eml numa pasta) e "smtp" (cliente SMTP mínimo: EHLO, STARTTLS, AUTH LOGIN, MAIL/RCPT/DATA).
 import net from 'node:net';
 import tls from 'node:tls';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, X509Certificate } from 'node:crypto';
+
+// Autoridades extras para o certificado do servidor de e-mail (CINZAS_SMTP_CA): os certificados PEM do arquivo.
+// Arquivo vazio (o /dev/null do compose, quando não há CA extra) dá lista vazia; texto que não é certificado é
+// erro. Elas se SOMAM às autoridades de sempre: a verificação do certificado e do nome continua ligada.
+export function readExtraCa(file) {
+  const text = readFileSync(file, 'utf8');
+  const certs = text.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g) ?? [];
+  if (!certs.length && text.trim() !== '') throw new Error('o arquivo não tem nenhum certificado PEM (-----BEGIN CERTIFICATE-----)');
+  for (const pem of certs) new X509Certificate(pem); // lança se o bloco não for um certificado válido
+  return certs;
+}
+
+// Lista de autoridades para o TLS do SMTP: as de sempre (as do Node, mais NODE_EXTRA_CA_CERTS) e as extras.
+// Sem extras, undefined: o Node usa as dele.
+function trustedCa(extra) {
+  if (!extra?.length) return undefined;
+  const base = typeof tls.getCACertificates === 'function' ? tls.getCACertificates('default') : tls.rootCertificates;
+  return [...base, ...extra];
+}
 
 // domínio do remetente ("Nome <x@dominio>" → "dominio"): vai no Message-ID e no EHLO
 export function senderDomain(from) {
@@ -29,12 +48,16 @@ export function createMailer(cfg = { kind: 'console' }) {
     mkdirSync(cfg.dir, { recursive: true });
     return { async send(m) { const f = join(cfg.dir, `${Date.now()}-${randomUUID().slice(0, 8)}.eml`); writeFileSync(f, message({ from, ...m })); return f; } };
   }
-  if (cfg.kind === 'smtp') return { send: (m) => smtpSend({ ...cfg, from }, m) };
+  if (cfg.kind === 'smtp') {
+    const ca = trustedCa(cfg.caFile ? readExtraCa(cfg.caFile) : null);
+    return { send: (m) => smtpSend({ ...cfg, from, ca }, m) };
+  }
   return { async send(m) { console.log(`[e-mail] para ${m.to}: ${m.subject}\n${m.text}\n`); return 'console'; } };
 }
 
 // Cliente SMTP mínimo (sem dependências). cfg: host, port, secure (TLS direto, 465), starttls (587),
-// user, pass, from, helo, rejectUnauthorized, allowPlainAuth.
+// user, pass, from, helo, ca (lista de autoridades; sem ela, as do Node), rejectUnauthorized (só os testes),
+// allowPlainAuth.
 // Usuário e senha só vão por conexão cifrada: sem TLS direto e sem STARTTLS anunciado, o envio falha
 // (a menos de allowPlainAuth, só para um relé local de desenvolvimento).
 export function smtpSend(cfg, m) {
@@ -48,7 +71,7 @@ export function smtpSend(cfg, m) {
       try { sock.destroy(); } catch { /* já fechado */ }
       if (sent) resolve('smtp'); else reject(e);
     };
-    let sock = cfg.secure ? tls.connect({ host: cfg.host, port: cfg.port, servername: cfg.host, rejectUnauthorized: cfg.rejectUnauthorized !== false })
+    let sock = cfg.secure ? tls.connect({ host: cfg.host, port: cfg.port, servername: cfg.host, ca: cfg.ca, rejectUnauthorized: cfg.rejectUnauthorized !== false })
       : net.connect({ host: cfg.host, port: cfg.port });
     let buf = '';
     const queue = [];
@@ -83,7 +106,7 @@ export function smtpSend(cfg, m) {
         plain.removeAllListeners('close');
         // o soquete TLS precisa do próprio tratador de erro: certificado de outro nome ou cadeia
         // desconhecida viram falha deste envio, não um 'error' sem dono que derruba o processo
-        sock = tls.connect({ socket: plain, servername: cfg.host, rejectUnauthorized: cfg.rejectUnauthorized !== false });
+        sock = tls.connect({ socket: plain, servername: cfg.host, ca: cfg.ca, rejectUnauthorized: cfg.rejectUnauthorized !== false });
         sock.on('error', fail);
         sock.on('close', () => fail(new Error('SMTP: conexão fechada pelo servidor')));
         sock.on('data', onData);

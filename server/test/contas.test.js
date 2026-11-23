@@ -149,6 +149,43 @@ test('limites de e-mail: um por minuto e 10 por 24 h por conta e por endereço, 
   } finally { await svc.stop(); rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('envio de e-mail que falha: cadastro criado com a explicação (202, codigo "email"), reenvio 502 e "Esqueci a senha" igual; nada de "Erro interno"', async () => {
+  const dir = tmp('cinzas-semcorreio-');
+  let down = true;
+  const sent = [];
+  const { svc, port } = await startAccounts(join(dir, 's.db'), { mailer: { send: async (m) => { if (down) throw new Error('SMTP 535: 535 5.7.8 Username and Password not accepted'); sent.push(m); return 'mem'; } } });
+  try {
+    let r = await post(port, '/contas', { conta: 'semcorreio', email: 'semcorreio@exemplo.com', senha: SENHA, aceite: true });
+    assert.equal(r.status, 202, r.erro ?? r.mensagem);
+    assert.equal(r.ok, true, 'a conta existe: o cliente abre a tela do código');
+    assert.equal(r.codigo, 'email');
+    assert.match(r.mensagem, /Reenviar código/);
+    assert.equal(svc.store.findAccount('semcorreio')?.verified, 0, 'conta criada, ainda sem confirmar');
+    // reenviar com o servidor de e-mail ainda fora: erro com o que fazer (e o limite de um por minuto vale)
+    passa(svc.store, 61_000);
+    r = await post(port, '/contas/reenviar', { conta: 'semcorreio' });
+    assert.equal(r.status, 502);
+    assert.equal(r.codigo, 'email');
+    assert.match(r.erro, /alguns minutos/);
+    // "Esqueci a senha" responde igual com ou sem conta, mesmo com o envio falhando; a falha fica na auditoria
+    passa(svc.store, 61_000);
+    const generic = await post(port, '/senha/esqueci', { email: 'ninguem@exemplo.com' });
+    r = await post(port, '/senha/esqueci', { email: 'semcorreio@exemplo.com' });
+    assert.deepEqual(r, generic);
+    assert.equal(svc.store.auditTail(5, 'password_reset_mail_failed').length, 1);
+    assert.equal(svc.store.auditTail(5, 'password_reset_requested').length, 0);
+    // o servidor de e-mail voltou: o reenvio manda o código e a conta confirma
+    down = false;
+    passa(svc.store, 61_000);
+    r = await post(port, '/contas/reenviar', { conta: 'semcorreio' });
+    assert.equal(r.ok, true, r.erro);
+    assert.equal(sent.length, 1);
+    r = await post(port, '/contas/verificar', { conta: 'semcorreio', codigo: codeOf(sent[0]) });
+    assert.equal(r.ok, true, r.erro);
+    assert.equal(svc.metrics.mailFailed, 3, 'cada falha conta na métrica (alerta FalhaNoEnvioDeEmail)');
+  } finally { await svc.stop(); rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('tentativas de código: no máximo 20 erradas por conta em 24 h, somando confirmação e troca de senha; a ferramenta libera', async () => {
   const dir = tmp('cinzas-cod-');
   const db = join(dir, 'k.db');

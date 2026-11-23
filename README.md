@@ -37,6 +37,7 @@ Personagens: modelos VRM de anime — **Seed-san model by VirtualCast, Inc.** e 
 | [docs/TERMOS.md](docs/TERMOS.md) · [docs/PRIVACIDADE.md](docs/PRIVACIDADE.md) | Termos de uso (regras de convivência e jogo limpo) e política de privacidade do teste público (rascunhos) |
 | [docs/DECISOES.md](docs/DECISOES.md) | Todas as decisões tomadas por conta própria e o motivo |
 | [docs/09-checklist-do-dono.md](docs/09-checklist-do-dono.md) | O que só o dono do projeto pode fazer antes do teste público: publicar, máquina e domínio, e-mail, textos legais, alertas, backups, assinatura e decisões de produto |
+| [docs/10-subir-no-vps.md](docs/10-subir-no-vps.md) | **Subir no VPS**: guia linear de um Ubuntu 24.04 limpo até o jogo no ar — Docker, firewall, DNS, `deploy/.env`, e-mail (Gmail ou provedor transacional), teste de fumaça da implantação, administrador, cliente, backups, atualização e o que fazer quando algo dá errado |
 | [docs/CREDITOS.md](docs/CREDITOS.md) | Créditos e licenças: modelos de personagem, ícone original, licença do Godot e componentes de terceiros (tela *Créditos e licenças* e `LICENCAS-TERCEIROS.txt` de cada pacote), som e música originais (síntese por `tools/audio/gerar_sons.py`) |
 
 ## Requisitos

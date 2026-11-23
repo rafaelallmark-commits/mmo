@@ -18,6 +18,9 @@ Siga na ordem; cada item diz onde fica o passo técnico detalhado.
 
 ## 2. Máquina, domínio e endereço do jogo
 
+O passo a passo, de um VPS Ubuntu 24.04 limpo até o jogo no ar (Docker, firewall, DNS, `.env`, e-mail, teste de
+fumaça, administrador, backups e problemas comuns), está em **[10-subir-no-vps.md](10-subir-no-vps.md)**.
+
 - [ ] Uma máquina Linux com IP público, Docker 25+ (ou systemd) e as portas 80 e 443 abertas. Medido: 100
       jogadores numa zona usam ~7% de um núcleo e 144 MB; 1–2 vCPU e 2 GB sobram. De preferência perto dos
       testadores.
@@ -32,9 +35,14 @@ Siga na ordem; cada item diz onde fica o passo técnico detalhado.
       (`docs/GUIA.md`, em `/guia`): trocar o marcador **`[e-mail da equipe]`** pelo contato real e manter a
       seção *Avisos* em dia — os Termos e a Política dizem que mudanças são avisadas ali.
 - [ ] Primeira conta de administrador: criar e confirmar a conta pelo cliente e dar o papel `admin`
-      ([08-operacao §8.8, "Antes de abrir o teste"](08-operacao.md#antes-de-abrir-o-teste)).
+      ([10, passo 10](10-subir-no-vps.md#10-a-conta-de-administrador); [08-operacao §8.8](08-operacao.md#primeira-conta-de-administrador)).
+- [ ] **Teste de fumaça** no VPS passando, também depois de `docker compose restart`, com a conta de teste apagada
+      no fim ([10, passo 9](10-subir-no-vps.md#9-conferir)).
 
 ## 3. E-mail (sem ele ninguém entra)
+
+Para começar já, o Gmail com senha de app serve (variáveis exatas no [10, passo 7](10-subir-no-vps.md#7-e-mail-sem-ele-ninguém-entra));
+para o teste aberto, um provedor transacional:
 
 - [ ] Contratar um provedor de e-mail transacional e verificar o domínio do remetente.
 - [ ] Publicar **SPF**, **DKIM** e **DMARC** no DNS (o provedor mostra os registros).

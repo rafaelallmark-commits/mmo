@@ -4,7 +4,10 @@
 //   direto   — TLS desde o início (porta 465)
 //   starttls — conexão comum que vira TLS antes de autenticar (587); sem STARTTLS o envio falha
 //   nenhum   — sem criptografia (só para um relé local de desenvolvimento)
-import { senderDomain } from './mailer.js';
+// CINZAS_SMTP_CA (ou --smtp-ca): arquivo PEM com autoridades a mais para o certificado do servidor de e-mail
+// (relé próprio com certificado de uma CA privada). Soma às autoridades de sempre — a verificação nunca é
+// desligada; arquivo vazio (o /dev/null do compose) = nenhuma a mais. Gmail, Brevo e afins não precisam.
+import { readExtraCa, senderDomain } from './mailer.js';
 
 const text = (v) => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null);
 
@@ -22,6 +25,7 @@ export function mailConfig(arg, env = process.env) {
     pass: text(arg('smtp-pass', env.CINZAS_SMTP_PASS)),
     from: text(arg('smtp-from', env.CINZAS_SMTP_FROM)),
     helo: text(arg('smtp-helo', env.CINZAS_SMTP_HELO)),
+    caFile: text(arg('smtp-ca', env.CINZAS_SMTP_CA)),
     tlsMode: mode,
     secure: mode === 'direto',
     starttls: mode === 'starttls',
@@ -40,7 +44,21 @@ export function mailProblems(cfg) {
   if (!cfg.from) out.push('CINZAS_SMTP_FROM (--smtp-from) é obrigatório: "Nome <endereco@seu-dominio>", com o domínio verificado no provedor.');
   else if (!senderDomain(cfg.from)) out.push(`CINZAS_SMTP_FROM sem domínio válido: «${cfg.from}».`);
   if (cfg.user && !cfg.pass) out.push('CINZAS_SMTP_PASS vazio com usuário definido.');
+  if (cfg.caFile) {
+    try { readExtraCa(cfg.caFile); } catch (e) { out.push(`CINZAS_SMTP_CA (--smtp-ca): não deu para usar «${cfg.caFile}»: ${e.code === 'ENOENT' ? 'arquivo não encontrado' : e.message}.`); }
+  }
   return out;
+}
+
+/** Linha do registro de subida: para onde vão os e-mails (sem usuário nem senha). */
+export function mailSummary(cfg) {
+  if (cfg.kind === 'arquivo') return `e-mail: arquivo, em ${cfg.dir}`;
+  if (cfg.kind !== 'smtp') return `e-mail: ${cfg.kind}`;
+  let extra = 0;
+  try { extra = cfg.caFile ? readExtraCa(cfg.caFile).length : 0; } catch { /* mailProblems já recusou */ }
+  const mode = { direto: 'TLS direto', starttls: 'STARTTLS obrigatório', nenhum: 'sem criptografia' }[cfg.tlsMode] ?? cfg.tlsMode;
+  return `e-mail: SMTP ${cfg.host}:${cfg.port} (${mode}${cfg.user ? ', com usuário e senha' : ', sem autenticação'}), remetente ${cfg.from}` +
+    (extra ? `; ${extra} autoridade(s) a mais para o certificado, de ${cfg.caFile}` : '');
 }
 
 /** Aviso de subida para os modos que não entregam e-mail a ninguém (null nos outros). */

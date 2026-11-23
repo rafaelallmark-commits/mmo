@@ -3,6 +3,10 @@ extends Node
 ## entra no mundo pela mesma rotina da interface, anda, ataca um monstro, coleta o saque
 ## e sai com código 0 em caso de sucesso. Uso:
 ##   godot --headless --path client -- --autotest --server=ws://127.0.0.1:7777 --account=bot --password=bot123 --class=breaker --name=Robo
+## Servidor do teste público (--auth token): entra pelo serviço de contas (https://DOMINIO/contas, ou --accounts).
+## Com --emails=pasta (onde chegam os e-mails: modo "arquivo" do serviço de contas ou um SMTP de teste) e uma conta
+## que ainda não existe, cria a conta pelo serviço (e-mail conta@exemplo.com), confirma com o código lido do
+## e-mail e entra, como um jogador novo; sem --emails, a conta já precisa existir e estar confirmada.
 ## Com --transfer (servidor em várias zonas, --dev): em vez de lutar, atravessa o portal para um mapa de
 ## outra zona e confere que o cliente reconectou no endereço novo e está no mapa novo.
 ## Com --board (servidor --dev): depois do fluxo normal, vai a Pedrâmbar e abre o quadro de missões da praça
@@ -74,14 +78,54 @@ func _connected() -> void:
 	main._when_hello(func():
 		if str(main.server_hello.get("auth", "both")) == "token":
 			say("servidor pede login por token; usando o serviço de contas em %s" % main._accounts_base())
-			main._accounts_post("/sessoes", {"conta": main.account, "senha": main.password}, func(ok: bool, b: Dictionary):
-				if not ok:
-					fail(str(b.get("erro", "serviço de contas recusou")))
-					return
-				Net.request("login_token", {"token": b["token"], "delta": true}, _logged))
+			_token_login(true)
 			return
 		Net.request("register", {"account": main.account, "password": main.password}, func(_r):
 			Net.request("login", {"account": main.account, "password": main.password, "delta": true}, _logged)))
+
+## Sessão no serviço de contas e "login_token" na zona. Conta que não existe (recusa sem "codigo") com --emails:
+## cadastro, código lido do e-mail, confirmação e sessão de novo (signup = pode tentar o cadastro uma vez).
+func _token_login(signup: bool) -> void:
+	main._accounts_post("/sessoes", {"conta": main.account, "senha": main.password}, func(ok: bool, b: Dictionary):
+		if ok:
+			Net.request("login_token", {"token": b["token"], "delta": true}, _logged)
+			return
+		if signup and main.args.has("emails") and not b.has("codigo"):
+			_signup()
+			return
+		fail(str(b.get("erro", "serviço de contas recusou"))))
+
+func _signup() -> void:
+	var email := "%s@exemplo.com" % main.account
+	var since := Time.get_unix_time_from_system()
+	say("conta %s não existe; criando pelo serviço de contas (e-mail %s)" % [main.account, email])
+	main._accounts_post("/contas", {"conta": main.account, "email": email, "senha": main.password, "aceite": true}, func(ok: bool, b: Dictionary):
+		if not ok:
+			fail("cadastro recusado: %s" % str(b.get("erro", "?")))
+			return
+		step = "signup_code"
+		signup_since = since
+		signup_until = Time.get_ticks_msec() + 60000)
+
+var signup_since := 0.0
+var signup_until := 0
+
+## Espera o e-mail do cadastro chegar na pasta de --emails e confirma a conta com o código.
+func _signup_tick() -> void:
+	var code := _mail_code(str(main.args["emails"]), "%s@exemplo.com" % main.account, signup_since)
+	if code == "":
+		if Time.get_ticks_msec() > signup_until:
+			fail("o e-mail com o código não chegou em %s em 60 s" % main.args["emails"])
+		return
+	step = "signup_wait"
+	say("código %s lido do e-mail; confirmando a conta" % code)
+	main._accounts_post("/contas/verificar", {"conta": main.account, "codigo": code}, func(ok: bool, b: Dictionary):
+		if not ok:
+			fail("confirmação recusada: %s" % str(b.get("erro", "?")))
+			return
+		say("conta confirmada pelo código do e-mail")
+		step = "connect"
+		_token_login(false))
 
 func _logged(r: Dictionary) -> void:
 	if not r["ok"]:
@@ -126,6 +170,9 @@ func _process(_d: float) -> void:
 		return
 	if step == "contas":
 		_accounts_tick()
+		return
+	if step == "signup_code":
+		_signup_tick()
 		return
 	match step:
 		"entering":
@@ -904,21 +951,34 @@ func _ui_fill(values: Array) -> void:
 func _ui_status() -> String:
 	return main.status_label.text if main.status_label else ""
 
-## Código de 6 dígitos do e-mail mais recente da pasta (--email arquivo grava .eml com o corpo em base64).
-func _mail_code() -> String:
-	var dir: String = main.args["contastest"]
+## Código de 6 dígitos do e-mail mais recente da pasta (--email arquivo, e um SMTP de teste, gravam .eml com o
+## corpo em base64 e o nome começando pela hora em ms). Com `to`, só e-mails para esse endereço; com `since`
+## (segundos Unix), só os gravados depois disso.
+func _mail_code(dir: String, to := "", since := 0.0) -> String:
 	var files := Array(DirAccess.get_files_at(dir)).filter(func(f): return str(f).ends_with(".eml"))
 	files.sort()
-	if files.is_empty():
-		return ""
-	var parts := FileAccess.get_file_as_string(dir.path_join(files[-1])).split("\r\n\r\n", true, 1)
-	if parts.size() < 2:
-		return ""
-	var body := Marshalls.base64_to_utf8(parts[1].replace("\r\n", "").strip_edges())
+	files.reverse()
 	var re := RegEx.new()
 	re.compile("\\b(\\d{6})\\b")
-	var found := re.search(body)
-	return found.get_string(1) if found else ""
+	for f in files:
+		var stamp := str(f).get_slice("-", 0)
+		if since > 0.0 and stamp.is_valid_int() and stamp.length() == 13 and int(stamp) / 1000.0 < since - 2.0:
+			break  # os nomes começam com a hora: daqui para trás é mais velho que o pedido
+		var parts := FileAccess.get_file_as_string(dir.path_join(f)).split("\r\n\r\n", true, 1)
+		if parts.size() < 2:
+			continue
+		if to != "":
+			var mine := false
+			for line in parts[0].split("\r\n"):
+				var l := str(line).to_lower()
+				if l.begins_with("to:") and (l.substr(3).strip_edges() == to.to_lower() or l.contains("<%s>" % to.to_lower())):
+					mine = true
+			if not mine:
+				continue
+		var found := re.search(Marshalls.base64_to_utf8(parts[1].replace("\r\n", "").strip_edges()))
+		if found:
+			return found.get_string(1)
+	return ""
 
 func _accounts_tick() -> void:
 	if Time.get_ticks_msec() < ac_until:
@@ -980,7 +1040,7 @@ func _accounts_tick() -> void:
 			if not _ui_status().contains("Espere"):
 				return
 			say("reenviar logo depois do cadastro: " + _ui_status())
-			var code := _mail_code()
+			var code := _mail_code(str(main.args["contastest"]), "%s@exemplo.com" % acc)
 			if code == "":
 				fail("código não encontrado nos e-mails")
 				return

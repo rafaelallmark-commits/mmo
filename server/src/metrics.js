@@ -222,7 +222,8 @@ export class AccountsMetrics {
     const r = routes.has(route) ? route : 'outra';
     const k = `${r}|${status}`;
     this.requests.set(k, (this.requests.get(k) ?? 0) + 1);
-    if (route === '/contas' && status === 201) this.signups++;
+    // 202: conta criada, mas o e-mail do código não saiu (a falha conta em cinzas_accounts_email_failures_total)
+    if (route === '/contas' && (status === 201 || status === 202)) this.signups++;
   }
 
   /** Embrulha o envio de e-mail para contar sucessos e falhas; o resto do objeto passa direto. */

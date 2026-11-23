@@ -78,7 +78,7 @@ na máquina. A porta do serviço (a que o Caddy repassa) continua sem `/metrics`
 | Métrica do serviço de contas (porta 9101) | Tipo | O que é |
 |---|---|---|
 | `cinzas_accounts_requests_total{route,status}` | contador | Pedidos por rota e código de resposta HTTP (caminho desconhecido conta como `route="outra"`) |
-| `cinzas_accounts_signups_total` | contador | Contas criadas (cadastro aceito) |
+| `cinzas_accounts_signups_total` | contador | Contas criadas (cadastro aceito, também quando o e-mail do código falhou: resposta 202) |
 | `cinzas_accounts_emails_sent_total` · `cinzas_accounts_email_failures_total` | contador | E-mails entregues ao servidor de envio; envios que falharam (servidor fora, recusa, certificado) |
 | `cinzas_accounts_cpu_seconds_total` · `cinzas_accounts_rss_mb` · `cinzas_accounts_uptime_s` | contador, medidores | CPU, memória e tempo no ar do processo |
 
@@ -213,7 +213,8 @@ Fora de `server/`, na raiz do repositório:
 
 | Comando | O que faz | Tempo |
 |---|---|---|
-| `godot --headless --path client -- --autotest --server=ws://127.0.0.1:7777` | Autotest do cliente contra um servidor rodando (`npm run dev`): conecta, cria conta e personagem, entra, anda, derrota um Rato de Sulco e coleta o saque; termina com `[autotest] OK` e código 0 (qualquer falha: código 1). O CI roda o mesmo (critério 9 do Marco 1). | ~30 s |
+| `godot --headless --path client -- --autotest --server=ws://127.0.0.1:7777` | Autotest do cliente contra um servidor rodando (`npm run dev`): conecta, cria conta e personagem, entra, anda, derrota um Rato de Sulco e coleta o saque; termina com `[autotest] OK` e código 0 (qualquer falha: código 1). O CI roda o mesmo (critério 9 do Marco 1). Contra o teste público (`--server=wss://DOMINIO`, zona com `--auth token`) o login passa pelo serviço de contas; com `--emails=pasta` (onde chegam os e-mails: modo `arquivo` ou um SMTP de teste) e uma `--account` que não existe, ele cria a conta, confirma com o código do e-mail e entra, como um jogador novo. | ~30 s |
+| `node server/tools/fumaca-deploy.mjs --url https://DOMINIO --email voce@exemplo.com` | Teste de fumaça da implantação, pelo proxy, numa conta nova: página, métricas fora do alcance da internet, cadastro, código (perguntado no terminal, ou `--codigos-dir`), sessão, zona, personagem, combate, saque, ouro, equipamento, missão, saída e a volta igual numa conexão nova; `--estado`/`--conferir` conferem de novo depois de reiniciar e `--excluir` apaga a conta de teste. No VPS roda de dentro do contêiner ([10-subir-no-vps.md](10-subir-no-vps.md), passo 9). | ~15 s |
 | `deploy/teste-conteiner.sh <imagem> [versão]` | Teste rápido de uma imagem do servidor (saúde, usuário, `hello` com a versão, backup, parada graciosa): o mesmo do CI e da release. Com a pilha do compose no ar (ela já ocupa a 9100 no 127.0.0.1), `CINZAS_TESTE_PORTA=9101 deploy/teste-conteiner.sh …`. | ~1 min |
 | `godot --headless --path client -- --licenses="$PWD/LICENCAS-TERCEIROS.txt"` | Grava o arquivo de créditos e licenças de terceiros que vai nos pacotes (o mesmo texto da tela *Créditos e licenças*). Caminho absoluto: com `--path` o Godot passa a rodar dentro de `client/`, e um caminho relativo iria parar lá. | segundos |
 
@@ -229,6 +230,10 @@ Fora de `server/`, na raiz do repositório:
   `docker compose restart servidor` (os personagens voltam do último salvamento, a cada 10 s).
 - **Ticks lentos**: veja `cinzas_tick_ms_p99` e o número de jogadores/zonas; zonas sem jogadores continuam
   simulando monstros.
+- **Código de confirmação não chega**: `docker compose logs contas | grep "falha no envio"` mostra o motivo
+  (`SMTP 535` = usuário ou senha; `tempo esgotado` ou `ECONNREFUSED` = porta bloqueada no caminho; `certificate` =
+  servidor errado). Teste da porta e a tabela completa de sintomas: [10-subir-no-vps.md](10-subir-no-vps.md),
+  passos 7 e 14.
 - **Alertas não chegam**: `docker compose logs alertmanager` (variável faltando ou recusada pelo `amtool`), a página
   `http://127.0.0.1:9093` (o alerta chegou ao Alertmanager?) e `http://127.0.0.1:9090/alerts` (disparou no Prometheus?);
   mande um alerta de teste (§8.3).
@@ -385,16 +390,33 @@ três quando ele for definido; o nome do produto e a descrição já vêm preenc
 A imagem (`deploy/Dockerfile`, base `node:22-bookworm-slim`) roda como `cinzas` (uid 10001), com o código só para
 leitura e o banco no volume `/data`; expõe 7777 (jogo) e 9100 (métricas e `/health`, usado pelo `HEALTHCHECK`).
 O `docker-compose.yml` sobe o servidor, o serviço de contas, o proxy TLS e o backup de hora em hora (perfis opcionais:
-`postgres`, `monitoramento` e `copia-externa`):
+`postgres`, `monitoramento` e `copia-externa`). O passo a passo de um VPS limpo até o jogo no ar, com o `.env`
+completo, o e-mail e o teste de fumaça, está em [10-subir-no-vps.md](10-subir-no-vps.md); o resumo:
 
 ```bash
 cd deploy
-echo "DOMINIO=jogo.exemplo.com.br" > .env     # fora do git
-docker compose up -d --build
-docker compose ps                             # servidor (healthy) e proxy
+cat > .env <<'FIM'                            # fora do git; cada variável explicada no 10, passo 6
+DOMINIO=jogo.exemplo.com.br
+CINZAS_EMAIL=smtp
+CINZAS_SMTP_HOST=smtp.exemplo.com.br
+CINZAS_SMTP_PORT=587
+CINZAS_SMTP_USER=usuario
+CINZAS_SMTP_PASS=senha
+CINZAS_SMTP_FROM=Cinzas do Meridiano <nao-responda@exemplo.com.br>
+FIM
+echo "CINZAS_TOKEN_SECRET=$(openssl rand -hex 32)" >> .env
+docker compose up -d --build --wait           # espera todos ficarem prontos
+docker compose ps                             # servidor, contas e backup (healthy); proxy Up
 curl http://127.0.0.1:9100/health             # métricas e saúde: só nesta máquina
+docker compose exec servidor node tools/fumaca-deploy.mjs --url https://jogo.exemplo.com.br --email voce@exemplo.com
 docker compose logs -f servidor
 ```
+
+O serviço `backup` tem verificação de saúde própria (`tools/backup.mjs --saude`: uma cópia conferida nas últimas
+~2 h e nenhuma falha depois dela); sem ela valeria o `HEALTHCHECK` da imagem, que é o da zona, e ele apareceria
+`unhealthy` com os backups em dia. `contas` e `backup` usam a imagem do serviço `servidor` (`pull_policy: never`):
+o primeiro `up --build` não tenta mais baixá-la de um registro (antes saíam duas linhas "Error pull access denied
+for cinzas-servidor" antes do build).
 
 - **Versão**: a imagem da release traz a tag em `CINZAS_VERSION` (`hello`, registro de início e `/bug`; D150).
   Construindo aqui, passe a mesma com `--build-arg CINZAS_VERSION=0.4.0-teste.2` (no compose:
@@ -424,11 +446,14 @@ docker compose logs -f servidor
   docker compose start servidor contas backup
   ```
 
-  Uma cópia que está fora da máquina entra no volume assim (depois use `/data/backups/restaurar.db` no `cp` acima):
+  O `stop` leva uns 35 s: o servidor avisa quem está jogando e espera 30 s antes de gravar e sair. Uma cópia que
+  está fora da máquina entra no volume assim (depois use `/data/backups/restaurar.db` no `cp` acima):
   `docker compose run --rm -T --no-deps servidor sh -c 'cat > /data/backups/restaurar.db' < cinzas-AAAA-MM-DDTHH-MM-SS.db`.
-  Depois da troca, apague-a (`docker compose run --rm --no-deps servidor rm /data/backups/restaurar.db`): fora do
-  padrão de nomes dos backups, ela não entra na rotação de 14 dias nem na cópia para fora da máquina e ficaria ali
-  para sempre, com os dados de quem já excluiu a conta.
+  Depois da troca, **apague-a**: `docker compose run --rm --no-deps servidor rm /data/backups/restaurar.db`. A
+  rotação e a cópia para fora da máquina só mexem nos arquivos com o nome que o backup dá; um `restaurar.db` esquecido ficaria para sempre na pasta,
+  com os dados pessoais de quem excluiu a conta depois (a política de privacidade promete no máximo 14 dias). O
+  caminho contrário, de uma cópia do volume para a máquina (e dela para fora com `scp`):
+  `docker compose run --rm -T --no-deps servidor cat /data/backups/cinzas-AAAA-MM-DDTHH-MM-SS.db > cinzas-AAAA-MM-DDTHH-MM-SS.db`.
 - **Serviço de contas** (`contas`): mesma imagem, mesmo volume e mesmo banco; o Caddy repassa
   `https://DOMINIO/contas/*` para ele (o cliente usa essa base quando o servidor é `wss://`). O servidor de zona sobe com
   `CINZAS_AUTH=token`: cadastro e senha só pelo serviço de contas. `deploy/.env` precisa de `DOMINIO`,
@@ -436,7 +461,10 @@ docker compose logs -f servidor
   recusam um segredo com menos de 32 caracteres ou o valor de exemplo do repositório (D139). Para enviar e-mail de
   verdade, `CINZAS_EMAIL=smtp` e os `CINZAS_SMTP_*` (modelo no cabeçalho do `docker-compose.yml`); as contas recusam
   subir sem `CINZAS_SMTP_HOST` ou sem `CINZAS_SMTP_FROM`. `CINZAS_EMAIL=arquivo` (códigos em `/data/emails`, ninguém
-  recebe nada) só serve para um ensaio, e o serviço avisa isso no registro ao subir.
+  recebe nada) só serve para um ensaio, e o serviço avisa isso no registro ao subir. Servidor de e-mail próprio com
+  certificado de uma CA privada: `CINZAS_SMTP_CA_ARQUIVO=./segredos/ca-smtp.pem` no `.env` (o arquivo chega às contas
+  como o segredo `ca_smtp`; legível pelo uid 10001) soma as autoridades dele às públicas, sem desligar a verificação
+  (§8.9). Gmail e provedores comerciais não precisam.
 - **PostgreSQL** (perfil `postgres`, opcional): o serviço `banco` (`postgres:17`, só na rede interna, dados no volume
   `banco`) e `CINZAS_DB=postgres://cinzas@banco:5432/cinzas` na zona e nas contas; a senha fica em
   `deploy/segredos/senha_banco.txt` (fora do git) e chega aos três como segredo do compose. Sem o perfil nada muda
@@ -652,6 +680,8 @@ marca **[Equipe]** saindo junto). O que cada papel pode: [§8.9](#89-contas-segu
   provedor mostra os registros; sem eles os códigos caem no lixo eletrônico ou são recusados). Mande um código para
   um endereço do Gmail e um do Outlook e confira que chega na caixa de entrada.
 - Responsável e contato preenchidos em `docs/TERMOS.md` e `docs/PRIVACIDADE.md` (e revisados por assessoria jurídica).
+- O **teste de fumaça** passa no VPS, inclusive depois de `docker compose restart`, e a conta de teste é apagada no
+  fim ([10-subir-no-vps.md](10-subir-no-vps.md), passo 9).
 - Criar conta pelo cliente publicado: o e-mail com o código chega, a confirmação funciona (também fechando o jogo e
   voltando por *Confirmar e-mail*), o login por token entra e *Baixar meus dados* grava o arquivo.
 - `docker compose ps` saudável; de outra máquina, `curl http://IP:9100/health` **não** pode responder (nem
@@ -698,8 +728,20 @@ E-mail (D139): cada opção também vem do ambiente (`CINZAS_EMAIL`, `CINZAS_SMT
 TLS direto e **587** exige STARTTLS — se o servidor de e-mail não oferecer STARTTLS, o envio falha em vez de mandar
 usuário e senha do SMTP às claras. `CINZAS_SMTP_TLS=direto|starttls|nenhum` força o modo (`nenhum` só para um relé
 local de desenvolvimento). O remetente (`CINZAS_SMTP_FROM`) é obrigatório e o domínio dele vai no EHLO e no
-Message-ID (ou `CINZAS_SMTP_HELO`). Um erro de certificado do servidor de e-mail vira falha daquele envio (registrada),
-sem derrubar o serviço.
+Message-ID (ou `CINZAS_SMTP_HELO`). O certificado do servidor de e-mail é sempre conferido (cadeia e nome); para um
+relé próprio com certificado de uma CA privada, `CINZAS_SMTP_CA` (ou `--smtp-ca`) aponta um arquivo PEM cujas
+autoridades se **somam** às de sempre — nunca há opção de desligar a conferência. Arquivo vazio (o `/dev/null` do
+compose, quando `CINZAS_SMTP_CA_ARQUIVO` não está no `.env`) é nenhuma a mais; arquivo ilegível ou sem certificado
+impede a subida. Ao subir, o registro diz para onde vão os e-mails, sem usuário nem senha (`e-mail: SMTP
+smtp.gmail.com:587 (STARTTLS obrigatório, com usuário e senha), remetente ...`).
+
+**Envio que falha** (servidor fora, senha recusada, porta bloqueada, certificado): vira uma linha
+`falha no envio do e-mail (...) da conta N: <motivo>` no registro, conta em `cinzas_accounts_email_failures_total`
+(alerta `FalhaNoEnvioDeEmail`) e não derruba o serviço. O cadastro responde **202** com `codigo: 'email'` e "Conta
+criada, mas o e-mail com o código não saiu agora..." (o cliente abre a tela do código, onde *Reenviar código*
+resolve depois); o reenvio responde **502** com `codigo: 'email'`; "Esqueci a senha" responde igual ao normal (não
+revela se o e-mail tem conta) e grava `password_reset_mail_failed` na auditoria. Antes, as três respostas eram
+"Erro interno." (500).
 
 **Servidor de zona no teste público**:
 

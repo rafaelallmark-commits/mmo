@@ -86,11 +86,20 @@ export class AccountsService {
   }
 
   // Manda o e-mail com um código novo e anota o envio (limites); a anotação vem antes do envio, para dois
-  // pedidos ao mesmo tempo não passarem juntos pela conferência.
+  // pedidos ao mesmo tempo não passarem juntos pela conferência. Devolve false se o envio falhou (servidor de
+  // e-mail fora, senha recusada, certificado): a falha vai para o registro (com o id da conta, sem o endereço) e
+  // para a métrica cinzas_accounts_email_failures_total, e quem chamou responde com uma mensagem que diz o que
+  // fazer, em vez de "Erro interno".
   async sendCode(acc, kind, subject, text) {
     const code = this.store.issueCode(acc.id, kind);
     this.store.noteAccountEvent('mail', acc.id, acc.email);
-    await this.mailer.send({ to: acc.email, subject, text: text(code) });
+    try {
+      await this.mailer.send({ to: acc.email, subject, text: text(code) });
+      return true;
+    } catch (e) {
+      this.log(`falha no envio do e-mail (${kind === 'reset' ? 'troca de senha' : 'código de confirmação'}) da conta ${acc.id}: ${e.message}`);
+      return false;
+    }
   }
 
   log(...a) { if (this.opts.log) console.log(new Date().toISOString().slice(11, 19), '[contas]', ...a); }
@@ -185,9 +194,11 @@ export class AccountsService {
         const termsVersion = this.opts.termsVersion;
         const id = st.createAccount(conta, senha, { email, verified: false, termsVersion, termsAt: Date.now() });
         st.audit('account_created', { accountId: id, ip, terms: termsVersion });
-        await this.sendCode({ id, email }, 'verify', 'Confirme sua conta — Cinzas do Meridiano',
+        const sent = await this.sendCode({ id, email }, 'verify', 'Confirme sua conta — Cinzas do Meridiano',
           (code) => `Olá, ${conta}!\n\nSeu código de confirmação é ${code}. Ele vale por 30 minutos.\n\nSe não foi você quem criou esta conta, ignore esta mensagem: sem confirmação, ela é apagada em 7 dias.`);
-        this.log(`conta criada: ${conta}`);
+        this.log(`conta criada: ${conta}${sent ? '' : ' (o e-mail do código não saiu)'}`);
+        // a conta existe mesmo sem o e-mail: o cliente abre a tela do código, onde "Reenviar código" resolve depois
+        if (!sent) return { ok: true, status: 202, codigo: 'email', mensagem: 'Conta criada, mas o e-mail com o código não saiu agora (falha no envio). Daqui a alguns minutos, use Reenviar código nesta tela e confira também o lixo eletrônico.' };
         return { ok: true, status: 201, mensagem: 'Conta criada. Enviamos um código para o seu e-mail.' };
       }
       case '/contas/verificar': {
@@ -207,8 +218,9 @@ export class AccountsService {
           // o nome da conta já é público (o cadastro diz "Essa conta já existe."): aqui o limite pode ser explícito
           const blocked = this.mailBlocked(acc.id, acc.email);
           if (blocked) return { ok: false, status: 429, codigo: 'limite', erro: blocked };
-          await this.sendCode(acc, 'verify', 'Confirme sua conta — Cinzas do Meridiano',
+          const sent = await this.sendCode(acc, 'verify', 'Confirme sua conta — Cinzas do Meridiano',
             (code) => `Seu novo código de confirmação é ${code}. Ele vale por 30 minutos.`);
+          if (!sent) return { ok: false, status: 502, codigo: 'email', erro: 'Não conseguimos enviar o e-mail agora (falha no envio). Tente de novo em alguns minutos.' };
         }
         return { ok: true, mensagem: 'Se a conta existir e não estiver confirmada, enviamos um novo código.' };
       }
@@ -243,9 +255,10 @@ export class AccountsService {
           // limite atingido: nada é enviado, mas a resposta é a mesma (não revela se o e-mail tem conta)
           if (this.mailBlocked(acc.id, acc.email)) st.audit('password_reset_limited', { accountId: acc.id, ip });
           else {
-            await this.sendCode(acc, 'reset', 'Troca de senha — Cinzas do Meridiano',
+            const sent = await this.sendCode(acc, 'reset', 'Troca de senha — Cinzas do Meridiano',
               (code) => `Olá, ${acc.name}!\n\nSeu código para trocar a senha é ${code}. Ele vale por 30 minutos.\n\nSe não foi você, ignore esta mensagem: sua senha continua a mesma.`);
-            st.audit('password_reset_requested', { accountId: acc.id, ip });
+            // envio que falhou: a resposta continua a mesma (não revela se o e-mail tem conta); fica na auditoria
+            st.audit(sent ? 'password_reset_requested' : 'password_reset_mail_failed', { accountId: acc.id, ip });
           }
         }
         return { ok: true, mensagem: `Se o e-mail tiver conta, enviamos um código (no máximo um e-mail por minuto e ${MAIL_PER_DAY} por dia).` };

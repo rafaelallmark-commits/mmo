@@ -2,14 +2,14 @@
 // autenticar, erro de certificado depois do STARTTLS sem derrubar o processo, remetente obrigatório.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import net from 'node:net';
 import tls from 'node:tls';
-import { smtpSend, senderDomain } from '../src/mailer.js';
-import { mailConfig, mailProblems, mailWarning } from '../src/mailcfg.js';
+import { createMailer, readExtraCa, smtpSend, senderDomain } from '../src/mailer.js';
+import { mailConfig, mailProblems, mailSummary, mailWarning } from '../src/mailcfg.js';
 
 const noArgs = (_name, def) => def; // nenhuma opção na linha de comando: tudo vem do ambiente
 
@@ -172,4 +172,62 @@ test('zona, contas e mundo recusam subir com segredo de exemplo ou curto; contas
   assert.match(r.stderr, /CINZAS_SMTP_FROM/);
   r = run('contas-main.js', ['--port', '0', '--db', ':memory:'], { CINZAS_TOKEN_SECRET: 'troque-por-um-segredo-longo', CINZAS_EMAIL: 'console' });
   assert.equal(r.status, 2, r.stderr);
+});
+
+// CA privada e certificado do servidor assinado por ela, para o nome dado (SAN).
+function caAndLeaf(name) {
+  const dir = mkdtempSync(join(tmpdir(), 'cinzas-ca-'));
+  const f = (n) => join(dir, n);
+  const run = (args) => execFileSync('openssl', args, { stdio: 'ignore' });
+  run(['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', f('ca.key'), '-out', f('ca.pem'), '-days', '1', '-subj', '/CN=CA de teste',
+    '-addext', 'basicConstraints=critical,CA:TRUE', '-addext', 'keyUsage=critical,keyCertSign,cRLSign']);
+  run(['req', '-newkey', 'rsa:2048', '-nodes', '-keyout', f('k.pem'), '-out', f('r.csr'), '-subj', `/CN=${name}`]);
+  writeFileSync(f('ext'), `subjectAltName=DNS:${name}\nbasicConstraints=CA:FALSE\nextendedKeyUsage=serverAuth\n`);
+  run(['x509', '-req', '-in', f('r.csr'), '-CA', f('ca.pem'), '-CAkey', f('ca.key'), '-CAcreateserial', '-out', f('c.pem'), '-days', '1', '-extfile', f('ext')]);
+  return { dir, caFile: f('ca.pem'), keyFile: f('k.pem'), key: readFileSync(f('k.pem')), cert: readFileSync(f('c.pem')) };
+}
+
+test('CINZAS_SMTP_CA: autoridade a mais para um relé com CA privada, sem desligar a verificação', async () => {
+  const pki = caAndLeaf('localhost');
+  const other = caAndLeaf('outro.nome');
+  const f = await fakeSmtp({ starttls: true, key: pki.key, cert: pki.cert });
+  const g = await fakeSmtp({ starttls: true, key: other.key, cert: other.cert });
+  const env = (port, ca) => ({ CINZAS_EMAIL: 'smtp', CINZAS_SMTP_HOST: 'localhost', CINZAS_SMTP_PORT: String(port), CINZAS_SMTP_USER: 'u', CINZAS_SMTP_PASS: 'p', CINZAS_SMTP_FROM: 'Jogo <j@x.com>', CINZAS_SMTP_CA: ca });
+  try {
+    // arquivo: certificados PEM; vazio (o /dev/null do compose) = nenhum a mais; texto sem certificado é erro
+    assert.equal(readExtraCa(pki.caFile).length, 1);
+    assert.deepEqual(readExtraCa('/dev/null'), []);
+    assert.throws(() => readExtraCa(pki.keyFile), /nenhum certificado/);
+    writeFileSync(join(pki.dir, 'quebrado.pem'), '-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n');
+    assert.throws(() => readExtraCa(join(pki.dir, 'quebrado.pem')));
+    assert.deepEqual(mailProblems(mailConfig(noArgs, env(f.port, '/dev/null'))), []);
+    assert.match(mailProblems(mailConfig(noArgs, env(f.port, pki.keyFile))).join(' '), /CINZAS_SMTP_CA.*nenhum certificado/);
+    assert.match(mailProblems(mailConfig(noArgs, env(f.port, join(pki.dir, 'nao-existe.pem')))).join(' '), /CINZAS_SMTP_CA.*não encontrado/);
+    // sem a CA (ou com o arquivo vazio): o certificado da CA privada é recusado e a senha não sai
+    for (const ca of ['', '/dev/null']) {
+      await assert.rejects(createMailer(mailConfig(noArgs, env(f.port, ca))).send(MSG), /certificate|verify/i);
+    }
+    assert.ok(!f.seen.some((s) => s.line === 'AUTH LOGIN'), 'sem confiar no certificado, nada de AUTH');
+    // com a CA: entrega, com AUTH só depois do STARTTLS
+    const cfg = mailConfig(noArgs, env(f.port, pki.caFile));
+    assert.match(mailSummary(cfg), /localhost:\d+ \(STARTTLS obrigatório, com usuário e senha\).*1 autoridade/);
+    assert.equal(await createMailer(cfg).send(MSG), 'smtp');
+    assert.ok(f.seen.find((s) => s.line === 'AUTH LOGIN')?.tls, 'AUTH depois do STARTTLS');
+    assert.match(f.state.data, /MTIzNDU2|123456/);
+    // a CA a mais não aceita certificado de outra CA nem de outro nome: a verificação continua inteira
+    await assert.rejects(createMailer(mailConfig(noArgs, env(g.port, pki.caFile))).send(MSG), /certificate|verify/i);
+    await assert.rejects(createMailer(mailConfig(noArgs, env(g.port, other.caFile))).send(MSG), /altnames|localhost/i);
+    assert.ok(!g.seen.some((s) => s.line === 'AUTH LOGIN'));
+  } finally {
+    f.srv.close(); g.srv.close();
+    rmSync(pki.dir, { recursive: true, force: true }); rmSync(other.dir, { recursive: true, force: true });
+  }
+  // o serviço de contas recusa subir com um arquivo de CA que não serve
+  const { spawnSync } = await import('node:child_process');
+  const r = spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', new URL('../src/contas-main.js', import.meta.url).pathname, '--port', '0', '--db', ':memory:'], {
+    encoding: 'utf8', timeout: 20_000,
+    env: { ...process.env, CINZAS_TOKEN_SECRET: 'c'.repeat(40), CINZAS_EMAIL: 'smtp', CINZAS_SMTP_HOST: 'smtp.x.com', CINZAS_SMTP_FROM: 'Jogo <j@x.com>', CINZAS_SMTP_CA: '/nao/existe/ca.pem' },
+  });
+  assert.equal(r.status, 2, r.stderr);
+  assert.match(r.stderr, /CINZAS_SMTP_CA/);
 });

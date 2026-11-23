@@ -1,14 +1,15 @@
 // Ponto de entrada do serviço de contas:
 //   node src/contas-main.js --port 7780 --db cinzas.db --token-secret S
 //     [--email console|arquivo|smtp] [--email-dir emails] [--smtp-host h --smtp-port 587 --smtp-user u
-//      --smtp-pass p --smtp-from "Nome <x@y>" --smtp-tls direto|starttls|nenhum --smtp-helo dominio]
+//      --smtp-pass p --smtp-from "Nome <x@y>" --smtp-tls direto|starttls|nenhum --smtp-helo dominio
+//      --smtp-ca ca-extra.pem]
 //     [--trust-proxy] [--docs-dir ../docs] [--metrics-port 9101 --metrics-host 127.0.0.1]
-// Cada opção também vem do ambiente (CINZAS_EMAIL, CINZAS_SMTP_HOST/PORT/USER/PASS/FROM/TLS/HELO,
+// Cada opção também vem do ambiente (CINZAS_EMAIL, CINZAS_SMTP_HOST/PORT/USER/PASS/FROM/TLS/HELO/CA,
 // CINZAS_CONTAS_METRICS_PORT). Métricas (GET /metrics: pedidos, cadastros, falhas de e-mail) só numa porta à
 // parte, que o proxy não repassa, e só para endereços internos (loopback e redes privadas).
 // O servidor de zona precisa do mesmo segredo (--token-secret ou CINZAS_TOKEN_SECRET) e de --auth token.
 import { AccountsService } from './contas.js';
-import { mailConfig, mailProblems, mailWarning } from './mailcfg.js';
+import { mailConfig, mailProblems, mailSummary, mailWarning } from './mailcfg.js';
 import { checkSecrets } from './segredo.js';
 
 function arg(name, def) {
@@ -42,6 +43,7 @@ const svc = new AccountsService({
   metricsHost,
 });
 await svc.start();
+svc.log(mailSummary(mail));
 const stop = async () => { await svc.stop(); process.exit(0); };
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);
