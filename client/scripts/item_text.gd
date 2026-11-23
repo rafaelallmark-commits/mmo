@@ -94,6 +94,10 @@ static func describe(defs: Dictionary, inst: Dictionary, ch: Dictionary, compare
 	if d.has("bonusAttrs"):
 		for a in d["bonusAttrs"].keys():
 			t += "+%d %s (não conta para requisitos)\n" % [int(d["bonusAttrs"][a]), defs["attributes"][a]["name"]]
+	if d.get("questItem", false):
+		# material de coleta das secundárias (só cai com a missão ativa e sai da bolsa na entrega) e o mapa, que fica
+		var fate := "fica na bolsa" if d.get("kind", "") == "map" else "sai da bolsa na entrega"
+		t += "[color=#9fd3d1]Item de missão: %s. Não se vende, troca, descarta nem vai para o depósito.[/color]\n" % fate
 	if d.has("use"):
 		var u: Dictionary = d["use"]
 		if u.has("healHp"):
@@ -104,8 +108,6 @@ static func describe(defs: Dictionary, inst: Dictionary, ch: Dictionary, compare
 		t += "Uso: a tecla M (ou um clique aqui) abre o mapa de onde você estiver\n"
 	if d.has("description"):
 		t += "[i]%s[/i]\n" % str(d["description"])
-	if d.get("questItem", false):
-		t += "[color=#9a927f]Item de missão: não se vende, não se descarta, não se troca e não vai para o depósito.[/color]\n"
 	# requisitos
 	var lvl_ok := int(ch.get("level", 1)) >= int(d.get("level", 1))
 	t += "[color=%s]Nível mínimo: %d[/color]\n" % [OK if lvl_ok else RED, int(d.get("level", 1))]

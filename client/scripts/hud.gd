@@ -1022,13 +1022,19 @@ func _bag_menu(inst: Dictionary) -> void:
 	if usable:
 		var verb := "Usar" if d.get("kind", "") == "consumable" else ("Abrir o mapa (M)" if d.get("kind", "") == "map" else "Equipar")
 		_menu_button(v, verb, func(): _on_bag_menu(0, inst))
-	if _merchant_open():
-		var label := "Vender%s a %s por %d de ouro" % [" (x%d)" % int(inst["qty"]) if int(inst.get("qty", 1)) > 1 else "", str(npc_open.get("name", "comerciante")).get_slice(",", 0), _sell_price(inst)]
-		_menu_button(v, label, func(): _on_bag_menu(1, inst))
+	if d.get("questItem", false):
+		# item de missão (carapaças, couros, fios... e o mapa): o servidor recusa venda e descarte (o menu mostrava
+		# um preço de venda que nunca saía); o de coleta sai da bolsa na entrega da missão, o mapa fica com o jogador
+		var qi := _menu_button(v, "Item de missão: fica na bolsa" if d.get("kind", "") == "map" else "Item de missão: sai da bolsa na entrega", func(): pass)
+		qi.disabled = true
 	else:
-		var off := _menu_button(v, "Vender (fale com um comerciante)", func(): pass)
-		off.disabled = true
-	_menu_button(v, "Descartar…", func(): _on_bag_menu(2, inst))
+		if _merchant_open():
+			var label := "Vender%s a %s por %d de ouro" % [" (x%d)" % int(inst["qty"]) if int(inst.get("qty", 1)) > 1 else "", str(npc_open.get("name", "comerciante")).get_slice(",", 0), _sell_price(inst)]
+			_menu_button(v, label, func(): _on_bag_menu(1, inst))
+		else:
+			var off := _menu_button(v, "Vender (fale com um comerciante)", func(): pass)
+			off.disabled = true
+		_menu_button(v, "Descartar…", func(): _on_bag_menu(2, inst))
 	_menu_button(v, "Cancelar", func(): pass)
 	# na posição do mouse, sem sair da tela
 	var vp := get_viewport().get_visible_rect().size
@@ -1698,7 +1704,8 @@ func _storage_refresh(npc: Dictionary, box: VBoxContainer) -> void:
 			box.add_child(b)
 		_title(box, "Da bolsa", 13)
 		for it in main.ch.get("items", []):
-			if it["loc"] != "bag":
+			# item de missão não vai para o depósito (o servidor recusa)
+			if it["loc"] != "bag" or main.defs["items"].get(it["defId"], {}).get("questItem", false):
 				continue
 			var b2 := Button.new()
 			b2.text = "Guardar: %s%s" % [ItemText.item_name(main.defs, it), (" ×%d" % int(it["qty"])) if int(it["qty"]) > 1 else ""]

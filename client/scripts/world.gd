@@ -742,9 +742,14 @@ func _click(screen_pos: Vector2) -> void:
 			pending_pickup = lid
 			request_move(gp.x, gp.z)
 			return
+	# monstro sob o clique: na defesa do Joca as ondas ficam coladas no NPC escondido, e o clique num monstro
+	# abria a conversa com ele em vez de atacar
+	var mon_here := _monster_at(gp)
 	for group in [["npc", npc_nodes, 1.5, 4.5], ["object", object_nodes, 1.2, 2.8], ["portal", portal_nodes, 3.0, 2.5]]:
 		var nodes: Dictionary = group[1]
 		for id in nodes.keys():
+			if group[0] == "npc" and mon_here != "" and not (nodes[id]["node"] as Node3D).visible:
+				continue
 			var pos: Vector3 = nodes[id]["pos"]
 			var pick := float(group[2])
 			if group[0] == "portal":
@@ -770,16 +775,7 @@ func _click(screen_pos: Vector2) -> void:
 			main.hud.system("Aliado selecionado: %s" % pe["data"]["n"])
 			main.hud.social.show_player_actions(str(pe["data"]["n"]), bool(pe["data"].get("dead", false)))
 			return
-	var best := ""
-	var best_d := 1.8
-	for eid in entities.keys():
-		var e: Dictionary = entities[eid]
-		if e["data"]["k"] != "m":
-			continue
-		var d: float = _flat_dist(e["node"].position, gp)
-		if d < best_d:
-			best_d = d
-			best = eid
+	var best := mon_here
 	if best != "":
 		selected = best
 		pending_cast = {}
@@ -795,6 +791,20 @@ func _click(screen_pos: Vector2) -> void:
 			var dst: Dictionary = r.get("dest", {"x": gp.x, "z": gp.z})
 			dest_marker.position = _gpos(float(dst["x"]), float(dst["z"])) + Vector3(0, 0.06, 0)
 			dest_marker.visible = true)
+
+## Monstro mais perto do ponto clicado (até 1,8 m), ou "".
+func _monster_at(gp: Vector3) -> String:
+	var best := ""
+	var best_d := 1.8
+	for eid in entities.keys():
+		var e: Dictionary = entities[eid]
+		if e["data"]["k"] != "m":
+			continue
+		var d: float = _flat_dist(e["node"].position, gp)
+		if d < best_d:
+			best_d = d
+			best = eid
+	return best
 
 ## Usa a habilidade da barra conforme o tipo de alvo.
 func use_skill(skill_id: String) -> void:
