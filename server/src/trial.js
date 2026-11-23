@@ -336,7 +336,8 @@ const KINDS = {
   },
 
   // Bastião: um aprendiz no centro; seis construtos que miram nele e esquecem quem bateu se não apanharem de
-  // novo; duas investidas (avisadas) em que eles largam tudo e vão no aprendiz. Vence quem segura o tempo.
+  // novo; investidas avisadas (rushes; hoje uma, aos 30 s) em que eles largam tudo e vão no aprendiz. Vence
+  // quem segura o tempo.
   hold: {
     setup(t) {
       const c = t.cfg;

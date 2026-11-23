@@ -16059,7 +16059,7 @@
       "kind": "hold",
       "title": "O Aprendiz no Centro",
       "objective": "Mantenha os 6 construtos longe do aprendiz por 60 s.",
-      "hint": "O Pulso de Atração puxa até 3 e prende a atenção deles por alguns segundos. Antes de cada investida, use o Reforço de Campo perto do aprendiz: ele ganha defesa e 20% do dano dele vem para você.",
+      "hint": "O Pulso de Atração puxa até 3 e prende a atenção deles por alguns segundos. Antes da investida, que o painel avisa, use o Reforço de Campo perto do aprendiz: ele ganha defesa e 20% do dano dele vem para você.",
       "timeMs": 60000,
       "ally": {
        "name": "Aprendiz Brás",
@@ -16354,7 +16354,7 @@
       "kind": "course",
       "title": "Percurso do Vento",
       "objective": "Derrube os 4 sinos do percurso, em ordem, sem deixar os perseguidores te pegarem.",
-      "hint": "Bata e recue: arremesse no sino aceso e saia antes que os perseguidores cheguem. Eles aceleram a cada sino; com o Vento a Favor (+8% de velocidade) você corre mais que eles. O Passo Lateral tira você de um aperto.",
+      "hint": "Bata e recue: arremesse no sino aceso e saia antes que os perseguidores cheguem. Eles aceleram a cada sino, mas nunca correm mais que você: o perigo é ficar parada no arremesso e ser encurralada. O Vento a Favor (+8% de dano e de velocidade por 15 s) ajuda a abrir distância e a derrubar o sino mais depressa; o Passo Lateral tira você de um aperto.",
       "timeMs": 120000,
       "monster": "trial_bell",
       "bells": [

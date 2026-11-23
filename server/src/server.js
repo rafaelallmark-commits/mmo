@@ -1409,9 +1409,13 @@ export class GameServer {
         if (zone.now - trial.startedAt > 5000) this.endTrial(key, false, 'A prova foi abandonada.', true);
         continue;
       }
-      if (p.char.dead) { this.endTrial(key, false, 'Você caiu durante a prova. Fale com o mestre para tentar de novo.'); continue; }
+      const fell = 'Você caiu durante a prova. Fale com o mestre para tentar de novo.';
+      if (p.char.dead) { this.endTrial(key, false, fell); continue; }
       const r = trial.tick(p);
       if (r) this.endTrial(key, r.success, r.message);
+      // caiu no próprio passo da prova (pedra do teto): acaba já — esperar o passo seguinte deixava um
+      // "respawn" devolver o personagem ao posto da arena, de pé, com a prova correndo
+      else if (p.char.dead) this.endTrial(key, false, fell);
     }
   }
 

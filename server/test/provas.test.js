@@ -196,6 +196,34 @@ test('prova: o mestre conta a prova antes, fora do posto há aviso e tiro recusa
   log('Vigia: o mestre conta a prova; fora do posto, aviso e "fora do posto" no golpe; instância abandonada removida');
 });
 
+test('prova: a pedra do teto que derruba o Quebraferro encerra a prova no mesmo passo (o "respawn" não a salva)', { timeout: 60000 }, () => {
+  // a pedra cai dentro do passo da prova (trial.tick); antes, a queda só era vista no passo seguinte e um
+  // "respawn" nesse meio-tempo devolvia o personagem ao posto da arena, de pé, com a prova correndo
+  const { server, cli, mestre } = prepararProva({ classId: 'breaker', seed: 2 });
+  const ev = [];
+  cli.aoEvento = (m) => ev.push(m);
+  assert.equal(cli.pedir('trial_start', { npc: mestre }).ok, true);
+  const key = [...server.trials.keys()][0];
+  const p = server.zones.get(key).players.values().next().value;
+  let caiu = false;
+  for (let i = 0; i < 300 && !caiu; i++) {
+    p.char.hp = Math.min(p.char.hp, 5); // a primeira pedra derruba
+    server.step(100);
+    caiu = p.char.dead || !server.trials.has(key);
+  }
+  assert.ok(caiu, 'a pedra caiu nele');
+  const rs = cli.pedir('respawn');
+  assert.equal(server.trials.has(key), false, 'a prova acabou no passo da queda');
+  assert.equal(rs.ok, false, 'nada a levantar: de volta ao mestre, de pé');
+  const fim = ev.find((m) => m.t === 'trial' && m.state === 'failed');
+  assert.match(fim?.message ?? '', /Você caiu durante a prova/);
+  const ch = cli.pedir('char').char;
+  assert.equal(ch.mapId, 'pedrambar');
+  assert.equal(ch.trialDone, false);
+  server.store.close();
+  log('Quebraferro derrubado por uma pedra: a prova acaba no mesmo passo e o "respawn" não a retoma');
+});
+
 test('prova: o peregrino espera parado enquanto a emboscada estiver de pé', { timeout: 60000 }, () => {
   const { server, cli, mestre } = prepararProva({ classId: 'dawnshield', seed: 6 });
   const ev = [];

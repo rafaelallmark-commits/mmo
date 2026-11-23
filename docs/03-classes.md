@@ -55,7 +55,7 @@ Cidade de pedra, madeira e rotas de superfície.
 - **Atributos iniciais:** Força 16 · Espírito 6 · Talento 12 · Agilidade 8 · Vitalidade 18
 - **Nível 1 com o kit inicial:** vida 128, mana 23, defesa 17, precisão 18, crítico 5,6%
 - **Kit inicial (tutorial adapta à classe):** equipado Martelo de Rebitar, Escudo de Ferro Batido, Couraça de Ferro Batido; na bolsa Garra de Arame, Tônico de Vida Pequeno ×5
-- **Prova de classe (nível 10, missão 3.3): O Aprendiz no Centro.** Mantenha os 6 construtos longe do aprendiz por 60 s. Limite: 60 s. O Pulso de Atração puxa até 3 e prende a atenção deles por alguns segundos. Antes de cada investida, use o Reforço de Campo perto do aprendiz: ele ganha defesa e 20% do dano dele vem para você. Reforço de Campo fica emprestada no grau 1 durante a prova; vencer a libera de vez.
+- **Prova de classe (nível 10, missão 3.3): O Aprendiz no Centro.** Mantenha os 6 construtos longe do aprendiz por 60 s. Limite: 60 s. O Pulso de Atração puxa até 3 e prende a atenção deles por alguns segundos. Antes da investida, que o painel avisa, use o Reforço de Campo perto do aprendiz: ele ganha defesa e 20% do dano dele vem para você. Reforço de Campo fica emprestada no grau 1 durante a prova; vencer a libera de vez.
 
 | Habilidade | Nível | Mana | Recarga | Alcance | Efeito | Valor principal nos graus 1–5 | Marco |
 |---|---|---|---|---|---|---|---|
@@ -144,7 +144,7 @@ Cidade de condutores que atravessam montanhas e rios.
 - **Atributos iniciais:** Força 10 · Espírito 8 · Talento 12 · Agilidade 17 · Vitalidade 13
 - **Nível 1 com o kit inicial:** vida 87, mana 29, defesa 10, precisão 25, crítico 9,5%
 - **Kit inicial (tutorial adapta à classe):** equipado Azagaia de Junco, Broquel de Couro Cru, Gibão de Couro Cru; na bolsa Tônico de Vida Pequeno ×5
-- **Prova de classe (nível 10, missão 3.3): Percurso do Vento.** Derrube os 4 sinos do percurso, em ordem, sem deixar os perseguidores te pegarem. Limite: 120 s. Bata e recue: arremesse no sino aceso e saia antes que os perseguidores cheguem. Eles aceleram a cada sino; com o Vento a Favor (+8% de velocidade) você corre mais que eles. O Passo Lateral tira você de um aperto. Vento a Favor fica emprestada no grau 1 durante a prova; vencer a libera de vez.
+- **Prova de classe (nível 10, missão 3.3): Percurso do Vento.** Derrube os 4 sinos do percurso, em ordem, sem deixar os perseguidores te pegarem. Limite: 120 s. Bata e recue: arremesse no sino aceso e saia antes que os perseguidores cheguem. Eles aceleram a cada sino, mas nunca correm mais que você: o perigo é ficar parada no arremesso e ser encurralada. O Vento a Favor (+8% de dano e de velocidade por 15 s) ajuda a abrir distância e a derrubar o sino mais depressa; o Passo Lateral tira você de um aperto. Vento a Favor fica emprestada no grau 1 durante a prova; vencer a libera de vez.
 
 | Habilidade | Nível | Mana | Recarga | Alcance | Efeito | Valor principal nos graus 1–5 | Marco |
 |---|---|---|---|---|---|---|---|

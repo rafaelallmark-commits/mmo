@@ -203,6 +203,12 @@ export function validateTrials(data) {
         monstro(w, ch.monster);
         for (const [x, z] of [...(ch.start ?? []), ...(ch.spawnAt ?? [])]) dentro(w, x, z);
         num(`${w}: speedBase`, ch.speedBase, 0.1);
+        num(`${w}: speedPerBell`, ch.speedPerBell ?? 0);
+        // a dica promete que os perseguidores nunca correm mais que a Andarilha (sem reforço de velocidade):
+        // o perigo da prova é ser encurralada parada no arremesso, não ser alcançada na corrida
+        const top = ch.speedBase + (ch.speedPerBell ?? 0) * Math.max(0, (c.bells?.length ?? 1) - 1);
+        const run = data.formulas.movement.playerSpeed;
+        if (top >= run) errors.push(`${w}: perseguidores chegam a ${top.toFixed(2)} m/s, não menos que a corrida do jogador (${run} m/s)`);
         break;
       }
       case 'vigil': {
