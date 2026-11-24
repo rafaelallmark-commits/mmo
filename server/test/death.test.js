@@ -114,8 +114,10 @@ test('comando de mestre hp (cenário, D186): 0 derruba como um golpe final e o r
     assert.equal((await c.request('gm', { cmd: 'hp', value: -1 })).code, 'bad_request');
     let r = await c.request('gm', { cmd: 'hp', value: 7 });
     assert.equal(r.ok, true, r.reason);
-    assert.equal(p.char.hp, 7);
-    assert.equal(server.store.loadCharacter(char.id).hp, 7, 'vida gravada');
+    // a regeneração natural pode somar uma fração entre o comando e a conferência (no CI, 7,148)
+    assert.ok(p.char.hp >= 7 && p.char.hp < 8, `vida 7: ${p.char.hp}`);
+    const saved = server.store.loadCharacter(char.id).hp;
+    assert.ok(saved >= 7 && saved < 8, `vida gravada: ${saved}`);
     // longe do posto, cai: evento player_dead e caído no snapshot, como um golpe final de monstro
     await c.request('gm', { cmd: 'teleport', x: 60, z: 50 });
     // um rato acertou bem antes: a queda pelo comando não é morte do jogo e não entra na telemetria de mortes com o
