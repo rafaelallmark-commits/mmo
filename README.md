@@ -184,6 +184,12 @@ Vitrine com as 8 classes, monstros e NPCs (salva capturas, inclusive closes do r
 /Applications/Godot.app/Contents/MacOS/Godot --path client -- --gallery=/tmp/vitrine
 ```
 
+Golpes e habilidades congelados (`client/scripts/anim_probe.gd`): cada movimento numa fileira de cópias do personagem, cada uma num instante, de perto e na câmera do jogo — as variações do ataque básico, o crítico e as seis habilidades de cada classe (`--set=classe` ou `--set=classe:arma` filtra; `--only=trecho` filtra pelo nome). Com `--check` não captura: confere os números de cada movimento (pulso, alcance, mão de apoio fora do cabo, arma ou mão dentro do corpo, pé que desliza) e imprime o que passar do limite.
+
+```bash
+/Applications/Godot.app/Contents/MacOS/Godot --path client -- --animprobe=/tmp/golpes --set=pikeman
+```
+
 Percorrer todas as telas e salvar uma captura de cada (precisa de janela, não use `--headless`):
 
 ```bash

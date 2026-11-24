@@ -570,7 +570,11 @@ func _process(delta: float) -> void:
 		var yaw: float = e["yaw"]
 		var want := yaw
 		var turn_speed := 10.0
-		if speed > 0.35:
+		# salto ou investida: o servidor leva o corpo de lado ou para trás e ele não vira para onde desliza
+		var locked: bool = n.has_method("face_locked") and n.face_locked()
+		if locked:
+			want = yaw
+		elif speed > 0.35:
 			want = atan2(vel.x, vel.y)
 		else:
 			var tgt = e["data"].get("tgt", null)
@@ -579,8 +583,8 @@ func _process(delta: float) -> void:
 				if Vector2(tp.x - n.position.x, tp.z - n.position.z).length() > 0.05:
 					want = atan2(tp.x - n.position.x, tp.z - n.position.z)
 				turn_speed = 7.0
-		# preparando um cone ou uma linha avisada: olha para onde vai golpear
-		if e.has("face_until"):
+		# preparando um cone ou uma linha avisada (ou usando uma habilidade parado): olha para onde vai golpear
+		if e.has("face_until") and not locked:
 			if Time.get_ticks_msec() < int(e["face_until"]):
 				want = float(e["face_yaw"])
 				turn_speed = 12.0
@@ -948,10 +952,16 @@ func on_hit(m: Dictionary) -> void:
 	var fam := ""
 	if not src.is_empty() and src["data"]["k"] == "p":
 		fam = _weapon_family(src["data"].get("w"))
+	# ataque básico: o golpe de quem bateu (variação da arma; floreio maior no crítico) — antes do efeito, que
+	# espera a corda ou o foco soltar; golpe de habilidade de jogador vem com o cast, que já move o corpo
+	if not src.is_empty() and src["node"].has_method("play_attack"):
+		var sk = m.get("skill", null)
+		if sk == null:
+			src["node"].play_attack(bool(m.get("crit", false)))
+		elif sk != "dot" and src["data"].get("k", "") != "p":
+			src["node"].play_attack()
 	vfx.on_hit(m, fam)
 	_hit_voice(m, dst)
-	if not src.is_empty() and m.get("skill", null) != "dot" and src["node"].has_method("play_attack"):
-		src["node"].play_attack()
 	if not m.get("miss", false):
 		if dst["node"].has_method("play_hurt"):
 			dst["node"].play_hurt()
@@ -1037,6 +1047,17 @@ func monster_windup_cancel(eid) -> void:
 	entities[eid].erase("face_until")
 	if entities[eid]["node"].has_method("cancel_windup"):
 		entities[eid]["node"].cancel_windup()
+
+## Habilidade usada parado: o personagem vira para onde ela vai (alvo, ponto ou aliado) enquanto o movimento dura.
+## Andando, segue virado para onde anda (não anda de lado nem de costas).
+func face_during(eid, yaw: float, secs: float) -> void:
+	if eid == null or not entities.has(eid) or secs <= 0.0:
+		return
+	var e: Dictionary = entities[eid]
+	if float(e["speed"]) > 0.6:
+		return
+	e["face_yaw"] = yaw
+	e["face_until"] = Time.get_ticks_msec() + int(secs * 1000.0)
 
 ## O servidor parou o meu personagem (atordoado, puxado): a previsão local não continua o caminho antigo.
 func halt_prediction() -> void:

@@ -110,6 +110,12 @@ func _ready() -> void:
 		add_child(pp)
 		pp.start(args["poseprobe"], args.get("only", ""), int(args.get("focus", "-1")), int(args.get("group", "0")))
 		return
+	if args.has("animprobe"):
+		# golpes e habilidades congelados em vários instantes (anim_probe.gd); --check só confere os números
+		var ap = preload("res://scripts/anim_probe.gd").new()
+		add_child(ap)
+		ap.start(args["animprobe"], args.get("set", ""), args.get("only", ""), args.has("check"))
+		return
 	if args.has("sceneshots"):
 		autotest = preload("res://scripts/autotest.gd").new()
 		add_child(autotest)
@@ -1564,6 +1570,9 @@ func _on_message(m: Dictionary) -> void:
 		"cast_end":
 			if hud:
 				hud.on_cast_end(m)
+			# fim da conjuração com tempo: o corpo solta a pose que segurava (na falha, na hora)
+			if world and world.vfx:
+				world.vfx.on_cast_end(m, ch.get("eid", ""))
 		"cast_start":
 			if world and world.vfx:
 				world.vfx.on_cast_start(m)

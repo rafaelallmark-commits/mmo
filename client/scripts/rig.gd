@@ -48,7 +48,7 @@ func set_motion(p_speed: float, p_accel: float, p_turn: float) -> void:
 	turn = p_turn
 	moving = p_speed > 0.15
 
-func play_attack() -> void:
+func play_attack(_crit := false) -> void:
 	_attack = 0.0
 
 func play_hurt() -> void:

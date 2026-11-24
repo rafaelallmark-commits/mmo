@@ -8,6 +8,7 @@ extends Node3D
 ## impacto conforme a arma ou a família do monstro, curas, escudos e os sinos de aviso do chefe.
 
 const Gear := preload("res://scripts/gear.gd")
+const Moves := preload("res://scripts/moves.gd")
 
 var world # world.gd
 var _mats := {}
@@ -301,6 +302,9 @@ func on_cast_start(m: Dictionary) -> void:
 	mi.name = "VfxCast"
 	mi.scale = Vector3.ONE * inv * 1.4
 	var secs := maxf(0.2, float(m.get("ms", 1000)) / 1000.0)
+	# o corpo vai até a pose da conjuração e segura até a habilidade sair (cast) ou ser cancelada
+	if node.has_method("begin_cast"):
+		node.begin_cast(str(eff.get("kind", "")), Moves.skill_opts(str(m.get("skill", "")), world.main.defs.get("skills", {})), secs)
 	var tw := create_tween()
 	tw.set_parallel(true)
 	tw.tween_property(mi, "rotation:y", TAU * secs, secs)
@@ -311,9 +315,25 @@ func on_cast_cancel(m: Dictionary) -> void:
 	var eid = m.get("eid")
 	if eid == null or not world.entities.has(eid):
 		return
-	var old: Node = world.entities[eid]["node"].get_node_or_null("VfxCast")
+	var node: Node = world.entities[eid]["node"]
+	var old: Node = node.get_node_or_null("VfxCast")
 	if old:
 		old.queue_free()
+	# cancelada: o corpo solta a pose na hora
+	if node.has_method("cancel_cast"):
+		node.cancel_cast()
+
+## Fim da conjuração do próprio jogador (cast_end, que só ele recebe): com sucesso solta a pose segurada (o cast
+## que chega junto já a soltou para todos); com falha (alvo caiu, saiu do alcance) solta na hora.
+func on_cast_end(m: Dictionary, eid) -> void:
+	if eid == null or not world.entities.has(eid):
+		return
+	if m.get("ok", false):
+		var node: Node = world.entities[eid]["node"]
+		if node.has_method("release_cast"):
+			node.release_cast()
+	else:
+		on_cast_cancel({"eid": eid})
 
 ## Espiral roxa (enfraquecido, lento, marcado).
 func swirl(eid, c: Color) -> void:
@@ -636,10 +656,14 @@ func on_cast(m: Dictionary) -> void:
 	if aim != null:
 		yaw = _yaw_to(src, aim)
 	var node: Node3D = world.entities[m["eid"]]["node"]
-	if node.has_method("play_attack") and kind in ["strike", "cone_strike", "line_strike", "charge", "aoe_strike", "pull", "spell", "debuff"]:
+	# movimento do corpo pelo tipo da habilidade (moves.gd); a conjuração com tempo que estava segurando solta
+	if node.has_method("play_skill"):
+		node.play_skill(kind, Moves.skill_opts(str(m.get("skill", "")), world.main.defs.get("skills", {})))
+		# parado, vira para o alvo, o ponto ou o aliado enquanto o movimento dura
+		if aim != null and Vector2(aim.x - src.x, aim.z - src.z).length() > 0.3:
+			world.face_during(m["eid"], yaw, node.action_seconds())
+	elif node.has_method("play_attack") and kind in ["strike", "cone_strike", "line_strike", "charge", "aoe_strike", "pull", "spell", "debuff"]:
 		node.play_attack()
-	elif node.has_method("play_cast"):
-		node.play_cast()
 	var rng = s.get("range", 3.0)
 	var reach: float = 3.0 if str(rng) == "weapon" else float(rng)
 	var fam := _attacker(m.get("eid"))
@@ -740,11 +764,31 @@ func on_hit(m: Dictionary, src_family: String) -> void:
 	if m.get("skill", null) == null and src != null and src_family in ["bow", "javelin", "staff_2h", "wand", "scepter", "staff"]:
 		var arrow: bool = src_family in ["bow", "javelin"]
 		var miss: bool = m.get("miss", false)
-		_launch_sound(src_family, src, not arrow)
-		projectile(src, dst, c if not arrow else Color(0.95, 0.9, 0.75), arrow, 0.18, func():
-			if not miss:
-				impact(dst, c, crit)
-				_impact_sound(att, dst, magic or not arrow, crit))
+		var src_node = world.entities[m["src"]]["node"] if world.entities.has(m.get("src")) else null
+		var wait := 0.0
+		if src_node != null and src_node.has_method("release_in"):
+			wait = clampf(float(src_node.release_in()), 0.0, 0.45)
+		# na hora do disparo, a posição atual de quem atira e do alvo — ou a do momento do golpe, se um deles já saiu
+		# (o golpe que mata chega junto com a morte, e o alvo deixa a lista antes de a flecha sair)
+		var shoot := func():
+			var a2 = _pos(m.get("src"))
+			var b2 = _pos(m.get("dst"))
+			if a2 == null:
+				a2 = src
+			if b2 == null:
+				b2 = dst
+			_launch_sound(src_family, a2, not arrow)
+			projectile(a2, b2, c if not arrow else Color(0.95, 0.9, 0.75), arrow, 0.18, func():
+				if not miss:
+					impact(b2, c, crit)
+					_impact_sound(att, b2, magic or not arrow, crit))
+		if wait > 0.01:
+			# tween preso a este nó: se o mundo sai (troca de zona) antes do disparo, nada fica pendurado
+			var tw := create_tween()
+			tw.tween_interval(wait)
+			tw.tween_callback(shoot)
+		else:
+			shoot.call()
 		return
 	var melee: bool = src != null and m.get("skill", null) == null and src.distance_to(dst) < 4.0
 	if melee:
