@@ -1816,12 +1816,29 @@ var dungeon_shots := 0
 
 # ---------- capítulo 4 no cliente (--cap4): canalização, escolta e escolha de diálogo ----------
 # Na escolta, confere que a carroça parada (objeto de missão) aparece antes e some enquanto a do grupo está na
-# rota: uma carroça só na tela (D183).
+# rota: uma carroça só na tela (D183). Em "Duas Razões", mede os três pontos dos Ninhos Térmicos de verdade e
+# confere que Ilda pergunta e que a resposta dá o título.
 var cap4_step := 0
 var cap4_done := false
 var cap4_until := 0
 var cap4_ambush := false
 var cap4_ambush_shot := false
+var cap4_measured := 0  # pontos dos Ninhos Térmicos já medidos (Duas Razões)
+var cap4_measure_at := 0  # quando as medições começaram
+
+## Duas Razões: os três pontos de medição com teleporte de mestre e a interação de verdade. O comando de mestre
+## quest_progress só aceita números, e o progresso de um objetivo de interação é a lista dos objetos usados.
+func _cap4_measure() -> void:
+	cap4_measure_at = Time.get_ticks_msec()
+	for oid in ["thermo_1", "thermo_2", "thermo_3"]:
+		var od: Dictionary = main.world.object_nodes[oid]["data"]
+		Net.request("gm", {"cmd": "teleport", "x": float(od["x"]) + 1.0, "z": float(od["z"])})
+		await get_tree().create_timer(0.8).timeout
+		Net.request("interact", {"object": oid}, func(r):
+			if r["ok"]:
+				cap4_measured += 1
+			say("medição em %s: %s" % [oid, "ok" if r["ok"] else str(r.get("reason", ""))]))
+		await get_tree().create_timer(0.6).timeout
 
 func _cap4_cart() -> Dictionary:
 	for eid in main.world.entities.keys():
@@ -1925,10 +1942,17 @@ func _cap4_tick() -> void:
 			wait = 2500
 		26:
 			Net.request("quest_accept", {"quest": "c4_reasons", "npc": "mara"}, func(r):
-				say("aceitou Duas Razões: %s" % ("ok" if r["ok"] else r["reason"]))
-				Net.request("gm", {"cmd": "quest_progress", "quest": "c4_reasons", "index": 0, "value": ["thermo_1", "thermo_2", "thermo_3"]}))
+				if not r["ok"]:
+					fail("Duas Razões não foi aceita: %s" % str(r.get("reason", "")))
+					return
+				say("aceitou Duas Razões: ok")
+				_cap4_measure())
 			wait = 1500
 		27:
+			if cap4_measured < 3:
+				if cap4_measure_at > 0 and Time.get_ticks_msec() - cap4_measure_at > 15000:
+					fail("Duas Razões: só %d dos 3 pontos dos Ninhos Térmicos medidos" % cap4_measured)
+				return
 			Net.request("gm", {"cmd": "teleport", "x": 25.5, "z": 87.0})
 			main.world.cam_dist = 10.0
 			wait = 2000
@@ -1936,12 +1960,18 @@ func _cap4_tick() -> void:
 			Net.request("talk", {"npc": "ilda"}, func(r):
 				if r["ok"]:
 					main.hud.show_npc(r)
-					say("Ilda pergunta: %s" % ("sim" if r.get("choice", null) != null else "não")))
+				if not r["ok"] or r.get("choice", null) == null:
+					fail("Ilda não fez a pergunta de Duas Razões: %s" % str(r.get("reason", "sem escolha na conversa")))
+					return
+				say("Ilda pergunta: sim"))
 		29:
 			_scene_shot("93_escolha")
 			Net.request("quest_choice", {"quest": "c4_reasons", "option": "inverno", "npc": "ilda"}, func(r):
-				say("escolha: %s" % (("título " + str(r.get("title", ""))) if r["ok"] else r["reason"]))
-				main.hud.npc_panel.visible = false)
+				main.hud.npc_panel.visible = false
+				if not r["ok"] or str(r.get("title", "")) == "":
+					fail("a resposta a Ilda não deu o título: %s" % str(r.get("reason", "")))
+					return
+				say("escolha: título " + str(r["title"])))
 			wait = 2500
 		30:
 			main.world.cam_dist = 8.0

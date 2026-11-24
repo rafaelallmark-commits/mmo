@@ -126,7 +126,8 @@ motor Godot e dos componentes que vêm com ele.
 
 Nas telas fora do mundo, **Esc** faz o mesmo que o botão *Voltar* (ou *Cancelar*): da lista de personagens volta
 à tela Entrar (e desconecta, como o *Voltar*); da criação de personagem, de *Baixar meus dados* e das telas de
-excluir, volta à lista; das telas de conta (criar, confirmar e-mail, esqueci a senha), volta à tela Entrar.
+excluir, volta à tela de onde você veio (a lista de personagens ou a de termos atualizados); das telas de conta
+(criar, confirmar e-mail, esqueci a senha), volta à tela Entrar.
 
 Apareceu **"Servidor cheio"** ao entrar? O teste chegou ao limite de jogadores ao mesmo tempo: tente de novo em alguns
 minutos.

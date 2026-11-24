@@ -185,8 +185,9 @@ export class Escort {
     this.notify('A carroça quebrou! Ela volta ao último marco em instantes.', { broken: true });
   }
 
-  // esc/own/pty: de qual escolta é (o id em map.escorts, o mesmo do objeto de missão que a começa) e de quem
-  // (dono e grupo): o cliente esconde a carroça parada enquanto a do próprio grupo está na rota (D183)
+  // esc/own/pty: de qual escolta é (o id em map.escorts ou map.defenses, o do campo escort/defense do objeto de
+  // missão que a começa) e de quem (dono e grupo): o cliente esconde a carroça parada enquanto a do próprio grupo
+  // está na rota (D183)
   view() {
     return { id: this.eid, k: 'e', def: this.def.model ?? 'cart', n: this.def.name, esc: this.defId, own: this.ownerCharId, pty: this.partyId ?? null, x: r2(this.x), z: r2(this.z), vx: r2(this.vx), vz: r2(this.vz), hp: Math.ceil(this.hp), mhp: this.mhp, st: this.state };
   }
