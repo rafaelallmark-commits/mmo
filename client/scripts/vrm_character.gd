@@ -417,7 +417,8 @@ func _build_accessories() -> void:
 			"long_skirt":
 				var lk := _attach("hips", Vector3(0, 0.045, 0.0), Quaternion.IDENTITY, Quaternion.IDENTITY)
 				if lk:
-					lk.add_child(Gear.skirt(look.get("cape", outfit), trim, waist + 0.01, 0.3, 0.72))
+					_long_skirt = Gear.skirt(look.get("cape", outfit), trim, waist + 0.01, SKIRT_R, SKIRT_LEN)
+					lk.add_child(_long_skirt)
 			"scarf":
 				var sc := _attach("neck", Vector3(0, 0.02, 0.0), Quaternion.IDENTITY, Quaternion.IDENTITY)
 				if sc:
@@ -574,6 +575,11 @@ var _drink_t := -1.0
 var _drink_kind := "hp"
 var _flask: Node3D
 var _flask_side := ""
+# saia longa (peça rígida presa ao quadril): raio da barra e comprimento (m); agachado, ajoelhado ou caído ela inclina
+# com as coxas e encurta para a barra não entrar no chão (_fit_skirt)
+const SKIRT_R := 0.3
+const SKIRT_LEN := 0.72
+var _long_skirt: Node3D
 
 ## Empunhaduras em que o gume fica do lado dos nós dos dedos (giro de −90° no cabo, D63) — e o arco, cujo
 ## "gume" é a direção do tiro, também para onde apontam os dedos.
@@ -1039,12 +1045,20 @@ func set_down(down: bool, dead := true, instant := false) -> void:
 		return
 	_down = down
 	if down:
+		# golpe ou gole em curso (cai no meio dele, o que é comum): não some de um quadro para o outro — a ação mistura de
+		# volta à postura (XF_LEN) e o frasco desce no resto do gole enquanto os joelhos cedem
+		if not instant and not _act.is_empty():
+			_snapshot()
+		else:
+			_xf_t = -1.0
 		_act = {}
 		_act_holding = false
-		_xf_t = -1.0
-		_drink_t = -1.0
-		if _flask:
-			_flask.scale = Vector3.ZERO
+		if not instant and _drink_t >= 0.0:
+			_drink_t = maxf(_drink_t, DRINK_LEN * 0.8)
+		else:
+			_drink_t = -1.0
+			if _flask:
+				_flask.scale = Vector3.ZERO
 		_fall_side = -1.0 if grip.get("hand", "r") == "l" else 1.0
 		if instant:
 			_dp = 2.0
@@ -1856,6 +1870,9 @@ func _pose(delta: float) -> void:
 		var gd: Dictionary = wpd["guard"]
 		spine_yaw = float(gd.get("yaw", 0.0)) * sw[2]
 		spine_lean = float(gd.get("lean", 0.0)) * sw[2]
+		# levantando do chão a guarda já vem, mas o tronco só gira para ela depois de sair de deitado (deitado de lado,
+		# o giro levava o braço de cima para dentro do chão)
+		spine_yaw *= 1.0 - kl
 	var acting := not _act.is_empty() or _xf_t >= 0.0
 	var ab := _act_body({"yaw": spine_yaw, "lean": spine_lean}) if acting else {}
 	if downing:
@@ -1924,6 +1941,7 @@ func _pose(delta: float) -> void:
 	var pelvis_yaw := -(hip_l - hip_r) * (0.12 * wk + 0.16 * rn) * absf(_mdir.y) - 0.22 * cw * idle + hip_twist
 	var pelvis_roll := 0.05 * stand + wk * 0.04 * cos(_phase)
 	_bone("hips", Quaternion(Vector3.UP, pelvis_yaw) * Quaternion(Vector3.BACK, pelvis_roll) * Quaternion(Vector3.RIGHT, 0.04 * rn))
+	_fit_skirt(leg, kl)
 	# susto ao levar golpe
 	var hurt := 0.0
 	if _hurt >= 0.0:
@@ -2160,6 +2178,31 @@ func _lie_legs(leg: Dictionary, kl: float) -> void:
 		l[3] = lerpf(float(l[3]), hip_t - knee_t + deg_to_rad(18.0), kl)
 		l[6] = float(l[6]) * (1.0 - kl) + (0.08 if top else -0.04) * _fall_side * kl
 
+## Saia longa: peça rígida presa ao quadril, que de pé desce até perto dos tornozelos. Agachado (queda, renascer,
+## golpes que ajoelham) as coxas vão para a frente e a barra entraria no chão com os joelhos saindo pela frente: a
+## saia inclina para a frente com a média das coxas, achata de lado quando o corpo está deitado e encurta até o ponto
+## mais baixo da barra ficar a 2 cm do chão. De pé, andando e correndo fica como era (a média das coxas é pequena).
+func _fit_skirt(leg: Dictionary, kl: float) -> void:
+	if _long_skirt == null or not bones.has("hips"):
+		return
+	var thigh := (float(leg["l"][0]) + float(leg["r"][0])) * 0.5
+	var tilt := clampf(thigh - 0.35, 0.0, 1.3) * 0.85
+	var flat := 1.0 - 0.45 * kl
+	var rot := Basis(Vector3.RIGHT, -tilt)
+	# a saia no espaço do personagem, pela pose atual do quadril (o anexo do osso só se atualiza no quadro seguinte)
+	var holder := _long_skirt.get_parent() as Node3D
+	var t_hold: Transform3D = _skel_to_root() * skel.get_bone_global_pose(bones["hips"]["idx"]) * holder.transform
+	var b0: Basis = t_hold.basis * rot * Basis.from_scale(Vector3(flat, 1.0, 1.0))
+	var down: float = (b0 * Vector3(0.0, -SKIRT_LEN, 0.0)).y
+	var sy := 1.0
+	if down < -1e-3:
+		for k in 8:
+			var ph := TAU * float(k) / 8.0
+			var y0: float = t_hold.origin.y + (b0 * Vector3(SKIRT_R * cos(ph), 0.0, SKIRT_R * sin(ph))).y
+			sy = minf(sy, (y0 - 0.02) / -down)
+	sy = clampf(sy, 0.3, 1.0)
+	_long_skirt.transform = Transform3D(rot * Basis.from_scale(Vector3(flat, sy, 1.0)), Vector3.ZERO)
+
 func _limp_arm(side: String, kl: float) -> Array:
 	var sgn := 1.0 if side == "l" else -1.0
 	var hang: Array = ARM_HANG_L if side == "l" else ARM_HANG_R
@@ -2167,10 +2210,12 @@ func _limp_arm(side: String, kl: float) -> Array:
 		return hang
 	var s := _fall_side
 	var lie: Array
+	# o de baixo gira o antebraço para o dorso (onde fica o escudo) olhar para cima: o escudo deita no chão em vez de
+	# entrar nele; o de cima cai à frente do peito com a mão apoiada no chão, sem afundar (conferido pela sonda)
 	if sgn == s:
-		lie = [Vector3(0.18 * s, 0.38, 0.9), 0.0, 0.45, 0.1, 0.0, 0.0]
+		lie = [Vector3(0.18 * s, 0.38, 0.9), 0.0, 0.45, 0.1, 0.0, -1.2]
 	else:
-		lie = [Vector3(0.55 * s, -0.3, 0.78), 0.0, 0.9, 0.3, 0.0, 0.0]
+		lie = [Vector3(0.15 * s, -0.45, 0.85), 0.0, 0.9, 0.3, 0.0, 0.0]
 	return _mix_arm(hang, lie, kl)
 
 func _drink_u() -> float:

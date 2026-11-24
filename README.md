@@ -190,7 +190,7 @@ Golpes e habilidades congelados (`client/scripts/anim_probe.gd`): cada movimento
 /Applications/Godot.app/Contents/MacOS/Godot --path client -- --animprobe=/tmp/golpes --set=pikeman
 ```
 
-Com `--states`, a mesma sonda mostra os estados do corpo de cada personagem em vez dos golpes: empunhadura parado, em guarda, andando e correndo; a passada de frente, de costas e de lado; beber o tônico (vida e mana); a queda, o corpo caído visto de quatro lados, o levantar (do chão e agachado, como no renascer) e o desfazer e o formar em brasas — com uma terceira imagem (`_detalhe`) que junta um close de cada cópia. Com `--states --check`, confere a passada em cada velocidade (calcanhar e ponta do pé no chão que deslizam), a arma dentro do corpo ou do chão, o gargalo longe da boca e o corpo deitado dentro do chão. `--monsters` mostra a queda de cada família de monstro.
+Com `--states`, a mesma sonda mostra os estados do corpo de cada personagem em vez dos golpes: empunhadura parado, em guarda, andando e correndo; a passada de frente, de costas e de lado; beber o tônico (vida e mana); a queda, o corpo caído visto de quatro lados, o levantar (do chão e agachado, como no renascer) e o desfazer e o formar em brasas — com uma terceira imagem (`_detalhe`) que junta um close de cada cópia. Com `--states --check`, confere a passada em cada velocidade (calcanhar e ponta do pé no chão que deslizam), a arma dentro do corpo ou do chão, o gargalo longe da boca e o corpo deitado dentro do chão (quadril, peito, cabeça e as mãos, com as pontas dos dedos). `--monsters` mostra a queda de cada família de monstro.
 
 ```bash
 /Applications/Godot.app/Contents/MacOS/Godot --path client -- --animprobe=/tmp/corpo --states --set=warden

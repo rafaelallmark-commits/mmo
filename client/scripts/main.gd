@@ -1707,7 +1707,8 @@ func _on_message(m: Dictionary) -> void:
 				Sfx.ui("player_die")
 				if hud:
 					ch["dead"] = true
-					hud.show_death()
+					# o aviso vem depois da queda do corpo (~1 s): ele fica no meio da tela, em cima do personagem
+					hud.show_death(1.3)
 			elif world:
 				world.sound_at(m["eid"], "player_die", -8.0)
 		"respawn":

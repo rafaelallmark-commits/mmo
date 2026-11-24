@@ -9,7 +9,7 @@ extends Node3D
 ## --states (D186): em vez dos golpes, os estados do corpo de cada personagem — empunhadura parado, em guarda,
 ## andando e correndo; passada e corrida; beber o tônico; a queda, o levantar (do chão e agachado, no posto), o
 ## desfazer e o formar em brasas. Com --check, confere a passada (pé de apoio que desliza no chão), a arma dentro
-## do corpo ou do chão e a mão longe do frasco.
+## do corpo ou do chão, a mão longe do frasco e, deitado, o corpo e as mãos (pontas dos dedos) dentro do chão.
 ## --monsters (D186): a queda de cada família de monstro ao morrer (bicho, besouro, máquina, espírito).
 
 const Art = preload("res://scripts/art.gd")
@@ -624,6 +624,17 @@ func _check_state(jb: Array, c) -> void:
 				var bpos: Vector3 = bp.call(key)
 				if bpos.y < 0.03:
 					worst["%s dentro do chão (%.2f m)" % [key, bpos.y]] = tag
+			# as mãos no chão: punho e pontas dos dedos (a do braço de cima entrava uns 15 cm no chão)
+			for side in ["l", "r"]:
+				var pts: Array = [bp.call(side + "_hand")]
+				for f in (c.fingers.get(side, {}) as Dictionary).values():
+					if (f as Array).size() >= 3:
+						pts.append(gt * sk.get_bone_global_pose(int(f[2]["idx"])).origin)
+				var low := 1e9
+				for q2 in pts:
+					low = minf(low, (q2 as Vector3).y)
+				if low < -0.03:
+					worst["mão %s dentro do chão (%.2f m)" % [side, low]] = tag
 	for w in worst.keys():
 		issues += 1
 		print("[animcheck] %s %s: %s" % [name, str(worst[w]), w])

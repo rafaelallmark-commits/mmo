@@ -1112,6 +1112,9 @@ func set_move_speed(v: float) -> void:
 		pred.max_speed = v
 
 func on_death(eid: String) -> void:
+	# antes de tudo: o espírito sai da função mais cedo (some sem afundar) e a seleção não pode ficar presa nele
+	if selected == eid:
+		selected = ""
 	if entities.has(eid):
 		var e: Dictionary = entities[eid]
 		var n: Node3D = e["node"]
@@ -1149,8 +1152,6 @@ func on_death(eid: String) -> void:
 			tw.tween_interval(0.9)
 		tw.tween_property(n, "position:y", n.position.y - 1.4, 0.9).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
 		tw.tween_callback(n.queue_free)
-	if selected == eid:
-		selected = ""
 
 # ---------------- corpo: chegar, sair, teleportar, renascer, beber (D186) ----------------
 ## Entidade que acabou de entrar na lista: caída desde já (sem a queda), ou chegando ao mapa com o efeito de chegada

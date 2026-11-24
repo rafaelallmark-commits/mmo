@@ -25,8 +25,9 @@ extends Node
 ## Corpo (D186): bebe um tônico e confere que o servidor anunciou o gole e o personagem levou o frasco à boca; em
 ## servidor --dev, é teleportado no mesmo mapa e confere que o corpo se desfez no lugar antigo e se formou no novo;
 ## num modelo à parte, confere a queda (caído, arma no chão, cor apagada) e o levantar (arma de volta); em servidor
-## --dev, cai de verdade longe do posto (comando de mestre hp 0), confere o corpo deitado com a arma ao lado, volta ao
-## posto e confere que o corpo se desfez onde caiu, se formou agachado no posto e se levantou.
+## --dev, cai de verdade longe do posto (comando de mestre hp 0), confere o corpo deitado com a arma ao lado e o aviso de
+## queda só depois da queda, volta ao posto e confere que o corpo se desfez onde caiu, se formou agachado no posto e se
+## levantou. Nas mecânicas dos monstros, um espírito que morre selecionado deixa a seleção vazia.
 
 const ItemText = preload("res://scripts/item_text.gd")
 
@@ -344,7 +345,27 @@ func _process(_d: float) -> void:
 			if absf(main.world.pred.max_speed - speed_before) > 0.01:
 				fail("a velocidade não voltou ao normal na previsão")
 				return
-			say("mecânicas dos monstros: avisos em círculo, cone e linha (e um cancelado), explosão, puxão, drenagem de mana, eco, investida, reforços e pressão desenhados; Desorientado na interface e tirado pela Alvorada; a velocidade do Atolado chegou à previsão do movimento e voltou")
+			# espírito que morre selecionado (a queda dele some sem afundar e sai mais cedo): a seleção não fica presa
+			# num alvo que já não existe (o primeiro Esc só a tiraria, sem abrir o menu)
+			var sp_def: Dictionary = {}
+			for mid in main.defs.get("monsters", {}).keys():
+				if str(main.defs["monsters"][mid].get("family", "")) == "spirit":
+					sp_def = (main.defs["monsters"][mid] as Dictionary).duplicate()
+					sp_def["id"] = mid
+					break
+			if not sp_def.is_empty():
+				var sp_node: Node3D = preload("res://scripts/art.gd").monster(sp_def)
+				main.world.add_child(sp_node)
+				sp_node.position = main.world.my_pos() + Vector3(3.0, 0.0, 0.0)
+				var sp_label := Label3D.new()
+				sp_node.add_child(sp_label)
+				main.world.entities["auto-espirito"] = {"node": sp_node, "label": sp_label, "data": {"k": "m", "def": sp_def["id"]}, "snd": {"voice": 1.0, "fam": "spirit"}}
+				main.world.selected = "auto-espirito"
+				main.world.on_death("auto-espirito")
+				if main.world.selected != "" or main.world.entities.has("auto-espirito"):
+					fail("o espírito morreu selecionado e a seleção ficou presa nele (%s)" % main.world.selected)
+					return
+			say("mecânicas dos monstros: avisos em círculo, cone e linha (e um cancelado), explosão, puxão, drenagem de mana, eco, investida, reforços e pressão desenhados; Desorientado na interface e tirado pela Alvorada; a velocidade do Atolado chegou à previsão do movimento e voltou; espírito morto selecionado deixa a seleção vazia")
 			step = "mech_real"
 		"mech_real":
 			# luta de verdade (servidor --dev): na estrada segura, a uns 25 m dos Javalis de Cinza (o ponto vem
@@ -551,12 +572,20 @@ func _process(_d: float) -> void:
 				return
 			var dn: Node3D = de["node"]
 			var dropped_ok2: bool = dn.weapon_mesh == null or dn._dropped != null
+			# o aviso de queda espera o corpo cair (fica no meio da tela, em cima do personagem)
+			if bool(dn._down) and float(dn._dp) < 1.0 and main.hud.death_overlay.visible:
+				fail("o aviso de queda cobriu o personagem antes de o corpo cair (progresso %.2f)" % float(dn._dp))
+				return
 			if bool(dn._down) and float(dn._dp) >= 1.99 and dropped_ok2 and body_shots.is_empty():
 				if not body_seen:
 					body_seen = true
 					_sched("corpo_morte", 200)
 					return
-				say("morte: o corpo caiu de verdade (snapshot dead), deitado de lado com a arma ao lado")
+				if not main.hud.death_overlay.visible:
+					if Time.get_ticks_msec() > wait_until:
+						fail("o aviso de queda não apareceu depois da queda do corpo")
+					return
+				say("morte: o corpo caiu de verdade (snapshot dead), deitado de lado com a arma ao lado; o aviso de queda veio depois")
 				body_seen = false
 				step = "body_respawn_wait"
 				wait_until = Time.get_ticks_msec() + 10000
