@@ -1,0 +1,78 @@
+# Proxy do teste público (Caddy 2, usado pelo docker-compose.yml). Ver docs/08-operacao.md §8.8.
+#
+# - Termina o TLS com certificado automático (Let's Encrypt/ZeroSSL) para o domínio em DOMINIO.
+#   Requisitos: DNS do domínio apontando para esta máquina e portas 80 e 443 abertas.
+# - Pedidos WebSocket (o jogo): wss://DOMINIO/  ->  ws://servidor:7777 (rede interna do compose).
+# - Serviço de contas: https://DOMINIO/contas/...  ->  http://contas:7780/...
+# - Todo o resto (um navegador abrindo https://DOMINIO/) recebe a página do jogo (deploy/site: estática, sem
+#   rastreadores, com links para baixar, guia, termos e privacidade e o espaço dos avisos da equipe) e o guia
+#   do jogador em https://DOMINIO/guia (docs/GUIA.md, em texto). Antes, o navegador recebia 426 do servidor.
+# - As métricas e a saúde (porta 9100 do servidor) NÃO passam por aqui.
+# - Sem Docker: troque servidor:7777 e contas:7780 por 127.0.0.1:7777 e 127.0.0.1:7780 e aponte CINZAS_SITE e
+#   CINZAS_DOCS para deploy/site e docs/ do repositório (ex.: /opt/cinzas/deploy/site e /opt/cinzas/docs).
+{
+	# E-mail para avisos de expiração do certificado (recomendado):
+	# email operacao@exemplo.com.br
+
+	servers {
+		# O jogo usa WebSocket sobre HTTP/1.1; sem HTTP/3 (a porta 443/udp não é publicada).
+		protocols h1 h2
+	}
+}
+
+{$DOMINIO:jogo.exemplo.com.br} {
+	# Os blocos "handle" são exclusivos: cada pedido cai em um só. Caminhos primeiro (/contas/*, /guia), depois
+	# o WebSocket do jogo, e a página por último.
+
+	# Serviço de contas: https://DOMINIO/contas/...  ->  http://contas:7780/... (o cliente usa esta base quando o
+	# servidor é wss://; cadastro, confirmação, sessão, senha, dados, exclusão, termos e privacidade).
+	handle /contas/* {
+		uri strip_prefix /contas
+		reverse_proxy contas:7780
+	}
+
+	# Guia do jogador e do testador, em texto puro (docs/GUIA.md; o resto da pasta docs não é servido).
+	handle /guia {
+		root * {$CINZAS_DOCS:/srv/docs}
+		rewrite * /GUIA.md
+		# ">" aplica na hora de responder, por cima do tipo que o file_server deduz do .md (que faria o
+		# navegador baixar o arquivo em vez de mostrar)
+		header >Content-Type "text/plain; charset=utf-8"
+		header X-Content-Type-Options nosniff
+		# o guia muda a cada versão: o navegador confere (ETag) antes de reaproveitar a cópia que guardou
+		header Cache-Control no-cache
+		file_server
+	}
+
+	# O jogo: pedido de WebSocket no endereço raiz, como o cliente sempre conectou (wss://DOMINIO).
+	@jogo {
+		header_regexp Connection (?i)upgrade
+		header_regexp Upgrade (?i)^websocket$
+	}
+	handle @jogo {
+		reverse_proxy servidor:7777 {
+			# Recarregar a configuração do Caddy não derruba de imediato quem está jogando.
+			stream_close_delay 5m
+		}
+	}
+
+	# Página do jogo. Sem scripts nem recursos de outros sites: a política de segurança abaixo nem deixaria.
+	handle {
+		root * {$CINZAS_SITE:/srv/site}
+		header {
+			Content-Security-Policy "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+			X-Content-Type-Options nosniff
+			Referrer-Policy no-referrer
+			# Avisos: sem isto o navegador reaproveita a página guardada por até 10% da idade dela (Last-Modified)
+			# sem perguntar ao servidor, e quem voltou à página não via o aviso novo; com no-cache ele confere
+			# (ETag, resposta 304 quando nada mudou) a cada visita
+			Cache-Control no-cache
+		}
+		file_server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

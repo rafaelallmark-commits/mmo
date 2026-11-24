@@ -1,0 +1,204 @@
+{
+  "_doc": "Fórmulas de combate. Todas as constantes aqui são lidas pelo servidor (server/src/rules.js). Ver docs/04-progressao-e-formulas.md para exemplos calculados.",
+  "physical": {
+    "_doc": "danoBruto = rolagem(armaMin..armaMax) + floor(soma(atributo × coef da família da arma)). Habilidade: danoBruto × pct/100.",
+    "minDamage": 1
+  },
+  "magic": {
+    "_doc": "Magia: (fixo + fixoPorGrau×(grau−1)) + Espírito × coefEsp + poderMágico da arma. Ataque básico com arma mágica: rolagem(armaMin..armaMax) + floor(Espírito × basicSpiCoef).",
+    "basicSpiCoef": 0.2,
+    "minDamage": 1
+  },
+  "mitigation": {
+    "_doc": "dano final = bruto × K / (K + defesa), onde K = base + porNivel × nível do atacante. A mesma curva vale para resistência mágica.",
+    "base": 40,
+    "perAttackerLevel": 8
+  },
+  "defense": {
+    "_doc": "defesa = soma da defesa dos itens × (1 + 0,10 × refino) + floor(Vitalidade × vitCoef) + nível × perLevel",
+    "vitCoef": 0.3,
+    "perLevel": 1,
+    "enhancePct": 10
+  },
+  "magicResist": {
+    "_doc": "resistência mágica = soma dos itens + floor(Espírito × spiCoef) + floor(Vitalidade × vitCoef)",
+    "spiCoef": 0.3,
+    "vitCoef": 0.2
+  },
+  "accuracy": {
+    "_doc": "precisão = attr principal × 1,0 + attr secundário × 0,5 + nível × 2 + precisão da arma. Corpo a corpo: Talento principal, Agilidade secundária. Distância: Agilidade principal, Talento secundário. acerto% = clamp(base + (precisão − evasão) × fator + (nívelAtacante − nívelAlvo) × porNível, mín, máx).",
+    "melee": {
+      "tal": 1,
+      "agi": 0.5
+    },
+    "ranged": {
+      "agi": 1,
+      "tal": 0.5
+    },
+    "perLevel": 2,
+    "baseHit": 80,
+    "diffFactor": 0.4,
+    "levelDiffPct": 2,
+    "minHit": 10,
+    "maxHit": 98,
+    "magicHit": {
+      "_doc": "Magias não usam evasão: acerto% = clamp(100 + (nívelAtacante − nívelAlvo) × 4, 60, 100).",
+      "base": 100,
+      "perLevel": 4,
+      "min": 60,
+      "max": 100
+    }
+  },
+  "evasion": {
+    "_doc": "evasão = floor(Agilidade × agiCoef) + nível + evasão dos itens",
+    "agiCoef": 0.5
+  },
+  "crit": {
+    "_doc": "crítico% = crítico da arma + Talento × talCoef + Agilidade × agiCoef − 2 × max(0, nívelAlvo − nívelAtacante); teto 40%. Magia: base 3 + Espírito × 0,05 + Talento × 0,1.",
+    "talCoef": 0.15,
+    "agiCoef": 0.1,
+    "levelPenaltyPct": 2,
+    "cap": 40,
+    "physMult": 1.6,
+    "magic": {
+      "base": 3,
+      "spiCoef": 0.05,
+      "talCoef": 0.1,
+      "mult": 1.5
+    }
+  },
+  "regen": {
+    "_doc": "Regeneração por segundo fora de combate (5 s sem causar ou receber dano). Em combate, um quarto.",
+    "hpPctPerSec": 1.5,
+    "mpPctPerSec": 1.5,
+    "mpPerSpiPerSec": 0.05,
+    "inCombatFactor": 0.25,
+    "outOfCombatAfterMs": 5000
+  },
+  "xp": {
+    "_doc": "XP por abate = xpBase do monstro × modificador de diferença de nível × taxa do servidor. Em grupo improvisado (M1) ou grupo formal (M2+), divide por participação.",
+    "levelDiffMod": {
+      "0": 1,
+      "1": 1.1,
+      "2": 1.2,
+      "3": 1.3,
+      "4": 1.35,
+      "5": 1.4,
+      "-6": 0.1,
+      "-5": 0.25,
+      "-4": 0.45,
+      "-3": 0.65,
+      "-2": 0.85,
+      "-1": 0.95
+    },
+    "levelDiffClampMin": -6,
+    "levelDiffClampMax": 5,
+    "shareRadius": 40,
+    "minShareForLoot": 0.05,
+    "cooperationBonusPerExtra": 0.1,
+    "participation": {
+      "damage": 1,
+      "healing": 0.8,
+      "threatAbsorbed": 0.6,
+      "controlSeconds": 6
+    }
+  },
+  "movement": {
+    "playerSpeed": 5,
+    "meleeRange": 2.5,
+    "rangeTolerance": 0.75,
+    "pickupRange": 6,
+    "accel": 14,
+    "decel": 16,
+    "_doc": "Velocidade do jogador (m/s), aceleração e frenagem (m/s²): o personagem ganha velocidade em ~0,35 s e freia em ~0,8 m ao chegar. Caminhos por A* em grade de 0,5 m (server/src/nav.js)."
+  },
+  "enhance": {
+    "_doc": "Ferreiro (refino +1 a +6). chancePct[g] = chance de ir do grau g para g+1; ouro = goldBase × (g+1) × nível do item; materiais: materialByGrade[g] × materials[g]. Falha até +3: grau mantido. Falha a partir de +4 (g ≥ downgradeFrom): o grau cai 1, a menos que se use um Selo de Proteção (protectItem), que só é gasto quando segura uma falha. Ouro e materiais são sempre consumidos. Cada grau soma weaponDamagePct ao dano da arma e defense.enhancePct à defesa/poder mágico da peça.",
+    "maxLevel": 6,
+    "chancePct": [
+      90,
+      70,
+      45,
+      30,
+      20,
+      12
+    ],
+    "goldBase": 12,
+    "material": "mat_refine",
+    "materials": [
+      1,
+      2,
+      3,
+      2,
+      3,
+      4
+    ],
+    "weaponDamagePct": 8,
+    "materialByGrade": [
+      "mat_refine",
+      "mat_refine",
+      "mat_refine",
+      "mat_refine_sup",
+      "mat_refine_sup",
+      "mat_refine_sup"
+    ],
+    "downgradeFrom": 3,
+    "protectItem": "protect_seal"
+  },
+  "dungeon": {
+    "_doc": "A Última Eclusa. Vida do Custódio = vida × (hpScaleMin + (jogadores − 2) × hpScaleStep), 60% com 2 e 100% com 5; dano do Custódio × √escala. Fase 1 (100–70%): Proteção de Pressão (dano −90%) rompida por 12 s ao acertar a junta exposta durante a ventilação de uma válvula (aviso 3 s, janela 5 s). Fase 2 (70–35%): linhas do piso acendem 2 s e descarregam (30% da vida máxima + atordoamento 1 s). Fase 3 (35–0%): três comportas descem em 25 s ÷ escala (≈42 s com 2 jogadores); destruir a trava devolve a comporta ao alto; bater no Braço de Comando atrasa todas 1,5 s (no máximo a cada 3 s, ou seja, desce na metade da velocidade enquanto alguém bate). Três fechadas = falha (volta ao início). Desconexão: a instância espera 3 min.",
+    "hpScaleMin": 0.6,
+    "hpScaleStep": 0.1333,
+    "protectionPct": 90,
+    "breakMs": 12000,
+    "valveWarnMs": 3000,
+    "valveVentMs": 5000,
+    "valveCycleMs": 11000,
+    "exposedAngleDeg": 70,
+    "lineWarnMs": 2000,
+    "lineCycleMs": 6500,
+    "lineWidth": 2.2,
+    "lineDamagePctMaxHp": 30,
+    "lineStunMs": 1000,
+    "gateCloseMs": 25000,
+    "gateLockRespawnMs": 6000,
+    "armDelayMs": 1500,
+    "armCooldownMs": 3000,
+    "reconnectWaitMs": 180000
+  },
+  "storage": {
+    "_doc": "Depósito compartilhado pelos personagens da mesma conta (guarda-volumes das cidades).",
+    "capacity": 60
+  },
+  "potions": {
+    "sharedCooldownMs": 3000
+  },
+  "death": {
+    "_doc": "Caído: volta ao posto com 50% de vida e de mana (sem perda de XP), sozinho depois de corpseTimeoutMs. Qualquer aliado fora de combate levanta um caído a até allyReviveRange m canalizando allyReviveMs (mover, agir ou ser atingido interrompe), com allyReviveHpPct da vida.",
+    "respawnHpPct": 50,
+    "respawnMpPct": 50,
+    "corpseTimeoutMs": 300000,
+    "allyReviveMs": 5000,
+    "allyReviveHpPct": 20,
+    "allyReviveRange": 3
+  },
+  "threat": {
+    "_doc": "Ameaça: dano × multiplicador da classe; cura gera healingPerHp por ponto curado, dividido entre os monstros engajados com o aliado curado. O monstro troca de alvo quando alguém passa de switchMargin × a ameaça do alvo atual. Quem provoca a agressão por proximidade (ou é atacado pela matilha) começa com proximityAggro de ameaça.",
+    "healingPerHp": 0.25,
+    "classMult": {
+      "bastion": 1.8,
+      "dawnshield": 1.5
+    },
+    "switchMargin": 1.1,
+    "proximityAggro": 25
+  },
+  "skills": {
+    "_doc": "Recarga global: depois de usar uma habilidade, nenhuma outra (exceto as marcadas offGcd) sai antes de globalCooldownMs. Habilidades com castMs conjuram parado (mover, atacar ou usar item interrompe) e a recarga global cobre a conjuração.",
+    "globalCooldownMs": 1000
+  },
+  "economy": {
+    "_doc": "Comércio com NPCs: lojas vendem a 2× o valor do item; o armeiro vende as peças comuns da faixa atual e da próxima a gearPriceMult × valor; qualquer comerciante compra itens da bolsa a sellFraction × valor (por unidade).",
+    "gearPriceMult": 2.5,
+    "sellFraction": 0.5
+  }
+}

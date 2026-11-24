@@ -1,0 +1,275 @@
+// Moderação do teste público: papéis (jogador não modera), silêncio, denúncia com contexto do chat,
+// limites do mestre, suspensão com expulsão e recusa de login (zona e serviço de contas), suspensão
+// feita pela ferramenta valendo em até 1 minuto, "onde está" e anúncio.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { GameServer } from '../src/server.js';
+import { AccountsService } from '../src/contas.js';
+import { PERMANENT } from '../src/moderation.js';
+import { SimClient, sleep } from './helpers/client.js';
+
+const log = (...a) => console.log('   ·', ...a);
+
+async function enter(url, name) {
+  const c = new SimClient(name);
+  await c.connect(url);
+  await c.request('register', { account: `m_${name.toLowerCase()}`, password: 'senha123' });
+  const l = await c.request('login', { account: `m_${name.toLowerCase()}`, password: 'senha123' });
+  if (!l.ok) return { c, login: l };
+  let ch = l.chars.find((x) => x.name === name);
+  if (!ch) ch = (await c.request('create_char', { name, classId: 'breaker' })).char;
+  const e = await c.request('enter', { charId: ch.id });
+  assert.equal(e.ok, true, e.reason);
+  return { c, login: l };
+}
+
+test('moderação: silêncio, denúncia, suspensão, ferramenta, onde está e anúncio', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cinzas-mod-'));
+  const server = new GameServer({ port: 0, host: '127.0.0.1', dbPath: join(dir, 'm.db'), seed: 5, log: false });
+  const port = await server.start();
+  const url = `ws://127.0.0.1:${port}`;
+  const accSvc = new AccountsService({ port: 0, dbPath: join(dir, 'm.db'), tokenSecret: 'segredo-de-teste-123', log: false, mailer: { send: async () => 'mem' } });
+  const aport = await accSvc.start();
+  try {
+    // contas e papéis (o papel vale a partir do login)
+    for (const n of ['Altiva', 'Guardia']) {
+      const c = new SimClient(n);
+      await c.connect(url);
+      await c.request('register', { account: `m_${n.toLowerCase()}`, password: 'senha123' });
+      c.ws.close();
+    }
+    server.store.setRole(server.store.findAccount('m_altiva').id, 'admin');
+    server.store.setRole(server.store.findAccount('m_guardia').id, 'gm');
+    const { c: A } = await enter(url, 'Altiva');
+    const { c: G } = await enter(url, 'Guardia');
+    const { c: P } = await enter(url, 'Peregrino');
+    const { c: Q } = await enter(url, 'Quezilento');
+
+    // jogador comum não modera
+    assert.equal((await P.request('gm', { cmd: 'kick', name: 'Quezilento' })).code, 'forbidden');
+
+    // silêncio
+    let r = await G.request('gm', { cmd: 'mute', name: 'Quezilento', minutes: 10, reason: 'flood' });
+    assert.equal(r.ok, true, r.reason);
+    r = await Q.request('chat', { text: 'oi' });
+    assert.equal(r.code, 'muted');
+    assert.match(r.reason, /silenciado até/);
+    assert.equal((await G.request('gm', { cmd: 'unmute', name: 'Quezilento' })).ok, true);
+    for (const t of ['vocês são todos ruins', 'vou te achar']) assert.equal((await Q.request('chat', { text: t })).ok, true);
+    // sussurros: um para a Altiva (outra pessoa) e um para o Peregrino (quem vai denunciar)
+    assert.equal((await Q.request('chat', { channel: 'whisper', to: 'Altiva', text: 'segredo só da Altiva' })).ok, true);
+    assert.equal((await Q.request('chat', { channel: 'whisper', to: 'Peregrino', text: 'sei onde você mora' })).ok, true);
+    // sussurro para quem não está on-line não foi entregue: não vira contexto
+    assert.equal((await Q.request('chat', { channel: 'whisper', to: 'Ninguem', text: 'fala que ninguém ouviu' })).code, 'offline');
+
+    // denúncia guarda o contexto do chat; limites
+    r = await P.request('report', { name: 'Quezilento', reason: 'ameaça no chat' });
+    assert.equal(r.ok, true, r.reason);
+    const rep = server.store.auditTail(5, 'report')[0];
+    const d = JSON.parse(rep.data_json);
+    assert.equal(d.targetName, 'Quezilento');
+    assert.ok(d.chat.some((l) => l.text === 'vou te achar'), 'falas do denunciado vão junto');
+    assert.ok(d.chat.some((l) => l.text === 'sei onde você mora' && l.channel === 'whisper'), 'o sussurro para o denunciante vai junto');
+    assert.ok(!d.chat.some((l) => /segredo|ninguém ouviu/.test(l.text)), 'sussurros para outras pessoas (ou não entregues) não vão para a denúncia');
+    assert.ok(d.chat.every((l) => !('to' in l)), 'a denúncia não guarda quem mais recebeu cada fala');
+    // a exportação de dados de quem denunciou não devolve as falas do denunciado (dados de outra pessoa)
+    const pAcc = server.store.findAccount('m_peregrino').id;
+    const expRep = server.store.exportAccount(pAcc).auditoria.find((a) => a.kind === 'report');
+    const expData = JSON.parse(expRep.data_json);
+    assert.equal(expData.chat, undefined);
+    assert.equal(expData.targetAccount, undefined);
+    assert.ok(expData.chatLines >= 3, 'fica só o número de falas');
+    assert.equal((await P.request('report', { name: 'Peregrino', reason: 'x' })).code, 'self');
+    for (let i = 0; i < 4; i++) await P.request('report', { name: 'Quezilento', reason: `de novo ${i}` });
+    assert.equal((await P.request('report', { name: 'Quezilento', reason: 'mais uma' })).code, 'too_many');
+
+    // relato de problema (/bug) com lugar e versões
+    r = await P.request('bug_report', { text: 'a carroça travou no marco 2', client: '0.4.0\r\u001b[2K\u009b' });
+    assert.equal(r.ok, true, r.reason);
+    const bug = JSON.parse(server.store.auditTail(5, 'bug_report')[0].data_json);
+    assert.equal(bug.text, 'a carroça travou no marco 2');
+    assert.equal(bug.map, 'estrada_velha');
+    assert.equal(bug.client, '0.4.0  [2K', 'versão do cliente sem caracteres de controle (não mexe no terminal da equipe)');
+    assert.ok(bug.server && bug.data, 'versões do servidor e dos dados');
+    assert.equal((await P.request('bug_report', { text: 'oi' })).code, 'bad_request');
+
+    // onde está e anúncio
+    r = await G.request('gm', { cmd: 'where', name: 'Peregrino' });
+    assert.match(r.message, /estrada_velha/);
+    const ann = P.waitFor((m) => m.t === 'notice' && m.kind === 'announce', 3000, 'anúncio');
+    assert.equal((await A.request('gm', { cmd: 'announce', text: 'Reinício às 20h' })).ok, true);
+    assert.match((await ann).text, /Reinício às 20h/);
+
+    // hierarquia e limites: mestre não modera admin; prazos absurdos recusados (antes corrompiam a conta)
+    assert.equal((await G.request('gm', { cmd: 'mute', name: 'Altiva', minutes: 10, reason: 'x' })).code, 'forbidden');
+    assert.equal((await A.request('gm', { cmd: 'ban', name: 'Quezilento', hours: 1e15, reason: 'x' })).code, 'bad_request');
+    assert.equal((await G.request('gm', { cmd: 'mute', name: 'Quezilento', minutes: 1e12, reason: 'x' })).code, 'bad_request');
+
+    // mestre suspende até 72 h; permanente só admin; motivo obrigatório
+    assert.equal((await G.request('gm', { cmd: 'ban', name: 'Quezilento', hours: 100, reason: 'ameaças' })).code, 'forbidden');
+    assert.equal((await G.request('gm', { cmd: 'ban', name: 'Quezilento', hours: 2 })).code, 'bad_request');
+    const kicked = Q.waitFor((m) => m.t === 'kicked', 3000, 'expulsão');
+    r = await G.request('gm', { cmd: 'ban', name: 'Quezilento', hours: 2, reason: 'ameaças' });
+    assert.equal(r.ok, true, r.reason);
+    assert.match((await kicked).reason, /Conta suspensa até .*ameaças/);
+    await Q.closed;
+    const again = new SimClient('Q2');
+    await again.connect(url);
+    r = await again.request('login', { account: 'm_quezilento', password: 'senha123' });
+    assert.equal(r.ok, false);
+    assert.equal(r.code, 'banned');
+    // o serviço de contas também recusa (conta confirmada)
+    server.store.setVerified(server.store.findAccount('m_quezilento').id);
+    const res = await fetch(`http://127.0.0.1:${aport}/sessoes`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ conta: 'm_quezilento', senha: 'senha123' }) });
+    assert.equal(res.status, 403);
+    assert.match((await res.json()).erro, /Conta suspensa/);
+    // admin retira; depois suspende sem data
+    assert.equal((await A.request('gm', { cmd: 'unban', name: 'Quezilento' })).ok, true);
+    assert.equal((await again.request('login', { account: 'm_quezilento', password: 'senha123' })).ok, true);
+    again.ws.close();
+    r = await A.request('gm', { cmd: 'ban', name: 'Quezilento', hours: 'perm', reason: 'reincidência' });
+    assert.match(r.message, /sem data para acabar/);
+    const third = new SimClient('Q3');
+    await third.connect(url);
+    assert.match((await third.request('login', { account: 'm_quezilento', password: 'senha123' })).reason, /sem data para acabar.*reincidência/);
+    third.ws.close();
+    // mestre não troca a suspensão sem data do admin por uma curta (nem por engano)
+    r = await G.request('gm', { cmd: 'ban', name: 'Quezilento', hours: 0.001, reason: 'x' });
+    assert.equal(r.code, 'forbidden');
+    assert.match(r.reason, /só administradores encurtam/);
+    assert.equal(server.store.findAccount('m_quezilento').banned_until, PERMANENT);
+    log('silêncio, denúncia, limites do mestre e suspensão conferidos');
+
+    // suspensão gravada pela ferramenta (direto no banco) derruba quem está on-line na próxima varredura
+    const pk = P.waitFor((m) => m.t === 'kicked', 3000, 'expulsão pela varredura');
+    server.store.setBan(server.store.findAccount('m_peregrino').id, Date.now() + 3600_000, 'teste da ferramenta');
+    server.mod.lastSweep = 0;
+    server.mod.sweep();
+    assert.match((await pk).reason, /teste da ferramenta/);
+    // conta excluída fora do servidor (serviço de contas, ferramenta): a sessão cai na varredura
+    const gk = G.waitFor((m) => m.t === 'kicked', 3000, 'expulsão de conta excluída');
+    server.store.deleteAccount(server.store.findAccount('m_guardia').id);
+    server.mod.lastSweep = 0;
+    server.mod.sweep();
+    assert.match((await gk).reason, /excluída/);
+    // auditoria registrou tudo
+    const kinds = new Set(server.store.auditTail(200).map((a) => a.kind));
+    for (const k of ['mod_mute', 'mod_unmute', 'mod_ban', 'mod_unban', 'report', 'login_banned']) assert.ok(kinds.has(k), `auditoria: ${k}`);
+    log('ferramenta e auditoria conferidas');
+    A.ws.close();
+    await sleep(100);
+  } finally {
+    await accSvc.stop().catch(() => {});
+    await server.stop().catch(() => {});
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('exportação de dados: suspensão, silêncio, clã e as linhas do jogo (só com o personagem) vão junto', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cinzas-exp-'));
+  const server = new GameServer({ port: 0, host: '127.0.0.1', dbPath: join(dir, 'e.db'), seed: 5, dev: true, log: false });
+  const port = await server.start();
+  try {
+    const { c } = await enter(`ws://127.0.0.1:${port}`, 'Exportador');
+    const st = server.store;
+    const acc = st.findAccount('m_exportador');
+    const ch = st.listCharacters(acc.id)[0];
+    st.setMute(acc.id, Date.now() + 60_000);
+    server.audit('loot', { charId: ch.id, gold: 7 }); // como o jogo grava: sem a conta, só o personagem
+    const clanId = st.createClan('Os Exportados', 'EXP', ch.id);
+    const e = st.exportAccount(acc.id);
+    assert.ok(e.conta.muted_until > Date.now(), 'silêncio na conta');
+    assert.ok('banned_until' in e.conta && 'ban_reason' in e.conta);
+    assert.ok(e.auditoria.some((a) => a.kind === 'loot' && a.char_id === ch.id), 'linha do jogo do personagem');
+    assert.equal(e.clas.length, 1);
+    assert.equal(e.clas[0].tag, 'EXP');
+    assert.ok(clanId != null);
+    c.ws.close();
+    await sleep(50);
+  } finally {
+    await server.stop().catch(() => {});
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('exportação de dados: ações da equipe contra a conta (silêncio, expulsão, nome trocado, ouro retirado, suspensão) vão junto, sem quem moderou nem denúncias', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cinzas-exp-mod-'));
+  const server = new GameServer({ port: 0, host: '127.0.0.1', dbPath: join(dir, 'e.db'), seed: 5, dev: true, log: false });
+  const port = await server.start();
+  const url = `ws://127.0.0.1:${port}`;
+  try {
+    const st = server.store;
+    const { c: M } = await enter(url, 'Vigilante');
+    const { c: D } = await enter(url, 'Denunciante');
+    const { c: O } = await enter(url, 'Ofensivo');
+    const alvo = st.findAccount('m_ofensivo');
+    const modAcc = st.findAccount('m_vigilante');
+    assert.equal((await O.request('gm', { cmd: 'gold', amount: 300 })).ok, true);
+    assert.equal((await D.request('report', { name: 'Ofensivo', reason: 'xingamentos' })).ok, true);
+    let r = await M.request('gm', { cmd: 'mute', name: 'Ofensivo', minutes: 30, reason: 'xingamentos' });
+    assert.equal(r.ok, true, r.reason);
+    const kicked = O.waitFor((m) => m.t === 'kicked', 3000, 'expulsão');
+    r = await M.request('gm', { cmd: 'kick', name: 'Ofensivo', reason: 'esfriar a cabeça' });
+    assert.equal(r.ok, true, r.reason);
+    await kicked;
+    await O.closed;
+    for (const cmd of [{ cmd: 'rename', name: 'Ofensivo', newName: 'Renomeado', reason: 'nome ofensivo' }, { cmd: 'take_gold', name: 'Renomeado', amount: 100, reason: 'ouro de trapaça' },
+      { cmd: 'ban', name: 'Renomeado', hours: 2, reason: 'reincidência' }]) {
+      r = await M.request('gm', cmd);
+      assert.equal(r.ok, true, `${cmd.cmd}: ${r.reason}`);
+    }
+    st.audit('mod_unban', { targetAccount: alvo.id, by: 'ferramenta' }); // como tools/conta.mjs grava
+    const e = st.exportAccount(alvo.id);
+    const kinds = e.acoes_da_equipe.map((a) => a.kind);
+    assert.deepEqual(kinds, ['mod_mute', 'mod_kick', 'mod_rename', 'mod_take_gold', 'mod_ban', 'mod_unban']);
+    const alvoChar = e.personagens[0].id;
+    for (const a of e.acoes_da_equipe) {
+      assert.deepEqual(Object.keys(a).sort(), ['at', 'data_json', 'kind'], 'sem conta, personagem e IP de quem moderou');
+      const d = JSON.parse(a.data_json);
+      assert.ok(d.targetAccount === alvo.id || d.target === alvoChar, a.kind);
+    }
+    assert.equal(JSON.parse(e.acoes_da_equipe[2].data_json).to, 'Renomeado');
+    assert.equal(JSON.parse(e.acoes_da_equipe[0].data_json).reason, 'xingamentos');
+    // a denúncia contra ele não vem (são dados de quem denunciou), nem em lugar nenhum da exportação dele
+    assert.equal(JSON.stringify(e).includes('"report"'), false);
+    const modChar = st.listCharacters(modAcc.id)[0].id;
+    assert.equal(e.auditoria.some((a) => a.char_id === modChar), false, 'nenhuma linha do personagem de quem moderou');
+    // a exportação de quem moderou continua com as próprias ações (como antes) e sem ações contra ela
+    const em = st.exportAccount(modAcc.id);
+    assert.ok(em.auditoria.some((a) => a.kind === 'mod_ban'));
+    assert.deepEqual(em.acoes_da_equipe, []);
+    M.ws.close(); D.ws.close();
+    await sleep(50);
+  } finally {
+    await server.stop().catch(() => {});
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('nomes: sem espaço, prefixo da exclusão reservado e sem duplicata por maiúscula acentuada', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cinzas-nomes-'));
+  const server = new GameServer({ port: 0, host: '127.0.0.1', dbPath: join(dir, 'n.db'), seed: 5, dev: true, log: false });
+  const port = await server.start();
+  try {
+    const c = new SimClient('nomes');
+    await c.connect(`ws://127.0.0.1:${port}`);
+    await c.request('register', { account: 'm_nomes', password: 'senha123' });
+    await c.request('login', { account: 'm_nomes', password: 'senha123' });
+    const make = (name) => c.request('create_char', { name, classId: 'breaker' });
+    assert.equal((await make('Ana Maria')).code, 'bad_name', 'nome com espaço');
+    assert.equal((await make('excluido_1')).code, 'bad_name', 'prefixo que a exclusão de conta usa');
+    assert.equal((await make('Excluída_7')).code, 'bad_name');
+    assert.equal((await make('Ângela')).ok, true);
+    assert.equal((await make('ângela')).code, 'name_taken', 'Ângela e ângela seriam o mesmo nome para o chat');
+    assert.equal((await make('ÂNGELA')).code, 'name_taken');
+    assert.equal((await make('Ana_Maria')).ok, true);
+    c.ws.close();
+    await sleep(50);
+  } finally {
+    await server.stop().catch(() => {});
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

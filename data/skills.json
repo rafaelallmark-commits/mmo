@@ -1,0 +1,355 @@
+{
+  "rules": {
+    "maxRank": 5,
+    "rankCapByLevel": [[1, 2], [5, 3], [10, 4], [15, 5]],
+    "unlockGivesRank": 1,
+    "costPerExtraRank": 1,
+    "unlockLevels": [1, 5, 10, 15, 20, 25],
+    "note": "Desbloquear a habilidade no nível indicado concede o grau 1 de graça. Cada grau extra custa 1 ponto de habilidade e respeita o teto da faixa de nível (rankCapByLevel: a partir do nível N, teto G). A habilidade do nível 25 (pós-v1) usa só tipos de efeito que o servidor já executa."
+  },
+  "skills": {
+    "deep_cut": {
+      "classId": "breaker", "name": "Talho Profundo", "unlockLevel": 1, "target": "enemy",
+      "mp": 6, "mpPerRank": 1, "cooldownMs": 4000, "range": "weapon",
+      "effect": { "kind": "strike", "damageType": "phys", "pct": 150, "pctPerRank": 12, "dot": { "dps": 4, "dpsPerRank": 2, "durationMs": 3000 } },
+      "description": "Golpe pesado que abre a guarda: 150% do dano da arma (+12% por grau) e sangramento de 4 (+2 por grau) por segundo durante 3 s.",
+      "implementedIn": "M1"
+    },
+    "momentum": {
+      "classId": "breaker", "name": "Ímpeto", "unlockLevel": 5, "target": "self",
+      "mp": 12, "mpPerRank": 2, "cooldownMs": 25000, "range": 0,
+      "effect": { "kind": "buff_self", "durationMs": 10000, "physDamagePct": 15, "physDamagePctPerRank": 5, "attackSpeedPct": 10 },
+      "description": "Por 10 s: +15% de dano físico (+5% por grau) e +10% de velocidade de ataque.",
+      "implementedIn": "M1"
+    },
+    "rupture": {
+      "classId": "breaker", "name": "Ruptura", "unlockLevel": 10, "target": "cone",
+      "mp": 20, "mpPerRank": 3, "cooldownMs": 12000, "range": 4,
+      "effect": { "kind": "cone_strike", "damageType": "phys", "pct": 220, "pctPerRank": 20, "angleDeg": 90, "defenseDownPct": 20, "durationMs": 6000 },
+      "description": "Golpe em cone à frente (4 m): 220% (+20% por grau); reduz a defesa dos atingidos em 20% por 6 s. Habilidade marcante da prova de classe.",
+      "implementedIn": "M2"
+    },
+    "gravel_carapace": {
+      "classId": "breaker", "name": "Couraça de Brita", "unlockLevel": 15, "target": "self",
+      "mp": 18, "mpPerRank": 2, "cooldownMs": 30000, "range": 0,
+      "effect": { "kind": "shield_self", "absorbPctMaxHp": 10, "absorbPctMaxHpPerRank": 3, "durationMs": 8000, "ccImmune": true },
+      "description": "Absorve dano igual a 10% da vida máxima (+3% por grau) por 8 s e fica imune a atordoamento.",
+      "implementedIn": "M3"
+    },
+    "seismic_rift": {
+      "classId": "breaker", "name": "Fenda Sísmica", "unlockLevel": 20, "target": "line",
+      "mp": 32, "mpPerRank": 4, "cooldownMs": 20000, "range": 8,
+      "effect": { "kind": "line_strike", "damageType": "phys", "pct": 300, "pctPerRank": 25, "width": 2, "knockdownMs": 1500 },
+      "description": "Racha o chão em linha (8 m): 300% (+25% por grau); derruba monstros normais por 1,5 s.",
+      "implementedIn": "M3"
+    },
+    "bottomless_cut": {
+      "classId": "breaker", "name": "Talho Sem Fundo", "unlockLevel": 25, "target": "enemy",
+      "mp": 34, "mpPerRank": 4, "cooldownMs": 18000, "range": "weapon",
+      "effect": { "kind": "strike", "damageType": "phys", "pct": 360, "pctPerRank": 30, "dot": { "dps": 12, "dpsPerRank": 4, "durationMs": 4000 }, "defenseDownPct": 25, "durationMs": 8000 },
+      "description": "Golpe que chega ao fundo da couraça: 360% do dano da arma (+30% por grau), sangramento de 12 (+4 por grau) por segundo durante 4 s e defesa do alvo −25% por 8 s.",
+      "implementedIn": "Pós-v1"
+    },
+
+    "dynamic_plate": {
+      "classId": "bastion", "name": "Placa Dinâmica", "unlockLevel": 1, "target": "self",
+      "mp": 6, "mpPerRank": 1, "cooldownMs": 16000, "range": 0,
+      "effect": { "kind": "buff_self", "durationMs": 12000, "defensePct": 30, "defensePctPerRank": 8, "physDamagePct": 20, "physDamagePctPerRank": 4 },
+      "description": "Placas se reorganizam: +30% de defesa (+8% por grau) e +20% de dano físico (+4% por grau) por 12 s.",
+      "implementedIn": "M2"
+    },
+    "pull_pulse": {
+      "classId": "bastion", "name": "Pulso de Atração", "unlockLevel": 5, "target": "area_self",
+      "mp": 7, "mpPerRank": 1, "cooldownMs": 5000, "range": 7,
+      "effect": { "kind": "pull", "maxTargets": 3, "extraTargetEvery2Ranks": 1, "pct": 160, "pctPerRank": 10, "threatMult": 3 },
+      "description": "Puxa até 3 monstros num raio de 7 m (+1 a cada 2 graus), causa 160% do dano da arma (+10% por grau) e gera ameaça triplicada.",
+      "implementedIn": "M2"
+    },
+    "field_reinforcement": {
+      "classId": "bastion", "name": "Reforço de Campo", "unlockLevel": 10, "target": "party_area",
+      "mp": 24, "mpPerRank": 3, "cooldownMs": 35000, "range": 8,
+      "effect": { "kind": "party_buff", "durationMs": 10000, "defensePct": 15, "defensePctPerRank": 4, "redirectDamagePct": 20 },
+      "description": "Aliados a até 8 m: +15% de defesa (+4% por grau); 20% do dano que sofrem é redirecionado ao Bastião por 10 s.",
+      "implementedIn": "M2"
+    },
+    "locked_gear": {
+      "classId": "bastion", "name": "Engrenagem Travada", "unlockLevel": 15, "target": "enemy",
+      "mp": 10, "mpPerRank": 1, "cooldownMs": 6000, "range": "weapon",
+      "effect": { "kind": "strike", "damageType": "phys", "pct": 220, "pctPerRank": 15, "stunMs": 1500, "stunMsPerRank": 250 },
+      "description": "Golpe de garra que trava o alvo: 220% (+15% por grau) e atordoamento de 1,5 s (+0,25 s por grau).",
+      "implementedIn": "M3"
+    },
+    "living_bastille": {
+      "classId": "bastion", "name": "Bastilha Viva", "unlockLevel": 20, "target": "area_self",
+      "mp": 30, "mpPerRank": 3, "cooldownMs": 45000, "range": 8,
+      "effect": { "kind": "taunt_area", "durationMs": 8000, "damageTakenDownPct": 30, "damageTakenDownPctPerRank": 3 },
+      "description": "Provoca todos os monstros a até 8 m e reduz o dano recebido em 30% (+3% por grau) por 8 s.",
+      "implementedIn": "M3"
+    },
+    "bronze_toll": {
+      "classId": "bastion", "name": "Toque de Bronze", "unlockLevel": 25, "target": "area_self",
+      "mp": 30, "mpPerRank": 3, "cooldownMs": 24000, "range": 4,
+      "effect": { "kind": "aoe_strike", "damageType": "phys", "radius": 4, "pct": 160, "pctPerRank": 12, "stunMs": 1500, "stunMsPerRank": 250 },
+      "description": "Bate a arma no chão como um badalo: 160% (+12% por grau) em todos a até 4 m e atordoamento de 1,5 s (+0,25 s por grau). Não atordoa chefes.",
+      "implementedIn": "Pós-v1"
+    },
+
+    "long_thrust": {
+      "classId": "pikeman", "name": "Estocada Longa", "unlockLevel": 1, "target": "line",
+      "mp": 7, "mpPerRank": 1, "cooldownMs": 5000, "range": 5,
+      "effect": { "kind": "line_strike", "damageType": "phys", "pct": 160, "pctPerRank": 12, "width": 1.2, "maxTargets": 2 },
+      "description": "Estocada de 5 m: 160% (+12% por grau), atravessa até 2 alvos em linha.",
+      "implementedIn": "M2"
+    },
+    "split_line": {
+      "classId": "pikeman", "name": "Linha Partida", "unlockLevel": 5, "target": "line",
+      "mp": 14, "mpPerRank": 2, "cooldownMs": 10000, "range": 7,
+      "effect": { "kind": "line_strike", "damageType": "phys", "pct": 130, "pctPerRank": 10, "width": 2, "knockbackM": 1.5 },
+      "description": "Varredura em linha de 7 m: 130% (+10% por grau) em todos na linha e empurra levemente.",
+      "implementedIn": "M2"
+    },
+    "moat_charge": {
+      "classId": "pikeman", "name": "Avanço do Fosso", "unlockLevel": 10, "target": "enemy",
+      "mp": 22, "mpPerRank": 3, "cooldownMs": 15000, "range": 10,
+      "effect": { "kind": "charge", "damageType": "phys", "pct": 250, "pctPerRank": 20, "splashPct": 100, "splashRadius": 2.5 },
+      "description": "Investida de até 10 m: 250% (+20% por grau) no alvo e 100% nos adjacentes. Habilidade marcante.",
+      "implementedIn": "M2"
+    },
+    "firm_haft": {
+      "classId": "pikeman", "name": "Haste Firme", "unlockLevel": 15, "target": "self",
+      "mp": 18, "mpPerRank": 2, "cooldownMs": 30000, "range": 0,
+      "effect": { "kind": "buff_self", "durationMs": 10000, "basicPierce": 2, "critPct": 10, "critPctPerRank": 2 },
+      "description": "Por 10 s, ataques básicos atingem 2 alvos em linha e ganham +10% de crítico (+2% por grau).",
+      "implementedIn": "M3"
+    },
+    "pike_wall": {
+      "classId": "pikeman", "name": "Muralha de Piques", "unlockLevel": 20, "target": "cone",
+      "mp": 34, "mpPerRank": 4, "cooldownMs": 22000, "range": 6,
+      "effect": { "kind": "cone_strike", "damageType": "phys", "pct": 140, "pctPerRank": 10, "hits": 3, "angleDeg": 100 },
+      "description": "Três estocadas em leque (6 m), 140% cada (+10% por grau).",
+      "implementedIn": "M3"
+    },
+    "moat_wheel": {
+      "classId": "pikeman", "name": "Roda do Fosso", "unlockLevel": 25, "target": "area_self",
+      "mp": 32, "mpPerRank": 4, "cooldownMs": 18000, "range": 4.5,
+      "effect": { "kind": "cone_strike", "damageType": "phys", "pct": 220, "pctPerRank": 18, "angleDeg": 360, "knockbackM": 2 },
+      "description": "Gira a lança em volta de si (4,5 m): 220% (+18% por grau) em todos os atingidos, que são empurrados 2 m.",
+      "implementedIn": "Pós-v1"
+    },
+
+    "trail_mark": {
+      "classId": "warden", "name": "Marca da Trilha", "unlockLevel": 1, "target": "enemy",
+      "mp": 6, "mpPerRank": 1, "cooldownMs": 8000, "range": 20,
+      "effect": { "kind": "debuff", "durationMs": 12000, "physDamageTakenPct": 6, "physDamageTakenPctPerRank": 2, "evasionDown": 10 },
+      "description": "Marca o alvo por 12 s: recebe +6% de dano físico de todas as fontes (+2% por grau) e perde 10 de evasão.",
+      "implementedIn": "M2"
+    },
+    "passage_arrow": {
+      "classId": "warden", "name": "Flecha de Passagem", "unlockLevel": 5, "target": "line",
+      "mp": 12, "mpPerRank": 2, "cooldownMs": 7000, "range": 20,
+      "effect": { "kind": "line_strike", "damageType": "phys", "pct": 170, "pctPerRank": 15, "width": 1.2 },
+      "description": "Flecha que perfura em linha (20 m): 170% (+15% por grau) em todos.",
+      "implementedIn": "M2"
+    },
+    "thorn_rain": {
+      "classId": "warden", "name": "Chuva de Espinhos", "unlockLevel": 10, "target": "ground",
+      "mp": 26, "mpPerRank": 3, "cooldownMs": 16000, "range": 18,
+      "effect": { "kind": "ground_aoe", "damageType": "phys", "radius": 5, "pulses": 5, "intervalMs": 500, "pct": 50, "pctPerRank": 5 },
+      "description": "Área de 5 m a até 18 m: 5 pulsos de 50% (+5% por grau) em 2,5 s. Habilidade marcante.",
+      "implementedIn": "M2"
+    },
+    "recoil_step": {
+      "classId": "warden", "name": "Passo de Recuo", "unlockLevel": 15, "target": "self",
+      "mp": 12, "mpPerRank": 1, "cooldownMs": 18000, "range": 0,
+      "effect": { "kind": "dash", "distance": -6, "durationMs": 5000, "evasion": 20, "evasionPerRank": 4 },
+      "description": "Salta 6 m para trás e ganha +20 de evasão (+4 por grau) por 5 s.",
+      "implementedIn": "M3"
+    },
+    "spinal_shot": {
+      "classId": "warden", "name": "Tiro do Espinhal", "unlockLevel": 20, "target": "enemy",
+      "mp": 30, "mpPerRank": 3, "cooldownMs": 20000, "range": 24, "castMs": 1000,
+      "effect": { "kind": "strike", "damageType": "phys", "pct": 400, "pctPerRank": 30, "guaranteedCritIfMarked": true },
+      "description": "Disparo carregado (1 s): 400% (+30% por grau); crítico garantido contra alvo com Marca da Trilha.",
+      "implementedIn": "M3"
+    },
+    "bell_arrow": {
+      "classId": "warden", "name": "Flecha do Sino", "unlockLevel": 25, "target": "enemy",
+      "mp": 28, "mpPerRank": 3, "cooldownMs": 14000, "range": 20,
+      "effect": { "kind": "strike", "damageType": "phys", "pct": 220, "pctPerRank": 18, "bounceTargets": 3 },
+      "description": "Flecha que ressoa como um sino: 220% (+18% por grau) no alvo e ricocheteia em até 3 inimigos a até 6 m dele.",
+      "implementedIn": "Pós-v1"
+    },
+
+    "solar_cut": {
+      "classId": "dawnshield", "name": "Corte Solar", "unlockLevel": 1, "target": "enemy",
+      "mp": 7, "mpPerRank": 1, "cooldownMs": 5000, "range": "weapon",
+      "effect": { "kind": "strike", "damageType": "phys", "pct": 140, "pctPerRank": 10, "bonusSacred": 6, "bonusSacredPerRank": 3 },
+      "description": "Corte reforçado: 140% (+10% por grau) mais 6 de dano sagrado (+3 por grau).",
+      "implementedIn": "M2"
+    },
+    "dawn_guard": {
+      "classId": "dawnshield", "name": "Guarda da Aurora", "unlockLevel": 5, "target": "party_area",
+      "mp": 16, "mpPerRank": 2, "cooldownMs": 30000, "range": 6,
+      "effect": { "kind": "party_buff", "durationMs": 10000, "defensePct": 12, "defensePctPerRank": 3, "regenPctMaxHpPerSec": 1 },
+      "description": "Aliados a até 6 m (inclusive o Escudeiro): +12% de defesa (+3% por grau) e regeneram 1% da vida por segundo durante 10 s.",
+      "implementedIn": "M2"
+    },
+    "oath": {
+      "classId": "dawnshield", "name": "Juramento", "unlockLevel": 10, "target": "ally",
+      "mp": 20, "mpPerRank": 2, "cooldownMs": 25000, "range": 10,
+      "effect": { "kind": "guard_ally", "durationMs": 12000, "redirectDamagePct": 30, "redirectDamagePctPerRank": 4, "selfDefensePct": 15 },
+      "description": "Escolhe um aliado: 30% (+4% por grau) do dano que ele sofre vai para o Escudeiro, que ganha +15% de defesa por 12 s. Habilidade marcante.",
+      "implementedIn": "M2"
+    },
+    "noon_blade": {
+      "classId": "dawnshield", "name": "Lâmina do Meio-Dia", "unlockLevel": 15, "target": "area_self",
+      "mp": 22, "mpPerRank": 2, "cooldownMs": 14000, "range": 3,
+      "effect": { "kind": "aoe_strike", "damageType": "phys", "radius": 3, "pct": 180, "pctPerRank": 15, "bonusSacred": 12, "bonusSacredPerRank": 4 },
+      "description": "Giro em área de 3 m: 180% (+15% por grau) mais 12 de dano sagrado (+4 por grau).",
+      "implementedIn": "M3"
+    },
+    "daybreak": {
+      "classId": "dawnshield", "name": "Alvorada", "unlockLevel": 20, "target": "party_area",
+      "mp": 36, "mpPerRank": 3, "cooldownMs": 60000, "range": 8,
+      "effect": { "kind": "party_heal", "healPctMaxHp": 15, "healPctMaxHpPerRank": 2, "cleanse": 1 },
+      "description": "Aliados a até 8 m recuperam 15% da vida máxima (+2% por grau) e perdem um efeito negativo.",
+      "implementedIn": "M3"
+    },
+    "dawn_sentence": {
+      "classId": "dawnshield", "name": "Sentença da Aurora", "unlockLevel": 25, "target": "enemy",
+      "mp": 30, "mpPerRank": 3, "cooldownMs": 16000, "range": "weapon",
+      "effect": { "kind": "strike", "damageType": "phys", "pct": 300, "pctPerRank": 25, "bonusSacred": 30, "bonusSacredPerRank": 8, "stunMs": 1500, "stunMsPerRank": 200 },
+      "description": "Golpe de sentença: 300% (+25% por grau) mais 30 de dano sagrado (+8 por grau) e atordoamento de 1,5 s (+0,2 s por grau). Não atordoa chefes.",
+      "implementedIn": "Pós-v1"
+    },
+
+    "return_throw": {
+      "classId": "windwalker", "name": "Arremesso de Retorno", "unlockLevel": 1, "target": "enemy",
+      "mp": 9, "mpPerRank": 1, "cooldownMs": 6000, "range": 14,
+      "effect": { "kind": "strike", "damageType": "phys", "pct": 120, "pctPerRank": 8, "bounceTargets": 1 },
+      "description": "A azagaia vai e volta: 120% (+8% por grau) no alvo e num segundo inimigo no retorno.",
+      "implementedIn": "M2"
+    },
+    "side_step": {
+      "classId": "windwalker", "name": "Passo Lateral", "unlockLevel": 5, "target": "self",
+      "mp": 8, "mpPerRank": 1, "cooldownMs": 10000, "range": 0,
+      "effect": { "kind": "dash", "distance": 5, "lateral": true, "nextAttackPct": 25, "nextAttackPctPerRank": 5 },
+      "description": "Desliza 5 m para o lado; o próximo ataque causa +25% (+5% por grau).",
+      "implementedIn": "M2"
+    },
+    "tailwind": {
+      "classId": "windwalker", "name": "Vento a Favor", "unlockLevel": 10, "target": "party_area",
+      "mp": 24, "mpPerRank": 3, "cooldownMs": 40000, "range": 10,
+      "effect": { "kind": "party_buff", "durationMs": 15000, "physDamagePct": 8, "physDamagePctPerRank": 2, "moveSpeedPct": 8 },
+      "description": "Grupo a até 10 m: +8% de dano físico (+2% por grau) e +8% de velocidade por 15 s. Habilidade marcante.",
+      "implementedIn": "M2"
+    },
+    "cutting_gust": {
+      "classId": "windwalker", "name": "Rajada Cortante", "unlockLevel": 15, "target": "cone",
+      "mp": 18, "mpPerRank": 2, "cooldownMs": 12000, "range": 12,
+      "effect": { "kind": "cone_strike", "damageType": "phys", "pct": 90, "pctPerRank": 8, "projectiles": 3, "angleDeg": 60 },
+      "description": "Arremessa 3 azagaias em leque (12 m), 90% cada (+8% por grau).",
+      "implementedIn": "M3"
+    },
+    "eye_of_storm": {
+      "classId": "windwalker", "name": "Olho do Furacão", "unlockLevel": 20, "target": "area_self",
+      "mp": 34, "mpPerRank": 3, "cooldownMs": 30000, "range": 4,
+      "effect": { "kind": "aura_damage", "damageType": "phys", "radius": 4, "pulses": 4, "intervalMs": 1000, "pct": 80, "pctPerRank": 6, "evasion": 30 },
+      "description": "Gira por 4 s: 4 pulsos de 80% (+6% por grau) num raio de 4 m e +30 de evasão.",
+      "implementedIn": "M3"
+    },
+    "ash_whirl": {
+      "classId": "windwalker", "name": "Redemoinho de Cinzas", "unlockLevel": 25, "target": "ground",
+      "mp": 32, "mpPerRank": 3, "cooldownMs": 20000, "range": 16,
+      "effect": { "kind": "ground_aoe", "damageType": "phys", "radius": 4, "pulses": 5, "intervalMs": 600, "pct": 60, "pctPerRank": 5, "slowPct": 35 },
+      "description": "Lança um redemoinho a até 16 m: área de 4 m com 5 pulsos de 60% (+5% por grau) em 3 s; quem fica dentro anda 35% mais devagar.",
+      "implementedIn": "Pós-v1"
+    },
+
+    "sustain_chant": {
+      "classId": "veilsinger", "name": "Canto de Amparo", "unlockLevel": 1, "target": "ally",
+      "mp": 10, "mpPerRank": 2, "cooldownMs": 3000, "range": 16,
+      "effect": { "kind": "heal", "flat": 20, "flatPerRank": 10, "spiCoef": 0.6 },
+      "description": "Cura um aliado (ou a si) em 20 (+10 por grau) + 60% do Espírito.",
+      "implementedIn": "M2"
+    },
+    "shared_light": {
+      "classId": "veilsinger", "name": "Luz Compartilhada", "unlockLevel": 15, "target": "party_area",
+      "mp": 22, "mpPerRank": 3, "cooldownMs": 10000, "range": 8,
+      "effect": { "kind": "party_heal", "flat": 12, "flatPerRank": 6, "spiCoef": 0.35 },
+      "description": "Cura todos os aliados a até 8 m em 12 (+6 por grau) + 35% do Espírito.",
+      "implementedIn": "M2"
+    },
+    "veil_seal": {
+      "classId": "veilsinger", "name": "Selo do Véu", "unlockLevel": 10, "target": "ally",
+      "mp": 20, "mpPerRank": 2, "cooldownMs": 12000, "range": 16,
+      "effect": { "kind": "shield_ally", "flat": 30, "flatPerRank": 15, "spiCoef": 0.8, "durationMs": 10000, "breakKnockbackRadius": 3 },
+      "description": "Escudo que absorve 30 (+15 por grau) + 80% do Espírito por 10 s; ao se romper, afasta inimigos próximos. Habilidade marcante.",
+      "implementedIn": "M2"
+    },
+    "clear_note": {
+      "classId": "veilsinger", "name": "Nota Clara", "unlockLevel": 5, "target": "enemy",
+      "mp": 10, "mpPerRank": 1, "cooldownMs": 4500, "range": 16,
+      "effect": { "kind": "spell", "damageType": "sacred", "flat": 20, "flatPerRank": 6, "spiCoef": 0.5, "magicPowerPct": 50, "bonusVsFamily": { "machine": 50 } },
+      "description": "Dano sagrado de 20 (+6 por grau) + 50% do Espírito + metade do poder mágico da arma e do foco; +50% contra máquinas.",
+      "implementedIn": "M3"
+    },
+    "renewal_choir": {
+      "classId": "veilsinger", "name": "Coro do Recomeço", "unlockLevel": 20, "target": "ally_dead",
+      "mp": 40, "mpPerRank": 3, "cooldownMs": 90000, "range": 12, "castMs": 2000,
+      "effect": { "kind": "resurrect", "hpPct": 30, "hpPctPerRank": 5 },
+      "description": "Levanta um aliado caído com 30% da vida (+5% por grau). Conjuração de 2 s.",
+      "implementedIn": "M3"
+    },
+    "vigil_chant": {
+      "classId": "veilsinger", "name": "Canto de Vigília", "unlockLevel": 25, "target": "party_area",
+      "mp": 38, "mpPerRank": 3, "cooldownMs": 40000, "range": 10,
+      "effect": { "kind": "party_buff", "durationMs": 10000, "regenPctMaxHpPerSec": 2, "regenPctMaxHpPerSecPerRank": 0.5, "defensePct": 10 },
+      "description": "Grupo a até 10 m (inclusive a Cantora): regenera 2% da vida máxima por segundo (+0,5% por grau) e ganha +10% de defesa durante 10 s.",
+      "implementedIn": "Pós-v1"
+    },
+
+    "glass_spark": {
+      "classId": "emberweaver", "name": "Faísca de Vidro", "unlockLevel": 1, "target": "enemy",
+      "mp": 12, "mpPerRank": 1, "cooldownMs": 4000, "range": 16,
+      "effect": { "kind": "spell", "damageType": "magic", "flat": 14, "flatPerRank": 6, "spiCoef": 0.35, "magicPowerPct": 30 },
+      "description": "Estilhaço incandescente: dano de fogo de 14 (+6 por grau) + 35% do Espírito + 30% do poder mágico da arma e do foco.",
+      "implementedIn": "M1"
+    },
+    "ember_ground": {
+      "classId": "emberweaver", "name": "Chão em Brasa", "unlockLevel": 5, "target": "ground",
+      "mp": 24, "mpPerRank": 2, "cooldownMs": 12000, "range": 16,
+      "effect": { "kind": "ground_aoe", "damageType": "magic", "radius": 4, "pulses": 3, "intervalMs": 1000, "flat": 5, "flatPerRank": 2, "spiCoef": 0.12, "magicPowerPct": 25, "slowPct": 30 },
+      "description": "Incendeia uma área de 4 m a até 16 m: 3 pulsos de 5 (+2 por grau) + 12% do Espírito + 25% do poder mágico em 3 s; reduz a velocidade em 30%.",
+      "implementedIn": "M1"
+    },
+    "soot_circle": {
+      "classId": "emberweaver", "name": "Círculo de Fuligem", "unlockLevel": 10, "target": "area_self",
+      "mp": 30, "mpPerRank": 3, "cooldownMs": 20000, "range": 5,
+      "effect": { "kind": "aoe_spell", "damageType": "magic", "radius": 5, "flat": 22, "flatPerRank": 8, "spiCoef": 0.5, "magicPowerPct": 60, "rootMs": 2000, "rootMsPerRank": 300 },
+      "description": "Anel de fuligem de 5 m ao redor: enraíza por 2 s (+0,3 s por grau) e causa 22 (+8 por grau) + 50% do Espírito + 60% do poder mágico. Habilidade marcante.",
+      "implementedIn": "M2"
+    },
+    "heat_veil": {
+      "classId": "emberweaver", "name": "Véu de Calor", "unlockLevel": 15, "target": "self",
+      "mp": 18, "mpPerRank": 2, "cooldownMs": 25000, "range": 0,
+      "effect": { "kind": "shield_self", "flat": 25, "flatPerRank": 12, "spiCoef": 0.6, "durationMs": 8000, "thornsMagic": 5 },
+      "description": "Escudo próprio que absorve 25 (+12 por grau) + 60% do Espírito por 8 s; atacantes corpo a corpo sofrem 5 de queimadura.",
+      "implementedIn": "M3"
+    },
+    "furnace_heart": {
+      "classId": "emberweaver", "name": "Coração da Fornalha", "unlockLevel": 20, "target": "ground",
+      "mp": 45, "mpPerRank": 4, "cooldownMs": 35000, "range": 18, "castMs": 1500,
+      "effect": { "kind": "delayed_aoe", "damageType": "magic", "radius": 6, "delayMs": 3000, "flat": 60, "flatPerRank": 15, "spiCoef": 1.6 },
+      "description": "Marca uma área de 6 m que explode após 3 s: 60 (+15 por grau) + 160% do Espírito + poder mágico da arma e do foco. A marcação é visível para todos.",
+      "implementedIn": "M3"
+    },
+    "incandescent_thread": {
+      "classId": "emberweaver", "name": "Fio Incandescente", "unlockLevel": 25, "target": "enemy",
+      "mp": 36, "mpPerRank": 3, "cooldownMs": 12000, "range": 18,
+      "effect": { "kind": "spell", "damageType": "magic", "flat": 110, "flatPerRank": 32, "spiCoef": 1.5, "dot": { "dps": 20, "dpsPerRank": 6, "durationMs": 4000 } },
+      "description": "O Tecelão estica um fio de brasa até o alvo: dano de fogo de 110 (+32 por grau) + 150% do Espírito + poder mágico da arma, e queimadura de 20 (+6 por grau) por segundo durante 4 s.",
+      "implementedIn": "Pós-v1"
+    }
+  }
+}

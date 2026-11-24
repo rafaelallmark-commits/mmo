@@ -1,0 +1,455 @@
+# Teste público de CINZAS DO MERIDIANO: servidor de zona + serviço de contas + proxy TLS (Caddy).
+# Do VPS limpo ao jogo no ar: docs/10-subir-no-vps.md. Detalhes: docs/08-operacao.md §8.8 e §8.9.
+#
+#   cd deploy
+#   cat > .env <<'FIM'                                 # deploy/.env fica fora do git
+#   DOMINIO=jogo.exemplo.com.br                       # domínio real, com DNS apontando para esta máquina
+#   CINZAS_EMAIL=smtp                                  # "arquivo" grava os e-mails em /data/emails (testes)
+#   CINZAS_SMTP_HOST=smtp.exemplo.com.br
+#   CINZAS_SMTP_PORT=587
+#   CINZAS_SMTP_USER=...
+#   CINZAS_SMTP_PASS=...
+#   CINZAS_SMTP_FROM=Cinzas do Meridiano <nao-responda@exemplo.com.br>   # domínio verificado no provedor
+#   FIM
+#   echo "CINZAS_TOKEN_SECRET=$(openssl rand -hex 32)" >> .env   # segredo compartilhado pela zona e pelas contas
+#   docker compose up -d --build --wait
+#   docker compose exec servidor node tools/fumaca-deploy.mjs --url https://jogo.exemplo.com.br --email voce@exemplo.com
+# O servidor e as contas recusam subir com um segredo de exemplo ou com menos de 32 caracteres, e as contas
+# recusam CINZAS_EMAIL=smtp sem servidor ou sem remetente. Porta 465 liga o TLS direto; 587 exige STARTTLS
+# (CINZAS_SMTP_TLS=direto|starttls força o modo). Servidor de e-mail próprio com certificado de uma CA privada:
+# CINZAS_SMTP_CA_ARQUIVO=./segredos/ca-smtp.pem (soma às autoridades públicas; a conferência nunca é desligada).
+#
+# Imagem publicada pelo CI (release.yml) em vez de construir aqui: a MESMA imagem vale para a zona e as
+# contas (as duas leem e migram o mesmo banco), então defina só a variável e baixe:
+#   echo 'CINZAS_IMAGEM=ghcr.io/<dono-do-repositório>/cinzas-servidor:<versão>' >> .env
+#   docker compose pull servidor contas && docker compose up -d --no-build
+#   docker compose logs -f servidor
+#
+# Os jogadores conectam em wss://jogo.exemplo.com.br (campo "Servidor" do cliente ou --server=...); o
+# cliente cria a conta e pede o token em https://jogo.exemplo.com.br/contas (serviço "contas"). Um navegador
+# em https://jogo.exemplo.com.br/ vê a página do jogo (site/index.html: baixar, guia, termos, avisos).
+# Portas abertas na internet: só 80 e 443 (proxy). O jogo (7777) fica na rede interna do compose e as
+# métricas/saúde (9100) só no 127.0.0.1 desta máquina: curl http://127.0.0.1:9100/health
+#
+# Banco: sem nada a mais, SQLite no volume "dados". PostgreSQL central (perfil "postgres", docs §8.11):
+#   install -d -m 0700 segredos
+#   openssl rand -hex 24 > segredos/senha_banco.txt                # senha do banco, fora do git
+#   sudo chown 10001:10001 segredos/senha_banco.txt && chmod 0600 segredos/senha_banco.txt
+#   cat >> .env <<'FIM'
+#   COMPOSE_PROFILES=postgres                          # sobe o serviço "banco" (postgres:17)
+#   CINZAS_DB=postgres://cinzas@banco:5432/cinzas      # zona e contas usam o banco; a senha vem do arquivo
+#   CINZAS_DB_SENHA_ARQUIVO=./segredos/senha_banco.txt
+#   FIM
+#   docker compose up -d --build
+#
+# Teto de jogadores: 200 personagens no mundo ao mesmo tempo (decisão do dono do projeto; D149). Acima disso a
+# entrada responde "Servidor cheio (200 jogadores)..."; contas gm e admin entram sempre. CINZAS_MAX_PLAYERS=N
+# no .env muda o teto (0 = sem limite).
+#
+# Backup de hora em hora, sem nada a configurar (docs §8.8, D148): o serviço "backup" copia o SQLite e, com o
+# perfil "postgres", o "backup-banco" roda o pg_dump; as cópias ficam em /data/backups (volume "dados"): as 14
+# mais recentes e a mais nova de cada dia, nenhuma com mais de 14 dias. Cópia fora da máquina (opcional,
+# desligada): perfil "copia-externa" com COPIA_DESTINO e COPIA_S3_* no .env (docs §8.8).
+#
+# Monitoramento (opcional): perfil "monitoramento" — Prometheus, Grafana, Alertmanager e node-exporter. Os
+# alertas chegam por e-mail, Telegram ou Discord com as variáveis ALERTA_* no .env (docs §8.3). Ligue os perfis
+# sempre por COMPOSE_PROFILES no .env (ex.: COMPOSE_PROFILES=postgres,monitoramento): um --profile na linha de
+# comando SUBSTITUI o COMPOSE_PROFILES, e um "docker compose down" sem o perfil deixa os serviços dele no ar.
+name: cinzas
+
+services:
+  servidor:
+    # Construída a partir deste repositório (etiqueta cinzas-servidor:local). Com CINZAS_IMAGEM no .env,
+    # usa a imagem publicada pelo CI: docker compose pull servidor contas && docker compose up -d --no-build
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      # versão da implantação no hello, no registro de início e no /bug (D150): CINZAS_VERSION no .env, a tag da
+      # release sem o "v" (0.4.0-teste.2); vazia, vale a do package.json. Argumento de build e não environment:
+      # um environment vazio apagaria a versão gravada na imagem publicada (CINZAS_IMAGEM) (D181)
+      args:
+        CINZAS_VERSION: ${CINZAS_VERSION:-}
+    image: ${CINZAS_IMAGEM:-cinzas-servidor:local}
+    restart: unless-stopped
+    init: true
+    # SIGTERM -> o servidor salva todos os personagens e fecha o banco; 45 s de prazo antes do SIGKILL
+    stop_grace_period: 45s
+    volumes:
+      - dados:/data              # cinzas.db (+ -wal/-shm) e backups/
+    # perfil "postgres": espera o banco aceitar conexões (sem o perfil a dependência é ignorada)
+    depends_on:
+      banco:
+        condition: service_healthy
+        required: false
+    secrets: [senha_banco]
+    environment:
+      # arquivo SQLite no volume ou postgres://cinzas@banco:5432/cinzas (perfil "postgres", senha do arquivo)
+      CINZAS_DB: ${CINZAS_DB:-/data/cinzas.db}
+      CINZAS_DB_PASSWORD_FILE: /run/secrets/senha_banco
+      # login só com token do serviço de contas (cadastro e senha direto na zona ficam desligados)
+      CINZAS_AUTH: ${CINZAS_AUTH:-token}
+      CINZAS_TOKEN_SECRET: ${CINZAS_TOKEN_SECRET:?defina CINZAS_TOKEN_SECRET em deploy/.env}
+      CINZAS_TRUST_PROXY: "1"    # o IP real vem do X-Forwarded-For do Caddy (limite por IP, auditoria)
+      CINZAS_MAX_CONN_PER_IP: ${CINZAS_MAX_CONN_PER_IP:-8}
+      CINZAS_LOG_FORMAT: json
+      # teto de personagens no mundo (decisão do dono: 200 no teste público; 0 = sem limite; gm/admin entram sempre)
+      CINZAS_MAX_PLAYERS: ${CINZAS_MAX_PLAYERS:-200}
+    expose:
+      - "7777"                   # alcançável só pelo proxy (rede interna)
+    ports:
+      - "127.0.0.1:9100:9100"    # métricas Prometheus e /health: só nesta máquina, nunca na internet
+    # Teste em rede local sem TLS (ws://IP:7777): descomente. Não use no teste público.
+    #   - "7777:7777"
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  proxy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      servidor:
+        condition: service_healthy
+      contas:
+        condition: service_healthy
+    ports:
+      - "80:80"                  # desafio HTTP do Let's Encrypt e redirecionamento para HTTPS
+      - "443:443"                # wss:// do jogo
+    environment:
+      DOMINIO: ${DOMINIO:?defina DOMINIO (o domínio do teste, com DNS apontando para esta máquina) em deploy/.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # página do jogo em https://DOMINIO/ (avisos da equipe em site/index.html: salvar o arquivo já publica)
+      - ./site:/srv/site:ro
+      # guia do jogador em https://DOMINIO/guia (o Caddyfile só serve o GUIA.md desta pasta)
+      - ../docs:/srv/docs:ro
+      - caddy_dados:/data        # certificados e chaves do TLS: não apague (limites de emissão)
+      - caddy_config:/config
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  contas:
+    # Serviço de contas (cadastro com e-mail, confirmação, token de sessão de 5 min, troca de senha,
+    # exportação e exclusão de conta, termos). Sempre a mesma imagem da zona (CINZAS_IMAGEM), mesmo banco:
+    # uma etiqueta diferente rodaria contas de outra versão contra o banco já migrado pela zona.
+    image: ${CINZAS_IMAGEM:-cinzas-servidor:local}
+    # a imagem vem do serviço "servidor" (construída ou baixada por ele): nunca procurar num registro
+    pull_policy: never
+    restart: unless-stopped
+    init: true
+    depends_on:
+      servidor:
+        condition: service_healthy
+      banco:
+        condition: service_healthy
+        required: false
+    # métricas (pedidos, cadastros, falhas de e-mail) numa porta à parte, que o Caddy não conhece: o
+    # Prometheus coleta pela rede interna; só responde a endereços internos (rede do compose, 127.0.0.1)
+    command: ["node", "--disable-warning=ExperimentalWarning", "src/contas-main.js", "--port", "7780", "--host", "0.0.0.0", "--email-dir", "/data/emails",
+              "--metrics-port", "9101", "--metrics-host", "0.0.0.0"]
+    volumes:
+      - dados:/data
+    secrets: [senha_banco, ca_smtp]
+    environment:
+      CINZAS_DB: ${CINZAS_DB:-/data/cinzas.db}      # o mesmo banco da zona
+      CINZAS_DB_PASSWORD_FILE: /run/secrets/senha_banco
+      CINZAS_TOKEN_SECRET: ${CINZAS_TOKEN_SECRET:?defina CINZAS_TOKEN_SECRET em deploy/.env}
+      CINZAS_TRUST_PROXY: "1"
+      # autoridades a mais para o certificado do SMTP (só relé próprio com CA privada; vazio = só as públicas)
+      CINZAS_SMTP_CA: /run/secrets/ca_smtp
+      # smtp no teste público; "arquivo" (códigos em /data/emails, ninguém recebe e-mail) só para ensaio
+      CINZAS_EMAIL: ${CINZAS_EMAIL:?defina CINZAS_EMAIL=smtp em deploy/.env (ou arquivo, só para um ensaio)}
+      CINZAS_SMTP_HOST: ${CINZAS_SMTP_HOST:-}
+      CINZAS_SMTP_PORT: ${CINZAS_SMTP_PORT:-587}
+      CINZAS_SMTP_TLS: ${CINZAS_SMTP_TLS:-}
+      CINZAS_SMTP_USER: ${CINZAS_SMTP_USER:-}
+      CINZAS_SMTP_PASS: ${CINZAS_SMTP_PASS:-}
+      CINZAS_SMTP_FROM: ${CINZAS_SMTP_FROM:-}
+      CINZAS_SMTP_HELO: ${CINZAS_SMTP_HELO:-}
+    expose:
+      - "7780"                   # alcançável só pelo proxy (https://DOMINIO/contas/...)
+      - "9101"                   # métricas: só o Prometheus, pela rede interna
+    ports:
+      - "127.0.0.1:9101:9101"    # métricas do serviço de contas: só nesta máquina, nunca na internet
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:7780/saude',{signal:AbortSignal.timeout(4000)}).then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # --- Backup de hora em hora (sempre ligado; docs/08-operacao.md §8.8, D148) -------------------------------
+  # O mesmo "npm run backup" do guia (tools/backup.mjs), rodando sem parar: VACUUM INTO do SQLite com o jogo no
+  # ar para /data/backups, conferido com integrity_check; ficam as 14 mais recentes e a mais nova de cada dia,
+  # nenhuma com mais de 14 dias (política de privacidade). A métrica do último backup vai para o volume
+  # "metricas", que o node-exporter lê (alerta se passar de 2 h sem backup). Com o banco no PostgreSQL
+  # (CINZAS_DB=postgres://...) este serviço fica parado e quem faz o backup é o "backup-banco".
+  backup:
+    image: ${CINZAS_IMAGEM:-cinzas-servidor:local}
+    # a imagem vem do serviço "servidor" (construída ou baixada por ele): nunca procurar num registro
+    pull_policy: never
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 60s       # um backup em andamento termina antes de o contêiner parar
+    depends_on:
+      servidor:
+        condition: service_healthy   # o banco já existe e está migrado
+    command: ["node", "--disable-warning=ExperimentalWarning", "tools/backup.mjs", "--para", "/data/backups",
+              "--manter", "14", "--diarias", "--dias", "14", "--a-cada", "3600",
+              "--metrica", "/metricas/backup-sqlite.prom", "--somente-sqlite"]
+    environment:
+      CINZAS_DB: ${CINZAS_DB:-/data/cinzas.db}      # o mesmo banco da zona
+    volumes:
+      - dados:/data
+      - metricas:/metricas
+    network_mode: none           # só lê e grava arquivos: nenhuma rede
+    # Saudável com um backup conferido nas últimas ~2 h e nenhuma falha depois dele (lê a métrica que o próprio
+    # serviço grava). Sem isto valeria o HEALTHCHECK da imagem, que é o da zona (porta 9100), e o serviço
+    # apareceria "unhealthy" no docker compose ps mesmo com os backups em dia.
+    healthcheck:
+      test: ["CMD", "node", "--disable-warning=ExperimentalWarning", "tools/backup.mjs", "--saude",
+             "--metrica", "/metricas/backup-sqlite.prom", "--somente-sqlite"]
+      interval: 60s
+      timeout: 10s
+      retries: 2
+      start_period: 10m
+      start_interval: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  # --- PostgreSQL central (opcional): perfil "postgres" — ver o cabeçalho e docs/08-operacao.md §8.11 ----
+  # Zona e contas passam a usar este banco com CINZAS_DB=postgres://cinzas@banco:5432/cinzas no .env; a
+  # senha (segredo senha_banco) vem de deploy/segredos/senha_banco.txt, que fica fora do git.
+  banco:
+    image: postgres:17
+    profiles: ["postgres"]
+    restart: unless-stopped
+    # Desligamento "smart" (SIGTERM; a imagem usaria SIGINT, o "fast", que derruba as conexões na hora): no
+    # reinício do VPS o Docker para todos os serviços AO MESMO TEMPO, e a zona ainda grava os personagens depois
+    # dos 30 s de aviso. Com o "smart" o banco recusa conexões novas mas espera a zona e as contas gravarem e
+    # saírem; com o "fast" a zona caía ao gravar ("the database system is shutting down") e os jogadores
+    # voltavam ao último salvamento (D177). 60 s de prazo cobrem os 30 s do aviso da zona com folga.
+    stop_signal: SIGTERM
+    stop_grace_period: 60s
+    environment:
+      POSTGRES_USER: cinzas
+      POSTGRES_DB: cinzas
+      POSTGRES_PASSWORD_FILE: /run/secrets/senha_banco
+      # C.UTF-8: ordem por código (como o SQLite) e índices que não mudam quando a glibc da imagem muda
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C.UTF-8"
+    secrets: [senha_banco]
+    volumes:
+      - banco:/var/lib/postgresql/data
+    healthcheck:
+      # por TCP: na primeira inicialização o servidor temporário só escuta no soquete local, e um
+      # pg_isready pelo soquete daria "pronto" antes da hora
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U cinzas -d cinzas"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    # sem "ports": o banco nunca fica exposto fora da rede interna do compose
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # Backup do PostgreSQL de hora em hora (perfil "postgres"): deploy/backup-postgres.sh na imagem postgres:17
+  # (pg_dump da versão do servidor), pg_dump -Fc conferido com pg_restore --list para /data/backups, com a
+  # mesma rotação e a mesma métrica do serviço "backup" (que, com o banco no PostgreSQL, fica parado).
+  backup-banco:
+    image: postgres:17
+    profiles: ["postgres"]
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 60s       # um pg_dump em andamento termina antes de o contêiner parar
+    user: "10001:10001"          # o mesmo usuário da imagem do jogo: as cópias ficam dele no volume "dados"
+    depends_on:
+      banco:
+        condition: service_healthy
+      backup:
+        condition: service_started   # cria o volume "metricas" com o dono certo antes deste gravar nele
+    entrypoint: ["/bin/sh", "/opt/cinzas/backup-postgres.sh"]
+    environment:
+      PGHOST: banco
+      PGPORT: "5432"
+      PGUSER: cinzas
+      PGDATABASE: cinzas
+      BACKUP_SENHA_ARQUIVO: /run/secrets/senha_banco
+      BACKUP_DIR: /data/backups
+      BACKUP_MANTER: "14"
+      BACKUP_DIARIAS: "1"
+      BACKUP_DIAS: "14"
+      BACKUP_A_CADA: "3600"
+      BACKUP_METRICA: /metricas/backup-postgres.prom
+    secrets: [senha_banco]
+    volumes:
+      - ./backup-postgres.sh:/opt/cinzas/backup-postgres.sh:ro
+      - dados:/data
+      - metricas:/metricas
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  # --- Cópia fora da máquina (opcional, desligada): perfil "copia-externa" — docs/08-operacao.md §8.8 -------
+  # rclone sync de /data/backups para um armazenamento compatível com S3 (Backblaze B2, Cloudflare R2, Wasabi,
+  # AWS S3...) de hora em hora: o destino espelha a pasta, então a rotação de 14 dias vale lá também. As cópias
+  # vão cifradas com COPIA_SENHA_CIFRA (rclone crypt). Tudo no .env: COPIA_DESTINO=balde/pasta,
+  # COPIA_S3_PROVEDOR, COPIA_S3_ENDPOINT, COPIA_S3_REGIAO, COPIA_S3_CHAVE, COPIA_S3_SEGREDO, COPIA_SENHA_CIFRA; e
+  # COMPOSE_PROFILES=...,copia-externa para ligar.
+  copia-externa:
+    image: rclone/rclone:1.68.2
+    profiles: ["copia-externa"]
+    restart: unless-stopped
+    init: true
+    depends_on: [backup]
+    entrypoint: ["/bin/sh", "/opt/cinzas/copia-externa.sh"]
+    environment:
+      COPIA_DESTINO: ${COPIA_DESTINO:-}
+      COPIA_A_CADA: ${COPIA_A_CADA:-3600}
+      COPIA_SENHA_CIFRA: ${COPIA_SENHA_CIFRA:-}     # obrigatória, a menos de COPIA_SEM_CIFRA=sim
+      COPIA_SEM_CIFRA: ${COPIA_SEM_CIFRA:-}
+      COPIA_METRICA: /metricas/copia-externa.prom
+      RCLONE_CONFIG_EXTERNO_TYPE: s3
+      RCLONE_CONFIG_EXTERNO_PROVIDER: ${COPIA_S3_PROVEDOR:-Other}
+      RCLONE_CONFIG_EXTERNO_ENDPOINT: ${COPIA_S3_ENDPOINT:-}
+      RCLONE_CONFIG_EXTERNO_REGION: ${COPIA_S3_REGIAO:-}
+      RCLONE_CONFIG_EXTERNO_ACCESS_KEY_ID: ${COPIA_S3_CHAVE:-}
+      RCLONE_CONFIG_EXTERNO_SECRET_ACCESS_KEY: ${COPIA_S3_SEGREDO:-}
+    volumes:
+      - ./copia-externa.sh:/opt/cinzas/copia-externa.sh:ro
+      - dados:/dados:ro          # só lê /dados/backups
+      - metricas:/metricas
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  # --- Monitoramento (opcional): COMPOSE_PROFILES=monitoramento no .env (junto dos outros perfis) -------
+  # Prometheus coleta as métricas da zona (servidor:9100), do serviço de contas (contas:9101) e da máquina
+  # (node-exporter: disco, e a idade do último backup) e avalia os alertas de monitoramento/alertas.yml;
+  # o Alertmanager manda os alertas por e-mail, Telegram ou Discord (variáveis ALERTA_* no .env; sem elas,
+  # os alertas só aparecem nas páginas). Grafana mostra o painel pronto em http://127.0.0.1:3000. Tudo só
+  # nesta máquina; de fora, um túnel SSH (ssh -L 3000:127.0.0.1:3000 -L 9093:127.0.0.1:9093 servidor).
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    profiles: ["monitoramento"]
+    restart: unless-stopped
+    depends_on: [alertmanager]
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=15d",
+              "--web.external-url=http://127.0.0.1:9090"]
+    volumes:
+      - ./monitoramento/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoramento/alertas.yml:/etc/prometheus/alertas.yml:ro
+      - prometheus_dados:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    logging:                     # sem isto o registro do Docker cresce sem limite
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    profiles: ["monitoramento"]
+    restart: unless-stopped
+    # monta a configuração a partir do modelo com as variáveis ALERTA_* (nenhum segredo no git) e sobe
+    entrypoint: ["/bin/sh", "/etc/alertmanager/entrada.sh"]
+    command: ["--web.external-url=http://127.0.0.1:9093", "--cluster.listen-address="]
+    environment:
+      ALERTA_EMAIL_PARA: ${ALERTA_EMAIL_PARA:-}
+      ALERTA_SMTP_SERVIDOR: ${ALERTA_SMTP_SERVIDOR:-}
+      ALERTA_SMTP_DE: ${ALERTA_SMTP_DE:-}
+      ALERTA_SMTP_USUARIO: ${ALERTA_SMTP_USUARIO:-}
+      ALERTA_SMTP_SENHA: ${ALERTA_SMTP_SENHA:-}
+      ALERTA_TELEGRAM_TOKEN: ${ALERTA_TELEGRAM_TOKEN:-}
+      ALERTA_TELEGRAM_CHAT: ${ALERTA_TELEGRAM_CHAT:-}
+      ALERTA_DISCORD_WEBHOOK: ${ALERTA_DISCORD_WEBHOOK:-}
+    volumes:
+      - ./monitoramento/alertmanager.yml:/etc/alertmanager/modelo.yml:ro
+      - ./monitoramento/alertmanager-entrada.sh:/etc/alertmanager/entrada.sh:ro
+      - alertmanager_dados:/alertmanager
+    tmpfs:
+      - /tmp                     # a configuração montada (com as senhas) fica só na memória
+    read_only: true
+    ports:
+      - "127.0.0.1:9093:9093"
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+  node-exporter:
+    # métricas da máquina (disco, memória, CPU) e, pelo coletor textfile, a idade do último backup
+    image: prom/node-exporter:v1.8.2
+    profiles: ["monitoramento"]
+    restart: unless-stopped
+    command: ["--path.rootfs=/host", "--collector.textfile.directory=/metricas"]
+    pid: host
+    read_only: true
+    volumes:
+      - /:/host:ro,rslave        # só leitura: o node-exporter só olha a máquina
+      - metricas:/metricas:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+  grafana:
+    image: grafana/grafana:11.3.1
+    profiles: ["monitoramento"]
+    restart: unless-stopped
+    depends_on: [prometheus]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_SENHA:-troque-esta-senha}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    volumes:
+      - ./monitoramento/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoramento/grafana/painel-cinzas.json:/var/lib/grafana/dashboards/painel-cinzas.json:ro
+      - grafana_dados:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+volumes:
+  dados:
+  caddy_dados:
+  caddy_config:
+  prometheus_dados:
+  grafana_dados:
+  alertmanager_dados:            # silêncios e avisos já mandados (perfil "monitoramento")
+  metricas:                      # métricas dos backups (arquivos .prom) que o node-exporter lê
+  banco:                         # dados do PostgreSQL (perfil "postgres")
+
+secrets:
+  senha_banco:
+    # perfil "postgres": CINZAS_DB_SENHA_ARQUIVO=./segredos/senha_banco.txt no .env (deploy/segredos/ está
+    # no .gitignore). Sem o perfil não é usado: /dev/null, para o SQLite não exigir o arquivo.
+    file: ${CINZAS_DB_SENHA_ARQUIVO:-/dev/null}
+  ca_smtp:
+    # Só para um servidor de e-mail com certificado de uma CA privada (relé próprio): CINZAS_SMTP_CA_ARQUIVO=
+    # ./segredos/ca-smtp.pem no .env (legível pelo uid 10001: um certificado não é segredo, chmod 644). As
+    # autoridades do arquivo se SOMAM às públicas; a verificação do certificado nunca é desligada. Gmail,
+    # Brevo e afins não precisam: sem a variável, /dev/null (nenhuma a mais).
+    file: ${CINZAS_SMTP_CA_ARQUIVO:-/dev/null}
