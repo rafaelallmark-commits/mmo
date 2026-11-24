@@ -289,21 +289,30 @@ func apply_snapshot(snap: Dictionary) -> void:
 	var seen := {}
 	for d in snap.get("ents", []):
 		var eid: String = d["id"]
-		seen[eid] = true
 		var e: Dictionary = entities.get(eid, {})
+		# entidade nova sem o registro inteiro (só os grupos que mudaram, sem a base no cache de main.gd): não dá para
+		# montá-la, e uma entrada quebrada em entities pararia o laço do mundo a cada quadro — fica de fora (D187)
+		if e.is_empty() and not d.has("k"):
+			continue
+		seen[eid] = true
 		if not e.is_empty() and d["k"] == "p" and (e.get("w") != d.get("w") or e.get("oh") != d.get("oh")):
-			# trocou de arma ou de mão secundária: refaz o modelo no mesmo lugar
+			# trocou de arma ou de mão secundária: refaz o modelo no mesmo lugar (caído, o novo já aparece deitado)
 			var keep: Motion.Track = e["track"]
 			var yaw: float = e["yaw"]
 			e["node"].queue_free()
 			entities.erase(eid)
 			e = _spawn_entity(d)
+			if not e.has("node"):
+				continue
 			e["track"] = keep
 			e["yaw"] = yaw
 			entities[eid] = e
+			_down_now(e)
 		var fresh := e.is_empty()
 		if fresh:
 			e = _spawn_entity(d)
+			if not e.has("node"):
+				continue   # não deu para montar o modelo: nada de entrada quebrada em entities
 			entities[eid] = e
 		e["data"] = d
 		var pos := Vector2(float(d["x"]), float(d["z"]))
@@ -1159,9 +1168,9 @@ func on_death(eid: String) -> void:
 			Sfx.play("monster_die", n.position, 0.0, float(snd["voice"]))
 			if snd["fam"] == "machine":
 				Sfx.play("hit_blunt", n.position, -1.0, 0.7)
-		# a queda da família do monstro (rig.gd: bicho tomba de lado, besouro vira de costas, máquina cai de cara,
-		# espírito encolhe e some), um instante no chão e afunda — no mesmo tempo de antes, ~2,2 s (D186); peças
-		# paradas da prova tombam de lado
+		# a queda da família do monstro (rig.gd: bicho tomba de lado, besouro vira de costas, máquina cai de cara),
+		# um instante no chão e afunda — no mesmo tempo de antes, ~2,2 s (D186); o espírito encolhe e some em ~0,75 s,
+		# sem afundar; peças paradas da prova tombam de lado
 		var tw := create_tween()
 		if n.has_method("play_death"):
 			n.play_death()
@@ -1189,9 +1198,7 @@ func on_death(eid: String) -> void:
 ## (o meu personagem no mundo novo; outro jogador que acabou de entrar — evento joined).
 func _on_spawned(eid: String, e: Dictionary) -> void:
 	var n: Node3D = e["node"]
-	var d: Dictionary = e["data"]
-	if n.has_method("set_down") and (d.get("dead", false) or str(d.get("st", "")) == "down"):
-		n.set_down(true, bool(d.get("dead", false)), true)
+	_down_now(e)
 	var arriving := false
 	if _is_me(eid) and not _me_arrived:
 		_me_arrived = true
@@ -1203,6 +1210,14 @@ func _on_spawned(eid: String, e: Dictionary) -> void:
 		if n.has_method("appear"):
 			n.appear(0.45)
 		vfx.arrive_fx(n.position, false)
+
+## Modelo novo de quem está caído (chegou à lista caído, ou trocou de arma ou de mão secundária no chão): já deitado,
+## com a arma no chão e a cor apagada, sem tocar a queda (D187).
+func _down_now(e: Dictionary) -> void:
+	var n: Node3D = e["node"]
+	var d: Dictionary = e["data"]
+	if n.has_method("set_down") and (d.get("dead", false) or str(d.get("st", "")) == "down"):
+		n.set_down(true, bool(d.get("dead", false)), true)
 
 ## Outro jogador entrou neste mapa (portal, prova, calabouço, entrada no jogo): quando aparecer, chega com o efeito.
 func on_joined(m: Dictionary) -> void:
@@ -1217,7 +1232,10 @@ func on_joined(m: Dictionary) -> void:
 	else:
 		_arrivals[eid] = Time.get_ticks_msec()
 
-## Outro jogador saiu do mapa (portal, saída do jogo): o corpo se desfaz em brasas onde estava.
+## Outro jogador saiu do mapa (portal, saída do jogo): o corpo se desfaz em brasas onde estava. O registro dele fica no
+## cache dos snapshots por diferença (main.gd): o servidor o tira com "gone" no snapshot seguinte e, se o mesmo jogador
+## entra de novo antes disso (outra conexão da mesma conta derruba a antiga: left e joined no mesmo tick), o servidor
+## ainda o conhece e manda só os grupos que mudaram — é o registro guardado que deixa remontá-lo (D187).
 func on_left(m: Dictionary) -> void:
 	var eid := str(m.get("eid", ""))
 	_arrivals.erase(eid)
@@ -1225,7 +1243,6 @@ func on_left(m: Dictionary) -> void:
 		return
 	var e: Dictionary = entities[eid]
 	entities.erase(eid)
-	main.snap_cache.erase(eid)   # um snapshot por diferença atrasado não o traz de volta
 	if selected == eid:
 		selected = ""
 	var n: Node3D = e["node"]
@@ -1237,8 +1254,8 @@ func on_left(m: Dictionary) -> void:
 	tw.tween_interval(VANISH_SECS + 0.05)
 	tw.tween_callback(n.queue_free)
 
-## Salto de posição no snapshot (teleporte de mestre, escolta que recomeça): desfaz e forma de novo, se nada explica
-## o salto (investida ou salto do próprio movimento, puxão de monstro, renascer já em curso).
+## Salto de posição no snapshot (teleporte de mestre): desfaz e forma de novo, se nada explica o salto (investida ou
+## salto do próprio movimento, puxão de monstro, renascer já em curso).
 func _check_jump(e: Dictionary, pos: Vector2) -> void:
 	var n: Node3D = e["node"]
 	if not n.has_method("vanish") or e.has("pin"):

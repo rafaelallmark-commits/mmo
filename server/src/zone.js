@@ -1280,7 +1280,10 @@ export class Zone {
     if (p.char.hp <= 0) { if (p.isAlly) p.die(); else this.killPlayer(p); }
   }
 
-  killPlayer(p) {
+  // gm: queda pelo comando de mestre hp 0 (cenário, D186) — não é morte do jogo e fica fora da telemetria de mortes
+  // (sem isso, o último monstro que acertou o personagem, mesmo muito antes, viraria o autor; a auditoria 'gm' já
+  // registra o comando; D187)
+  killPlayer(p, { gm = false } = {}) {
     const c = p.char;
     const attackers = [...this.monsters.values()].filter((m) => m.state !== 'dead' && m.targetId === p.eid).length;
     c.hp = 0; c.dead = true; p.targetId = null; p.dest = null; p.buffs = []; p.debuffs = []; p.guards = []; p.shield = null; p.stunUntil = 0;
@@ -1289,7 +1292,7 @@ export class Zone {
     for (const m of this.monsters.values()) { m.threat.delete(c.id); if (m.targetId === p.eid) m.targetId = null; }
     this.store.saveCharacter(c);
     this.broadcast({ t: 'player_dead', eid: p.eid });
-    this.hooks.onPlayerDeath?.(p, { by: p.lastHitBy ?? null, attackers });
+    if (!gm) this.hooks.onPlayerDeath?.(p, { by: p.lastHitBy ?? null, attackers });
   }
 
   tickGround() {

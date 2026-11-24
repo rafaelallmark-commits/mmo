@@ -28,6 +28,10 @@ extends Node
 ## --dev, cai de verdade longe do posto (comando de mestre hp 0), confere o corpo deitado com a arma ao lado e o aviso de
 ## queda só depois da queda, volta ao posto e confere que o corpo se desfez onde caiu, se formou agachado no posto e se
 ## levantou. Nas mecânicas dos monstros, um espírito que morre selecionado deixa a seleção vazia.
+## D187: um monstro visível que sai (left) e entra de novo (joined) antes de um tick, com o snapshot por diferença
+## seguinte só com posição e velocidade, volta inteiro; o frasco de quem se desfaz no meio do gole some junto e não volta
+## na mão; o golpe básico logo depois da investida não corta o movimento travado; caído (servidor --dev), tira e põe a
+## arma e o modelo refeito já aparece deitado, sem levantar e cair de novo.
 
 const ItemText = preload("res://scripts/item_text.gd")
 
@@ -70,6 +74,11 @@ var body_target := Vector2.ZERO
 var body_dummy: Node3D = null
 var body_shots := {}   # nome da captura -> instante (ms) em que tirar (com --shots)
 var body_sched := {}   # capturas já marcadas (cada uma uma vez só)
+# caído, tira e põe a arma (D187): o modelo do personagem visto por último, quantas vezes foi refeito e a arma tirada
+var body_node: Node3D = null
+var body_swaps := 0
+var body_swap_inst := ""
+var body_hold_until := 0
 
 func say(s: String) -> void:
 	print("[autotest] ", s)
@@ -366,6 +375,14 @@ func _process(_d: float) -> void:
 					fail("o espírito morreu selecionado e a seleção ficou presa nele (%s)" % main.world.selected)
 					return
 			say("mecânicas dos monstros: avisos em círculo, cone e linha (e um cancelado), explosão, puxão, drenagem de mana, eco, investida, reforços e pressão desenhados; Desorientado na interface e tirado pela Alvorada; a velocidade do Atolado chegou à previsão do movimento e voltou; espírito morto selecionado deixa a seleção vazia")
+			var reentry := _check_reentry()
+			if reentry == "skip":
+				say("sem monstro visível no cache dos snapshots: a reentrada rápida ficou de fora")
+			elif reentry != "":
+				fail(reentry)
+				return
+			else:
+				say("reentrada rápida: a entidade que saiu (left) e entrou de novo (joined) antes de um tick voltou inteira com o snapshot por diferença seguinte, que só trazia posição e velocidade")
 			step = "mech_real"
 		"mech_real":
 			# luta de verdade (servidor --dev): na estrada segura, a uns 25 m dos Javalis de Cinza (o ponto vem
@@ -481,7 +498,7 @@ func _process(_d: float) -> void:
 			Net.request("gm", {"cmd": "teleport", "x": body_target.x, "z": body_target.y}, func(r):
 				if not r.get("ok", false):
 					say("sem comandos de mestre: o teleporte ficou de fora")
-					step = "body_fall")
+					step = "body_flask")
 		"body_tp_wait":
 			_body_shots()
 			var te: Dictionary = main.world.me()
@@ -497,10 +514,71 @@ func _process(_d: float) -> void:
 				_sched("corpo_teleporte_chega", 120)
 			var here := Vector2(tn.position.x, tn.position.z)
 			if body_seen and here.distance_to(body_target) < 1.5 and float(tn.get("_form_t")) < 0.0 and tn.get("model").visible and body_shots.is_empty():
+				# o gole que o teleporte pegou no meio (quadros lentos) não deixa o frasco na mão (D187)
+				if tn.get("_flask") != null and tn._flask.scale.x > 0.01:
+					fail("depois do teleporte, o frasco do tônico ficou na mão (escala %.2f)" % tn._flask.scale.x)
+					return
 				say("teleporte: o corpo se desfez em brasas no lugar antigo e se formou no novo")
-				step = "body_fall"
+				step = "body_flask"
 			elif Time.get_ticks_msec() > wait_until:
 				fail("teleporte no mesmo mapa sem o efeito (desfez: %s, posição (%.1f, %.1f), alvo (%.1f, %.1f))" % [str(body_seen), here.x, here.y, body_target.x, body_target.y])
+		"body_flask":
+			# num modelo à parte (D187): o golpe básico logo depois da investida não corta o movimento travado (o salto de
+			# posição do snapshot seguinte é da investida, não um teleporte); desfeito no meio do gole (teleporte, renascer
+			# longe), o frasco some junto e não volta na mão ao formar no lugar novo
+			var ffam: String = main.world._weapon_family(main.world.me()["data"].get("w")) if not main.world.me().is_empty() else ""
+			body_dummy = preload("res://scripts/art.gd").character(main.ch.get("classId", "breaker"), ffam)
+			main.world.add_child(body_dummy)
+			body_dummy.position = main.world.my_pos() + Vector3(-2.0, 0.0, 0.0)
+			if not body_dummy.has_method("play_drink") or body_dummy.get("skel") == null:
+				body_dummy.queue_free()
+				body_dummy = null
+				step = "body_fall"
+				return
+			body_dummy.play_skill("charge", {})
+			body_dummy.play_attack()
+			if not body_dummy.act_locked():
+				fail("o golpe básico logo depois da investida cortou o movimento travado (o salto viraria teleporte)")
+				return
+			body_dummy.cancel_cast()
+			body_dummy.play_attack()
+			if body_dummy._act.is_empty():
+				fail("fora da investida, o golpe básico não tocou")
+				return
+			body_dummy.cancel_cast()
+			say("investida: o golpe básico que chega logo depois não corta o movimento travado; fora dela, toca")
+			body_dummy.play_drink("hp")
+			wait_until = Time.get_ticks_msec() + 5000
+			step = "body_flask_up"
+		"body_flask_up":
+			if body_dummy._flask != null and body_dummy._flask.scale.x > 0.5:
+				body_dummy.vanish(0.3)
+				wait_until = Time.get_ticks_msec() + 450
+				step = "body_flask_gone"
+			elif Time.get_ticks_msec() > wait_until:
+				fail("o modelo à parte não levou o frasco à boca")
+		"body_flask_gone":
+			if Time.get_ticks_msec() < wait_until:
+				return
+			body_dummy.appear(0.35)
+			wait_until = Time.get_ticks_msec() + 5000
+			step = "body_flask_back"
+		"body_flask_back":
+			if float(body_dummy._form_t) >= 0.0:
+				if Time.get_ticks_msec() > wait_until:
+					fail("o modelo à parte não terminou de se formar")
+				return
+			if not body_dummy.model.visible:
+				fail("o modelo à parte não reapareceu depois de formar")
+				return
+			var fs: float = body_dummy._flask.scale.x if body_dummy._flask != null else 0.0
+			if fs > 0.01:
+				fail("desfeito no meio do gole, o frasco voltou na mão ao formar (escala %.2f)" % fs)
+				return
+			body_dummy.queue_free()
+			body_dummy = null
+			say("desfeito no meio do gole: o frasco sumiu junto e não voltou na mão ao formar no lugar novo")
+			step = "body_fall"
 		"body_fall":
 			# num modelo à parte (o do jogador segue o servidor): cai, fica caído com a arma no chão e levanta
 			var fam: String = main.world._weapon_family(main.world.me()["data"].get("w")) if not main.world.me().is_empty() else ""
@@ -586,12 +664,50 @@ func _process(_d: float) -> void:
 						fail("o aviso de queda não apareceu depois da queda do corpo")
 					return
 				say("morte: o corpo caiu de verdade (snapshot dead), deitado de lado com a arma ao lado; o aviso de queda veio depois")
-				body_seen = false
-				step = "body_respawn_wait"
-				wait_until = Time.get_ticks_msec() + 10000
-				Net.request("respawn")
+				step = "body_swap"
 			elif Time.get_ticks_msec() > wait_until:
 				fail("caiu, mas o corpo não ficou deitado com a arma ao lado (progresso %.2f, caído %s, arma no chão %s)" % [float(dn._dp), str(dn._down), str(dropped_ok2)])
+		"body_swap":
+			# caído, tira a arma e põe de volta (o servidor aceita; outro jogador vê o mesmo): cada troca refaz o modelo, que
+			# já aparece deitado, com a arma no chão e a cor apagada, sem levantar e cair de novo (D187)
+			body_node = main.world.me()["node"]
+			body_swaps = 0
+			body_hold_until = 0
+			body_swap_inst = ""
+			step = "body_swap_wait"
+			wait_until = Time.get_ticks_msec() + 8000
+			Net.request("unequip", {"slot": "weapon"}, func(r):
+				if not r.get("ok", false):
+					say("caído, o servidor não tirou a arma (%s): a troca no chão ficou de fora" % r.get("reason", ""))
+					_body_respawn()
+					return
+				body_swap_inst = str(r.get("instanceId", "")))
+		"body_swap_wait":
+			var se: Dictionary = main.world.me()
+			if se.is_empty():
+				return
+			var sn: Node3D = se["node"]
+			if sn != body_node:
+				body_node = sn
+				body_swaps += 1
+				body_hold_until = Time.get_ticks_msec() + 500
+			# o modelo refeito fica deitado desde o primeiro quadro em que aparece, e assim fica
+			var swap_dropped: bool = sn.weapon_mesh == null or sn._dropped != null
+			if body_swaps > 0 and (not bool(sn._down) or float(sn._dp) < 1.99 or float(sn._fade_w) < 0.95 or not swap_dropped):
+				fail("caído, %s a arma e o modelo refeito levantou para cair de novo (progresso %.2f, caído %s, cor apagada %.2f, arma no chão %s)" % ["tirou" if body_swaps == 1 else "pôs", float(sn._dp), str(sn._down), float(sn._fade_w), str(swap_dropped)])
+				return
+			if body_hold_until > 0 and Time.get_ticks_msec() >= body_hold_until:
+				body_hold_until = 0
+				if body_swaps == 1:
+					Net.request("equip", {"instance": body_swap_inst}, func(r):
+						if not r.get("ok", false):
+							fail("caído, a arma não voltou: %s" % r.get("reason", "")))
+				else:
+					say("caído, tirou e pôs a arma: o modelo refeito apareceu deitado, com a cor apagada, sem levantar e cair de novo")
+					_body_respawn()
+					return
+			if Time.get_ticks_msec() > wait_until:
+				fail("caído, a troca de arma não refez o modelo (trocas vistas: %d)" % body_swaps)
 		"body_respawn_wait":
 			_body_shots()
 			var re: Dictionary = main.world.me()
@@ -1138,6 +1254,40 @@ func _sched(name: String, ms: int) -> void:
 		return
 	body_sched[name] = true
 	body_shots[name] = Time.get_ticks_msec() + ms
+
+## Pede o renascer e espera o corpo se desfazer onde caiu e se formar no posto.
+func _body_respawn() -> void:
+	body_seen = false
+	step = "body_respawn_wait"
+	wait_until = Time.get_ticks_msec() + 10000
+	Net.request("respawn")
+
+## Reentrada rápida (D187): outra conexão da mesma conta derruba a antiga (left) e entra de novo (joined) antes de um
+## tick do servidor, que ainda conhece a entidade e manda só os grupos que mudaram. Um monstro visível faz o papel: left,
+## joined e um snapshot por diferença só com posição e velocidade (as mesmas que o cache já tem, no instante do último
+## snapshot: o cache segue igual ao que o servidor acha que o cliente sabe) — ele tem de voltar inteiro. Devolve o erro,
+## "skip" sem monstro no cache, ou "".
+func _check_reentry() -> String:
+	var w = main.world
+	var mid := ""
+	for eid in w.entities.keys():
+		var d: Dictionary = w.entities[eid]["data"]
+		if d.get("k", "") != "m" or d.get("dead", false) or not main.snap_cache.has(eid):
+			continue
+		mid = eid
+		if float(d.get("vx", 0.0)) == 0.0 and float(d.get("vz", 0.0)) == 0.0:
+			break
+	if mid == "":
+		return "skip"
+	var c: Dictionary = main.snap_cache[mid]
+	w.on_left({"eid": mid})
+	w.on_joined({"eid": mid, "name": "?"})
+	main._on_message({"t": "snap", "d": 1, "now": w.clock.latest, "map": main.map_id, "gone": [],
+		"ents": [{"id": mid, "x": c.get("x", 0.0), "z": c.get("z", 0.0), "vx": c.get("vx", 0.0), "vz": c.get("vz", 0.0)}]})
+	var e: Dictionary = w.entities.get(mid, {})
+	if not e.has("node") or not is_instance_valid(e["node"]) or not e["data"].has("k"):
+		return "reentrada rápida: %s saiu e entrou de novo antes de um tick e não voltou inteiro (entrada: %s)" % [mid, str(e.keys())]
+	return ""
 
 ## Capturas do corpo (D186) na hora marcada (com --shots; sem tela, só some da lista).
 func _body_shots() -> void:

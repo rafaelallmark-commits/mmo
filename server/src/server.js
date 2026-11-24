@@ -2462,7 +2462,7 @@ export class GameServer {
       const v = Number(msg.value);
       if (!Number.isInteger(v) || v < 0) return { ok: false, code: 'bad_request', reason: 'Vida inválida.' };
       if (c.dead) return { ok: false, code: 'dead', reason: 'Você está caído.' };
-      if (v === 0) p.zone.killPlayer(p);
+      if (v === 0) p.zone.killPlayer(p, { gm: true }); // fora da telemetria de mortes (D187)
       else { c.hp = Math.min(p.stats.maxHp, v); this.store.saveCharacter(c); }
       return { ok: true, char: p.zone.charView(p) };
     }
