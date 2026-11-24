@@ -548,6 +548,9 @@ static func monster(def: Dictionary) -> Node3D:
 	var col: Color = MONSTER_COLORS.get(id, FAMILY_COLORS.get(fam, Color.GRAY))
 	var fierce: bool = def.get("aggro", "passive") == "aggressive"
 	root.cycle_len = (1.6 if fam == "machine" else 1.15) * s
+	# a queda ao morrer é da família do modelo (rig.gd, D186)
+	root.family = "beetle" if id == "ember_beetle" else fam
+	root.size = s
 	if fam == "machine":
 		_robot(root, body, s, col, rank)
 		if model == "archer" and root.weapon_arm != null:

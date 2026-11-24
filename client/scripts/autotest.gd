@@ -22,6 +22,12 @@ extends Node
 ## Em servidor --dev (comandos de mestre), também luta de verdade contra uma mecânica de monstro: perto dos
 ## Javalis de Cinza, recebe a investida avisada pelo servidor, confere o aviso desenhado, sai de lado e
 ## confere que o javali passou direto sem acertá-lo.
+## Corpo (D186): bebe um tônico e confere que o servidor anunciou o gole e o personagem levou o frasco à boca; em
+## servidor --dev, é teleportado no mesmo mapa e confere que o corpo se desfez no lugar antigo e se formou no novo;
+## num modelo à parte, confere a queda (caído, arma no chão, cor apagada) e o levantar (arma de volta); em servidor
+## --dev, cai de verdade longe do posto (comando de mestre hp 0), confere o corpo deitado com a arma ao lado e o aviso de
+## queda só depois da queda, volta ao posto e confere que o corpo se desfez onde caiu, se formou agachado no posto e se
+## levantou. Nas mecânicas dos monstros, um espírito que morre selecionado deixa a seleção vazia.
 
 const ItemText = preload("res://scripts/item_text.gd")
 
@@ -58,6 +64,12 @@ var tr_from := ""
 var tr_to := ""
 var tr_portal := ""
 var tr_hud = null
+# corpo (D186): tônico, teleporte e queda/levantar
+var body_seen := false
+var body_target := Vector2.ZERO
+var body_dummy: Node3D = null
+var body_shots := {}   # nome da captura -> instante (ms) em que tirar (com --shots)
+var body_sched := {}   # capturas já marcadas (cada uma uma vez só)
 
 func say(s: String) -> void:
 	print("[autotest] ", s)
@@ -333,7 +345,27 @@ func _process(_d: float) -> void:
 			if absf(main.world.pred.max_speed - speed_before) > 0.01:
 				fail("a velocidade não voltou ao normal na previsão")
 				return
-			say("mecânicas dos monstros: avisos em círculo, cone e linha (e um cancelado), explosão, puxão, drenagem de mana, eco, investida, reforços e pressão desenhados; Desorientado na interface e tirado pela Alvorada; a velocidade do Atolado chegou à previsão do movimento e voltou")
+			# espírito que morre selecionado (a queda dele some sem afundar e sai mais cedo): a seleção não fica presa
+			# num alvo que já não existe (o primeiro Esc só a tiraria, sem abrir o menu)
+			var sp_def: Dictionary = {}
+			for mid in main.defs.get("monsters", {}).keys():
+				if str(main.defs["monsters"][mid].get("family", "")) == "spirit":
+					sp_def = (main.defs["monsters"][mid] as Dictionary).duplicate()
+					sp_def["id"] = mid
+					break
+			if not sp_def.is_empty():
+				var sp_node: Node3D = preload("res://scripts/art.gd").monster(sp_def)
+				main.world.add_child(sp_node)
+				sp_node.position = main.world.my_pos() + Vector3(3.0, 0.0, 0.0)
+				var sp_label := Label3D.new()
+				sp_node.add_child(sp_label)
+				main.world.entities["auto-espirito"] = {"node": sp_node, "label": sp_label, "data": {"k": "m", "def": sp_def["id"]}, "snd": {"voice": 1.0, "fam": "spirit"}}
+				main.world.selected = "auto-espirito"
+				main.world.on_death("auto-espirito")
+				if main.world.selected != "" or main.world.entities.has("auto-espirito"):
+					fail("o espírito morreu selecionado e a seleção ficou presa nele (%s)" % main.world.selected)
+					return
+			say("mecânicas dos monstros: avisos em círculo, cone e linha (e um cancelado), explosão, puxão, drenagem de mana, eco, investida, reforços e pressão desenhados; Desorientado na interface e tirado pela Alvorada; a velocidade do Atolado chegou à previsão do movimento e voltou; espírito morto selecionado deixa a seleção vazia")
 			step = "mech_real"
 		"mech_real":
 			# luta de verdade (servidor --dev): na estrada segura, a uns 25 m dos Javalis de Cinza (o ponto vem
@@ -345,7 +377,7 @@ func _process(_d: float) -> void:
 			Net.request("gm", {"cmd": "teleport", "x": real_spot.x, "z": real_spot.y}, func(r):
 				if not r.get("ok", false):
 					say("sem comandos de mestre neste servidor: a luta de verdade contra uma mecânica ficou de fora (%s)" % r.get("reason", ""))
-					step = "done"
+					step = "body_drink"
 					return
 				real_until = Time.get_ticks_msec() + 30000
 				wait_until = Time.get_ticks_msec() + 600
@@ -408,8 +440,178 @@ func _process(_d: float) -> void:
 				wait_until = Time.get_ticks_msec() + 600
 				step = "real_done")
 		"real_done":
-			if Time.get_ticks_msec() >= wait_until:
+			if Time.get_ticks_msec() >= wait_until + 1000:
+				step = "body_drink"
+		# ---------------- corpo (D186): tônico, teleporte, queda e levantar ----------------
+		"body_drink":
+			var pot := ""
+			for it in main.ch.get("items", []):
+				if it.get("loc", "") == "bag" and str(it.get("defId", "")).begins_with("potion_"):
+					pot = str(it["id"])
+			if pot == "":
+				say("sem tônico na bolsa: o gole ficou de fora")
+				step = "body_tp"
+				return
+			body_seen = false
+			step = "body_drink_wait"
+			wait_until = Time.get_ticks_msec() + 6000
+			Net.request("use_item", {"instance": pot}, func(r):
+				if not r.get("ok", false):
+					fail("o tônico foi recusado: %s" % r.get("reason", "")))
+		"body_drink_wait":
+			_body_shots()
+			var me_d: Dictionary = main.world.me()
+			if not me_d.is_empty() and not body_seen:
+				var mn: Node3D = me_d["node"]
+				if mn.get("_drink_t") != null and float(mn._drink_t) >= 0.0 and mn._flask != null and mn._flask.scale.x > 0.5:
+					body_seen = true
+					_sched("corpo_tonico", 300)
+					wait_until = Time.get_ticks_msec() + 1300
+			if body_seen and Time.get_ticks_msec() >= wait_until:
+				say("tônico: o servidor anunciou o gole e o personagem levou o frasco à boca")
+				step = "body_tp"
+			elif not body_seen and Time.get_ticks_msec() > wait_until:
+				fail("o tônico foi usado, mas o personagem não bebeu (evento drink)")
+		"body_tp":
+			var ap: Vector3 = main.world.auth_pos()
+			body_target = Vector2(ap.x + 12.0, ap.z)
+			body_seen = false
+			step = "body_tp_wait"
+			wait_until = Time.get_ticks_msec() + 8000
+			Net.request("gm", {"cmd": "teleport", "x": body_target.x, "z": body_target.y}, func(r):
+				if not r.get("ok", false):
+					say("sem comandos de mestre: o teleporte ficou de fora")
+					step = "body_fall")
+		"body_tp_wait":
+			_body_shots()
+			var te: Dictionary = main.world.me()
+			if te.is_empty():
+				return
+			var tn: Node3D = te["node"]
+			if te.has("pin"):
+				if not body_seen:
+					_sched("corpo_teleporte_some", 150)
+				body_seen = true   # desfazendo no lugar antigo
+				return
+			if body_seen and float(tn.get("_form_t")) >= 0.0:
+				_sched("corpo_teleporte_chega", 120)
+			var here := Vector2(tn.position.x, tn.position.z)
+			if body_seen and here.distance_to(body_target) < 1.5 and float(tn.get("_form_t")) < 0.0 and tn.get("model").visible and body_shots.is_empty():
+				say("teleporte: o corpo se desfez em brasas no lugar antigo e se formou no novo")
+				step = "body_fall"
+			elif Time.get_ticks_msec() > wait_until:
+				fail("teleporte no mesmo mapa sem o efeito (desfez: %s, posição (%.1f, %.1f), alvo (%.1f, %.1f))" % [str(body_seen), here.x, here.y, body_target.x, body_target.y])
+		"body_fall":
+			# num modelo à parte (o do jogador segue o servidor): cai, fica caído com a arma no chão e levanta
+			var fam: String = main.world._weapon_family(main.world.me()["data"].get("w")) if not main.world.me().is_empty() else ""
+			body_dummy = preload("res://scripts/art.gd").character(main.ch.get("classId", "breaker"), fam)
+			main.world.add_child(body_dummy)
+			body_dummy.position = main.world.my_pos() + Vector3(2.0, 0.0, 0.0)
+			if not body_dummy.has_method("set_down"):
+				body_dummy.queue_free()
 				step = "done"
+				return
+			body_dummy.set_down(true, true)
+			wait_until = Time.get_ticks_msec() + 10000
+			_sched("corpo_queda", 450)
+			step = "body_fall_wait"
+		"body_fall_wait":
+			# o relógio do jogo anda mais devagar quando os quadros demoram (renderização por software): espera a
+			# condição, com folga
+			_body_shots()
+			var dropped_ok: bool = body_dummy.weapon_mesh == null or body_dummy._dropped != null
+			var lying_ok: bool = float(body_dummy._dp) >= 1.99 and dropped_ok and float(body_dummy._fade_w) > 0.5
+			if not lying_ok or not body_shots.is_empty():
+				if Time.get_ticks_msec() > wait_until:
+					fail("a queda não terminou deitada (progresso %.2f, arma no chão %s, cor apagada %.2f)" % [float(body_dummy._dp), str(dropped_ok), float(body_dummy._fade_w)])
+				return
+			if not body_sched.has("corpo_caido"):
+				_sched("corpo_caido", 0)
+				return
+			body_dummy.set_down(false)
+			wait_until = Time.get_ticks_msec() + 10000
+			_sched("corpo_levantando", 500)
+			step = "body_rise_wait"
+		"body_rise_wait":
+			_body_shots()
+			var back_ok: bool = body_dummy.weapon_mesh == null or (body_dummy._dropped == null and body_dummy.weapon_mesh.visible)
+			var up_ok2: bool = float(body_dummy._dp) <= 0.01 and back_ok and float(body_dummy._fade_w) <= 0.05
+			if not up_ok2 or not body_shots.is_empty():
+				if Time.get_ticks_msec() > wait_until:
+					fail("o levantar não terminou de pé (progresso %.2f, arma na mão %s, cor apagada %.2f)" % [float(body_dummy._dp), str(back_ok), float(body_dummy._fade_w)])
+				return
+			body_dummy.queue_free()
+			body_dummy = null
+			say("queda e levantar: os joelhos cederam, o corpo foi ao chão de lado com a arma ao lado e a cor apagada, e levantou pegando a arma de volta")
+			step = "body_death"
+		"body_death":
+			# cai de verdade (servidor --dev), longe do posto de guarda, para o renascer desfazer e formar o corpo
+			body_seen = false
+			step = "body_death_wait"
+			var gp: Dictionary = main.map_def().get("guardPost", {"x": 20.0, "z": 50.0})
+			body_target = Vector2(float(gp["x"]) + 14.0, float(gp["z"]))
+			Net.request("gm", {"cmd": "teleport", "x": body_target.x, "z": body_target.y}, func(r):
+				if not r.get("ok", false):
+					step = "done"
+					return
+				wait_until = Time.get_ticks_msec() + 900
+				step = "body_death_go")
+		"body_death_go":
+			if Time.get_ticks_msec() < wait_until:
+				return
+			step = "body_death_wait"
+			wait_until = Time.get_ticks_msec() + 10000
+			Net.request("gm", {"cmd": "hp", "value": 0}, func(r):
+				if not r.get("ok", false):
+					say("sem o comando de vida neste servidor: a morte de verdade ficou de fora (%s)" % r.get("reason", ""))
+					step = "done")
+		"body_death_wait":
+			_body_shots()
+			var de: Dictionary = main.world.me()
+			if de.is_empty():
+				return
+			var dn: Node3D = de["node"]
+			var dropped_ok2: bool = dn.weapon_mesh == null or dn._dropped != null
+			# o aviso de queda espera o corpo cair (fica no meio da tela, em cima do personagem)
+			if bool(dn._down) and float(dn._dp) < 1.0 and main.hud.death_overlay.visible:
+				fail("o aviso de queda cobriu o personagem antes de o corpo cair (progresso %.2f)" % float(dn._dp))
+				return
+			if bool(dn._down) and float(dn._dp) >= 1.99 and dropped_ok2 and body_shots.is_empty():
+				if not body_seen:
+					body_seen = true
+					_sched("corpo_morte", 200)
+					return
+				if not main.hud.death_overlay.visible:
+					if Time.get_ticks_msec() > wait_until:
+						fail("o aviso de queda não apareceu depois da queda do corpo")
+					return
+				say("morte: o corpo caiu de verdade (snapshot dead), deitado de lado com a arma ao lado; o aviso de queda veio depois")
+				body_seen = false
+				step = "body_respawn_wait"
+				wait_until = Time.get_ticks_msec() + 10000
+				Net.request("respawn")
+			elif Time.get_ticks_msec() > wait_until:
+				fail("caiu, mas o corpo não ficou deitado com a arma ao lado (progresso %.2f, caído %s, arma no chão %s)" % [float(dn._dp), str(dn._down), str(dropped_ok2)])
+		"body_respawn_wait":
+			_body_shots()
+			var re: Dictionary = main.world.me()
+			if re.is_empty():
+				return
+			var rn: Node3D = re["node"]
+			if re.has("pin"):
+				body_seen = true   # desfazendo onde caiu
+				return
+			if body_seen and float(rn._form_t) >= 0.0:
+				_sched("corpo_renascer", 250)
+				_sched("corpo_renascer_levantando", 750)
+			var gp2: Dictionary = main.map_def().get("guardPost", {"x": 20.0, "z": 50.0})
+			var near_post: bool = Vector2(rn.position.x - float(gp2["x"]), rn.position.z - float(gp2["z"])).length() < 4.0
+			var up_ok: bool = not bool(rn._down) and float(rn._dp) <= 0.01 and (rn.weapon_mesh == null or rn.weapon_mesh.visible) and rn._dropped == null
+			if body_seen and near_post and up_ok and body_shots.is_empty():
+				say("renascer: o corpo se desfez onde caiu, formou-se agachado no posto numa coluna de luz e levantou com a arma na mão")
+				step = "done"
+			elif Time.get_ticks_msec() > wait_until:
+				fail("renascer sem o efeito (desfez: %s, no posto: %s, de pé: %s, progresso %.2f)" % [str(body_seen), str(near_post), str(up_ok), float(rn._dp)])
 		"done":
 			step = "wait_gm"
 			# Em servidor --dev, mostra a descrição de um item de nível 5 (requisitos em vermelho).
@@ -930,6 +1132,20 @@ func _tut_tick() -> void:
 				main.world.request_move(22.0, 50.0)
 
 ## Com --shots=pasta, salva capturas de tela (precisa de janela/GL; não funciona em --headless).
+## Marca uma captura do corpo para daqui a ms milissegundos (uma vez por nome).
+func _sched(name: String, ms: int) -> void:
+	if body_sched.has(name):
+		return
+	body_sched[name] = true
+	body_shots[name] = Time.get_ticks_msec() + ms
+
+## Capturas do corpo (D186) na hora marcada (com --shots; sem tela, só some da lista).
+func _body_shots() -> void:
+	for nm in body_shots.keys():
+		if Time.get_ticks_msec() >= int(body_shots[nm]):
+			body_shots.erase(nm)
+			_shot(nm)
+
 func _shot(name: String) -> void:
 	if not main.args.has("shots") or DisplayServer.get_name() == "headless":
 		return

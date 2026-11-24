@@ -56,6 +56,17 @@ const PEOPLE := {"man": 1.3, "woman": 1.25, "boy": 1.0}
 ## (ruas calçadas, trilhos, túneis e câmaras).
 const STEP_HEAR := 16.0
 const DIRT_MAPS := ["estrada_velha", "brejo_bombas"]
+## Teleporte (D186): salto de posição de gente maior que isso num snapshot, sem investida, salto ou puxão de monstro
+## que o explique, desfaz o corpo em brasas no lugar antigo e o forma no novo.
+const JUMP_MIN := 7.0
+## Em combate, andando mais devagar que isso (m/s) com o alvo a até STRAFE_NEAR m, o personagem segue virado para o
+## alvo e a passada vai de lado ou de costas (D186); correndo, vira para onde corre.
+const STRAFE_MAX := 2.4
+const STRAFE_NEAR := 8.0
+## Quanto o corpo leva para se desfazer (s); o personagem fica no lugar antigo enquanto isso.
+const VANISH_SECS := 0.3
+var _arrivals := {}   # eid -> instante (ms) do evento joined: a entidade nova chega com o efeito de chegada
+var _me_arrived := false
 
 func _ready() -> void:
 	var map: Dictionary = main.map_def()
@@ -290,14 +301,19 @@ func apply_snapshot(snap: Dictionary) -> void:
 			e["track"] = keep
 			e["yaw"] = yaw
 			entities[eid] = e
-		if e.is_empty():
+		var fresh := e.is_empty()
+		if fresh:
 			e = _spawn_entity(d)
 			entities[eid] = e
 		e["data"] = d
 		var pos := Vector2(float(d["x"]), float(d["z"]))
 		var vel := Vector2(float(d.get("vx", 0.0)), float(d.get("vz", 0.0)))
 		if d.get("_u", true):
+			if not fresh:
+				_check_jump(e, pos)
 			(e["track"] as Motion.Track).push(now_srv, pos, vel)
+		if fresh:
+			_on_spawned(eid, e)
 		var name: String
 		if d["k"] == "p":
 			name = "%s  nv %d" % [d["n"], int(d["lvl"])]
@@ -340,6 +356,7 @@ func apply_snapshot(snap: Dictionary) -> void:
 		if not seen.has(eid):
 			entities[eid]["node"].queue_free()
 			entities.erase(eid)
+			_arrivals.erase(eid)
 			if selected == eid:
 				selected = ""
 	_sync_defense_npcs()
@@ -580,15 +597,31 @@ func _process(delta: float) -> void:
 			var s2: Array = track.sample(clock.render)
 			pos2 = s2[0]
 			vel = s2[1]
+		# desfazendo em brasas (teleporte, renascer longe): fica no lugar antigo até sumir, então aparece no novo
+		if e.has("pin"):
+			if Time.get_ticks_msec() < int(e["pin_until"]):
+				pos2 = e["pin"]
+				vel = Vector2.ZERO
+			else:
+				_arrive(e)
+				pos2 = (e["track"] as Motion.Track).last_pos()
+				vel = Vector2.ZERO
+				if eid == my_eid:
+					_lp_offset = Vector2.ZERO
+					_lp_render = pos2
 		# empurrão visual dos golpes
 		var knock: Vector2 = e["knock"]
 		if knock.length() > 0.001:
 			knock *= exp(-delta * 9.0)
 			e["knock"] = knock
 		n.position = _gpos(pos2.x + knock.x, pos2.y + knock.y)
-		# caído: deita no chão (e levanta ao renascer); o Caio derrubado pelos bichos também
+		# caído: o corpo cai de lado e fica no chão (e levanta ao renascer ou ao ser levantado); o Caio derrubado pelos
+		# bichos também (D186). Corpos sem esqueleto (reserva sem os modelos VRM) só deitam
 		var lying: bool = e["data"].get("dead", false) or str(e["data"].get("st", "")) == "down"
-		n.rotation.x = lerpf(n.rotation.x, -1.45 if lying else 0.0, clampf(delta * 6.0, 0.0, 1.0))
+		if n.has_method("set_down"):
+			n.set_down(lying, bool(e["data"].get("dead", false)))
+		else:
+			n.rotation.x = lerpf(n.rotation.x, -1.45 if lying else 0.0, clampf(delta * 6.0, 0.0, 1.0))
 		# velocidade e aceleração suavizadas (para a animação)
 		var speed := vel.length()
 		var prev_speed: float = e["speed"]
@@ -599,8 +632,19 @@ func _process(delta: float) -> void:
 		var yaw: float = e["yaw"]
 		var want := yaw
 		var turn_speed := 10.0
-		if speed > 0.35:
+		# salto ou investida: o servidor leva o corpo de lado ou para trás e ele não vira para onde desliza
+		var locked: bool = n.has_method("face_locked") and n.face_locked()
+		if locked:
+			want = yaw
+		elif speed > 0.35:
 			want = atan2(vel.x, vel.y)
+			var ct = e["data"].get("tgt", null)
+			if speed < STRAFE_MAX and ct != null and entities.has(ct) and n.has_method("set_move_dir"):
+				var ctp: Vector3 = entities[ct]["node"].position
+				var cd := Vector2(ctp.x - n.position.x, ctp.z - n.position.z)
+				if cd.length() > 0.3 and cd.length() < STRAFE_NEAR:
+					want = atan2(cd.x, cd.y)
+					turn_speed = 7.0
 		else:
 			var tgt = e["data"].get("tgt", null)
 			if tgt != null and entities.has(tgt):
@@ -608,8 +652,8 @@ func _process(delta: float) -> void:
 				if Vector2(tp.x - n.position.x, tp.z - n.position.z).length() > 0.05:
 					want = atan2(tp.x - n.position.x, tp.z - n.position.z)
 				turn_speed = 7.0
-		# preparando um cone ou uma linha avisada: olha para onde vai golpear
-		if e.has("face_until"):
+		# preparando um cone ou uma linha avisada (ou usando uma habilidade parado): olha para onde vai golpear
+		if e.has("face_until") and not locked:
 			if Time.get_ticks_msec() < int(e["face_until"]):
 				want = float(e["face_yaw"])
 				turn_speed = 12.0
@@ -623,6 +667,9 @@ func _process(delta: float) -> void:
 		n.rotation.y = yaw
 		if n.has_method("set_motion"):
 			n.set_motion(speed, float(e["accel"]), float(e["turn"]))
+		if n.has_method("set_move_dir") and speed > 0.05:
+			# para onde anda em relação a para onde olha (x: esquerda, y: frente)
+			n.set_move_dir(Vector2(vel.x * cos(yaw) - vel.y * sin(yaw), vel.x * sin(yaw) + vel.y * cos(yaw)))
 		if n.has_method("set_combat"):
 			n.set_combat(e["data"].get("tgt", null) != null and not e["data"].get("dead", false))
 		elif n.has_method("set_moving"):
@@ -979,10 +1026,16 @@ func on_hit(m: Dictionary) -> void:
 	var fam := ""
 	if not src.is_empty() and src["data"]["k"] == "p":
 		fam = _weapon_family(src["data"].get("w"))
+	# ataque básico: o golpe de quem bateu (variação da arma; floreio maior no crítico) — antes do efeito, que
+	# espera a corda ou o foco soltar; golpe de habilidade de jogador vem com o cast, que já move o corpo
+	if not src.is_empty() and src["node"].has_method("play_attack"):
+		var sk = m.get("skill", null)
+		if sk == null:
+			src["node"].play_attack(bool(m.get("crit", false)))
+		elif sk != "dot" and src["data"].get("k", "") != "p":
+			src["node"].play_attack()
 	vfx.on_hit(m, fam)
 	_hit_voice(m, dst)
-	if not src.is_empty() and m.get("skill", null) != "dot" and src["node"].has_method("play_attack"):
-		src["node"].play_attack()
 	if not m.get("miss", false):
 		if dst["node"].has_method("play_hurt"):
 			dst["node"].play_hurt()
@@ -1069,6 +1122,17 @@ func monster_windup_cancel(eid) -> void:
 	if entities[eid]["node"].has_method("cancel_windup"):
 		entities[eid]["node"].cancel_windup()
 
+## Habilidade usada parado: o personagem vira para onde ela vai (alvo, ponto ou aliado) enquanto o movimento dura.
+## Andando, segue virado para onde anda (não anda de lado nem de costas).
+func face_during(eid, yaw: float, secs: float) -> void:
+	if eid == null or not entities.has(eid) or secs <= 0.0:
+		return
+	var e: Dictionary = entities[eid]
+	if float(e["speed"]) > 0.6:
+		return
+	e["face_yaw"] = yaw
+	e["face_until"] = Time.get_ticks_msec() + int(secs * 1000.0)
+
 ## O servidor parou o meu personagem (atordoado, puxado): a previsão local não continua o caminho antigo.
 func halt_prediction() -> void:
 	_stop_prediction()
@@ -1079,6 +1143,9 @@ func set_move_speed(v: float) -> void:
 		pred.max_speed = v
 
 func on_death(eid: String) -> void:
+	# antes de tudo: o espírito sai da função mais cedo (some sem afundar) e a seleção não pode ficar presa nele
+	if selected == eid:
+		selected = ""
 	if entities.has(eid):
 		var e: Dictionary = entities[eid]
 		var n: Node3D = e["node"]
@@ -1092,18 +1159,168 @@ func on_death(eid: String) -> void:
 			Sfx.play("monster_die", n.position, 0.0, float(snd["voice"]))
 			if snd["fam"] == "machine":
 				Sfx.play("hit_blunt", n.position, -1.0, 0.7)
-		# cai de lado, fica um instante no chão e afunda
-		var side := -1.0 if randf() < 0.5 else 1.0
+		# a queda da família do monstro (rig.gd: bicho tomba de lado, besouro vira de costas, máquina cai de cara,
+		# espírito encolhe e some), um instante no chão e afunda — no mesmo tempo de antes, ~2,2 s (D186); peças
+		# paradas da prova tombam de lado
 		var tw := create_tween()
-		if e["data"]["k"] == "p":
-			tw.tween_property(n, "rotation:x", -1.45, 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		if n.has_method("play_death"):
+			n.play_death()
+			if str(n.get("family")) == "spirit":
+				_sparks_at(n.position + Vector3(0, 1.0, 0))
+				tw.tween_interval(float(n.death_seconds()) + 0.05)
+				tw.tween_callback(n.queue_free)
+				return
+			if str(n.get("family")) == "machine":
+				# faíscas quando bate no chão (tween preso ao mundo: numa troca de zona, nada fica pendurado)
+				var at := n.position
+				var tws := create_tween()
+				tws.tween_interval(0.55)
+				tws.tween_callback(func(): vfx._sparks(at + Vector3(0, 0.3, 0), Color(1.0, 0.75, 0.35), 18, 3.0, 0.6, 0.45))
+			tw.tween_interval(float(n.death_seconds()) + 0.7)
 		else:
+			var side := -1.0 if randf() < 0.5 else 1.0
 			tw.tween_property(n, "rotation:z", 1.5 * side, 0.4).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-		tw.tween_interval(0.9)
+			tw.tween_interval(0.9)
 		tw.tween_property(n, "position:y", n.position.y - 1.4, 0.9).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
 		tw.tween_callback(n.queue_free)
+
+# ---------------- corpo: chegar, sair, teleportar, renascer, beber (D186) ----------------
+## Entidade que acabou de entrar na lista: caída desde já (sem a queda), ou chegando ao mapa com o efeito de chegada
+## (o meu personagem no mundo novo; outro jogador que acabou de entrar — evento joined).
+func _on_spawned(eid: String, e: Dictionary) -> void:
+	var n: Node3D = e["node"]
+	var d: Dictionary = e["data"]
+	if n.has_method("set_down") and (d.get("dead", false) or str(d.get("st", "")) == "down"):
+		n.set_down(true, bool(d.get("dead", false)), true)
+	var arriving := false
+	if _is_me(eid) and not _me_arrived:
+		_me_arrived = true
+		arriving = true
+	elif _arrivals.has(eid):
+		arriving = Time.get_ticks_msec() - int(_arrivals[eid]) < 4000
+		_arrivals.erase(eid)
+	if arriving:
+		if n.has_method("appear"):
+			n.appear(0.45)
+		vfx.arrive_fx(n.position, false)
+
+## Outro jogador entrou neste mapa (portal, prova, calabouço, entrada no jogo): quando aparecer, chega com o efeito.
+func on_joined(m: Dictionary) -> void:
+	var eid := str(m.get("eid", ""))
+	if eid == "" or _is_me(eid):
+		return
+	if entities.has(eid):
+		var n: Node3D = entities[eid]["node"]
+		if n.has_method("appear"):
+			n.appear(0.45)
+		vfx.arrive_fx(n.position, false)
+	else:
+		_arrivals[eid] = Time.get_ticks_msec()
+
+## Outro jogador saiu do mapa (portal, saída do jogo): o corpo se desfaz em brasas onde estava.
+func on_left(m: Dictionary) -> void:
+	var eid := str(m.get("eid", ""))
+	_arrivals.erase(eid)
+	if not entities.has(eid) or _is_me(eid):
+		return
+	var e: Dictionary = entities[eid]
+	entities.erase(eid)
+	main.snap_cache.erase(eid)   # um snapshot por diferença atrasado não o traz de volta
 	if selected == eid:
 		selected = ""
+	var n: Node3D = e["node"]
+	(e["label"] as Node3D).visible = false
+	vfx.vanish_fx(n.position)
+	if n.has_method("vanish"):
+		n.vanish(VANISH_SECS)
+	var tw := create_tween()
+	tw.tween_interval(VANISH_SECS + 0.05)
+	tw.tween_callback(n.queue_free)
+
+## Salto de posição no snapshot (teleporte de mestre, escolta que recomeça): desfaz e forma de novo, se nada explica
+## o salto (investida ou salto do próprio movimento, puxão de monstro, renascer já em curso).
+func _check_jump(e: Dictionary, pos: Vector2) -> void:
+	var n: Node3D = e["node"]
+	if not n.has_method("vanish") or e.has("pin"):
+		return
+	var last: Vector2 = (e["track"] as Motion.Track).last_pos()
+	if last.distance_to(pos) < JUMP_MIN:
+		return
+	if (n.has_method("act_locked") and n.act_locked()) or Time.get_ticks_msec() < int(e.get("pulled_until", 0)):
+		return
+	_teleport(e, false)
+
+## Começa o teleporte: o corpo se desfaz em brasas onde está e fica ali até sumir; crouched: ao chegar, forma
+## agachado e se levanta (renascer).
+func _teleport(e: Dictionary, crouched: bool) -> void:
+	var n: Node3D = e["node"]
+	e["pin"] = Vector2(n.position.x, n.position.z) - (e["knock"] as Vector2)
+	e["pin_until"] = Time.get_ticks_msec() + int(VANISH_SECS * 1000.0)
+	e["pin_crouch"] = crouched
+	vfx.vanish_fx(n.position)
+	if n.has_method("vanish"):
+		n.vanish(VANISH_SECS)
+
+## Fim do desfazer: o corpo aparece no lugar novo (o que o servidor já mandou) e se forma numa coluna de luz.
+func _arrive(e: Dictionary) -> void:
+	var crouched: bool = e.get("pin_crouch", false)
+	e.erase("pin")
+	e.erase("pin_until")
+	e.erase("pin_crouch")
+	var track: Motion.Track = e["track"]
+	track.clear_to(clock.latest, track.last_pos())
+	e["knock"] = Vector2.ZERO
+	var p := track.last_pos()
+	var n: Node3D = e["node"]
+	n.position = _gpos(p.x, p.y)
+	if n.has_method("appear"):
+		n.appear(0.45 if crouched else 0.35, crouched)
+	vfx.arrive_fx(n.position, crouched)
+
+## Renascer (evento respawn): longe de onde caiu (posto de guarda, entrada do calabouço depois da queda do grupo), o
+## corpo se desfaz e se forma agachado numa coluna de luz e então se levanta; levantado por um aliado no mesmo
+## lugar, levanta-se de onde caiu.
+func on_respawn(m: Dictionary) -> void:
+	var eid := str(m.get("eid", ""))
+	if not entities.has(eid):
+		return
+	var e: Dictionary = entities[eid]
+	var n: Node3D = e["node"]
+	var to := Vector2(float(m.get("x", n.position.x)), float(m.get("z", n.position.z)))
+	if Vector2(n.position.x, n.position.z).distance_to(to) > 3.0 and n.has_method("vanish"):
+		_teleport(e, true)
+		# o snapshot com o lugar novo chega logo depois; até lá, a chegada é no lugar do evento
+		(e["track"] as Motion.Track).push(clock.latest + 1.0, to, Vector2.ZERO)
+		return
+	if n.has_method("set_down"):
+		n.set_down(false)
+		vfx.column(eid, Vfx.COLORS["sacred"], 0.9)
+
+## Monstro puxou este jogador (mech pull): o salto de posição é o puxão, não um teleporte.
+func mark_pulled(eid) -> void:
+	if eid != null and entities.has(eid):
+		entities[eid]["pulled_until"] = Time.get_ticks_msec() + 800
+
+## Tônico (evento drink): quem bebeu leva o frasco à boca; no fim do gole, a faísca da cor sobe.
+func on_drink(m: Dictionary) -> void:
+	var eid := str(m.get("eid", ""))
+	if not entities.has(eid):
+		return
+	var n: Node3D = entities[eid]["node"]
+	var kind := str(m.get("kind", "hp"))
+	if not _is_me(eid):
+		Sfx.play("potion", n.position, -6.0)
+	var wait := 0.0
+	if n.has_method("play_drink"):
+		n.play_drink(kind)
+		wait = n.drink_spark_in()
+	var tw := create_tween()
+	tw.tween_interval(maxf(0.05, wait))
+	tw.tween_callback(func(): vfx.drink_spark(eid, kind))
+
+## Brilhos do espírito que se desfaz.
+func _sparks_at(at: Vector3) -> void:
+	vfx._sparks(at, Color(0.85, 0.75, 1.0), 22, 2.0, 1.0, 0.7)
 
 func add_loot(l: Dictionary) -> void:
 	if loots.has(l["id"]):

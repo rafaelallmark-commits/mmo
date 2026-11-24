@@ -191,6 +191,18 @@ Vitrine com as 8 classes, monstros e NPCs (salva capturas, inclusive closes do r
 /Applications/Godot.app/Contents/MacOS/Godot --path client -- --gallery=/tmp/vitrine
 ```
 
+Golpes e habilidades congelados (`client/scripts/anim_probe.gd`): cada movimento numa fileira de cópias do personagem, cada uma num instante, de perto e na câmera do jogo — as variações do ataque básico, o crítico e as seis habilidades de cada classe (`--set=classe` ou `--set=classe:arma` filtra; `--only=trecho` filtra pelo nome). Com `--check` não captura: confere os números de cada movimento (pulso, alcance, mão de apoio fora do cabo, arma ou mão dentro do corpo, pé que desliza) e imprime o que passar do limite.
+
+```bash
+/Applications/Godot.app/Contents/MacOS/Godot --path client -- --animprobe=/tmp/golpes --set=pikeman
+```
+
+Com `--states`, a mesma sonda mostra os estados do corpo de cada personagem em vez dos golpes: empunhadura parado, em guarda, andando e correndo; a passada de frente, de costas e de lado; beber o tônico (vida e mana); a queda, o corpo caído visto de quatro lados, o levantar (do chão e agachado, como no renascer) e o desfazer e o formar em brasas — com uma terceira imagem (`_detalhe`) que junta um close de cada cópia. Com `--states --check`, confere a passada em cada velocidade (calcanhar e ponta do pé no chão que deslizam), a arma dentro do corpo ou do chão, o gargalo longe da boca e o corpo deitado dentro do chão (quadril, peito, cabeça e as mãos, com as pontas dos dedos). `--monsters` mostra a queda de cada família de monstro.
+
+```bash
+/Applications/Godot.app/Contents/MacOS/Godot --path client -- --animprobe=/tmp/corpo --states --set=warden
+```
+
 Percorrer todas as telas e salvar uma captura de cada (precisa de janela, não use `--headless`):
 
 ```bash

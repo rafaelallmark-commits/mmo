@@ -614,6 +614,7 @@ func _process(delta: float) -> void:
 	_tick_channel(delta)
 	_tick_defense(delta)
 	_tick_debuffs(delta)
+	_tick_death()
 	# mantém o inventário inteiro dentro da tela, qualquer que seja a largura do conteúdo
 	if inv_panel and inv_panel.visible:
 		var vw := get_viewport().get_visible_rect().size.x
@@ -925,12 +926,29 @@ static func esc(t) -> String:
 # Marca da equipe (papel gm ou admin) antes do nome no chat; o servidor manda staff: true (D145).
 const STAFF_MARK := "[color=#8fd0ff][lb]Equipe][/color] "
 
-func show_death() -> void:
+## Aviso de queda (tela escura com o botão de voltar ao posto). delay > 0: adiado, para o jogador ver o próprio corpo
+## cair (os joelhos cedem e ele vai ao chão de lado em ~1 s, D186) — o aviso fica no meio da tela, bem em cima dele;
+## uma ficha que chega caída nesse meio-tempo não o antecipa.
+var _death_at := -1
+
+func show_death(delay := 0.0) -> void:
+	if delay > 0.0:
+		if not death_overlay.visible:
+			_death_at = Time.get_ticks_msec() + int(delay * 1000.0)
+		return
+	if _death_at >= 0 and Time.get_ticks_msec() < _death_at:
+		return
+	_death_at = -1
 	death_overlay.visible = true
 	clear_debuffs()  # quem cai perde os efeitos negativos (o servidor também os tira)
 
 func hide_death() -> void:
+	_death_at = -1
 	death_overlay.visible = false
+
+func _tick_death() -> void:
+	if _death_at >= 0 and Time.get_ticks_msec() >= _death_at:
+		show_death()
 
 func show_disconnect(reason: String) -> void:
 	disc_label.text = "Conexão perdida.\n%s" % reason

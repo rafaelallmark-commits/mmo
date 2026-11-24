@@ -21,7 +21,17 @@ uniform vec4 rim_color : source_color = vec4(1.0, 0.95, 0.86, 1.0);
 uniform float rim_strength = 0.22;
 uniform vec4 emission_color : source_color = vec4(0.0, 0.0, 0.0, 1.0);
 
+#ifdef FX_BODY
+#include "res://shaders/fx_body.gdshaderinc"
+#endif
+
 void fragment() {
+#ifdef FX_BODY
+	float fx_glow = fx_cut((INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz);
+	if (fx_glow < 0.0) {
+		discard;
+	}
+#endif
 	vec4 t = texture(albedo_tex, UV) * albedo;
 	vec3 c = t.rgb;
 	if (recolor_on) {
@@ -41,6 +51,9 @@ void fragment() {
 	float rim = 1.0 - clamp(dot(N, VIEW), 0.0, 1.0);
 	rim = smoothstep(0.66, 0.72, rim) * lit;
 	ALBEDO = c * light + rim * rim_color.rgb * rim_strength * sun_color.rgb + emission_color.rgb;
+#ifdef FX_BODY
+	ALBEDO = mix(fx_color(ALBEDO), fx_edge.rgb * 1.6, fx_glow);
+#endif
 	ALPHA = t.a;
 	ALPHA_SCISSOR_THRESHOLD = alpha_cut;
 }
