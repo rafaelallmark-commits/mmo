@@ -194,7 +194,12 @@ Telas de conta do teste público pela interface, apertando os botões de verdade
 "fecha o jogo" sem confirmar, a recusa do login abre a tela do código com a conta preenchida (também quando vem
 numa reconexão, como de dentro do mundo, sem derrubar a conexão nova), o reenvio é barrado
 pelo limite de um e-mail por minuto, confirma com o código lido do e-mail, entra, usa *Baixar meus dados* e salva uma
-cópia pelo diálogo de arquivo (escolhendo o caminho pelo sinal do diálogo, na pasta dos e-mails). Precisa de
+cópia pelo diálogo de arquivo (escolhendo o caminho pelo sinal do diálogo, na pasta dos e-mails); depois aperta Esc
+em *Baixar meus dados*, na Criação, em *Excluir conta*, em *Excluir personagem* e na lista (cada tela volta como o
+Voltar dela), cria
+personagens até 4 e confere que a lista com um aviso de duas linhas cabe na janela padrão (com `--shots=pasta` e
+janela, salva a captura `contas_personagens_4.png`). Com `--accounts=http://127.0.0.1:PORTA`, o serviço de contas
+pode estar em outra porta (`npm run contas -- --port PORTA ...`). Precisa de
 uma zona com login por token e do serviço de contas gravando os e-mails numa pasta, com o mesmo segredo nos dois
 terminais (gere um com `openssl rand -hex 32` e exporte em `CINZAS_TOKEN_SECRET` nos dois; dentro de `server/`, banco
 novo):

@@ -870,8 +870,9 @@ static func _npc_seed(fem: bool, base: int) -> int:
 
 # ---------------- objetos de missão ----------------
 ## Modelo de um objeto de missão (data/maps.json "objects"): pelo kind (quadro, carroça, defesa) ou pelo
-## prefixo do id (marcos, páginas, fusíveis, medidores, válvulas, selos, tubos de voz, a máquina do posto,
-## pessoas a resgatar). A base fica no chão (y = 0); o losango que indica "dá para usar" é do world.gd.
+## prefixo do id (marcos, páginas, fusíveis, medidores, válvulas, selos, tubos de voz, a máquina do posto).
+## A base fica no chão (y = 0); o losango que indica "dá para usar" é do world.gd. (Os resgatados do
+## tutorial são entidades da zona, não objetos: world.gd PEOPLE, D165.)
 static func quest_object(o: Dictionary) -> Node3D:
 	var id: String = o.get("id", "")
 	match o.get("kind", ""):
@@ -881,8 +882,6 @@ static func quest_object(o: Dictionary) -> Node3D:
 			return cart()
 		"defense":
 			return _obj_valve(true)
-	if id.begins_with("rescue_"):
-		return _obj_person(id)
 	if id.begins_with("marker_"):
 		return _obj_marker()
 	if id.begins_with("page_"):
@@ -1053,23 +1052,6 @@ static func _obj_board() -> Node3D:
 	for p in papers:
 		part(root, box(Vector3(0.36, 0.42, 0.01)), toon(Color("#efe4c8"), false), Vector3(p[0], p[1], 0.05), Vector3.ONE, Vector3(0, 0, p[2]))
 		part(root, sphere(0.025, 5), toon(Color("#c0392b"), false), Vector3(p[0], p[1] + 0.17, 0.065))
-	return root
-
-static func _obj_person(id: String) -> Node3D:
-	# pessoa a resgatar (tutorial): morador comum; Bento preso no entulho, Caio é criança
-	var root := Node3D.new()
-	var p := character("", "", true, Color("#8a9a6a") if id.ends_with("caio") else Color("#a87a5a"), hash(id))
-	root.add_child(p)
-	if id.ends_with("caio"):
-		p.scale = Vector3.ONE * 0.95
-	else:
-		p.scale = Vector3.ONE * 1.25
-	if id.ends_with("bento"):
-		var rubble := toon(Color("#8a8278"))
-		for i in 6:
-			var a := i * TAU / 6.0
-			part(root, sphere(0.25 + (i % 3) * 0.06, 6), rubble, Vector3(cos(a) * 0.55, 0.15, sin(a) * 0.55), Vector3(1.2, 0.7, 1.0), Vector3(0, i * 40, 0))
-		part(root, box(Vector3(1.4, 0.12, 0.2)), toon(Color("#5a3e2a")), Vector3(0.1, 0.4, 0.35), Vector3.ONE, Vector3(0, 20, 12))
 	return root
 
 # ---------------- cenário ----------------

@@ -20,13 +20,14 @@ const MONSTERS := [
 ]
 
 ## Um de cada modelo de objeto de missão (o id e o kind decidem o modelo, como nos mapas), em duas fileiras.
+## (Os resgatados do tutorial não são objetos: são entidades da zona, com o corpo de morador; D165.)
 const OBJECTS := [
 	[{"id": "marker_1", "name": "Marco de rota"}, {"id": "page_heron_1", "name": "Páginas"}, {"id": "fuse_box_1", "name": "Fusíveis"},
 	{"id": "order_vault", "name": "Cofre"}, {"id": "gauge_1", "name": "Medidor"}, {"id": "thermo_1", "name": "Medição térmica"},
 	{"id": "valve_1", "name": "Válvula"}, {"id": "main_valve", "kind": "defense", "name": "Válvula principal"}],
 	[{"id": "voice_tube_1", "name": "Tubo de voz"}, {"id": "reply_tube", "name": "Tubo de resposta"}, {"id": "old_post", "name": "Máquina do posto"},
 	{"id": "deep_seal_1", "name": "Selo"}, {"id": "ilda_cart", "kind": "escort", "name": "Carroça parada"},
-	{"id": "board_ambar", "kind": "board", "name": "Quadro de missões"}, {"id": "rescue_bento", "name": "Bento"}, {"id": "outro_qualquer", "name": "Sem modelo (cubo)"}],
+	{"id": "board_ambar", "kind": "board", "name": "Quadro de missões"}, {"id": "outro_qualquer", "name": "Sem modelo (cubo)"}],
 ]
 ## Peças da prova de classe (o pilar e o sino nos dois estados) e os monstros/aliados com aparência própria.
 const PIECES := [
@@ -80,12 +81,13 @@ func start(dir: String) -> void:
 		var n := Art.character("", "", true, Color.from_hsv(i * 0.22, 0.35, 0.75), i * 7919)
 		n.position = Vector3(-2.25 + i * 1.5, 0, 3)
 		add_child(n)
-	# objetos de missão: fileiras em z = 14 e z = 32, de frente (+z do modelo) para a câmera que olha de z menor
+	# objetos de missão: fileiras em z = 14 e z = 32, centradas em x = 0, de frente (+z do modelo) para a câmera
+	# que olha de z menor
 	for r in OBJECTS.size():
 		var row: Array = OBJECTS[r]
 		for i in row.size():
 			var o: Node3D = Art.quest_object(row[i])
-			o.position = Vector3(9.1 - i * 2.6, 0, 14.0 + r * 18.0)
+			o.position = Vector3((row.size() - 1) * 1.3 - i * 2.6, 0, 14.0 + r * 18.0)
 			o.rotation.y = PI
 			add_child(o)
 			_tag(row[i]["name"], o.position + Vector3(0, 0.25, -1.3))

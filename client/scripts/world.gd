@@ -224,7 +224,7 @@ func _build_map(map: Dictionary) -> void:
 		var ol := _label(o["name"], 30, Color("#bfeeee"))
 		ol.position = op + Vector3(0, top + 0.5, 0)
 		add_child(ol)
-		object_nodes[o["id"]] = {"pos": op, "data": o, "node": obj, "static": true, "gem": gem, "gem_y": top}
+		object_nodes[o["id"]] = {"pos": op, "data": o, "node": obj, "static": true, "gem": gem, "gem_y": top, "label": ol}
 	for pt in map.get("portals", []):
 		var pp := _gpos(float(pt["x"]), float(pt["z"]))
 		var ring2 := Art.cyl(float(pt["radius"]), float(pt["radius"]), 0.06, 48)
@@ -343,6 +343,7 @@ func apply_snapshot(snap: Dictionary) -> void:
 			if selected == eid:
 				selected = ""
 	_sync_defense_npcs()
+	_sync_escort_objects()
 	if main.hud:
 		main.hud.refresh_target()
 
@@ -362,6 +363,34 @@ func _sync_defense_npcs() -> void:
 			(nd["node"] as Node3D).visible = show
 			if nd.has("label"):
 				(nd["label"] as Node3D).visible = show
+
+## Carroça parada da escolta (objeto de missão): some, com o losango e o nome, enquanto a carroça da escolta
+## do próprio grupo está na rota — a entidade "e" com esc = o id da escolta do objeto e o dono (own) ou o
+## grupo (pty) de quem joga; o servidor a manda sempre ao grupo, também de longe — e volta quando a escolta
+## acaba (chegada, abandono), pronta para recomeçar. A carroça de outro grupo não a esconde: quem não está
+## naquela escolta começa a própria ali (D183). Escondida, não recebe clique.
+func _sync_escort_objects() -> void:
+	var busy := {}
+	var my_id := int(main.ch.get("id", -1))
+	var mine_e := me()
+	var my_party = null if mine_e.is_empty() else mine_e["data"].get("party", null)
+	for e in entities.values():
+		var d: Dictionary = e["data"]
+		if d.get("k", "") != "e" or d.get("esc") == null:
+			continue
+		var own := d.get("own") != null and int(d["own"]) == my_id
+		var party := d.get("pty") != null and my_party != null and str(d["pty"]) == str(my_party)
+		if own or party:
+			busy[str(d["esc"])] = true
+	for id in object_nodes.keys():
+		var o: Dictionary = object_nodes[id]
+		if str(o["data"].get("kind", "")) != "escort":
+			continue
+		var show := not busy.has(str(o["data"].get("escort", "")))
+		if (o["node"] as Node3D).visible != show:
+			for k in ["node", "gem", "label"]:
+				if o.get(k) != null:
+					(o[k] as Node3D).visible = show
 
 ## Confere a previsão do próprio personagem com a posição do servidor.
 func _reconcile(server_pos: Vector2, d: Dictionary) -> void:
@@ -797,6 +826,8 @@ func _click(screen_pos: Vector2) -> void:
 		for id in nodes.keys():
 			if group[0] == "npc" and mon_here != "" and not (nodes[id]["node"] as Node3D).visible:
 				continue
+			if group[0] == "object" and not (nodes[id]["node"] as Node3D).visible:
+				continue  # carroça parada escondida enquanto a escolta do grupo está na rota (D183)
 			var pos: Vector3 = nodes[id]["pos"]
 			var pick := float(group[2])
 			if group[0] == "portal":

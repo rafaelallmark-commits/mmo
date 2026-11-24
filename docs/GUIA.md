@@ -95,7 +95,8 @@ pasta antiga; as opções, o último servidor usado e o registro do jogo ficam g
 ## 3. Entrar
 
 1. Abra o jogo. O campo **Servidor** já vem com o endereço do teste (e, depois, com o último servidor que você
-   usou para entrar).
+   usou para entrar). Se o endereço do teste tiver porta (como `wss://jogo.exemplo.com.br:8443`), digite-o
+   inteiro: criar conta e entrar usam a mesma porta.
 2. **Criar conta**: escolha um nome de conta, seu e-mail e uma senha (8 caracteres ou mais), marque a caixa de
    idade (13 anos ou mais) e de aceite dos termos e toque em *Criar e receber o código*.
 3. Digite o **código de 6 dígitos** que chega por e-mail (vale 30 minutos).
@@ -122,6 +123,10 @@ aceitar, na mesma tela dá para baixar seus dados ou excluir a conta.
 
 A tela de título também tem **Créditos e licenças**: quem fez o quê, os modelos de personagem e as licenças do
 motor Godot e dos componentes que vêm com ele.
+
+Nas telas fora do mundo, **Esc** faz o mesmo que o botão *Voltar* (ou *Cancelar*): da lista de personagens volta
+à tela Entrar (e desconecta, como o *Voltar*); da criação de personagem, de *Baixar meus dados* e das telas de
+excluir, volta à lista; das telas de conta (criar, confirmar e-mail, esqueci a senha), volta à tela Entrar.
 
 Apareceu **"Servidor cheio"** ao entrar? O teste chegou ao limite de jogadores ao mesmo tempo: tente de novo em alguns
 minutos.
@@ -198,6 +203,7 @@ O **escudo** (Bastião e Escudeiro) tem chance de **bloqueio** contra golpes de 
 | Câmera | **Q/E** ou botão direito arrastando giram; a roda aproxima |
 | Mapa | **M** — o mapa de onde você está (estradas, portais com o destino, NPCs, posto de guarda, você e o grupo); precisa do Mapa da Estrada Velha, recompensa do tutorial, e vale em todos os mapas |
 | Painéis | **I** bolsa, **C** ficha (atributos e habilidades), **J** missões, **L** clã, **M** mapa, **Enter** chat, **Esc** fecha o painel aberto (sem painel, tira a seleção do alvo e o personagem para de bater nele; sem alvo, abre o menu) |
+| Telas fora do mundo (entrar, personagens, criação) | **Esc** = o botão *Voltar* (ou *Cancelar*) da tela |
 
 Habilidades com **tempo de conjuração** mostram a barra "Conjurando…": fique parado até o fim — andar, atacar
 ou usar um item interrompe (sem gastar mana).
@@ -217,6 +223,10 @@ próximos animados), **Sombras**, **Tela cheia** e limite de **quadros por segun
   fazer uma vez por dia; voltam à **00:00 UTC** (21:00 em Brasília) — o diário e o quadro mostram quanto falta.
 - **Títulos**: algumas missões e respostas dão um título, mostrado acima do nome. Na ficha (**C**) você escolhe qual
   aparece, ou nenhum.
+- **Escolta da carroça** (Galerias do Eco, capítulo 4): clique na carroça parada do acampamento e fique perto da
+  que sai, até o fim da rota. Enquanto a carroça do seu grupo está na rota, a parada some; ela volta quando a
+  escolta acaba (chegada, ou o grupo inteiro fora do mapa por um minuto), pronta para recomeçar. A carroça de outro
+  grupo não esconde a parada: quem não está naquela escolta começa a própria.
 - A cada nível você ganha **pontos de atributo** e **de habilidade**: distribua na ficha (**C**). Os itens exigem
   nível, classe e atributos — a dica do item mostra o que falta.
 - **Equipamento**: o **armeiro** de cada cidade (Amaro em Pedrâmbar, Inês no Vau de Nácar) vende as peças comuns

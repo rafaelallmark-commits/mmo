@@ -185,7 +185,8 @@ nenhum acima de 50 ms; CPU do processo ~7% de um núcleo; 144 MB de memória.
 ## 8.4 Rede
 
 - Snapshots a 10 Hz. Clientes atuais pedem **snapshots por diferença e interesse** no login: só o que está a
-  até 70 m, cada entidade completa ao aparecer e depois só os grupos de campos que mudaram; a posição só vai
+  até 70 m (mais o próprio alvo e a carroça ou a defesa do próprio grupo, D183), cada entidade completa ao
+  aparecer e depois só os grupos de campos que mudaram; a posição só vai
   quando a previsão por velocidade do cliente erraria mais de 10 cm. Clientes antigos recebem o completo.
 - Banda medida por cliente com 100 jogadores juntos: **~9 KB/s** (snapshot completo: ~195 KB/s).
 - O cliente mostra o **ping** no canto inferior direito (verde < 80 ms, âmbar < 150 ms, vermelho acima).
@@ -470,7 +471,8 @@ for cinzas-servidor" antes do build).
   caminho contrário, de uma cópia do volume para a máquina (e dela para fora com `scp`):
   `docker compose run --rm -T --no-deps servidor cat /data/backups/cinzas-AAAA-MM-DDTHH-MM-SS.db > cinzas-AAAA-MM-DDTHH-MM-SS.db`.
 - **Serviço de contas** (`contas`): mesma imagem, mesmo volume e mesmo banco; o Caddy repassa
-  `https://DOMINIO/contas/*` para ele (o cliente usa essa base quando o servidor é `wss://`). O servidor de zona sobe com
+  `https://DOMINIO/contas/*` para ele (o cliente usa essa base quando o servidor é `wss://`, com a mesma porta do
+  campo Servidor quando ele tiver uma, D183). O servidor de zona sobe com
   `CINZAS_AUTH=token`: cadastro e senha só pelo serviço de contas. `deploy/.env` precisa de `DOMINIO`,
   `CINZAS_TOKEN_SECRET` (`openssl rand -hex 32`) e `CINZAS_EMAIL`: o compose não sobe sem os três. Zona e contas
   recusam um segredo com menos de 32 caracteres ou o valor de exemplo do repositório (D139). Para enviar e-mail de

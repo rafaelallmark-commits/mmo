@@ -1363,9 +1363,12 @@ export class Zone {
     }
     for (const e of this.escorts.values()) {
       const px = r2(e.x), pz = r2(e.z), vx = r2(e.vx || 0), vz = r2(e.vz || 0);
+      // escolta e defesa (não os resgatados do tutorial, que já são só do dono): o grupo dela a recebe também
+      // além do raio de interesse (server.js sendSnapshots), e esc/own/pty dizem de qual escolta e de quem é (D183)
+      const grp = e.ownerOnly ? null : { own: e.ownerCharId, pty: e.partyId ?? null };
       recs.push({
-        id: e.eid, x: e.x, z: e.z, px, pz, vx, vz, owner: e.ownerOnly ? e.ownerCharId : null,
-        A: `"k":"e","def":"${e.def.model ?? 'cart'}","n":${JSON.stringify(e.def.name)},"mhp":${e.mhp},"npc":${JSON.stringify(e.def.npc ?? null)}`,
+        id: e.eid, x: e.x, z: e.z, px, pz, vx, vz, owner: e.ownerOnly ? e.ownerCharId : null, grp,
+        A: `"k":"e","def":"${e.def.model ?? 'cart'}","n":${JSON.stringify(e.def.name)},"mhp":${e.mhp},"npc":${JSON.stringify(e.def.npc ?? null)},"esc":${JSON.stringify(grp ? e.defId : null)},"own":${JSON.stringify(grp ? grp.own : null)},"pty":${JSON.stringify(grp ? grp.pty : null)}`,
         P: `"x":${px},"z":${pz}`,
         V: `"vx":${vx},"vz":${vz}`,
         C: `"hp":${Math.ceil(e.hp)},"st":"${e.state}"`,

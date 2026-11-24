@@ -21,8 +21,8 @@ async function withServer(fn) {
 // tudo antes do capítulo 4 + o primeiro passo dele
 const preOf = (server) => [...Object.entries(server.data.quests).filter(([, q]) => q.chapter < 4).map(([id]) => id), 'c4_bells'];
 
-async function hero(server, url, label, classId, level, done, accept) {
-  const c = new SimClient(label);
+async function hero(server, url, label, classId, level, done, accept, opts = {}) {
+  const c = new SimClient(label, opts);
   await c.connect(url);
   await c.request('register', { account: `c4_${label}`, password: 'senha123' });
   await c.request('login', { account: `c4_${label}`, password: 'senha123' });
@@ -148,6 +148,53 @@ test('escolta da carroça: emboscadas, quebra volta ao marco, chegada conta para
       assert.equal(j.ready, true, `${c.label}: escolta concluída`);
     }
     await a.close(); await b.close();
+  });
+});
+
+// D183: o cliente esconde a carroça parada (objeto de missão) enquanto a carroça da escolta do próprio grupo está
+// na rota. Para isso a entidade diz de qual escolta é e de quem (esc, own, pty) e vai sempre ao grupo nos
+// snapshots por diferença, também além dos 70 m do raio de interesse; para quem é de fora, o raio vale como
+// sempre. Quando a escolta acaba, a carroça sai do snapshot do grupo (e a parada volta no cliente).
+test('escolta: a carroça diz de quem é e vai ao grupo também de longe; sai do snapshot quando acaba', async () => {
+  await withServer(async (server, url) => {
+    const pre = [...preOf(server), 'c4_ilda'];
+    const a = await hero(server, url, 'grpa', 'bastion', 14, pre, ['c4_route'], { delta: true });
+    const b = await hero(server, url, 'grpb', 'veilsinger', 14, pre, ['c4_route'], { delta: true });
+    const c = await hero(server, url, 'fora', 'warden', 14, pre, ['c4_route'], { delta: true });
+    await a.request('party_invite', { name: b.char.name });
+    await b.request('party_accept', { from: a.char.id });
+    const pid = server.partyIdOf(a.char.id);
+    assert.ok(pid, 'grupo formado');
+    await a.request('gm', { cmd: 'teleport', x: 30, z: 93.5 });
+    const st = await a.request('interact', { object: 'ilda_cart' });
+    assert.equal(st.ok, true, st.reason);
+    const zone = player(server, a).zone;
+    const esc = zone.escorts.get(st.escort);
+    // snapshot completo (clientes sem "delta") e por diferença trazem a escolta, o dono e o grupo
+    const v = zone.snapshot().ents.find((e) => e.id === esc.eid);
+    assert.deepEqual([v.esc, v.own, v.pty], ['ilda_cart', a.char.id, pid]);
+    for (const cl of [a, b, c]) {
+      await cl.waitFor((m) => m.t === 'snap' && cl.entity(esc.eid)?.esc === 'ilda_cart', 3000, `carroça no snapshot de ${cl.label}`);
+      const e = cl.entity(esc.eid);
+      assert.deepEqual([e.own, e.pty], [a.char.id, pid], `${cl.label}: dono e grupo da carroça`);
+    }
+    // os três bem longe da carroça (que fica parada esperando): o grupo continua com ela, quem é de fora a perde
+    const far = zone.nav.nearestFree(15, 15, 10);
+    assert.ok(Math.hypot(far.x - esc.x, far.z - esc.z) > 75, 'ponto além do raio de interesse');
+    for (const cl of [a, b, c]) assert.equal((await cl.request('gm', { cmd: 'teleport', x: far.x, z: far.z })).ok, true);
+    await c.waitFor((m) => m.t === 'snap' && !c.entity(esc.eid), 3000, 'carroça sai do snapshot de quem é de fora');
+    for (let i = 0; i < 4; i++) await a.waitFor((m) => m.t === 'snap', 2000, 'snapshot de a');
+    for (const cl of [a, b]) {
+      const e = cl.entity(esc.eid);
+      assert.ok(e, `${cl.label}: a carroça do grupo continua no snapshot de longe`);
+      assert.ok(Math.hypot(e.x - far.x, e.z - far.z) > 70, `${cl.label}: além do raio de interesse`);
+    }
+    // a escolta acaba (chegada há mais de 5 s): a carroça sai do snapshot do grupo
+    esc.state = 'arrived';
+    esc.arrivedAt = zone.now - 6000;
+    for (const cl of [a, b]) await cl.waitFor((m) => m.t === 'snap' && !cl.entity(esc.eid), 3000, `carroça sai do snapshot de ${cl.label}`);
+    assert.equal(zone.escorts.has(esc.eid), false);
+    for (const cl of [a, b, c]) await cl.close();
   });
 });
 

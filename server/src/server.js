@@ -326,7 +326,7 @@ export class GameServer {
       for (const r of recs) {
         if (r.owner != null && r.owner !== charId) continue;
         const dx = r.x - vx, dz = r.z - vz;
-        if (dx * dx + dz * dz > R2 && r.id !== p.targetId && r.id !== p.eid) continue;
+        if (dx * dx + dz * dz > R2 && r.id !== p.targetId && r.id !== p.eid && !this.ownGroupRecord(r, charId)) continue;
         seen.add(r.id);
         visible++;
         const k = known.get(r.id);
@@ -358,6 +358,14 @@ export class GameServer {
       s.knownFull = false;
       this.rawSend(s, raw, true);
     }
+  }
+
+  // A escolta (ou a defesa) do próprio grupo — do dono ou de quem está no grupo que a começou, os mesmos que
+  // escort.escorts() conta — vai sempre no snapshot por diferença, também além de INTEREST_R: enquanto ela
+  // existe, o cliente esconde a carroça parada do objeto de missão, e ela não volta a aparecer só porque a
+  // carroça da rota ficou longe (D183).
+  ownGroupRecord(r, charId) {
+    return !!r.grp && (r.grp.own === charId || (r.grp.pty != null && r.grp.pty === this.partyIdOf(charId)));
   }
 
   // A cada 10 s e no desligamento. Um lote só (uma transação no SQLite; um UPDATE numa ida e volta no

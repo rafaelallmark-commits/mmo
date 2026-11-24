@@ -283,6 +283,13 @@ func _button(box: Container, text: String, cb: Callable, primary := false) -> Bu
 	box.add_child(b)
 	return b
 
+## Botão Voltar (ou Cancelar) de uma tela fora do mundo: o Esc aperta este botão (_unhandled_input, D183).
+func _back_button(box: Container, text: String, cb: Callable, primary := false) -> Button:
+	var b := _button(box, text, cb, primary)
+	if screen:
+		screen.set_meta("esc_back", b)
+	return b
+
 func _field(box: VBoxContainer, label: String, value: String, secret := false) -> LineEdit:
 	var l := Label.new()
 	l.text = label
@@ -408,7 +415,7 @@ func show_credits() -> void:
 		rt.add_theme_font_size_override("normal_font_size", 14)
 		tabs.add_child(rt)
 		tabs.set_tab_title(i, pages[i][0])
-	_button(box, "Voltar", show_title, true)
+	_back_button(box, "Voltar", show_title, true)
 
 # ---------------- ENTRAR ----------------
 var _pending_register := false
@@ -444,7 +451,7 @@ func show_login() -> void:
 		server_url = e_url.text.strip_edges()
 		show_forgot_accounts())
 	b4.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_button(box, "Voltar", func():
+	_back_button(box, "Voltar", func():
 		Net.close()
 		show_title())
 	_status(box)
@@ -524,7 +531,7 @@ func show_register_accounts() -> void:
 				show_verify_accounts(str(b.get("mensagem", "")), account)
 			else:
 				set_status(str(b.get("erro", "Não foi possível criar a conta.")), true)), true)
-	_button(box, "Voltar", show_login)
+	_back_button(box, "Voltar", show_login)
 	_status(box)
 
 ## Links para os textos dos Termos de Uso e da Política de Privacidade (abrem no navegador).
@@ -579,7 +586,7 @@ func show_verify_accounts(msg := "", conta := "") -> void:
 	hint.add_theme_font_size_override("font_size", 12)
 	hint.add_theme_color_override("font_color", Theme_.MUTED)
 	_button(box, "Esqueci a senha", show_forgot_accounts)
-	_button(box, "Voltar", show_login)
+	_back_button(box, "Voltar", show_login)
 	_status(box)
 	e_code.text_submitted.connect(func(_t): confirm.call())
 
@@ -608,7 +615,7 @@ func show_terms_accounts(version: int, msg := "") -> void:
 	var back := func(): show_terms_accounts(version, msg)
 	_button(box, "Não aceito: baixar meus dados", func(): show_export_data(back))
 	_button(box, "Não aceito: excluir a conta", func(): show_delete_account(true, back))
-	_button(box, "Voltar", show_login)
+	_back_button(box, "Voltar", show_login)
 	_status(box)
 
 func show_forgot_accounts() -> void:
@@ -626,7 +633,7 @@ func show_forgot_accounts() -> void:
 				set_status("Senha trocada. Entre com a nova senha.")
 			else:
 				set_status(str(b.get("erro", "Não foi possível trocar a senha.")), true)))
-	_button(box, "Voltar", show_login)
+	_back_button(box, "Voltar", show_login)
 	_status(box)
 
 ## Exclusão da própria conta (privacidade), confirmada com a senha. Da tela de personagens vai pelo servidor
@@ -656,7 +663,7 @@ func show_delete_account(via_accounts := false, back := Callable()) -> void:
 				done.call()
 			else:
 				set_status(r["reason"], true)))
-	_button(box, "Cancelar", go_back)
+	_back_button(box, "Cancelar", go_back)
 	_status(box)
 
 # ---------------- BAIXAR MEUS DADOS (direito de acesso da LGPD) ----------------
@@ -688,7 +695,7 @@ func show_export_data(back := Callable()) -> void:
 			_export_save(_export_box, JSON.stringify(b["dados"], "  ", false)))
 	_button(box, "Baixar", fetch, true)
 	box.add_child(result)
-	_button(box, "Voltar", func():
+	_back_button(box, "Voltar", func():
 		_export_text = ""
 		go_back.call())
 	_status(box)
@@ -782,7 +789,7 @@ func show_delete_char(cid: int) -> void:
 				char_id = -1
 			show_chars()
 			set_status("%s foi excluído." % char_name)))
-	_button(box, "Cancelar", func(): show_chars(cid))
+	_back_button(box, "Cancelar", func(): show_chars(cid))
 	_status(box)
 
 ## Espera o "hello" do servidor (versão e modo de login) antes de seguir.
@@ -826,14 +833,29 @@ func _accounts_login_blocked(body: Dictionary) -> bool:
 		show_terms_accounts(int(body.get("versao", 0)), str(body.get("erro", "")))
 	return true
 
+## Serviço de contas: --accounts ou, sem ele, deduzido do campo Servidor. wss://HOST (teste público, atrás do
+## proxy) → https://HOST/contas, com a porta quando houver (wss://HOST:8443 → https://HOST:8443/contas, D183);
+## ws://HOST[:PORTA] (desenvolvimento) → http://HOST:7780, a porta padrão do serviço de contas.
 func _accounts_base() -> String:
 	if accounts_url != "":
 		return accounts_url.trim_suffix("/")
-	var u := server_url
-	var host := u.get_slice("://", 1).get_slice("/", 0).get_slice(":", 0)
+	var u := server_url.strip_edges()
+	var sep := u.find("://")
+	var authority := (u.substr(sep + 3) if sep >= 0 else u).get_slice("/", 0).get_slice("?", 0).get_slice("#", 0)
+	var host := authority
+	var port := ""
+	if authority.begins_with("["):
+		# IPv6 entre colchetes: [::1]:7777
+		var close := authority.find("]")
+		if close > 0:
+			host = authority.substr(0, close + 1)
+			port = authority.substr(close + 1).trim_prefix(":")
+	elif authority.contains(":"):
+		host = authority.get_slice(":", 0)
+		port = authority.get_slice(":", 1)
 	# o esquema em qualquer caixa ("Wss://", como um app de mensagens deixa): o WebSocket do Godot o aceita assim (D179)
 	if u.to_lower().begins_with("wss://"):
-		return "https://%s/contas" % host
+		return "https://%s%s/contas" % [host, (":" + port) if port.is_valid_int() else ""]
 	return "http://%s:7780" % host
 
 ## Prazo de 30 s: bem acima do prazo do envio de e-mail no servidor (SMTP_TIMEOUT_MS, 10 s em server/src/mailer.js),
@@ -891,6 +913,9 @@ func show_chars(select_id := -1) -> void:
 	_ensure_menu_scene()
 	menu_scene.set_view("chars")
 	var box := _menu_panel("Personagens de %s" % account, "left", 340)
+	# 7 px entre as linhas do painel (10 nas outras telas): com 4 personagens, os cinco botões e um aviso de
+	# duas (ou três) linhas, tudo cabe na janela padrão de 1280×720, dentro da margem de 40 px (D183)
+	box.add_theme_constant_override("separation", 7)
 	if chars_cache.is_empty():
 		var l := Label.new()
 		l.text = "Nenhum personagem ainda.\nCrie um voluntário das caravanas."
@@ -907,6 +932,12 @@ func show_chars(select_id := -1) -> void:
 		var b := _button(box, "%s\n%s · nível %d · %s" % [c["name"], cls_name, int(c["level"]), map_name], func(): show_chars(cid), cid == select_id)
 		b.custom_minimum_size = Vector2(0, 54)
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		# cartão de duas linhas com 4 px de respiro em cima e embaixo (8 nos outros botões): fica nos 54 px
+		for sn in ["normal", "hover", "pressed"]:
+			var sb := Theme_.button_style(cid == select_id, sn != "normal")
+			sb.content_margin_top = 4
+			sb.content_margin_bottom = 4
+			b.add_theme_stylebox_override(sn, sb)
 		if cid == select_id:
 			menu_scene.show_character(c["classId"], _kit_weapon_family(c["classId"]))
 	box.add_child(HSeparator.new())
@@ -919,7 +950,7 @@ func show_chars(select_id := -1) -> void:
 	if _selected_char >= 0:
 		var sel := _selected_char
 		_button(box, "Excluir personagem", func(): show_delete_char(sel))
-	_button(box, "Voltar", func():
+	_back_button(box, "Voltar", func():
 		Net.close()
 		show_login())
 	_status(box)
@@ -984,7 +1015,7 @@ func _build_create(name_text := "") -> void:
 			Net.request("list_chars", {}, func(r2):
 				chars_cache = r2["chars"]
 				show_chars(int(r["char"]["id"])))), true)
-	_button(box, "Voltar", func(): show_chars(_selected_char))
+	_back_button(box, "Voltar", func(): show_chars(_selected_char))
 	_status(box)
 
 func _name_edit_text() -> String:
@@ -1311,7 +1342,7 @@ func _show_returning() -> void:
 	state = "login"
 	menu_scene.set_view("login")
 	var box := _menu_panel("Voltando aos personagens")
-	_button(box, "Voltar", func():
+	_back_button(box, "Voltar", func():
 		Net.close()
 		show_login())
 	_status(box)
@@ -1497,10 +1528,14 @@ func _unhandled_input(event: InputEvent) -> void:
 					hud.refresh_target()
 			else:
 				toggle_pause_menu()
-		elif state == "create":
-			show_chars(_selected_char)
-		elif state in ["login", "credits"]:
-			show_title()
+		elif loading == null and screen and screen.has_meta("esc_back"):
+			# fora do mundo, o Esc faz o que o Voltar (ou o Cancelar) da tela faz: Personagens → Entrar
+			# (desconecta), Criação, Baixar meus dados, Excluir personagem e Excluir conta → a tela de onde se veio,
+			# as telas de conta → Entrar, Entrar e Créditos → Título (D183). Com a tela Carregando por cima, nada:
+			# o botão embaixo dela também não dá para clicar
+			var back = screen.get_meta("esc_back")
+			if is_instance_valid(back) and (back as Button).is_visible_in_tree():
+				(back as Button).pressed.emit()
 		get_viewport().set_input_as_handled()
 
 # ---------------- mensagens ----------------

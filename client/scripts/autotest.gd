@@ -1064,16 +1064,30 @@ func _nav_tick() -> void:
 # uma cópia pelo diálogo de arquivo (na pasta dos e-mails) e, com --termos=conta:senha (conta que aceitou uma
 # versão anterior dos termos), aceita os termos novos e entra. Confere também (D179, D180) que a tela de personagens tem
 # um botão Excluir conta só, que "Wss://" leva ao serviço de contas em https, e que, com a conexão caída na tela de
-# personagens, Jogar avisa na linha de status sem deixar a tela Carregando presa.
+# personagens, Jogar avisa na linha de status sem deixar a tela Carregando presa. E (D183): o serviço de contas
+# deduzido do campo Servidor mantém a porta do wss:// (e o ws:// segue para a 7780); Esc em Baixar meus dados, na
+# Criação, em Excluir conta, em Excluir personagem e na lista faz o que o Voltar (ou Cancelar) de cada tela faz; com 4
+# personagens (criados aqui pela tela de criação) e um aviso de duas linhas, a lista cabe na janela padrão com 40 px
+# de folga.
 var ac_step := 0
 var ac_until := 0
 var ac_data_path := ""
 var ac_screen = null  # tela do código antes da reconexão (sai quando a recusa abre a tela de novo)
+var ac_nchars := 0    # personagens da conta antes da criação em curso (D183: a lista chega a 4)
+var ac_from_data := false  # o bloco do Esc começou na tela Baixar meus dados (sem --termos)
+
+## Aperta Esc como o teclado (o mesmo caminho da tecla: interface, depois _unhandled_input do main.gd).
+func _esc() -> void:
+	var ev := InputEventKey.new()
+	ev.keycode = KEY_ESCAPE
+	ev.physical_keycode = KEY_ESCAPE
+	ev.pressed = true
+	get_tree().root.push_input(ev)
 
 func start_accounts(m) -> void:
 	main = m
 	t0 = Time.get_ticks_msec()
-	deadline_ms = 90000
+	deadline_ms = 150000
 	step = "contas"
 	ac_until = Time.get_ticks_msec() + 800
 	say("telas de conta; e-mails em %s" % main.args["contastest"])
@@ -1223,17 +1237,29 @@ func _accounts_tick() -> void:
 			if excl != 1:
 				fail("a tela de personagens tem %d botões Excluir conta" % excl)
 				return
-			# o serviço de contas também é o https://HOST/contas com o esquema em maiúscula ("Wss://", D179)
+			# serviço de contas deduzido do campo Servidor: https://HOST/contas também com o esquema em maiúscula
+			# ("Wss://", D179), com a porta quando houver (D183); no desenvolvimento, http://HOST:7780
 			var keep_srv: String = main.server_url
 			var keep_acc: String = main.accounts_url
 			main.accounts_url = ""
-			main.server_url = "Wss://Jogo.Exemplo.com.br"
-			var base: String = main._accounts_base()
+			var wrong := ""
+			for case in [["Wss://Jogo.Exemplo.com.br", "https://Jogo.Exemplo.com.br/contas"],
+					["wss://jogo.exemplo.com.br:8443", "https://jogo.exemplo.com.br:8443/contas"],
+					["WSS://Jogo.Exemplo.com.br:8443/", "https://Jogo.Exemplo.com.br:8443/contas"],
+					["wss://[2001:db8::1]:8443", "https://[2001:db8::1]:8443/contas"],
+					["ws://127.0.0.1:7777", "http://127.0.0.1:7780"],
+					["ws://[::1]:7777", "http://[::1]:7780"]]:
+				main.server_url = case[0]
+				var base: String = main._accounts_base()
+				if base != case[1]:
+					wrong = "%s → %s (esperado %s)" % [case[0], base, case[1]]
+					break
 			main.server_url = keep_srv
 			main.accounts_url = keep_acc
-			if base != "https://Jogo.Exemplo.com.br/contas":
-				fail("serviço de contas deduzido de Wss://: %s" % base)
+			if wrong != "":
+				fail("serviço de contas deduzido do campo Servidor: " + wrong)
 				return
+			say("serviço de contas deduzido do campo Servidor: com a porta do wss://, 7780 no ws://")
 			if not _ui_press("Baixar meus dados"):
 				return
 		10:
@@ -1268,7 +1294,7 @@ func _accounts_tick() -> void:
 				return
 			say("cópia salva pelo diálogo em " + copy)
 			if not main.args.has("termos"):
-				ac_step = 30  # conexão que cai na tela de personagens (D180), depois OK
+				ac_step = 40  # Esc e leiaute com 4 personagens (D183); depois a conexão que cai (D180) e OK
 				return
 			if not _ui_press("Voltar"):
 				return
@@ -1300,7 +1326,110 @@ func _accounts_tick() -> void:
 			if main.state != "chars":
 				return
 			say("termos aceitos; lista de personagens de %s" % main.account)
-			ac_step = 30  # conexão que cai na tela de personagens (D180), depois OK
+			ac_step = 40  # Esc e leiaute com 4 personagens (D183); depois a conexão que cai (D180) e OK
+			return
+		# ---- Esc nas telas fora do mundo e leiaute da lista com 4 personagens (D183) ----
+		40:
+			# sem --termos, a tela aberta ainda é Baixar meus dados: o Esc volta à lista, como o Voltar
+			ac_from_data = _ui_title() == "Baixar meus dados"
+			if ac_from_data:
+				_esc()
+		41:
+			if _ui_title() != "Personagens de %s" % main.account:
+				return
+			if ac_from_data:
+				say("Esc em Baixar meus dados voltou à lista de personagens")
+			# Criação → Esc → lista (com 4 personagens o botão some; aí a tela abre direto)
+			if _ui_button("Criar novo personagem") != null:
+				_ui_press("Criar novo personagem")
+			else:
+				main.show_create()
+		42:
+			if main.state != "create":
+				return
+			_esc()
+		43:
+			if _ui_title() != "Personagens de %s" % main.account:
+				return
+			say("Esc na Criação voltou à lista de personagens")
+			if not _ui_press("Excluir conta"):
+				return
+		44:
+			if _ui_title() != "Excluir conta":
+				return
+			_esc()
+		45:
+			if _ui_title() != "Personagens de %s" % main.account:
+				return
+			say("Esc em Excluir conta voltou à lista de personagens")
+			ac_nchars = main.chars_cache.size()
+			if ac_nchars >= 4:
+				ac_step = 48
+				return
+			if not _ui_press("Criar novo personagem"):
+				return
+		46:
+			if main.state != "create" or main.screen == null or main.screen.find_child("NameEdit", true, false) == null:
+				return
+			# nomes da conta de teste: começam com letra, até 16 caracteres, um por vaga
+			var nm := "Pj%s%s" % [main.account.left(12), "abcd"[ac_nchars]]
+			(main.screen.find_child("NameEdit", true, false) as LineEdit).text = nm
+			if not _ui_press("Criar personagem"):
+				return
+		47:
+			if main.state != "chars" or main.chars_cache.size() <= ac_nchars:
+				if main.state == "create" and _ui_status() != "":
+					fail("criação recusada: " + _ui_status())
+				return
+			ac_nchars = main.chars_cache.size()
+			if ac_nchars < 4:
+				if not _ui_press("Criar novo personagem"):
+					return
+				ac_step = 46
+				ac_until = Time.get_ticks_msec() + 300
+				return
+		48:
+			if main.state != "chars" or main.chars_cache.size() < 4:
+				return
+			if _ui_button("Criar novo personagem") != null:
+				fail("com 4 personagens a lista ainda oferece Criar novo personagem")
+				return
+			say("4 personagens na lista de %s" % main.account)
+			if not _ui_press("Excluir personagem"):
+				return
+		49:
+			if _ui_title() != "Excluir personagem":
+				return
+			_esc()
+		50:
+			if _ui_title() != "Personagens de %s" % main.account:
+				return
+			say("Esc em Excluir personagem voltou à lista de personagens")
+			# o aviso de duas linhas mais comum nesta tela (D180) tem que caber com folga na janela padrão
+			main.set_status("Sem conexão com o servidor. Use Voltar e entre de novo.", true)
+		51:
+			var st: Label = main.status_label
+			# sem tela (--headless) a janela tem 64×64 e o painel só cresce até o tamanho mínimo: a medida é a mesma
+			# da janela padrão do projeto (1280×720), onde o painel começa no mesmo lugar
+			var view: Vector2 = main.get_viewport().get_visible_rect().size
+			if DisplayServer.get_name() == "headless":
+				view = Vector2(ProjectSettings.get_setting("display/window/size/viewport_width"), ProjectSettings.get_setting("display/window/size/viewport_height"))
+			var bottom := st.get_global_rect().end.y
+			say("leiaute com 4 personagens: janela %dx%d, aviso de %d linhas termina em %.0f px" % [int(view.x), int(view.y), st.get_line_count(), bottom])
+			if st.get_line_count() < 2:
+				fail("o aviso de teste não ocupou duas linhas (%d)" % st.get_line_count())
+				return
+			if bottom > view.y - 40.0:
+				fail("com 4 personagens o aviso de duas linhas termina em %.0f px, fora da margem de 40 px da janela de %.0f" % [bottom, view.y])
+				return
+			_shot("contas_personagens_4")  # com --shots=pasta e janela (sem --headless)
+			# Esc na lista: o mesmo que Voltar (Entrar, desconectando)
+			_esc()
+		52:
+			if _ui_title() != "Entrar" or Net.state != "closed":
+				return
+			say("Esc na lista de personagens: tela Entrar, conexão fechada")
+			ac_step = 30
 			return
 		30:
 			# a conexão cai com o jogador na tela de personagens (servidor reiniciado, outra conexão na conta)
@@ -1686,6 +1815,8 @@ var dungeon_until := 0
 var dungeon_shots := 0
 
 # ---------- capítulo 4 no cliente (--cap4): canalização, escolta e escolha de diálogo ----------
+# Na escolta, confere que a carroça parada (objeto de missão) aparece antes e some enquanto a do grupo está na
+# rota: uma carroça só na tela (D183).
 var cap4_step := 0
 var cap4_done := false
 var cap4_until := 0
@@ -1745,9 +1876,24 @@ func _cap4_tick() -> void:
 			Net.request("gm", {"cmd": "teleport", "x": 31.0, "z": 93.0})
 			main.world.cam_dist = 16.0
 		8:
+			# a carroça parada (objeto de missão) aparece antes da escolta
+			if not (main.world.object_nodes["ilda_cart"]["node"] as Node3D).visible:
+				fail("a carroça parada não aparece antes da escolta")
+				return
 			Net.request("interact", {"object": "ilda_cart"}, func(r):
 				say("carroça: %s" % ("partiu" if r["ok"] else r["reason"])))
 		9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24:
+			if cap4_step == 10:
+				# com a carroça da escolta na rota, a parada some (com o losango e o nome): uma carroça só (D183)
+				var parked: Dictionary = main.world.object_nodes["ilda_cart"]
+				if _cap4_cart().is_empty():
+					fail("a carroça da escolta não apareceu")
+					return
+				for k in ["node", "gem", "label"]:
+					if (parked[k] as Node3D).visible:
+						fail("a carroça parada continua visível (%s) durante a escolta" % k)
+						return
+				say("escolta: a carroça parada sumiu enquanto a do grupo está na rota")
 			var cart := _cap4_cart()
 			if not cart.is_empty():
 				var cp: Vector3 = cart["node"].position
