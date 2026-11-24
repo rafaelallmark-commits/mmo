@@ -108,6 +108,33 @@ test('tônico acima do nível: não compra nem usa; venda e descarte; item vendi
   });
 });
 
+test('tônico: todos na zona veem quem bebe (evento drink com o tipo do tônico); uso recusado não é anunciado', async () => {
+  await withServer(async (server, url) => {
+    const A = await hero(url, 'Sedenta');
+    const B = await hero(url, 'Testemunha');
+    const pa = server.playerOf(A.char.id);
+    assert.equal(server.playerOf(B.char.id).zone, pa.zone, 'os dois no mesmo mapa');
+    const hp = [...pa.char.items.values()].find((x) => x.defId === 'potion_hp_s' && x.loc === 'bag');
+    const ownSeen = A.waitFor((m) => m.t === 'drink' && m.eid === pa.eid, 3000, 'A vê o próprio gole');
+    const otherSeen = B.waitFor((m) => m.t === 'drink' && m.eid === pa.eid, 3000, 'B vê o gole de A');
+    assert.equal((await A.request('use_item', { instance: hp.id })).ok, true);
+    assert.equal((await ownSeen).kind, 'hp');
+    assert.equal((await otherSeen).kind, 'hp');
+    // em recarga: recusado e sem anúncio (o ping de B chega depois de tudo o que o pedido de A mandou)
+    const mp = (await A.request('gm', { cmd: 'give', defId: 'potion_mp_s', qty: 1 })).instanceId;
+    const before = B.events.filter((m) => m.t === 'drink').length;
+    assert.equal((await A.request('use_item', { instance: mp })).code, 'cooldown');
+    await B.request('ping');
+    assert.equal(B.events.filter((m) => m.t === 'drink').length, before, 'uso recusado não é anunciado');
+    // tônico de mana: kind 'mp', e o evento só diz quem bebeu e de que cor
+    pa.potionReadyAt = 0;
+    const mpSeen = B.waitFor((m) => m.t === 'drink' && m.eid === pa.eid && m.kind === 'mp', 3000, 'gole de mana');
+    assert.equal((await A.request('use_item', { instance: mp })).ok, true);
+    assert.deepEqual(Object.keys(await mpSeen).filter((k) => !k.startsWith('_')).sort(), ['eid', 'kind', 't']);
+    A.ws.close(); B.ws.close();
+  });
+});
+
 test('armeiro: peças comuns da classe, faixa atual e próxima; compra a gearPriceMult × o valor; vende de volta', async () => {
   await withServer(async (server, url) => {
     const c = await hero(url, 'Fregues', 'warden');

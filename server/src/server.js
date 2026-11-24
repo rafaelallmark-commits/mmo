@@ -32,7 +32,7 @@ export const PROTOCOL_VERSION = 3; // 3: snapshots por diferença, login por tok
 const SERVER_VERSION = JSON.parse(readFileSync(pathJoin(pathDirname(fileURLToPath(import.meta.url)), '../package.json'), 'utf8')).version;
 // (nomes de personagem: formato, prefixos da exclusão e palavras da equipe ficam em names.js)
 // comandos de mestre que criam ouro, itens, níveis, refino ou progresso: só admin ou --dev (D138)
-const GM_SCENARIO_CMDS = new Set(['give', 'xp', 'set_enh', 'gold', 'quest_progress', 'quest_done']);
+const GM_SCENARIO_CMDS = new Set(['give', 'xp', 'set_enh', 'gold', 'quest_progress', 'quest_done', 'hp']);
 const GM_GOLD_MAX = 1_000_000;
 // senha conferida dentro do jogo (excluir conta ou personagem): no máximo 5 erradas por conta a cada 10 min (D144)
 const PW_FAIL_MAX = 5;
@@ -2448,6 +2448,15 @@ export class GameServer {
       this.quests.save(c, msg.quest);
       this.notifyQuests(p, [msg.quest]);
       return { ok: true, cache: false };
+    }
+    if (msg.cmd === 'hp') {
+      // testes e reprodução de cenários: a vida do próprio personagem; 0 = cai como se apanhasse até o fim (D186)
+      const v = Number(msg.value);
+      if (!Number.isInteger(v) || v < 0) return { ok: false, code: 'bad_request', reason: 'Vida inválida.' };
+      if (c.dead) return { ok: false, code: 'dead', reason: 'Você está caído.' };
+      if (v === 0) p.zone.killPlayer(p);
+      else { c.hp = Math.min(p.stats.maxHp, v); this.store.saveCharacter(c); }
+      return { ok: true, char: p.zone.charView(p) };
     }
     if (msg.cmd === 'quest_done') {
       // marca missões como concluídas (atalho de cenário)

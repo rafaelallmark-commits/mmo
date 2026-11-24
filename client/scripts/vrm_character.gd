@@ -486,6 +486,9 @@ func _sphere(r: float) -> SphereMesh:
 var speed := 0.0
 var accel := 0.0
 var turn := 0.0
+var move_dir := Vector2(0.0, 1.0)
+var _mdir := Vector2(0.0, 1.0)
+var _back := false
 var combat := false
 var has_shield := false
 var npc_variant := 0
@@ -542,6 +545,35 @@ var _xf_body := {}
 var _xf_arms := {}
 var _out_body := {}
 var _out_arms := {}
+# ---- estados do corpo inteiro (D186): caído, levantar, beber, desfazer e formar em brasas ----
+# caído (morto ou derrubado): _dp vai de 0 (em pé) a 1 (agachado: os joelhos cederam) e a 2 (deitado de lado); a
+# queda e o levantar são curvas de _dp no tempo (_dp_keys: [instante, _dp, curva])
+var _down := false
+var _down_dead := true
+var _dp := 0.0
+var _dp_keys: Array = []
+var _dp_t := 0.0
+var _fall_side := 1.0      # +1 tomba para a esquerda (+X), −1 para a direita: o lado contrário ao da mão da arma
+var _fade_w := 0.0         # cor apagada do caído (0..1)
+var _dropped: Node3D       # a arma caída ao lado do corpo
+var _drop_t := -1.0
+var _drop_from := Transform3D()
+var _drop_to := Transform3D()
+var _pick_t := -1.0        # a arma voltando do chão para a mão no começo do levantar
+var _pick_from := Transform3D()
+# desfazer em brasas (some) e formar (aparece): tempo decorrido (−1 = parado) e duração
+var _vanish_t := -1.0
+var _vanish_len := 0.3
+var _hidden := false
+var _form_t := -1.0
+var _form_len := 0.4
+var _fx_dbg := Vector3(-1.0, 0.0, 1.0)   # sonda: [apagado, desfazer, sentido] fixos (x < 0 = não fixado)
+# bebida: tempo decorrido (−1 = não está bebendo), tônico (hp/mp) e o frasco na mão livre
+const DRINK_LEN := 1.2
+var _drink_t := -1.0
+var _drink_kind := "hp"
+var _flask: Node3D
+var _flask_side := ""
 
 ## Empunhaduras em que o gume fica do lado dos nós dos dedos (giro de −90° no cabo, D63) — e o arco, cujo
 ## "gume" é a direção do tiro, também para onde apontam os dedos.
@@ -590,7 +622,7 @@ const STANCES := {
 	"sword_1h": {
 		"relaxed": {"w": [Vector3(-0.29, -0.95, 0.08), -0.15, 0.12, 0.15, -0.62, 0.0], "o": ARM_RELAX_L},
 		"guard": {"w": [Vector3(-0.25, -0.9, 0.35), -0.15, 1.2, 0.1, -0.45, -0.25], "o": ARM_GUARD_CHECK_L},
-		"run": {"w": [Vector3(-0.22, -0.97, 0.0), -0.2, 1.3, 0.2, 0.25, -0.15], "o": ARM_RUN_L},
+		"run": {"w": [Vector3(-0.22, -0.97, 0.0), -0.2, 1.0, 0.2, -0.8, -0.15], "o": ARM_RUN_L},
 	},
 	"axe_2h": {
 		"relaxed": {"w": [Vector3(-0.25, -0.6, 0.76), -0.4, 2.2, 0.0, 0.7, 0.0], "o": ARM_RELAX_L},
@@ -670,7 +702,7 @@ const WPOSES := {
 	"bow": {
 		"relaxed": {"p": Vector3(0.220, -0.430, 0.120), "a": Vector3(0.000, 0.862, 0.507), "e": Vector3(-0.049, -0.506, 0.861), "pole": Vector3(0.500, -1.000, -0.350)},
 		"walk": {"p": Vector3(0.220, -0.430, 0.120), "a": Vector3(0.000, 0.862, 0.507), "e": Vector3(-0.049, -0.506, 0.861), "pole": Vector3(0.500, -1.000, -0.350), "swing": 0.050},
-		"guard": {"p": Vector3(0.120, -0.300, 0.320), "a": Vector3(0.151, 0.956, 0.252), "e": Vector3(-0.279, -0.203, 0.939), "pole": Vector3(0.500, -1.000, -0.350), "yaw": -0.300, "draw": 0.000},
+		"guard": {"p": Vector3(0.120, -0.300, 0.320), "a": Vector3(0.150, 0.975, 0.160), "e": Vector3(-0.279, -0.120, 0.953), "pole": Vector3(0.500, -1.000, -0.350), "yaw": -0.300, "draw": 0.000},
 		"run": {"p": Vector3(0.210, -0.440, 0.080), "a": Vector3(0.000, 0.800, 0.600), "e": Vector3(-0.108, -0.596, 0.795), "pole": Vector3(0.500, -1.000, -0.350), "swing": 0.100},
 	},
 	"wand": {
@@ -704,6 +736,43 @@ const WALK_ANKLE := [[0.0, 0.0], [0.08, -6.0], [0.42, 10.0], [0.6, -16.0], [0.7,
 const RUN_HIP := [[0.0, 32.0], [0.2, 8.0], [0.4, -12.0], [0.55, 4.0], [0.8, 50.0], [0.92, 40.0]]
 const RUN_KNEE := [[0.0, 18.0], [0.14, 42.0], [0.4, 18.0], [0.62, 115.0], [0.82, 70.0], [0.95, 22.0]]
 const RUN_ANKLE := [[0.0, 2.0], [0.15, 16.0], [0.4, -22.0], [0.6, 0.0], [0.85, 4.0]]
+
+## Passada de lado: amplitude e ciclo em relação à de frente (D186); o ciclo encurta mais que a amplitude porque o
+## pé de lado anda menos no apoio (conferido pela sonda).
+const LATERAL_AMP := 0.55
+const LATERAL_CYCLE := 0.35
+## Amplitude da coxa na corrida em relação à curva média (a passada longa de quem corre; D186).
+const RUN_HIP_K := 1.45
+## Comprimento do ciclo da passada (dois passos, metros do modelo) por velocidade (m/s do modelo): o pé de apoio
+## anda para trás, no corpo, o que o corpo anda para a frente — conferido pela sonda (--animprobe --states --check:
+## calcanhar e ponta, no chão, deslizam menos de 20% do que o corpo anda de 0,8 a 6,2 m/s; D186).
+const STRIDE := [[0.6, 1.17], [1.25, 1.22], [2.0, 1.42], [2.8, 1.8], [3.85, 2.0], [4.8, 2.05]]
+
+static func stride_cycle(vm: float) -> float:
+	if vm <= float(STRIDE[0][0]):
+		return float(STRIDE[0][1])
+	for i in range(1, STRIDE.size()):
+		if vm <= float(STRIDE[i][0]):
+			var a: Array = STRIDE[i - 1]
+			var b: Array = STRIDE[i]
+			return lerpf(float(a[1]), float(b[1]), (vm - float(a[0])) / (float(b[0]) - float(a[0])))
+	return float(STRIDE[STRIDE.size() - 1][1])
+
+## Amplitude da passada pela direção do movimento: de frente e de costas inteira, de lado 55% (sem cruzar as
+## pernas).
+func _dir_amp() -> float:
+	return _mdir.y * _mdir.y + _mdir.x * _mdir.x * LATERAL_AMP
+
+## Ciclo da passada pela direção: de lado, passos mais curtos e mais rápidos, para o pé de apoio não deslizar.
+func _dir_cycle() -> float:
+	return _mdir.y * _mdir.y + _mdir.x * _mdir.x * LATERAL_CYCLE
+
+## Eixo em que a coxa balança: perpendicular à direção do movimento, no chão (de costas, a da direção contrária: a
+## passada é a de frente tocada ao contrário).
+func _swing_axis() -> Vector3:
+	var d := -_mdir if _back else _mdir
+	var th := atan2(d.x, d.y)
+	return Vector3(cos(th), 0.0, -sin(th))
 
 static func _curve(keys: Array, u: float) -> float:
 	u = fposmod(u, 1.0)
@@ -831,6 +900,12 @@ func set_motion(p_speed: float, p_accel: float, p_turn: float) -> void:
 func set_combat(c: bool) -> void:
 	combat = c
 
+## Para onde anda em relação a para onde olha (x: esquerda, y: frente; D186): andando devagar virado para o alvo, a
+## passada vai de costas ou de lado (as pernas balançam na direção do movimento, com passos mais curtos).
+func set_move_dir(local: Vector2) -> void:
+	if local.length() > 0.01:
+		move_dir = local.normalized()
+
 ## Olhar para um ponto do mundo (peso 0 = olhar livre).
 func set_look_target(pos: Vector3, weight: float) -> void:
 	_look_pos = pos
@@ -891,6 +966,10 @@ func cancel_cast() -> void:
 
 ## Durante um salto ou investida o corpo não vira para onde desliza (o servidor o leva de lado ou para trás).
 func face_locked() -> bool:
+	return (not _act.is_empty() and bool(_act.get("lock", false))) or is_down()
+
+## Em salto ou investida (o movimento leva o corpo pelo chão): o salto de posição é dele, não um teleporte.
+func act_locked() -> bool:
 	return not _act.is_empty() and bool(_act.get("lock", false))
 
 ## Duração do movimento em curso (s), para quem precisa virar o personagem para o alvo enquanto ele dura.
@@ -949,11 +1028,439 @@ func express(name: String, weight: float, seconds: float) -> void:
 	expr_until[name] = _t + seconds
 	expr_weight[name + "_target"] = weight
 
+# ---------------- estados do corpo inteiro (D186) ----------------
+## Caído (morto, ou derrubado como o Caio) ou de pé. A queda: os joelhos cedem (agacha com os pés plantados), a arma
+## escapa da mão e cai deitada ao lado, e o corpo tomba de lado para o lado contrário ao da arma; o levantar volta
+## pelo mesmo caminho e pega a arma do chão. instant: já no estado, sem a queda (quem aparece na tela já caído).
+## dead: olhos fechados e a cor bem apagada (derrubado: um pouco).
+func set_down(down: bool, dead := true, instant := false) -> void:
+	_down_dead = dead
+	if down == _down:
+		return
+	_down = down
+	if down:
+		_act = {}
+		_act_holding = false
+		_xf_t = -1.0
+		_drink_t = -1.0
+		if _flask:
+			_flask.scale = Vector3.ZERO
+		_fall_side = -1.0 if grip.get("hand", "r") == "l" else 1.0
+		if instant:
+			_dp = 2.0
+			_dp_keys = []
+			_drop_weapon(true)
+			_fade_w = 1.0 if dead else 0.5
+		else:
+			_dp_keys = _fall_keys(_dp)
+			_dp_t = 0.0
+	else:
+		_pick_t = -1.0
+		if instant:
+			_dp = 0.0
+			_dp_keys = []
+			_remove_dropped()
+			_fade_w = 0.0
+		else:
+			_dp_keys = _rise_keys(_dp)
+			_dp_t = 0.0
+
+## Caído ou ainda caindo/levantando (o corpo não vira para onde desliza nem para o alvo).
+func is_down() -> bool:
+	return _down or _dp > 0.01
+
+## Segundos até o corpo terminar de se levantar (0 = de pé).
+func rise_seconds() -> float:
+	if _down or _dp_keys.is_empty():
+		return 0.0
+	return maxf(0.0, float(_dp_keys[_dp_keys.size() - 1][0]) - _dp_t)
+
+## Desfaz o corpo em brasas (teleporte, renascer longe, saída do mapa); no fim fica invisível até appear().
+func vanish(secs := 0.3) -> void:
+	_vanish_t = 0.0
+	_vanish_len = maxf(0.05, secs)
+	_form_t = -1.0
+	_drink_t = -1.0
+
+## Forma o corpo em brasas, dos pés para cima (chegada ao mapa, fim do teleporte). crouched: forma agachado e
+## então se levanta (renascer no posto, depois da queda do grupo no calabouço).
+func appear(secs := 0.4, crouched := false) -> void:
+	_vanish_t = -1.0
+	_hidden = false
+	if model:
+		model.visible = true
+	_form_t = 0.0
+	_form_len = maxf(0.05, secs)
+	if crouched:
+		_remove_dropped()
+		_pick_t = -1.0
+		_fade_w = 0.0   # corpo novo: sem a cor apagada de quem caiu
+		_dp = 1.0
+		_dp_t = 0.0
+		_dp_keys = [] if _down else _rise_keys(1.0)
+
+## Bebe um tônico (evento drink): a mão livre leva o frasco à boca sem largar a arma (vermelho: vida; azul: mana),
+## a cabeça vai para trás no gole e o frasco some no fim.
+func play_drink(kind: String) -> void:
+	if is_down() or _hidden or skel == null:
+		return
+	_drink_kind = kind
+	_ensure_flask()
+	_drink_t = 0.0
+
+## Segundos até o fim do gole (a faísca da cor sobe nessa hora; world.gd).
+func drink_spark_in() -> float:
+	return maxf(0.0, DRINK_LEN * 0.74 - _drink_t) if _drink_t >= 0.0 else 0.0
+
+## Curvas de _dp no tempo: [instante (s), _dp, curva até ele ("in" acelera, "out" freia, "io" suave)].
+static func _fall_keys(d0: float) -> Array:
+	var ks := [[0.0, d0, ""]]
+	var t := 0.0
+	if d0 < 1.0:
+		t += 0.3 * (1.0 - d0)
+		ks.append([t, 1.0, "io"])
+	t += 0.42 * clampf(2.0 - maxf(d0, 1.0), 0.05, 1.0)
+	ks.append([t, 2.0, "in"])
+	# o corpo bate no chão e assenta
+	ks.append([t + 0.1, 1.95, "out"])
+	ks.append([t + 0.24, 2.0, "io"])
+	return ks
+
+static func _rise_keys(d0: float) -> Array:
+	var ks := [[0.0, d0, ""]]
+	var t := 0.0
+	if d0 > 1.0:
+		t += 0.55 * (d0 - 1.0)
+		ks.append([t, 1.0, "io"])
+	t += 0.55 * clampf(minf(d0, 1.0), 0.05, 1.0)
+	ks.append([t, 0.0, "io"])
+	return ks
+
+static func _keys_eval(ks: Array, t: float) -> float:
+	if ks.is_empty():
+		return 0.0
+	if t <= float(ks[0][0]):
+		return float(ks[0][1])
+	for i in range(1, ks.size()):
+		var t1 := float(ks[i][0])
+		if t <= t1:
+			var t0 := float(ks[i - 1][0])
+			var u := clampf((t - t0) / maxf(t1 - t0, 1e-4), 0.0, 1.0)
+			match str(ks[i][2]):
+				"in":
+					u = u * u
+				"out":
+					u = 1.0 - (1.0 - u) * (1.0 - u)
+				"io":
+					u = u * u * (3.0 - 2.0 * u)
+			return lerpf(float(ks[i - 1][1]), float(ks[i][1]), u)
+	return float(ks[ks.size() - 1][1])
+
+## Avança queda/levantar, desfazer/formar, arma caindo/voltando, bebida e cor (a cada quadro, mesmo fora da tela).
+func _body_advance(delta: float) -> void:
+	var dissolve := 0.0
+	var up := 1.0
+	if _vanish_t >= 0.0:
+		_vanish_t += delta
+		dissolve = clampf(_vanish_t / _vanish_len, 0.0, 1.0)
+		if _vanish_t >= _vanish_len:
+			_vanish_t = -1.0
+			_hidden = true
+			model.visible = false
+			_remove_dropped()   # a arma caída se desfaz junto com o corpo
+	elif _hidden:
+		dissolve = 1.0
+	elif _form_t >= 0.0:
+		_form_t += delta
+		dissolve = 1.0 - clampf(_form_t / _form_len, 0.0, 1.0)
+		up = -1.0
+		if _form_t >= _form_len:
+			_form_t = -1.0
+			dissolve = 0.0
+	# queda e levantar; o levantar espera o corpo terminar de se formar
+	var busy := _hidden or _vanish_t >= 0.0 or _form_t >= 0.0
+	if not _dp_keys.is_empty() and not busy:
+		_dp_t += delta
+		_dp = _keys_eval(_dp_keys, _dp_t)
+		if _dp_t >= float(_dp_keys[_dp_keys.size() - 1][0]):
+			_dp = float(_dp_keys[_dp_keys.size() - 1][1])
+			_dp_keys = []
+	if _down and _dp > 0.55:
+		_drop_weapon(false)   # a mão solta a arma quando os joelhos cedem
+	if not _down and _dropped != null and _pick_t < 0.0 and not busy and _drop_t < 0.0:
+		_pick_t = 0.0
+		_pick_from = _dropped.transform
+	_drop_advance(delta)
+	if _drink_t >= 0.0:
+		_drink_t += delta
+		if _drink_t >= DRINK_LEN:
+			_drink_t = -1.0
+			if _flask:
+				_flask.scale = Vector3.ZERO
+	var fade_to := (1.0 if _down_dead else 0.5) if _down else 0.0
+	_fade_w = move_toward(_fade_w, fade_to, delta * (1.1 if _down else 2.2))
+	_fx_set(_fade_w, dissolve, up)
+
+# ---------------- a arma caída ----------------
+## A arma escapa da mão: uma cópia dela cai e fica deitada no chão ao lado do corpo (do lado da mão da arma, ao
+## longo do corpo), e a da mão some até o levantar.
+func _drop_weapon(instant: bool) -> void:
+	if weapon_mesh == null or _dropped != null or not weapon_mesh.visible or not is_inside_tree():
+		return
+	# a cópia sai com os materiais compartilhados (o efeito em curso volta a pegar tudo no quadro seguinte)
+	_fx_refresh()
+	var gt := weapon_mesh.global_transform
+	var d := weapon_mesh.duplicate() as Node3D
+	add_child(d)
+	d.global_transform = gt
+	_dropped = d
+	weapon_mesh.visible = false
+	if arrow_node:
+		arrow_node.visible = false
+	_drop_from = d.transform
+	_drop_to = _drop_rest(_drop_from.basis.get_scale())
+	if instant:
+		d.transform = _drop_to
+		_drop_t = -1.0
+	else:
+		_drop_t = 0.0
+
+## Onde a arma fica no chão (espaço do personagem): deitada (a face larga para cima, encostada no chão), ao longo do
+## corpo, do lado da mão da arma e com o meio dela ao lado do quadril.
+func _drop_rest(sc: Vector3) -> Transform3D:
+	var box := _weapon_box()
+	var side := -_fall_side
+	var axis := Vector3(side * 0.28, 0.0, 1.0).normalized()
+	var b := _wbasis(axis, Vector3(1.0, 0.0, 0.0).rotated(Vector3.UP, atan2(axis.x, axis.z)))
+	var mid := (box.position.y + box.size.y * 0.5) * sc.y
+	var p := Vector3(side * 0.42, -box.position.x * sc.x + 0.004, 0.05) - axis * mid
+	return Transform3D(Basis(b.x * sc.x, b.y * sc.y, b.z * sc.z), p)
+
+## Caixa da arma no espaço do modelo dela (y = eixo, para a ponta), pelas caixas das malhas.
+func _weapon_box() -> AABB:
+	var out := AABB()
+	var first := true
+	if weapon_mesh == null:
+		return out
+	for mi in weapon_mesh.find_children("*", "MeshInstance3D", true, false):
+		var m := mi as MeshInstance3D
+		if m.mesh == null:
+			continue
+		var xf := Transform3D.IDENTITY
+		var n: Node = m
+		while n != null and n != weapon_mesh:
+			if n is Node3D:
+				xf = (n as Node3D).transform * xf
+			n = n.get_parent()
+		var box: AABB = xf * m.get_aabb()
+		out = box if first else out.merge(box)
+		first = false
+	return out
+
+## Cai acelerando até o chão (e assenta); ao levantar, sobe do chão para a mão e volta a ser a arma da mão.
+func _drop_advance(delta: float) -> void:
+	if _dropped == null:
+		return
+	if _drop_t >= 0.0:
+		_drop_t += delta
+		var u := clampf(_drop_t / 0.32, 0.0, 1.0)
+		var p: Vector3 = _drop_from.origin.lerp(_drop_to.origin, u)
+		p.y = lerpf(_drop_from.origin.y, _drop_to.origin.y, u * u)
+		if _drop_t > 0.32:
+			p.y += 0.035 * sin(clampf((_drop_t - 0.32) / 0.12, 0.0, 1.0) * PI)
+		var q := _drop_from.basis.get_rotation_quaternion().slerp(_drop_to.basis.get_rotation_quaternion(), smoothstep(0.0, 1.0, u))
+		var sc := _drop_from.basis.get_scale()
+		_dropped.transform = Transform3D(Basis(q).scaled(sc), p)
+		if _drop_t >= 0.44:
+			_drop_t = -1.0
+			_dropped.transform = _drop_to
+	elif _pick_t >= 0.0 and weapon_mesh != null:
+		_pick_t += delta
+		var u2 := smoothstep(0.0, 1.0, clampf(_pick_t / 0.3, 0.0, 1.0))
+		var hand: Transform3D = global_transform.affine_inverse() * weapon_mesh.global_transform
+		var q2 := _pick_from.basis.get_rotation_quaternion().slerp(hand.basis.get_rotation_quaternion(), u2)
+		_dropped.transform = Transform3D(Basis(q2).scaled(_pick_from.basis.get_scale()), _pick_from.origin.lerp(hand.origin, u2))
+		if _pick_t >= 0.3:
+			_remove_dropped()
+
+func _remove_dropped() -> void:
+	_drop_t = -1.0
+	_pick_t = -1.0
+	if _dropped != null:
+		_dropped.queue_free()
+		_dropped = null
+		_fx_refresh()
+	if weapon_mesh:
+		weapon_mesh.visible = true
+
+# ---------------- o frasco do tônico ----------------
+## Mão da bebida: a livre (a contrária à da arma; no arco, a da corda).
+func _drink_side() -> String:
+	return "r" if grip.get("hand", "r") == "l" else "l"
+
+## Frasco redondo na mão livre, seguro como um cabo (o gargalo sai do lado do polegar), com o líquido da cor do tônico.
+func _ensure_flask() -> void:
+	var side := _drink_side()
+	if _flask != null and _flask_side != side:
+		_flask.get_parent().get_parent().queue_free()
+		_flask = null
+	if _flask == null:
+		var sgn := 1.0 if side == "l" else -1.0
+		var holder := _attach(side + "_hand", Vector3(_grip_x * sgn, -_palm_y, 0.0), Quaternion.IDENTITY, _grip_basis("", side).get_rotation_quaternion())
+		if holder == null:
+			return
+		_flask = Node3D.new()
+		holder.add_child(_flask)
+		_flask_side = side
+	for ch in _flask.get_children():
+		ch.queue_free()
+	var liquid := Color("#e0303a") if _drink_kind != "mp" else Color("#3a6ae6")
+	var glow := Color(0.5, 0.05, 0.08) if _drink_kind != "mp" else Color(0.08, 0.18, 0.6)
+	# bojo (o fundo sai do lado do mindinho), gargalo de vidro e rolha
+	Gear.part(_flask, Gear.sphere(0.037, 12, 8), Gear.mat(liquid, true, glow), Vector3(0, -0.026, 0), Vector3(1.0, 1.1, 1.0))
+	Gear.part(_flask, Gear.cyl(0.013, 0.016, 0.05, 8), Gear.mat(Color("#d8e4ea"), true, Color(0.12, 0.14, 0.16)), Vector3(0, 0.03, 0))
+	Gear.part(_flask, Gear.cyl(0.016, 0.014, 0.022, 8), Gear.mat(Color("#8a5a32")), Vector3(0, 0.064, 0))
+	_flask.scale = Vector3.ZERO
+	_fx_refresh()
+
+# ---------------- efeitos de cor do corpo: apagado e brasas (D186) ----------------
+## Variante de cada shader do corpo com os efeitos (fx_body.gdshaderinc). O renderizador de compatibilidade não tem
+## uniformes por instância e os materiais são compartilhados entre personagens: enquanto um efeito dura, este
+## personagem usa cópias com a variante; no fim volta aos compartilhados.
+const FX_SHADERS := {
+	"res://shaders/toon_tex.gdshader": preload("res://shaders/toon_tex_fx.gdshader"),
+	"res://shaders/toon_tex_2s.gdshader": preload("res://shaders/toon_tex_2s_fx.gdshader"),
+	"res://shaders/toon.gdshader": preload("res://shaders/toon_fx.gdshader"),
+	"res://shaders/outline.gdshader": preload("res://shaders/outline_fx.gdshader"),
+	"res://shaders/outline_self.gdshader": preload("res://shaders/outline_self_fx.gdshader"),
+}
+const EMBER := Color(1.0, 0.62, 0.25)
+var _fx_slots := []    # [MeshInstance3D, superfície (−1 = material_override), material compartilhado]
+var _fx_copies := []   # cópias em uso
+var _fx_alpha := {}    # cópia de StandardMaterial3D (brilho dos olhos) -> alfa original
+var _fx_last := Vector3(-1.0, -1.0, 0.0)
+
+## Aplica apagado (0..1) e desfazer (0..1; up: 1 some pelos pés, −1 forma pelos pés) no corpo, na arma, nos
+## acessórios, no frasco e na arma caída.
+func _fx_set(fade: float, dissolve: float, up := 1.0) -> void:
+	if _fx_dbg.x >= 0.0:
+		fade = _fx_dbg.x
+		dissolve = _fx_dbg.y
+		up = _fx_dbg.z
+	if fade <= 0.001 and dissolve <= 0.001:
+		if not _fx_slots.is_empty():
+			_fx_restore()
+		_fx_last = Vector3(-1.0, -1.0, 0.0)
+		return
+	if _fx_slots.is_empty():
+		_fx_capture()
+	var now := Vector3(fade, dissolve, up)
+	if now.is_equal_approx(_fx_last) and dissolve <= 0.001:
+		return
+	_fx_last = now
+	var base := global_position if is_inside_tree() else Vector3.ZERO
+	var height := 1.6 * maxf(0.2, scale.x)
+	for m in _fx_copies:
+		if m is ShaderMaterial:
+			var sm := m as ShaderMaterial
+			sm.set_shader_parameter("fx_fade", fade)
+			sm.set_shader_parameter("fx_dissolve", dissolve)
+			sm.set_shader_parameter("fx_base", base)
+			sm.set_shader_parameter("fx_up", up)
+			sm.set_shader_parameter("fx_height", height)
+			sm.set_shader_parameter("fx_edge", EMBER)
+		elif m is StandardMaterial3D:
+			var c: Color = (m as StandardMaterial3D).albedo_color
+			c.a = float(_fx_alpha.get(m, 1.0)) * (1.0 - smoothstep(0.15, 0.5, dissolve))
+			(m as StandardMaterial3D).albedo_color = c
+
+## Troca os materiais compartilhados por cópias com a variante dos efeitos (uma cópia por material).
+func _fx_capture() -> void:
+	var map := {}
+	var roots: Array = [model]
+	if _dropped != null:
+		roots.append(_dropped)
+	for r in roots:
+		if r == null:
+			continue
+		for node in (r as Node).find_children("*", "MeshInstance3D", true, false):
+			var mi := node as MeshInstance3D
+			if mi.material_override != null:
+				var c := _fx_copy(mi.material_override, map)
+				if c != null:
+					_fx_slots.append([mi, -1, mi.material_override])
+					mi.material_override = c
+				continue
+			if mi.mesh == null:
+				continue
+			for i in mi.mesh.get_surface_count():
+				var src := mi.get_surface_override_material(i)
+				if src == null:
+					continue
+				var c2 := _fx_copy(src, map)
+				if c2 != null:
+					_fx_slots.append([mi, i, src])
+					mi.set_surface_override_material(i, c2)
+
+func _fx_copy(mat: Material, map: Dictionary) -> Material:
+	if map.has(mat):
+		return map[mat]
+	var out: Material = null
+	if mat is ShaderMaterial and (mat as ShaderMaterial).shader != null and FX_SHADERS.has((mat as ShaderMaterial).shader.resource_path):
+		var src := mat as ShaderMaterial
+		var sm := ShaderMaterial.new()
+		sm.shader = FX_SHADERS[src.shader.resource_path]
+		for u in src.shader.get_shader_uniform_list():
+			var nm: String = u["name"]
+			sm.set_shader_parameter(nm, src.get_shader_parameter(nm))
+		sm.render_priority = src.render_priority
+		if src.next_pass != null:
+			var np := _fx_copy(src.next_pass, map)
+			sm.next_pass = np if np != null else src.next_pass
+		out = sm
+	elif mat is StandardMaterial3D and (mat as StandardMaterial3D).transparency != BaseMaterial3D.TRANSPARENCY_DISABLED:
+		out = mat.duplicate()
+		_fx_alpha[out] = (mat as StandardMaterial3D).albedo_color.a
+	if out != null:
+		map[mat] = out
+		_fx_copies.append(out)
+	return out
+
+## Volta aos materiais compartilhados.
+func _fx_restore() -> void:
+	for sl in _fx_slots:
+		var mi: MeshInstance3D = sl[0]
+		if not is_instance_valid(mi):
+			continue
+		if int(sl[1]) < 0:
+			mi.material_override = sl[2]
+		else:
+			mi.set_surface_override_material(int(sl[1]), sl[2])
+	_fx_slots.clear()
+	_fx_copies.clear()
+	_fx_alpha.clear()
+
+## Malhas novas (arma caída, frasco) entram no efeito em curso.
+func _fx_refresh() -> void:
+	if _fx_slots.is_empty():
+		return
+	_fx_restore()
+	_fx_last = Vector3(-1.0, -1.0, 0.0)
+
 ## Para capturas de teste: congela num estado conhecido (velocidade em m/s do mundo, fase da
 ## passada 0..1, combate, instante 0..1 do movimento ou −1, a variação do ataque básico e, se dado, outro
 ## movimento qualquer de Moves — habilidade ou crítico — no lugar do ataque básico).
 func debug_pose(p_speed: float, phase01: float, p_combat: bool, attack_t := -1.0, variant := 0, motion := {}) -> void:
 	debug_freeze = true
+	_down = false
+	_dp = 0.0
+	_dp_keys = []
+	_drink_t = -1.0
+	_remove_dropped()
+	_fx_dbg = Vector3(-1.0, 0.0, 1.0)
+	_fx_set(0.0, 0.0)
+	_mdir = move_dir
+	_back = _mdir.y < -0.35
 	speed = p_speed
 	combat = p_combat
 	var v := p_speed / maxf(0.2, scale.x)
@@ -993,6 +1500,57 @@ func debug_motion(m: Dictionary, t: float) -> void:
 		_two_w = 1.0
 	_pose(0.0)
 
+## Para capturas de teste (D186): congela um estado do corpo no instante u (0..1), por cima do estado deixado por
+## debug_pose — "queda", "caido", "levantar" (do chão), "levantar_agachado" (renascer no posto), "beber" e
+## "beber_mana", "desfazer", "formar" e "apagado".
+func debug_state(kind: String, u: float) -> void:
+	debug_freeze = true
+	_act = {}
+	_xf_t = -1.0
+	_out_body = {}
+	_out_arms = {}
+	_drink_t = -1.0
+	_remove_dropped()
+	_fx_dbg = Vector3(-1.0, 0.0, 1.0)
+	_down = false
+	_down_dead = true
+	_dp = 0.0
+	_dp_keys = []
+	_fall_side = -1.0 if grip.get("hand", "r") == "l" else 1.0
+	var fade := 0.0
+	match kind:
+		"queda":
+			var ks := _fall_keys(0.0)
+			var tt := u * float(ks[ks.size() - 1][0])
+			_down = true
+			_dp = _keys_eval(ks, tt)
+			fade = clampf(tt * 1.1, 0.0, 1.0)
+		"caido":
+			_down = true
+			_dp = 2.0
+			fade = 1.0
+		"levantar", "levantar_agachado":
+			var ks2 := _rise_keys(2.0 if kind == "levantar" else 1.0)
+			_dp = _keys_eval(ks2, u * float(ks2[ks2.size() - 1][0]))
+			fade = clampf(1.0 - u * 2.0, 0.0, 1.0) if kind == "levantar" else 0.0
+		"beber", "beber_mana":
+			_drink_kind = "mp" if kind == "beber_mana" else "hp"
+			_ensure_flask()
+			_drink_t = u * DRINK_LEN
+		"desfazer":
+			_fx_dbg = Vector3(0.0, u, 1.0)
+		"formar":
+			_fx_dbg = Vector3(0.0, 1.0 - u, -1.0)
+		"apagado":
+			fade = 1.0
+	_pose(0.0)
+	# a arma escapa da mão quando os joelhos cedem e fica deitada ao lado
+	if (kind == "queda" and _dp > 0.55) or kind == "caido" or (kind == "levantar" and u < 0.12):
+		_drop_weapon(true)
+		_pose(0.0)
+	_fade_w = fade
+	_fx_set(fade, 0.0, 1.0)
+
 # ---------------- quadro a quadro ----------------
 # Desempenho (opções gráficas): no modo leve, personagens a mais de anim_max_dist metros da câmera não
 # recalculam a pose; fora do campo de visão, ninguém recalcula (fica a última pose até voltar à tela).
@@ -1014,6 +1572,7 @@ func _process(delta: float) -> void:
 	if debug_freeze:
 		_pose(0.0)
 		return
+	_body_advance(delta)
 	_act_advance(delta)
 	var sc := maxf(0.2, scale.x)
 	var v := speed / sc
@@ -1023,10 +1582,17 @@ func _process(delta: float) -> void:
 	var fighting := not _act.is_empty() and bool(_act.get("guard", true))
 	_combat_w = lerpf(_combat_w, 1.0 if combat or fighting else 0.0, clampf(delta * 4.0, 0.0, 1.0))
 	_turn_amp = lerpf(_turn_amp, clampf(absf(turn) * 0.22, 0.0, 0.55) * (1.0 - _amp), clampf(delta * 6.0, 0.0, 1.0))
-	var cycle := lerpf(1.25, 2.9, smoothstep(0.8, 3.6, _speed_s))
+	var ma := lerp_angle(atan2(_mdir.x, _mdir.y), atan2(move_dir.x, move_dir.y), clampf(delta * 6.0, 0.0, 1.0))
+	_mdir = Vector2(sin(ma), cos(ma))
+	# de costas, a passada de frente tocada ao contrário (o pé de apoio vem de trás para a frente)
+	if _mdir.y < -0.35:
+		_back = true
+	elif _mdir.y > -0.15:
+		_back = false
+	var cycle := stride_cycle(_speed_s) * _dir_cycle()
 	# salto e investida: o corpo desliza com as pernas da ação; a passada não corre junto
 	if _act.is_empty() or not bool(_act.get("force_legs", false)):
-		_phase += TAU * _speed_s * delta / cycle + absf(turn) * delta * 1.4 * (1.0 - _amp)
+		_phase += (TAU * _speed_s * delta / cycle) * (-1.0 if _back else 1.0) + absf(turn) * delta * 1.4 * (1.0 - _amp)
 	# troca do pé de apoio parado (a cada 8–14 s), suave
 	_stand_in -= delta
 	if _stand_in <= 0.0:
@@ -1040,7 +1606,7 @@ func _process(delta: float) -> void:
 	_slide = lerpf(_slide, _target_slide(), clampf(delta * 6.0, 0.0, 1.0))
 	if grip_node:
 		grip_node.position = Vector3(0, -_slide, 0)
-	var want_two := 1.0 if _two_point(1) >= -0.5 and (_combat_w > 0.5 or not _act.is_empty()) and _run < 0.6 else 0.0
+	var want_two := 1.0 if _two_point(1) >= -0.5 and (_combat_w > 0.5 or not _act.is_empty()) and _run < 0.6 and _dp <= 0.001 else 0.0
 	_two_w = lerpf(_two_w, want_two, clampf(delta * 8.0, 0.0, 1.0))
 	# olhar
 	var yaw_t := 0.0
@@ -1071,15 +1637,19 @@ func _face(delta: float) -> void:
 			_blink_t = -1.0
 			bv = 0.0
 	var face_busy := false
+	var dead_eyes := _down and _down_dead and _dp > 0.6
 	for ename in expr_targets.keys():
-		var target: float = float(expr_weight.get(ename + "_target", 0.0)) if _t < float(expr_until[ename]) else 0.0
+		var target: float = float(expr_weight.get(ename + "_target", 0.0)) if _t < float(expr_until[ename]) and not dead_eyes else 0.0
 		var w: float = lerpf(float(expr_weight[ename]), target, clampf(delta * 12.0, 0.0, 1.0))
 		expr_weight[ename] = w
 		if w > 0.05:
 			face_busy = true
 		for t in expr_targets[ename]:
 			(t[0] as MeshInstance3D).set_blend_shape_value(t[1], w)
-	if not moving and _act.is_empty():
+	if dead_eyes:
+		bv = 1.0
+		face_busy = false
+	if not moving and _act.is_empty() and not is_down():
 		_smile_in -= delta
 		if _smile_in <= 0.0:
 			_smile_in = randf_range(7.0, 14.0)
@@ -1260,10 +1830,20 @@ func _pose(delta: float) -> void:
 	var a := clampf(_amp + _turn_amp, 0.0, 1.0)
 	if force:
 		a = 0.0  # investida e salto: as pernas são da ação, não da passada (o corpo desliza pelo chão)
+	# caído (D186): kc = agachado (os joelhos cederam), kl = deitado de lado; sem passada nem guarda
+	var kc := clampf(_dp, 0.0, 1.0)
+	var kl := clampf(_dp - 1.0, 0.0, 1.0)
+	var downing := _dp > 0.001
+	# caindo, os braços amolecem com os joelhos; levantando (vivo), a mão da arma já a segura na postura
+	var limp := maxf(smoothstep(0.25, 0.85, kc) * (1.0 if _down else 0.35), kl) if downing else 0.0
+	a *= 1.0 - kc
 	var wk := a * (1.0 - _run)
 	var rn := a * _run
 	var idle := 1.0 - a
-	var cw := _combat_w
+	var cw := _combat_w * (1.0 - kc)
+	if downing and not _down:
+		cw = maxf(cw, kc * 0.9)   # levantando: a arma vem para a guarda, à frente do corpo (não arrasta no chão)
+	var drink_w := _drink_weight()
 	var ph := _phase / TAU
 	var breath := sin(_t * 1.7)
 	var stand := _stand * idle * (1.0 - cw * 0.7)
@@ -1278,14 +1858,20 @@ func _pose(delta: float) -> void:
 		spine_lean = float(gd.get("lean", 0.0)) * sw[2]
 	var acting := not _act.is_empty() or _xf_t >= 0.0
 	var ab := _act_body({"yaw": spine_yaw, "lean": spine_lean}) if acting else {}
+	if downing:
+		ab = _down_body(ab, kc, kl)
 	var spin := float(ab.get("spin", 0.0))
-	model.transform.basis = Basis(Vector3.UP, spin) * Basis.from_euler(Vector3(_lean_f, 0.0, _lean_s)) * _base_basis
+	var body_basis := Basis(Vector3.UP, spin) * Basis.from_euler(Vector3(_lean_f * (1.0 - kc), 0.0, _lean_s * (1.0 - kc))) * _base_basis
+	model.transform = _topple(kl) * Transform3D(body_basis, Vector3.ZERO)
 	# ---- pernas: marcha/corrida por curvas + parado (contrapposto) + guarda ----
 	var leg := {}
 	var drop := {}
+	var gait := {}
+	var kd := _dir_amp()
 	for side in ["l", "r"]:
 		var u := ph if side == "l" else ph + 0.5
-		var hip := deg_to_rad(_curve(WALK_HIP, u)) * wk + deg_to_rad(_curve(RUN_HIP, u)) * rn
+		var hip := (deg_to_rad(_curve(WALK_HIP, u)) * wk + deg_to_rad(_curve(RUN_HIP, u)) * rn * RUN_HIP_K) * kd
+		gait[side] = hip
 		var knee := deg_to_rad(_curve(WALK_KNEE, u)) * wk + deg_to_rad(_curve(RUN_KNEE, u)) * rn
 		var ankle := deg_to_rad(_curve(WALK_ANKLE, u)) * wk + deg_to_rad(_curve(RUN_ANKLE, u)) * rn
 		var sgn := 1.0 if side == "l" else -1.0
@@ -1309,6 +1895,8 @@ func _pose(delta: float) -> void:
 		lw = clampf(float(_act.get("legs", 1.0)) if not _act.is_empty() else 1.0, 0.0, 1.0) * (1.0 if force else idle)
 		if lw > 0.001:
 			hip_off = _legs_ik(leg, drop, support, ab, lw)
+	if kl > 0.0:
+		_lie_legs(leg, kl)
 	for side in ["l", "r"]:
 		var sgn := 1.0 if side == "l" else -1.0
 		var hip: float = leg[side][0]
@@ -1321,7 +1909,10 @@ func _pose(delta: float) -> void:
 		var abd_act: float = leg[side][6]
 		# o giro da bacia da ação não torce os pés plantados (a coxa gira de volta)
 		var twist_back := -hip_twist * lw
-		_bone(side + "_upper_leg", Quaternion(Vector3.UP, twist_back) * Quaternion(Vector3.RIGHT, -hip) * Quaternion(Vector3.BACK, abduct * sgn + abd_act - _stand * idle * 0.05) * Quaternion(Vector3.UP, splay * sgn))
+		# a passada balança a coxa na direção do movimento (de costas, de lado); o resto do ângulo fica na frente
+		var dyn: float = float(gait[side]) * (1.0 - lw) * (1.0 - kl)
+		var swing_q := Quaternion(_swing_axis(), -dyn) * Quaternion(Vector3.RIGHT, -(hip - dyn))
+		_bone(side + "_upper_leg", Quaternion(Vector3.UP, twist_back) * swing_q * Quaternion(Vector3.BACK, abduct * sgn + abd_act - _stand * idle * 0.05) * Quaternion(Vector3.UP, splay * sgn))
 		_bone(side + "_lower_leg", Quaternion(Vector3.RIGHT, knee))
 		_bone(side + "_foot", Quaternion(Vector3.RIGHT, -ankle + flat) * Quaternion(Vector3.BACK, -(abduct * sgn + abd_act)))
 	# ---- quadril: altura pelo pé de apoio (o mais baixo encosta no chão) + voo da corrida ----
@@ -1330,7 +1921,7 @@ func _pose(delta: float) -> void:
 	_set_offset("hips", Vector3(sway, -support + flight - 0.02 * cw * idle, 0.0) + hip_off)
 	var hip_l: float = leg["l"][0]
 	var hip_r: float = leg["r"][0]
-	var pelvis_yaw := -(hip_l - hip_r) * (0.12 * wk + 0.16 * rn) - 0.22 * cw * idle + hip_twist
+	var pelvis_yaw := -(hip_l - hip_r) * (0.12 * wk + 0.16 * rn) * absf(_mdir.y) - 0.22 * cw * idle + hip_twist
 	var pelvis_roll := 0.05 * stand + wk * 0.04 * cos(_phase)
 	_bone("hips", Quaternion(Vector3.UP, pelvis_yaw) * Quaternion(Vector3.BACK, pelvis_roll) * Quaternion(Vector3.RIGHT, 0.04 * rn))
 	# susto ao levar golpe
@@ -1349,7 +1940,8 @@ func _pose(delta: float) -> void:
 	var w_arm: Array = _mix_arm(_mix_arm(st["relaxed"]["w"], st["guard"]["w"], cw), st["run"]["w"], rn)
 	var o_arm: Array = _mix_arm(_mix_arm(st["relaxed"]["o"], o_guard, cw), st["run"]["o"], rn)
 	# balanço oposto às pernas: o braço direito vai à frente quando o pé esquerdo pisa (fase 0)
-	var swing_amp := 0.3 * wk + 0.55 * rn
+	# de lado, os braços quase não balançam
+	var swing_amp := (0.3 * wk + 0.55 * rn) * absf(_mdir.y)
 	var swing_l := -cos(_phase) * swing_amp
 	var swing_r := cos(_phase) * swing_amp
 	# arma de golpe pesa: o braço que a carrega balança menos
@@ -1360,6 +1952,9 @@ func _pose(delta: float) -> void:
 	else:
 		w_arm = _swing_arm(w_arm, swing_l * 0.5 * (1.0 - cw * 0.8), 0.0)
 		o_arm = _swing_arm(o_arm, swing_r * (1.0 - cw * 0.8), 0.15 * maxf(0.0, -swing_r) * rn)
+	if downing:
+		w_arm = _mix_arm(w_arm, _limp_arm(wside, kl), limp).duplicate()
+		o_arm = _mix_arm(o_arm, _limp_arm(oside, kl), limp).duplicate()
 	# respiração e soltura dos braços parado
 	w_arm[2] = float(w_arm[2]) + breath * 0.02 * idle
 	o_arm[2] = float(o_arm[2]) + breath * 0.025 * idle
@@ -1370,19 +1965,20 @@ func _pose(delta: float) -> void:
 	if arrow_node:
 		var ar: Array = _act.get("arrow", []) if not _act.is_empty() else []
 		arrow_node.visible = not ar.is_empty() and u_act > float(ar[0]) and u_act < float(ar[1])
-	if weapon_mesh and weapon_family == "javelin":
+	if weapon_mesh and weapon_family == "javelin" and _dropped == null:
 		var th: Array = _act.get("throw", []) if not _act.is_empty() else []
 		weapon_mesh.visible = th.is_empty() or not (u_act > float(th[0]) and u_act < float(th[1]))
 	# ---- tronco, pescoço e cabeça ----
 	var roll := float(ab.get("roll", 0.0))
-	var head_up := float(ab.get("head", 0.0))
-	var lean := 0.04 * wk + 0.2 * rn + 0.025 * breath * idle - 0.22 * hurt + 0.06 * cw * idle + spine_lean
+	var head_up := float(ab.get("head", 0.0)) + _drink_head()
+	var neck_roll := -_fall_side * 0.32 * kl
+	var lean := (0.04 * wk + 0.2 * rn) * maxf(0.0, _mdir.y) + 0.025 * breath * idle - 0.22 * hurt + 0.06 * cw * idle + spine_lean
 	var counter := -pelvis_yaw * 0.85 + spine_yaw
 	# em guarda/golpe a cabeça compensa todo o giro do tronco para manter os olhos no oponente
 	var look_comp := 1.0 + cw
 	_bone("spine", Quaternion(Vector3.RIGHT, lean) * Quaternion(Vector3.UP, counter * 0.6) * Quaternion(Vector3.BACK, -pelvis_roll * 0.7 + roll * 0.6))
 	_bone("chest", Quaternion(Vector3.RIGHT, 0.02 * breath - 0.04 * rn) * Quaternion(Vector3.UP, counter * 0.4) * Quaternion(Vector3.BACK, -pelvis_roll * 0.3 + roll * 0.4))
-	_bone("neck", Quaternion(Vector3.RIGHT, -0.04 * a - 0.1 * rn - lean * 0.3 + head_up * 0.4) * Quaternion(Vector3.UP, _look_yaw * 0.4 - counter * 0.3 * look_comp))
+	_bone("neck", Quaternion(Vector3.RIGHT, -0.04 * a - 0.1 * rn - lean * 0.3 + head_up * 0.4) * Quaternion(Vector3.UP, _look_yaw * 0.4 * (1.0 - limp) - counter * 0.3 * look_comp) * Quaternion(Vector3.BACK, neck_roll))
 	var look_idle := sin(_t * 0.37) * 0.08 * idle * (1.0 - absf(_look_yaw)) * (1.0 - cw)
 	_bone("head", Quaternion(Vector3.RIGHT, sin(_t * 0.6) * 0.03 * idle - _look_pitch * 0.6 - 0.12 * hurt - lean * 0.2 + head_up * 0.6) * Quaternion(Vector3.UP, look_idle + _look_yaw * 0.6 - counter * 0.2 * look_comp) * Quaternion(Vector3.BACK, 0.04 * stand - roll * 0.3))
 	# ---- aplica braços (camada direta) ----
@@ -1399,6 +1995,11 @@ func _pose(delta: float) -> void:
 	if weapon_mesh and not wpd.is_empty():
 		_s0 = _shoulder_ref()
 		tgt = _wpose_blend(wpd, sw, wside)
+		if downing and weapon_family == "bow":
+			# agachado, o arco deita para a frente (a ponta de baixo não entra no chão)
+			var tb := Basis(Vector3.RIGHT, 0.9 * kc)
+			tgt["a"] = (tb * (tgt["a"] as Vector3)).normalized()
+			tgt["e"] = (tb * (tgt["e"] as Vector3)).normalized()
 	var o_curl := (0.22 * (1.0 - cw) + (0.45 if weapon_family in ["axe_1h", "hammer_1h", "sword_1h"] else 0.9) * cw) if not has_shield else 0.9
 	var string_w := float(tgt.get("off", [0, 0, 0, 0, 0.0])[4]) if weapon_family == "bow" and tgt.has("off") else 0.0
 	var arms := {}
@@ -1411,9 +2012,16 @@ func _pose(delta: float) -> void:
 	# ---- dedos ----
 	var w_curl := 1.0 if weapon_family != "" else (0.95 * cw + 0.22 * (1.0 - cw))
 	var w_thumb := 1.0 if weapon_family != "" else (0.8 * cw + 0.25 * (1.0 - cw))
-	var g_w := _two_w
+	if _dropped != null:
+		w_curl = 0.32
+		w_thumb = 0.3
+	var g_w := _two_w * (1.0 - limp)
 	if acting:
 		g_w = clampf(float(arms.get("g", _two_w)), 0.0, 1.0)
+	if drink_w > 0.0 and _flask_side == oside:
+		g_w *= 1.0 - drink_w   # a mão de apoio sai do cabo para beber
+	if downing:
+		o_curl = lerpf(o_curl, 0.3, limp)
 	if weapon_family == "bow" and (cw > 0.5 or acting):
 		# mão da corda: dedos em gancho na corda; abre ao soltar
 		o_curl = lerpf(0.12, 0.55, clampf(float(arms.get("dw", string_w)) if acting else 1.0, 0.0, 1.0))
@@ -1438,7 +2046,8 @@ func _pose(delta: float) -> void:
 		if grip_node and absf(slide_now - _slide) > 1e-4:
 			grip_node.position = Vector3(0, -slide_now, 0)
 		if weapon_mesh and not wpd.is_empty():
-			_ik_weapon(wside, final, 1.0)
+			if _dropped == null and limp < 0.999:
+				_ik_weapon(wside, final, 1.0 - limp)
 		elif acting:
 			var wik := clampf(float(arms.get("wik", 0.0)), 0.0, 1.0)
 			if weapon_holder:
@@ -1464,7 +2073,11 @@ func _pose(delta: float) -> void:
 		if off_spec.size() > 5 and float(off_spec[5]) > 0.5:
 			_string_pt = _root_to_world(off_spec[0] + (off_spec[1] as Vector3) * 0.035 * _arm_k)
 	elif not did_off and npc_variant > 0 and weapon_family == "":
-		_npc_hands(idle)
+		_npc_hands(idle * (1.0 - limp))
+	if _drink_t >= 0.0 and _flask != null:
+		_pose_drink(_flask_side, drink_w)
+		if drink_w > 0.3 and weapon_family == "bow":
+			_string_pt = Vector3.INF   # a mão da corda está no frasco
 	if acting:
 		_out_body = ab
 		_out_arms = arms
@@ -1503,6 +2116,112 @@ func _reach_two(oside: String, two_abs: float, slide_now: float) -> float:
 		else:
 			hi = mid
 	return slide_now + lo
+
+# ---------------- caído e bebendo: camadas do corpo (D186) ----------------
+## Braços soltos: pendurados enquanto os joelhos cedem; deitado, o de baixo estendido à frente rente ao chão e o de
+## cima caído por cima, com a mão no chão diante do peito.
+const ARM_HANG_L := [Vector3(0.24, -0.92, 0.3), 0.0, 0.35, 0.25, 0.0, 0.0]
+const ARM_HANG_R := [Vector3(-0.24, -0.92, 0.3), 0.0, 0.35, 0.25, 0.0, 0.0]
+## Pivô do tombo: a borda do corpo do lado da queda, no chão (metros do personagem, a partir do meio dos pés).
+const TOPPLE_PIVOT := 0.2
+
+## Canais do corpo do caído, por cima dos da ação (a queda a cancela): agacha com os pés plantados, curva o tronco e
+## baixa a cabeça; deitado, o tronco se ajeita e encosta a cabeça no chão.
+func _down_body(ab: Dictionary, kc: float, kl: float) -> Dictionary:
+	var out := ab.duplicate()
+	var deep := (_thigh_len + _shin_len) * 0.5
+	out["cr"] = deep * smoothstep(0.0, 1.0, kc) * (1.0 - 0.3 * kl)
+	out["fz"] = -0.05 * kc
+	out["lean"] = 0.48 * kc - 0.26 * kl
+	out["head"] = 0.42 * kc - 0.3 * kl
+	out["roll"] = -_fall_side * 0.12 * kl
+	out.erase("spin")
+	out.erase("hop")
+	return out
+
+## Tombo de lado: o corpo inteiro gira no eixo da frente em volta da borda do lado da queda, rente ao chão.
+func _topple(kl: float) -> Transform3D:
+	if kl <= 0.0001:
+		return Transform3D.IDENTITY
+	var piv := Vector3(_fall_side * TOPPLE_PIVOT, 0.0, 0.0)
+	var r := Basis(Vector3.BACK, -_fall_side * (PI * 0.5 - 0.05) * kl)
+	return Transform3D(Basis.IDENTITY, piv) * Transform3D(r, Vector3.ZERO) * Transform3D(Basis.IDENTITY, -piv)
+
+## Pernas do deitado: dobradas e soltas, a de cima um pouco mais à frente.
+func _lie_legs(leg: Dictionary, kl: float) -> void:
+	for side in ["l", "r"]:
+		var top: bool = (side == "l") != (_fall_side > 0.0)
+		var hip_t := deg_to_rad(62.0 if top else 34.0)
+		var knee_t := deg_to_rad(78.0 if top else 58.0)
+		var l: Array = leg[side]
+		l[0] = lerpf(float(l[0]), hip_t, kl)
+		l[1] = lerpf(float(l[1]), knee_t, kl)
+		l[2] = float(l[2]) * (1.0 - kl)
+		l[3] = lerpf(float(l[3]), hip_t - knee_t + deg_to_rad(18.0), kl)
+		l[6] = float(l[6]) * (1.0 - kl) + (0.08 if top else -0.04) * _fall_side * kl
+
+func _limp_arm(side: String, kl: float) -> Array:
+	var sgn := 1.0 if side == "l" else -1.0
+	var hang: Array = ARM_HANG_L if side == "l" else ARM_HANG_R
+	if kl <= 0.0:
+		return hang
+	var s := _fall_side
+	var lie: Array
+	if sgn == s:
+		lie = [Vector3(0.18 * s, 0.38, 0.9), 0.0, 0.45, 0.1, 0.0, 0.0]
+	else:
+		lie = [Vector3(0.55 * s, -0.3, 0.78), 0.0, 0.9, 0.3, 0.0, 0.0]
+	return _mix_arm(hang, lie, kl)
+
+func _drink_u() -> float:
+	return clampf(_drink_t / DRINK_LEN, 0.0, 1.0) if _drink_t >= 0.0 else -1.0
+
+## Peso da mão no frasco: sobe até a boca no primeiro quarto e desce no último.
+func _drink_weight() -> float:
+	var u := _drink_u()
+	if u < 0.0 or _flask == null:
+		return 0.0
+	return smoothstep(0.0, 0.25, u) * (1.0 - smoothstep(0.76, 1.0, u))
+
+## O gole: o frasco vira para cima e a cabeça vai para trás.
+static func _drink_tip(u: float) -> float:
+	return smoothstep(0.3, 0.46, u) * (1.0 - smoothstep(0.64, 0.78, u))
+
+func _drink_head() -> float:
+	var u := _drink_u()
+	return -0.38 * _drink_tip(u) if u >= 0.0 else 0.0
+
+## Mão livre com o frasco à boca: o gargalo nos lábios, o polegar para a boca e o cotovelo para fora (com escudo
+## nesse braço, para baixo: o escudo fica de lado, sem cobrir o rosto).
+func _pose_drink(side: String, w: float) -> void:
+	var u := _drink_u()
+	_flask.scale = Vector3.ONE * smoothstep(0.02, 0.12, u) * (1.0 - smoothstep(0.86, 0.96, u))
+	if w <= 0.001 or not bones.has("head"):
+		return
+	var tip := _drink_tip(u)
+	var sgn := 1.0 if side == "l" else -1.0
+	var mouth := _bone_point("head", cfg.get("mouth", Vector3(0.0, 0.008, 0.08)))
+	var ax := Vector3(-0.3 * sgn, 0.25, -0.92).lerp(Vector3(-0.16 * sgn, -0.42, -0.89), tip).normalized()
+	var grip_p := mouth - ax * 0.078
+	# cotovelo baixo e um pouco à frente (o antebraço sobe quase de pé até a boca); com escudo nesse braço, mais
+	# junto do corpo, e o escudo fica de lado
+	var shielded := has_shield and side == "l"
+	var pole := Vector3(0.3 * sgn, -1.0, 0.3) if shielded else Vector3(0.55 * sgn, -1.0, 0.2)
+	var f := _forearm_dir(side, grip_p, pole)
+	var fing := f - ax * ax.dot(f)
+	if fing.length() < 1e-3:
+		fing = Vector3.UP - ax * ax.dot(Vector3.UP)
+	_ik_hand_free(side, grip_p, fing.normalized(), ax, pole, w)
+	_finger_pose(side, lerpf(0.35, 0.95, w), lerpf(0.3, 0.9, w))
+
+## Ponto preso a um osso (espaço do personagem): off nos eixos do personagem na pose de repouso, em unidades do
+## esqueleto (como em _attach).
+func _bone_point(key: String, off: Vector3) -> Vector3:
+	var b: Dictionary = bones[key]
+	var gh := skel.get_bone_global_pose(b["idx"])
+	var rest := skel.get_bone_global_rest(b["idx"])
+	var rot: Basis = gh.basis.orthonormalized() * rest.basis.orthonormalized().inverse()
+	return _skel_to_root() * (gh.origin + rot * (Basis(s_rot.inverse()) * off))
 
 # ---------------- ações: avaliação e aplicação ----------------
 func _act_advance(delta: float) -> void:

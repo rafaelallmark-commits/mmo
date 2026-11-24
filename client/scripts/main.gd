@@ -111,10 +111,12 @@ func _ready() -> void:
 		pp.start(args["poseprobe"], args.get("only", ""), int(args.get("focus", "-1")), int(args.get("group", "0")))
 		return
 	if args.has("animprobe"):
-		# golpes e habilidades congelados em vários instantes (anim_probe.gd); --check só confere os números
+		# golpes e habilidades congelados em vários instantes (anim_probe.gd); --check só confere os números;
+		# --states troca os golpes pelos estados do corpo (passada, empunhadura, tônico, queda, levantar, brasas);
+		# --monsters mostra a queda de cada família de monstro
 		var ap = preload("res://scripts/anim_probe.gd").new()
 		add_child(ap)
-		ap.start(args["animprobe"], args.get("set", ""), args.get("only", ""), args.has("check"))
+		ap.start(args["animprobe"], args.get("set", ""), args.get("only", ""), args.has("check"), args.has("states"), args.has("monsters"))
 		return
 	if args.has("sceneshots"):
 		autotest = preload("res://scripts/autotest.gd").new()
@@ -1631,6 +1633,17 @@ func _on_message(m: Dictionary) -> void:
 		"joined":
 			if hud:
 				hud.chat_line("[color=#9a927f]%s entrou.[/color]" % hud.esc(m["name"]))
+			# quem chega ao mapa se forma em brasas quando aparecer (D186)
+			if world:
+				world.on_joined(m)
+		"left":
+			# quem sai do mapa (portal, saída do jogo) se desfaz em brasas onde estava (D186)
+			if world:
+				world.on_left(m)
+		"drink":
+			# alguém bebeu um tônico: leva o frasco à boca, da cor do tônico (D186)
+			if world:
+				world.on_drink(m)
 		"zone":
 			_on_zone(m)
 		"transfer":
@@ -1701,6 +1714,9 @@ func _on_message(m: Dictionary) -> void:
 			if hud and m["eid"] == ch.get("eid", ""):
 				hud.hide_death()
 				Sfx.ui("heal_chime" if m.get("revived", false) else "portal")
+			# o corpo se levanta onde caiu ou se desfaz e se forma no posto, numa coluna de luz (D186)
+			if world:
+				world.on_respawn(m)
 		"ground":
 			if world:
 				world.ground_effect(m)

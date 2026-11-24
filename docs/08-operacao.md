@@ -804,7 +804,7 @@ senha (pedida, barrada pelo limite, feita), exportação de dados, expulsões. C
 **Mestres** (D138): comandos `/gm` só para contas com papel `gm` ou `admin` (ou com `--dev`, em desenvolvimento):
 `npm run conta -- --db cinzas.db --conta nome --papel gm`. O papel `gm` modera (tabela abaixo) e teleporta o próprio
 personagem (`teleport`). Os comandos de cenário, que criam ouro, itens, níveis, refino ou progresso de missão
-(`give`, `gold`, `xp`, `set_enh`, `quest_progress`, `quest_done`), são só do papel `admin` (ou `--dev`), com teto:
+(`give`, `gold`, `xp`, `set_enh`, `quest_progress`, `quest_done` e `hp`, a vida do próprio personagem — 0 o derruba, para testar a queda e o renascer), são só do papel `admin` (ou `--dev`), com teto:
 `give` até uma pilha do item e `gold` até 1.000.000 por comando. Todo comando de mestre, inclusive o recusado, fica
 na auditoria. O papel vale sem novo login: o servidor relê o papel das sessões abertas na varredura de cada minuto,
 então dar, trocar ou tirar um papel pela ferramenta vale em até 60 s, com a marca **[Equipe]** junto (D146). Contas

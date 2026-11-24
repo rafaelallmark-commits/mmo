@@ -594,6 +594,8 @@ export class Zone {
       this.store.saveCharacter(c);
     });
     this.hooks.onUseItem?.(p, def);
+    // todos na zona veem o personagem beber: o cliente leva o frasco à boca na mão livre, da cor do tônico (D186)
+    this.broadcast({ t: 'drink', eid: p.eid, kind: def.use.healMp && !def.use.healHp ? 'mp' : 'hp' });
     return { ok: true, hp: Math.floor(c.hp), mp: Math.floor(c.mp), remaining: Math.max(0, it.qty) };
   }
 
