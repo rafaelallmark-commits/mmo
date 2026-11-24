@@ -64,6 +64,15 @@ export async function kill(c, eid, skill) {
 
 const nearest = (c, pred, from = c.me()) => (c.snap?.ents ?? []).filter((e) => e.k === 'm' && pred(e)).sort((a, b) => d2(a, from) - d2(b, from))[0] ?? null;
 
+// Rato para os passos 2 e 3 longe de Ligia e de Caio, ainda presos: o caminho até um rato colado a eles faria
+// Ligia pedir o tônico (a fala de chegada sai uma vez só, a até 7 m) ou os bichos de Caio aparecerem antes da
+// hora (a até 6 m; o passo 6 os espera novos). Os ratos do Campo do Sulco vagam até perto dos dois; a 11 m, quem
+// luta fica longe; sem nenhum rato assim, vale o mais perto.
+const ratForSteps = (c) => {
+  const away = ['Ligia', 'Caio'].map((n) => follower(c, n)).filter((f) => f && f.st === 'trapped');
+  return nearest(c, (e) => e.def === 'furrow_rat' && away.every((f) => d2(e, f) > 11)) ?? nearest(c, (e) => e.def === 'furrow_rat');
+};
+
 // Sai da faixa do segundo toque: anda 4 m para o lado (a faixa tem 4 m de largura e o jogador está no meio).
 export async function dodge(c, w) {
   const me = c.me();
@@ -81,6 +90,7 @@ export async function playTutorial(c, { skill, skillNeedsTarget = true, failBell
   await goTo(c, 25, 48);
   const t = await c.request('talk', { npc: 'mara' });
   assert.ok(t.quests.offer.some((q) => q.id === 'tutorial'), 'Mara oferece o tutorial');
+  const mark = c.events.length; // falas dos três a partir daqui
   const acc = await c.request('quest_accept', { quest: 'tutorial', npc: 'mara' });
   assert.equal(acc.ok, true, acc.reason);
   assert.equal(acc.quest.objectives.length, 8);
@@ -100,7 +110,7 @@ export async function playTutorial(c, { skill, skillNeedsTarget = true, failBell
 
   // 2) atacar um Rato de Sulco (ataque básico) — o primeiro abate garante um saque
   for (let guard = 0; !(await tutorialQuest(c)).objectives[1].done && guard < 6; guard++) {
-    const rat = nearest(c, (e) => e.def === 'furrow_rat');
+    const rat = ratForSteps(c);
     assert.ok(rat, 'há ratos no Campo do Sulco');
     await kill(c, rat.id, null);
     await sleep(100);
@@ -112,7 +122,7 @@ export async function playTutorial(c, { skill, skillNeedsTarget = true, failBell
   // 3) habilidade da tecla 1
   for (let guard = 0; !(await tutorialQuest(c)).objectives[2].done && guard < 20; guard++) {
     if (skillNeedsTarget) {
-      const rat = nearest(c, (e) => e.def === 'furrow_rat');
+      const rat = ratForSteps(c);
       if (rat && d2(rat, c.me()) > 12) await goTo(c, rat.x - 3, rat.z);
       const r = rat ? await c.request('cast', { skill, target: rat.id }) : { ok: false };
       if (!r.ok) await sleep(300);
@@ -128,9 +138,13 @@ export async function playTutorial(c, { skill, skillNeedsTarget = true, failBell
   // 4) Ligia ferida: tônico perto dela
   const ligia = follower(c, 'Ligia');
   assert.ok(ligia.hp < ligia.mhp, 'Ligia espera ferida');
-  const saidLigia = c.waitFor((m) => m.t === 'say' && m.name === 'Ligia', 20000, 'fala de Ligia');
+  // a fala de chegada de Ligia sai uma vez só: se uma luta já passou perto dela, vale a que ficou no histórico
+  const isLigia = (m) => m.t === 'say' && m.name === 'Ligia';
+  const saidLigia = c.waitFor(isLigia, 20000, 'fala de Ligia');
   await goTo(c, ligia.x + 2, ligia.z - 1);
-  log(`Ligia: "${(await saidLigia).text}"`);
+  const early = c.events.slice(mark).find(isLigia);
+  if (early) saidLigia.catch(() => {});
+  log(`Ligia: "${(early ?? await saidLigia).text}"`);
   c.char = (await c.request('char')).char;
   const pot = findItem(c, 'potion_hp_s');
   assert.ok(pot, 'tônico na bolsa');
