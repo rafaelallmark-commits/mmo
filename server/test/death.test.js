@@ -118,11 +118,18 @@ test('comando de mestre hp (cenário, D186): 0 derruba como um golpe final e o r
     assert.equal(server.store.loadCharacter(char.id).hp, 7, 'vida gravada');
     // longe do posto, cai: evento player_dead e caído no snapshot, como um golpe final de monstro
     await c.request('gm', { cmd: 'teleport', x: 60, z: 50 });
+    // um rato acertou bem antes: a queda pelo comando não é morte do jogo e não entra na telemetria de mortes com o
+    // rato como autor (D187); a auditoria 'gm' registra o comando
+    const rat = [...server.zone.monsters.values()].find((m) => m.defId === 'furrow_rat');
+    server.zone.damagePlayer(p, 1, rat);
+    assert.equal(p.lastHitBy, 'furrow_rat');
     const deadEv = c.waitFor((m) => m.t === 'player_dead' && m.eid === p.eid, 3000, 'player_dead');
     r = await c.request('gm', { cmd: 'hp', value: 0 });
     assert.equal(r.ok, true, r.reason);
     await deadEv;
     assert.equal(p.char.dead, true);
+    assert.deepEqual(server.store.auditTail(10, 'death').map((row) => JSON.parse(row.data_json)), [], 'queda de mestre fora da telemetria de mortes');
+    assert.ok(server.store.auditTail(10, 'gm').some((row) => JSON.parse(row.data_json).cmd === 'hp'), 'o comando fica na auditoria gm');
     await c.waitFor((m) => m.t === 'snap' && m.ents.find((e) => e.id === p.eid)?.dead === true, 3000, 'snapshot caído');
     assert.equal((await c.request('gm', { cmd: 'hp', value: 0 })).code, 'dead', 'caído não cai de novo');
     // renascer: evento respawn com o lugar novo (no posto), longe de onde caiu

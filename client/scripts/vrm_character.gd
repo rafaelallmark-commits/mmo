@@ -918,8 +918,12 @@ func set_look_target(pos: Vector3, weight: float) -> void:
 	_look_w = weight
 
 ## Ataque básico (evento hit sem habilidade): uma das variações da família da arma, nunca a mesma duas vezes
-## seguidas; no crítico, o mesmo golpe com o floreio maior (Moves.critical).
+## seguidas; no crítico, o mesmo golpe com o floreio maior (Moves.critical). Durante uma investida ou um salto (o
+## servidor leva o corpo pelo chão), o golpe básico que sai logo depois não corta o movimento: a investida já golpeia
+## ao chegar, e sem a trava o salto de posição do snapshot seguinte viraria teleporte (world.gd _check_jump; D187).
 func play_attack(crit := false) -> void:
+	if act_locked():
+		return
 	var cat := Moves.category(weapon_family)
 	var n := Moves.basic_count(cat)
 	var v := _rng.randi_range(0, n - 1)
@@ -1094,7 +1098,10 @@ func vanish(secs := 0.3) -> void:
 	_vanish_t = 0.0
 	_vanish_len = maxf(0.05, secs)
 	_form_t = -1.0
+	# o gole acaba aqui: o frasco some junto (senão volta na mão ao formar no lugar novo; D187)
 	_drink_t = -1.0
+	if _flask:
+		_flask.scale = Vector3.ZERO
 
 ## Forma o corpo em brasas, dos pés para cima (chegada ao mapa, fim do teleporte). crouched: forma agachado e
 ## então se levanta (renascer no posto, depois da queda do grupo no calabouço).

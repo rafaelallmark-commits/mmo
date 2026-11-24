@@ -13,8 +13,9 @@
 //     [--revida] [--habilidades 2] [--graus] [--grupo a,b] [--json arquivo] [--detalhe]
 //
 // --equip kit: só o equipamento inicial da classe; arma: o inicial com a arma comum de faixa 5 da família do kit (a
-//   que o Capataz da 1.5, pré-requisito da 2.1, dá a cada um); 5: as peças comuns de faixa 5 da classe (o armeiro
-//   vende a partir do nível 5), as mesmas do GEAR=5 do script da revisão.
+//   que o Capataz da 1.5, pré-requisito da 2.1, dá a cada um, menos ao Bastião: o Capataz lhe dá a Garra de Manivela,
+//   e aqui ele leva o Martelo de Ferreiro da Ponte, da família do martelo do kit; D187); 5: as peças comuns de faixa 5
+//   da classe (o armeiro vende a partir do nível 5), as mesmas do GEAR=5 do script da revisão.
 // --reacao-ms: intervalo entre as decisões do bot, em tempo de jogo (480 ms = os 120 ms do script da revisão
 //   com o servidor a 4x).
 // --janela-s 0 (padrão): só a primeira tentativa (Joca caído ou o jogador caído é derrota). Com N > 0, como o
