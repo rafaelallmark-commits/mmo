@@ -229,7 +229,8 @@ function runOnce() {
     const r = kind === 'postgres' ? backupPostgres(stamp, name) : backupSqlite(stamp, name);
     const rot = prune(name);
     const ms = Date.now() - t0;
-    console.log(`backup: ${r.out} (${r.detail}, ${ms} ms); ${rot.copies} cópia${rot.copies === 1 ? '' : 's'} guardada${rot.copies === 1 ? '' : 's'}, a mais velha de ${new Date(rot.oldestAt).toISOString().slice(0, 16).replace('T', ' ')} UTC`);
+    // a métrica antes da linha "backup: ...": quem espera a linha (o teste, quem acompanha o registro) já acha
+    // a métrica gravada
     writeMetrics({
       cinzas_backup_last_success_timestamp_seconds: secs(Date.now()),
       cinzas_backup_last_size_bytes: r.bytes,
@@ -237,6 +238,7 @@ function runOnce() {
       cinzas_backup_copies: rot.copies,
       cinzas_backup_oldest_copy_timestamp_seconds: rot.oldestAt == null ? 0 : secs(rot.oldestAt),
     });
+    console.log(`backup: ${r.out} (${r.detail}, ${ms} ms); ${rot.copies} cópia${rot.copies === 1 ? '' : 's'} guardada${rot.copies === 1 ? '' : 's'}, a mais velha de ${new Date(rot.oldestAt).toISOString().slice(0, 16).replace('T', ' ')} UTC`);
     return true;
   } catch (e) {
     console.error(e instanceof BackupError ? e.message : `backup falhou: ${e.message}`);
