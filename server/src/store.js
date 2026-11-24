@@ -610,9 +610,12 @@ export class Store {
     return charFromRow(row, this.prep('SELECT * FROM item_instances WHERE char_id = ? ORDER BY created_at, id').all(charId));
   }
 
+  // Nunca regrava personagem anonimizado (nome excluido_<id>, o mesmo filtro de listCharacters): a conta
+  // excluída fora da zona (serviço de contas, ferramenta) com a sessão no mundo seguia salvando ouro e marcas
+  // na linha anônima até a varredura de cada minuto. A condição vai na própria UPDATE: nenhuma consulta a mais (D184).
   saveCharacter(c) {
     this.prep(`UPDATE characters SET level=?, xp=?, alloc_json=?, unspent=?, skill_points=?, skills_json=?, hp=?, mp=?, gold=?,
-      map_id=?, x=?, z=?, dead=?, flags_json=?, played_s=?, updated_at=? WHERE id=?`).run(...charSaveValues(c));
+      map_id=?, x=?, z=?, dead=?, flags_json=?, played_s=?, updated_at=? WHERE id=? AND name NOT LIKE 'excluido\\_%' ESCAPE '\\'`).run(...charSaveValues(c));
   }
 
   // Salvamento periódico de todos os personagens conectados (GameServer.saveAll): uma transação só.

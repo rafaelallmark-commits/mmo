@@ -134,8 +134,8 @@ Cada missão principal lista **NPC**, **objetivo**, **diálogo curto**, **recomp
 - **Objetivo**: defender Joca por 3 minutos enquanto ele abre a válvula principal; ondas de Válvulas Errantes e Enguias de Lodo vêm do canal.
 - **Diálogo**: JOCA: "Se eu abrir devagar, ela não estoura. Se você deixar alguma coisa morder minha mão, estoura. Combinado?"
 - **Recompensa**: 900 XP, Anel de Bronze.
-- **Pré-requisitos**: 2.1.
-- **Conclusão**: Joca vivo no fim do cronômetro do servidor. Se ele cair, a missão reinicia em 30 s (sem perder o progresso de 2.1). Implementado: a **Válvula principal**, ao lado do Joca na frente da Casa das Bombas, começa a defesa; o Joca da defesa (900 de vida) fica no lugar do NPC e seis ondas (Válvulas Errantes e Enguias de Lodo, a cada 30 s) vêm do canal e miram nele até alguém chamar a atenção delas. Se ele cair, ou o grupo inteiro cair, as ondas somem e ele recomeça 30 s depois, assim que alguém do grupo estiver por perto; vencido o cronômetro, conta para todo o grupo a até 40 m. Recompensa: 900 XP, 60 ouro, Anel de Bronze.
+- **Pré-requisitos**: 2.1. Recomendado: 1 jogador de nível 6 com a arma de faixa 5 do Capataz (1.5) e uns 5 tônicos — com as peças comuns de faixa 5 do armeiro, uns 3 bastam —, ou um grupo.
+- **Conclusão**: Joca vivo no fim do cronômetro do servidor. Se ele cair, a missão reinicia em 30 s (sem perder o progresso de 2.1). Implementado: a **Válvula principal**, ao lado do Joca na frente da Casa das Bombas, começa a defesa; o Joca da defesa (900 de vida) fica no lugar do NPC e seis ondas, a cada 30 s, vêm do canal e miram nele até alguém chamar a atenção delas: 1 Válvula Errante; 2 Enguias de Lodo; 1 Enguia; 1 Válvula; 2 Enguias; e, por último, 2 Válvulas e 1 Enguia (10 monstros, D185). Em grupo, cada pessoa a mais, viva e a até 30 m do Joca quando a onda sai, traz uma Válvula Errante a mais nessa onda. Se ele cair, ou o grupo inteiro cair, as ondas somem e ele recomeça 30 s depois, assim que alguém do grupo estiver por perto; vencido o cronômetro, conta para todo o grupo a até 40 m. Recompensa: 900 XP, 60 ouro, Anel de Bronze.
 
 ### 2.3 Registros Molhados
 - **NPC**: Joca Vedante.

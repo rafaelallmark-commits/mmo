@@ -21,6 +21,15 @@ test('fração em valor que vai para coluna inteira do banco é recusada (o Post
   }
 });
 
+test('defesa com monstro a mais por pessoa do grupo malformado é recusada: monstro inexistente, quantidade zero ou fracionada (D185)', () => {
+  const d = structuredClone(data);
+  d.maps.brejo_bombas.defenses.joca_valve.extraPerMember = [['valvula_inexistente', 1], ['silt_eel', 0], ['errant_valve', 1.5]];
+  const { errors } = validate(d, loadBuilds());
+  for (const what of ['monstro a mais por pessoa valvula_inexistente', 'quantidade a mais por pessoa inválida (0)', 'quantidade a mais por pessoa inválida (1.5)']) {
+    assert.ok(errors.some((e) => e === `mapa brejo_bombas: defesa joca_valve: ${what}`), `${what} recusado: ${JSON.stringify(errors)}`);
+  }
+});
+
 test('mecânica de monstro malformada é recusada: tipo, aviso curto demais, efeito negativo longo, reforço inexistente, território em agressivo', () => {
   const d = structuredClone(data);
   d.monsters.blind_welder.mechanic.warnMs = 600; // golpe de área sem tempo de reação

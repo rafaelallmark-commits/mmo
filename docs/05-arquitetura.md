@@ -78,7 +78,7 @@ mmo/
 │   │   ├── quests.js              motor de missões (falar, matar, coletar, interagir, entrar no mapa, defender...), diárias, títulos, quadro
 │   │   ├── smith.js               ferreiro: custo, chance, risco (+4..+6), selo e rolagem do refino
 │   │   ├── escort.js              escolta da carroça (capítulo 4): rota, marcos, emboscadas, quebra
-│   │   ├── defense.js             defesa parada sobre a escolta (Joca na válvula, 2.2): ondas, cronômetro, recomeço
+│   │   ├── defense.js             defesa parada sobre a escolta (Joca na válvula, 2.2): ondas (mais monstros por pessoa a mais do grupo), cronômetro, recomeço
 │   │   ├── tutorial.js            «Três do Outro Lado»: Bento, Ligia e Caio por personagem (só o dono vê), segundo toque, chegada ao posto
 │   │   ├── trade.js               comércio entre jogadores: ofertas, travas, confirmação, troca numa transação
 │   │   ├── clans.js               clãs: fundar, convidar, cargos, liderança, mensagem do dia, chat do clã
@@ -154,6 +154,7 @@ mmo/
 │       ├── sqlite-para-pg.mjs     importa um banco SQLite para o PostgreSQL
 │       ├── carga.mjs              teste de carga com clientes simulados (relatório de carga)
 │       ├── simular-progressao.mjs simulação de progressão 1–25 por classe (relatório de progressão)
+│       ├── defesa-solo.mjs        Defesa do Joca (2.2) com o bot da revisão, sozinho ou em grupo (taxa de vitória por classe)
 │       ├── cenarios.mjs           roda as suítes de aceitação e as cargas (relatório de cenários)
 │       ├── telemetria.mjs         relatório da telemetria do teste a partir da auditoria
 │       ├── medir-caminhos.mjs     mede e compara a busca de caminho em todos os mapas

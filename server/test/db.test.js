@@ -117,6 +117,40 @@ test('saveCharacters grava todos os personagens num lote (repetido: vale o últi
   } finally { st.close(); }
 });
 
+test('salvamento nunca regrava personagem anonimizado (conta ou personagem excluído), sozinho ou no lote; o resto do lote grava (D184)', () => {
+  const st = createStore(':memory:');
+  try {
+    const gone = st.createAccount('sumida', 'senha');
+    const live = st.createAccount('ficou', 'senha');
+    const raw = (id) => st.db.prepare('SELECT name, gold, flags_json, level, xp, x, updated_at FROM characters WHERE id = ?').get(id);
+    // "Excluidor" tem as letras do prefixo, mas não o "_": o "_" do filtro é literal (sem ESCAPE seria curinga)
+    const [sombra, avulsa, viva, quase] = [[gone, 'Sombra'], [live, 'Avulsa'], [live, 'Viva'], [live, 'Excluidor']].map(([acc, name]) => st.loadCharacter(newChar(st, acc, name)));
+    // na memória da zona: ouro e marcas (título, escolha, prova) ganhos durante a sessão
+    for (const c of [sombra, avulsa, viva, quase]) Object.assign(c, { gold: 4321, title: 'Guardião da Ponte', trialDone: true, choices: { c4_reasons: 'b' }, level: 7, xp: 900, x: 61.5 });
+    st.saveCharacter(sombra); // antes da exclusão grava normalmente
+    assert.equal(raw(sombra.id).gold, 4321);
+    sombra.gold = 9999;
+    st.deleteAccount(gone); // conta excluída fora da zona com Sombra ainda no mundo
+    assert.equal(st.deleteCharacter(live, avulsa.id), 'Avulsa');
+    const frozen = { [sombra.id]: raw(sombra.id), [avulsa.id]: raw(avulsa.id) };
+    for (const r of Object.values(frozen)) { assert.match(r.name, /^excluido_\d+$/); assert.equal(r.gold, 0); assert.equal(r.flags_json, '{}'); }
+    st.saveCharacters([sombra, viva, avulsa, quase]); // salvamento periódico (lote)
+    st.saveCharacter(sombra); // e o avulso (missão, troca, saída)
+    st.saveCharacter(avulsa);
+    st.tx(() => st.saveCharacter(sombra));
+    for (const id of [sombra.id, avulsa.id]) assert.deepEqual(raw(id), frozen[id], 'a linha anônima ficou como a exclusão deixou (nem a hora do salvamento mudou)');
+    for (const c of [viva, quase]) {
+      const r = raw(c.id);
+      assert.equal(r.name, c.name);
+      assert.deepEqual([r.gold, r.level, r.xp, r.x], [4321, 7, 900, 61.5], `${c.name} gravado no mesmo lote`);
+      assert.deepEqual(JSON.parse(r.flags_json), { trialDone: true, title: 'Guardião da Ponte', choices: { c4_reasons: 'b' } });
+    }
+    viva.gold = 5;
+    st.saveCharacter(viva);
+    assert.equal(raw(viva.id).gold, 5);
+  } finally { st.close(); }
+});
+
 test('nomes de conta e de personagem e e-mail não diferenciam maiúsculas', () => {
   const st = createStore(':memory:');
   try {

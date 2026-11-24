@@ -883,7 +883,8 @@ itens ou ouro retirados, com o motivo) sem a conta, o personagem e o IP de quem 
 Exclusão de conta pelo jogo (tela de personagens) ou pelo serviço de contas apaga e-mail, senha, itens e
 missões na hora e anonimiza os nomes (a conta vira `excluida#<id>`, nome que o cadastro nunca aceita). Com a conta
 excluída pelo serviço de contas ou pela ferramenta enquanto uma sessão dela está aberta na zona, essa sessão não
-cria personagem nem entra no mundo, e a conferência de cada minuto a derruba sem gravar a saída (D178).
+cria personagem nem entra no mundo, e a conferência de cada minuto a derruba sem gravar a saída (D178); até lá,
+o salvamento (o periódico, de 10 s, e os avulsos) não regrava a linha já anonimizada do personagem (D184).
 Na tela de personagens também dá para **excluir um personagem só** (D144): o
 jogador digita o nome dele e a senha da conta; saem os itens, o ouro, as missões e as listas de ignorados, ele sai do
 grupo e do clã (o clã que ele liderava passa ao membro de maior cargo; sem ninguém, acaba) e o nome fica livre; as

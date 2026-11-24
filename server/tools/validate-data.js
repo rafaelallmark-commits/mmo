@@ -460,6 +460,11 @@ export function validate(data, builds) {
         if (!(w.atMs >= 0 && w.atMs < d.durationMs)) errors.push(`mapa ${mid}: defesa ${did}: onda fora do cronômetro (${w.atMs})`);
         for (const [mon] of w.monsters) if (!data.monsters[mon]) errors.push(`mapa ${mid}: defesa ${did}: monstro ${mon}`);
       }
+      // monstros a mais em cada onda por pessoa do grupo além da primeira (D185)
+      for (const [mon, n] of d.extraPerMember ?? []) {
+        if (!data.monsters[mon]) errors.push(`mapa ${mid}: defesa ${did}: monstro a mais por pessoa ${mon}`);
+        if (!(Number.isInteger(n) && n > 0)) errors.push(`mapa ${mid}: defesa ${did}: quantidade a mais por pessoa inválida (${n})`);
+      }
       for (const p of [d, ...(d.spawnAt ?? [])]) if (p.x < 0 || p.z < 0 || p.x > m.size[0] || p.z > m.size[1]) errors.push(`mapa ${mid}: defesa ${did}: ponto fora do mapa`);
     }
     for (const [hid, h] of Object.entries(m.hazards ?? {})) {

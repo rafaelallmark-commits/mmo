@@ -133,7 +133,7 @@ export class Moderation {
     for (const s of sessions) {
       const acc = accounts.get(s.accountId);
       // conta excluída fora deste servidor (serviço de contas, ferramenta): a sessão cai sem gravar (o personagem
-      // já foi anonimizado no banco; gravar a saída traria de volta o ouro e as marcas dele, D178)
+      // já foi anonimizado no banco, D178; o próprio salvamento também não regrava a linha anônima, D184)
       if (!acc) { s.noSave = true; this.kickSession(s, 'Esta conta foi excluída.'); continue; }
       s.mutedUntil = acc.muted_until ?? 0;
       const ban = banMessage(acc, now);

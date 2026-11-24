@@ -4,7 +4,8 @@
 // mensagem "escort" e o crédito para quem está por perto no fim. Vence quem mantiver Joca vivo até o fim do
 // cronômetro do servidor; se ele cair (ou o grupo inteiro cair), as ondas somem e ele tenta de novo em 30 s,
 // sem perder nada das missões anteriores. Sem ninguém do grupo na zona por 60 s, a defesa acaba (dá para
-// recomeçar na válvula).
+// recomeçar na válvula). As ondas dos dados têm o tamanho de quem defende sozinho; em grupo, cada pessoa a mais
+// perto do Joca soma extraPerMember a cada onda (D185).
 import { Escort } from './escort.js';
 
 const ABANDON_MS = 60000;
@@ -63,12 +64,19 @@ export class Defense extends Escort {
     return null;
   }
 
+  // As ondas dos dados são as de quem defende sozinho; cada pessoa a mais do grupo, viva e a até followRadius do
+  // Joca quando a onda sai, traz também extraPerMember (D185): em grupo a defesa continua pedindo trabalho.
+  waveMonsters(i) {
+    const extra = Math.max(0, this.escorts().filter((p) => dist(p.char, this) <= this.def.followRadius).length - 1);
+    const more = extra ? (this.def.extraPerMember ?? []).map(([monster, count]) => [monster, count * extra]) : [];
+    return [...this.def.waves[i].monsters, ...more];
+  }
+
   spawnWave(i) {
     const z = this.zone;
-    const w = this.def.waves[i];
     const points = this.def.spawnAt ?? [{ x: this.x + 12, z: this.z }];
     let k = 0;
-    for (const [monster, count] of w.monsters) {
+    for (const [monster, count] of this.waveMonsters(i)) {
       for (let n = 0; n < count; n++, k++) {
         const sp = points[k % points.length];
         const m = z.spawnMonster({ monster, x: sp.x, z: sp.z, radius: 2, count: 1 }, { noRespawn: true });

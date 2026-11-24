@@ -27,6 +27,7 @@
     "contas": "node --disable-warning=ExperimentalWarning src/contas-main.js",
     "conta": "node --disable-warning=ExperimentalWarning tools/conta.mjs",
     "simular-progressao": "node --disable-warning=ExperimentalWarning tools/simular-progressao.mjs",
+    "defesa-solo": "node --disable-warning=ExperimentalWarning tools/defesa-solo.mjs",
     "mundo": "node --disable-warning=ExperimentalWarning src/world-main.js",
     "multizona": "node --disable-warning=ExperimentalWarning tools/multizona.mjs",
     "medir-caminhos": "node --disable-warning=ExperimentalWarning tools/medir-caminhos.mjs"
