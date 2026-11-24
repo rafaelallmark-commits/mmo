@@ -604,6 +604,28 @@ test('2.2 sozinho e em grupo: as ondas dos dados são as de quem vai sozinho; ca
   });
 });
 
+test('npm run defesa-solo (a régua do D185): o bot da revisão vence sozinho as ondas dos dados e, em dupla, as Válvulas a mais; --graus gasta os pontos de habilidade e --habilidades escolhe quantas o bot usa', async () => {
+  const { runDefense } = await import('../tools/defesa-solo.mjs');
+  const jv = data.maps.brejo_bombas.defenses.joca_valve;
+  const solo = jv.waves.reduce((s, w) => s + w.monsters.reduce((t, [, n]) => t + n, 0), 0);
+  // Cantora com as peças de faixa 5 e 3 tônicos: vence sempre na medição (sem cair, Joca de pé)
+  const s = runDefense({ classId: 'veilsinger', tonics: 3, gear: '5', seed: 1 });
+  assert.equal(s.won, true, JSON.stringify(s));
+  assert.deepEqual([s.spawned, s.attempts, s.playerDown, s.fellAtS], [solo, 1, 0, null], 'sozinho: só as ondas dos dados, na primeira tentativa');
+  assert.ok(s.jocaHp > 0 && s.jocaHp <= s.jocaMaxHp && s.potions <= 3);
+  assert.deepEqual(s.skillRanks, [1, 1], 'sem --graus, as duas habilidades no grau 1 (como no script da revisão)');
+  // dupla: cada onda traz até uma Válvula a mais (a pessoa a mais, viva e perto do Joca quando a onda sai)
+  const d = runDefense({ classId: 'bastion', party: ['veilsinger'], tonics: 3, gear: '5', seed: 1 });
+  assert.equal(d.won, true, JSON.stringify(d));
+  assert.ok(d.spawned > solo && d.spawned <= solo + jv.waves.length * jv.extraPerMember[0][1], `dupla: ${d.spawned} monstros`);
+  // --graus (nível 6: 5 pontos, teto do grau 3) e --habilidades 1
+  const g = runDefense({ classId: 'veilsinger', tonics: 3, gear: '5', seed: 1, ranks: true });
+  assert.deepEqual(g.skillRanks, [3, 3]);
+  const one = runDefense({ classId: 'veilsinger', tonics: 3, gear: '5', seed: 1, skills: 1, ranks: true });
+  assert.deepEqual(one.skillRanks, [3], 'com uma habilidade só, os pontos vão nela');
+  log(`sozinho ${s.spawned} monstros (tônicos ${s.potions}); dupla ${d.spawned}; graus ${g.skillRanks} e ${one.skillRanks}`);
+});
+
 test('2.2 aceita antes da defesa (abates antigos gravados no objetivo): a válvula abre e a missão conclui', async () => {
   await withServer(async (server, url) => {
     const pre = ['tutorial', 'c1_count', 'c1_rats', 'c1_master', 'c1_route', 'c1_foreman', 'c2_water'];

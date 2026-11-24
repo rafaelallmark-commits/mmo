@@ -170,7 +170,7 @@ npm run simular-progressao
 npm run simular-progressao -- --classes breaker,emberweaver --repeticoes 2 --md /tmp/rel.md
 ```
 
-Medir a Defesa do Joca (missão 2.2) do mesmo jeito: o bot da revisão de D185 defende sozinho (ou em grupo, com `--grupo`) num servidor em processo, com nível, equipamento e tônicos escolhidos, e a saída é a taxa de vitória por classe (`--ajuste` testa outros números da defesa sem mexer nos dados):
+Medir a Defesa do Joca (missão 2.2) do mesmo jeito: o bot da revisão de D185 defende sozinho (ou em grupo, com `--grupo`) num servidor em processo, com nível, equipamento e tônicos escolhidos, e a saída é a taxa de vitória por classe (`--ajuste` testa outros números da defesa sem mexer nos dados; `--habilidades N` e `--graus` mudam a conduta do bot — a taxa de cada classe muda muito com ela, o total pouco):
 
 ```bash
 npm run defesa-solo -- --nivel 6 --tonicos 3 --equip 5 --sementes 40

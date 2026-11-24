@@ -4,12 +4,13 @@
 // ataca o monstro da onda mais perto do Joca, usa as duas primeiras habilidades da classe quando dá e bebe um
 // Tônico de Vida abaixo de 40% da vida. Antes da defesa, o personagem sobe ao nível pedido por comando de
 // mestre, gasta os pontos no que a arma comum de faixa 5 da família do kit pede (o resto vai no atributo
-// principal) e fica com exatamente N tônicos na bolsa. Ferramenta de MEDIÇÃO: não muda regra nem dado.
+// principal) e fica com exatamente N tônicos na bolsa; como no script da revisão, os pontos de habilidade ficam
+// sem gastar (as habilidades no grau 1). Ferramenta de MEDIÇÃO: não muda regra nem dado.
 //
 // Uso (na pasta server):
 //   npm run defesa-solo -- [--classes a,b] [--nivel 6] [--tonicos 3] [--equip kit|arma|5] [--sementes 20]
 //     [--semente-inicial 1] [--reacao-ms 480] [--passo-ms 100] [--janela-s 0] [--ajuste '{"hp":900}']
-//     [--revida] [--grupo a,b] [--json arquivo] [--detalhe]
+//     [--revida] [--habilidades 2] [--graus] [--grupo a,b] [--json arquivo] [--detalhe]
 //
 // --equip kit: só o equipamento inicial da classe; arma: o inicial com a arma comum de faixa 5 da família do kit (a
 //   que o Capataz da 1.5, pré-requisito da 2.1, dá a cada um); 5: as peças comuns de faixa 5 da classe (o armeiro
@@ -21,6 +22,9 @@
 //   também conta.
 // --revida: o bot também ataca primeiro um monstro do mapa (fora das ondas) que venha atrás dele, como qualquer
 //   jogador faria; sem isso (o script da revisão) ele só bate nos monstros da onda.
+// --habilidades N: quantas das primeiras habilidades da classe o bot usa (2 = o script da revisão); --graus: antes
+//   da defesa, gasta os pontos de habilidade nelas, alternando, até o teto do nível. A taxa de cada classe muda
+//   muito com essa conduta (o total, pouco): servem para ver quanto de uma diferença entre classes é do bot.
 // --grupo: outros bots (classes) no grupo de cada classe medida, cada um com o mesmo nível, equipamento e
 //   tônicos; o da classe medida abre a válvula. Em grupo, quem cai espera e os outros seguem.
 // --ajuste: JSON somado à definição da defesa (data/maps.json, brejo_bombas.defenses.joca_valve) só nesta
@@ -45,8 +49,9 @@ const must = (r, what) => {
 };
 
 // Prepara um personagem: conta, nível, missões anteriores, a 2.2 aceita com o Joca, pontos, equipamento e
-// exatamente N tônicos, parado em `spot` perto da válvula e com a vida cheia.
-function prepareHero(server, i, classId, { level, tonics, gear }, spot) {
+// exatamente N tônicos, parado em `spot` perto da válvula e com a vida cheia. skills: quantas das primeiras
+// habilidades da classe o bot usa; ranks: gasta os pontos de habilidade nelas.
+function prepareHero(server, i, classId, { level, tonics, gear, skills = 2, ranks = false }, spot) {
   const c = new ClienteEmProcesso(server, `bot${i}`);
   const account = `defesa_${i}`;
   must(c.pedir('register', { account, password: 'senha123' }), 'cadastro');
@@ -72,6 +77,10 @@ function prepareHero(server, i, classId, { level, tonics, gear }, spot) {
   }
   if (left) points[MAIN_ATTR[classId]] = (points[MAIN_ATTR[classId]] ?? 0) + left;
   must(c.pedir('allocate', { points }), 'atributos');
+  // habilidades que o bot usa; com ranks, os pontos de habilidade vão nelas, alternando (as ainda trancadas e as
+  // que chegaram ao teto do nível recusam o ponto)
+  const used = cls.skills.slice(0, skills);
+  if (ranks) for (let k = 0; used.length && k < 4 * used.length && p.char.skillPoints > 0; k++) c.pedir('learn_skill', { skill: used[k % used.length] });
   if (gear === '5' || gear === 'arma') {
     const kitOffhand = (d) => cls.startingKit.equip.some((e) => data.items[e].kind === 'offhand' && data.items[e].family === d.family);
     const want = Object.values(data.items).filter((d) => d.level === 5 && d.rarity === 'common' && (!d.classes || d.classes.includes(classId))
@@ -86,14 +95,15 @@ function prepareHero(server, i, classId, { level, tonics, gear }, spot) {
   if (tonics > 0) must(c.pedir('gm', { cmd: 'give', defId: 'potion_hp_s', qty: tonics }), 'dar tônicos');
   must(c.pedir('gm', { cmd: 'teleport', x: spot.x, z: spot.z }), 'ir à válvula');
   p.char.hp = p.stats.maxHp; p.char.mp = p.stats.maxMp; // chega descansado
-  return { c, p, cls, charId, name, potions: 0, strays: new Set() };
+  return { c, p, cls, charId, name, used, potions: 0, strays: new Set() };
 }
 
 // Uma defesa do começo ao fim, sozinho (party vazio) ou em grupo (party: classes dos outros bots; o primeiro
-// abre a válvula). Devolve { won, attempts, jocaHp, jocaMinHp, jocaMaxHp, potions, playerDown, fellAtS, strays, spawned }
+// abre a válvula). Devolve { won, attempts, jocaHp, jocaMinHp, jocaMaxHp, potions, playerDown, fellAtS, strays, spawned, skillRanks }
 // (potions: média por personagem; playerDown: quantos caíram; strays: monstros do mapa, fora das ondas, que vieram
-// atrás de alguém durante a defesa; spawned: monstros das ondas).
-export function runDefense({ classId, party = [], level = 6, tonics = 3, gear = 'kit', seed = 1, reactMs = 480, stepMs = 100, windowS = 0, override = null, fightBack = false }) {
+// atrás de alguém durante a defesa; spawned: monstros das ondas; skillRanks: graus das habilidades que o primeiro
+// usa). skills e ranks: ver prepareHero.
+export function runDefense({ classId, party = [], level = 6, tonics = 3, gear = 'kit', seed = 1, reactMs = 480, stepMs = 100, windowS = 0, override = null, fightBack = false, skills = 2, ranks = false }) {
   const realNow = Date.now;
   const base = realNow.call(Date);
   let simMs = 0;
@@ -101,7 +111,7 @@ export function runDefense({ classId, party = [], level = 6, tonics = 3, gear = 
   try {
     const server = new GameServer({ dbPath: ':memory:', dev: true, log: false, seed, tickHz: 10, rateLimit: 1e9, rateBurst: 1e9, partyInviteGapMs: 0 });
     congelarZonasVazias(server, () => simMs, 0);
-    const heroes = [classId, ...party].map((cid, i) => prepareHero(server, i, cid, { level, tonics, gear }, SPOTS[i % SPOTS.length]));
+    const heroes = [classId, ...party].map((cid, i) => prepareHero(server, i, cid, { level, tonics, gear, skills, ranks }, SPOTS[i % SPOTS.length]));
     const [lead] = heroes;
     for (const h of heroes.slice(1)) {
       must(lead.c.pedir('party_invite', { name: h.name }), 'convite do grupo');
@@ -125,7 +135,7 @@ export function runDefense({ classId, party = [], level = 6, tonics = 3, gear = 
         if (heroes.every((h) => h.p.char.dead)) break;
         const wave = [...zone.monsters.values()].filter((m) => m.escortTarget === def.eid && m.state !== 'dead');
         for (const h of heroes) {
-          const { c, p, cls } = h;
+          const { c, p } = h;
           if (p.char.dead) continue;
           if (p.char.hp < p.stats.maxHp * 0.4) {
             const pot = [...p.char.items.values()].find((i) => i.loc === 'bag' && i.defId.startsWith('potion_hp'));
@@ -135,7 +145,7 @@ export function runDefense({ classId, party = [], level = 6, tonics = 3, gear = 
           if (!stray && !wave.length) continue;
           const tgt = stray ?? wave.sort((a, b) => Math.hypot(a.x - def.x, a.z - def.z) - Math.hypot(b.x - def.x, b.z - def.z))[0];
           if (p.targetId !== tgt.eid) c.pedir('attack', { target: tgt.eid });
-          for (const sk of cls.skills.slice(0, 2)) if ((p.char.skills[sk] || 0) > 0) c.pedir('cast', { skill: sk, target: tgt.eid, x: tgt.x, z: tgt.z });
+          for (const sk of h.used) if ((p.char.skills[sk] || 0) > 0) c.pedir('cast', { skill: sk, target: tgt.eid, x: tgt.x, z: tgt.z });
         }
       }
       server.step(stepMs);
@@ -154,7 +164,7 @@ export function runDefense({ classId, party = [], level = 6, tonics = 3, gear = 
     const res = {
       won: won && ready, attempts, jocaHp: Math.ceil(def.hp), jocaMinHp: Math.ceil(jocaMinHp), jocaMaxHp: def.mhp,
       potions: heroes.reduce((s, h) => s + h.potions, 0) / heroes.length, playerDown: heroes.filter((h) => h.p.char.dead).length,
-      fellAtS, strays: strays.size, spawned: waveIds.size,
+      fellAtS, strays: strays.size, spawned: waveIds.size, skillRanks: lead.used.map((s) => lead.p.char.skills[s] ?? 0),
     };
     server.store.close();
     return res;
@@ -168,7 +178,7 @@ function main() {
   const opt = (k, d) => { const i = argv.indexOf(`--${k}`); return i === -1 || argv[i + 1] === undefined || argv[i + 1].startsWith('--') ? d : argv[i + 1]; };
   const flag = (k) => argv.includes(`--${k}`);
   if (flag('ajuda') || flag('help')) {
-    console.log('Uso: npm run defesa-solo -- [--classes a,b] [--nivel 6] [--tonicos 3] [--equip kit|arma|5] [--sementes 20] [--semente-inicial 1] [--reacao-ms 480] [--passo-ms 100] [--janela-s 0] [--ajuste JSON] [--revida] [--grupo a,b] [--json arquivo] [--detalhe]');
+    console.log('Uso: npm run defesa-solo -- [--classes a,b] [--nivel 6] [--tonicos 3] [--equip kit|arma|5] [--sementes 20] [--semente-inicial 1] [--reacao-ms 480] [--passo-ms 100] [--janela-s 0] [--ajuste JSON] [--revida] [--habilidades 2] [--graus] [--grupo a,b] [--json arquivo] [--detalhe]');
     return;
   }
   const all = Object.entries(data.classes).filter(([, c]) => ['M1', 'M2'].includes(c.implementedIn)).map(([id]) => id);
@@ -178,15 +188,17 @@ function main() {
     level: Number(opt('nivel', 6)), tonics: Number(opt('tonicos', 3)), gear: opt('equip', 'kit'),
     reactMs: Number(opt('reacao-ms', 480)), stepMs: Number(opt('passo-ms', 100)), windowS: Number(opt('janela-s', 0)),
     override: opt('ajuste') ? JSON.parse(opt('ajuste')) : null, fightBack: flag('revida'),
+    skills: Number(opt('habilidades', 2)), ranks: flag('graus'),
     party: opt('grupo') ? opt('grupo').split(',').map((s) => s.trim()).filter(Boolean) : [],
   };
+  if (!(Number.isInteger(cfg.skills) && cfg.skills >= 0)) { console.error('--habilidades: um número inteiro de 0 em diante'); process.exitCode = 1; return; }
   for (const c of cfg.party) if (!all.includes(c)) { console.error(`Classe inválida no grupo: ${c}. Opções: ${all.join(', ')}`); process.exitCode = 1; return; }
   if (!['kit', 'arma', '5'].includes(cfg.gear)) { console.error('--equip: kit, arma ou 5'); process.exitCode = 1; return; }
   const n = Math.max(1, Number(opt('sementes', 20)));
   const seed0 = Number(opt('semente-inicial', 1));
   const t0 = performance.now();
   const who = cfg.party.length ? `em grupo (cada classe abaixo com ${cfg.party.map((c) => data.classes[c].name).join(', ')})` : 'sozinho';
-  console.log(`Defesa do Joca ${who}: nível ${cfg.level}, ${cfg.tonics} tônicos, equipamento ${{ kit: 'do kit', arma: 'do kit com a arma de faixa 5', 5: 'comum de faixa 5' }[cfg.gear]}, ${n} sementes (${seed0}..${seed0 + n - 1}), ${cfg.windowS > 0 ? `janela de ${cfg.windowS} s` : 'só a primeira tentativa'}${cfg.fightBack ? ', revidando monstros do mapa' : ''}${cfg.override ? `, ajuste ${JSON.stringify(cfg.override)}` : ''}`);
+  console.log(`Defesa do Joca ${who}: nível ${cfg.level}, ${cfg.tonics} tônicos, equipamento ${{ kit: 'do kit', arma: 'do kit com a arma de faixa 5', 5: 'comum de faixa 5' }[cfg.gear]}, ${n} sementes (${seed0}..${seed0 + n - 1}), ${cfg.windowS > 0 ? `janela de ${cfg.windowS} s` : 'só a primeira tentativa'}${cfg.fightBack ? ', revidando monstros do mapa' : ''}${cfg.skills !== 2 ? `, usando ${cfg.skills} habilidade(s)` : ''}${cfg.ranks ? ', com os pontos de habilidade gastos' : ''}${cfg.override ? `, ajuste ${JSON.stringify(cfg.override)}` : ''}`);
   const rows = [];
   for (const classId of classes) {
     const runs = [];

@@ -216,10 +216,10 @@ próximos animados), **Sombras**, **Tela cheia** e limite de **quadros por segun
 - **Diárias** (Recibo do Capataz, Bomba-Mestra, Supervisor de Turno, Mãe do Eco, Brasa para a Forja): dá para
   fazer uma vez por dia; voltam à **00:00 UTC** (21:00 em Brasília) — o diário e o quadro mostram quanto falta.
 - **Defesa do Joca** ("O Teste de Pressão", no Brejo das Bombas): três minutos segurando seis ondas que vêm do
-  canal. Dá para fazer sozinho no nível 6: com a arma que o Capataz Rachado deixou ("Cobrança Antiga"), leve uns 5
-  tônicos; com as peças comuns da faixa 5 do armeiro, uns 3 bastam. Bata primeiro no que estiver mordendo o Joca e
-  beba tônico antes de a vida ficar no fim. Em grupo, cada pessoa a mais perto da válvula traz uma Válvula Errante a
-  mais por onda. Se o Joca (ou todo mundo) cair, ele tenta de novo em 30 s, sem perder nada.
+  canal. Dá para fazer sozinho no nível 6: com a arma que o Capataz Rachado deixa na missão "Cobrança Antiga",
+  leve uns 5 tônicos; com as peças comuns da faixa 5 do armeiro, uns 3 bastam. Bata primeiro no que estiver
+  mordendo o Joca e beba tônico antes de a vida ficar no fim. Em grupo, cada pessoa a mais perto da válvula traz
+  uma Válvula Errante a mais por onda. Se o Joca (ou todo mundo) cair, ele tenta de novo em 30 s, sem perder nada.
 - **Títulos**: algumas missões e respostas dão um título, mostrado acima do nome. Na ficha (**C**) você escolhe qual
   aparece, ou nenhum.
 - A cada nível você ganha **pontos de atributo** e **de habilidade**: distribua na ficha (**C**). Os itens exigem
