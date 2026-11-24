@@ -559,6 +559,73 @@ test('2.2 O Teste de Pressão: Joca cai e recomeça em 30 s; vencido o cronômet
   });
 });
 
+test('2.2 sozinho e em grupo: as ondas dos dados são as de quem vai sozinho; cada pessoa a mais do grupo, viva e perto do Joca, traz uma Válvula Errante a mais por onda (D185)', async () => {
+  await withServer(async (server, url) => {
+    const pre = ['tutorial', 'c1_count', 'c1_rats', 'c1_master', 'c1_route', 'c1_foreman', 'c2_water'];
+    const jv = data.maps.brejo_bombas.defenses.joca_valve;
+    assert.deepEqual(jv.extraPerMember, [['errant_valve', 1]]);
+    const count = (list) => list.reduce((acc, [m, n]) => ({ ...acc, [m]: (acc[m] ?? 0) + n }), {});
+    const solo = await hero(server, url, 'osolo', 'warden', 6, pre);
+    const [a, b, c] = [await hero(server, url, 'oa', 'breaker', 6, pre), await hero(server, url, 'ob', 'veilsinger', 6, pre), await hero(server, url, 'oc', 'pikeman', 6, pre)];
+    for (const x of [b, c]) {
+      server.partyInviteAt.clear(); // um convite a cada 10 s por quem convida: o teste não espera
+      assert.equal((await a.request('party_invite', { name: x.char.name })).ok, true);
+      assert.equal((await x.request('party_accept', { from: a.char.id })).ok, true);
+    }
+    for (const x of [solo, a, b, c]) {
+      await toNpc(server, x, 'joca', 'brejo_bombas');
+      assert.equal((await x.request('quest_accept', { quest: 'c2_pressure', npc: 'joca' })).ok, true);
+      await toObject(server, x, 'main_valve', 'brejo_bombas');
+    }
+    const zone = P(server, a).zone;
+    const wave = (def) => count([...zone.monsters.values()].filter((m) => m.escortTarget === def.eid && m.state !== 'dead').map((m) => [m.defId, 1]));
+    // sozinho: a primeira onda é a dos dados (uma Válvula Errante)
+    const s1 = await solo.request('interact', { object: 'main_valve' });
+    assert.equal(s1.ok, true, s1.reason);
+    const dSolo = zone.escorts.get(s1.escort);
+    assert.deepEqual(wave(dSolo), count(jv.waves[0].monsters), 'sozinho: a onda dos dados');
+    assert.deepEqual(jv.waves[0].monsters, [['errant_valve', 1]]);
+    // em trio, os três perto da válvula: duas Válvulas a mais na mesma onda
+    const st = await a.request('interact', { object: 'main_valve' });
+    assert.equal(st.ok, true, st.reason);
+    const dGroup = zone.escorts.get(st.escort);
+    assert.notEqual(dGroup, dSolo, 'a defesa do grupo é outra');
+    assert.deepEqual(wave(dGroup), { errant_valve: 3 }, 'trio: 1 dos dados + 2 por pessoa a mais');
+    // na onda seguinte, quem está longe do Joca ou caído não conta
+    await go(server, c, 'brejo_bombas', jv.x - jv.followRadius - 10, jv.z);
+    assert.deepEqual(count(dGroup.waveMonsters(1)), { ...count(jv.waves[1].monsters), errant_valve: 1 }, 'longe da válvula, C não conta');
+    P(server, b).char.dead = true;
+    assert.deepEqual(count(dGroup.waveMonsters(1)), count(jv.waves[1].monsters), 'B caído também não: só as da onda');
+    P(server, b).char.dead = false;
+    await toObject(server, c, 'main_valve', 'brejo_bombas');
+    assert.deepEqual(count(dGroup.waveMonsters(5)), { ...count(jv.waves[5].monsters), errant_valve: count(jv.waves[5].monsters).errant_valve + 2 }, 'de volta, os três contam de novo');
+    log(`sozinho: ${JSON.stringify(wave(dSolo))}; trio: ${JSON.stringify(wave(dGroup))}; longe ou caído não conta`);
+    for (const x of [solo, a, b, c]) await x.close();
+  });
+});
+
+test('npm run defesa-solo (a régua do D185): o bot da revisão vence sozinho as ondas dos dados e, em dupla, as Válvulas a mais; --graus gasta os pontos de habilidade e --habilidades escolhe quantas o bot usa', async () => {
+  const { runDefense } = await import('../tools/defesa-solo.mjs');
+  const jv = data.maps.brejo_bombas.defenses.joca_valve;
+  const solo = jv.waves.reduce((s, w) => s + w.monsters.reduce((t, [, n]) => t + n, 0), 0);
+  // Cantora com as peças de faixa 5 e 3 tônicos: vence sempre na medição (sem cair, Joca de pé)
+  const s = runDefense({ classId: 'veilsinger', tonics: 3, gear: '5', seed: 1 });
+  assert.equal(s.won, true, JSON.stringify(s));
+  assert.deepEqual([s.spawned, s.attempts, s.playerDown, s.fellAtS], [solo, 1, 0, null], 'sozinho: só as ondas dos dados, na primeira tentativa');
+  assert.ok(s.jocaHp > 0 && s.jocaHp <= s.jocaMaxHp && s.potions <= 3);
+  assert.deepEqual(s.skillRanks, [1, 1], 'sem --graus, as duas habilidades no grau 1 (como no script da revisão)');
+  // dupla: cada onda traz até uma Válvula a mais (a pessoa a mais, viva e perto do Joca quando a onda sai)
+  const d = runDefense({ classId: 'bastion', party: ['veilsinger'], tonics: 3, gear: '5', seed: 1 });
+  assert.equal(d.won, true, JSON.stringify(d));
+  assert.ok(d.spawned > solo && d.spawned <= solo + jv.waves.length * jv.extraPerMember[0][1], `dupla: ${d.spawned} monstros`);
+  // --graus (nível 6: 5 pontos, teto do grau 3) e --habilidades 1
+  const g = runDefense({ classId: 'veilsinger', tonics: 3, gear: '5', seed: 1, ranks: true });
+  assert.deepEqual(g.skillRanks, [3, 3]);
+  const one = runDefense({ classId: 'veilsinger', tonics: 3, gear: '5', seed: 1, skills: 1, ranks: true });
+  assert.deepEqual(one.skillRanks, [3], 'com uma habilidade só, os pontos vão nela');
+  log(`sozinho ${s.spawned} monstros (tônicos ${s.potions}); dupla ${d.spawned}; graus ${g.skillRanks} e ${one.skillRanks}`);
+});
+
 test('2.2 aceita antes da defesa (abates antigos gravados no objetivo): a válvula abre e a missão conclui', async () => {
   await withServer(async (server, url) => {
     const pre = ['tutorial', 'c1_count', 'c1_rats', 'c1_master', 'c1_route', 'c1_foreman', 'c2_water'];

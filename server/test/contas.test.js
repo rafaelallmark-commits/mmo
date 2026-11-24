@@ -459,6 +459,60 @@ test('conta excluída pelo serviço de contas com sessão aberta na zona: criar 
   } finally { await svc.stop(); await zone.stop(); rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('conta excluída pelo serviço de contas com o personagem no mundo: até a varredura, o salvamento periódico não regrava ouro nem marcas na linha anônima; os outros seguem gravando (D184)', async () => {
+  const dir = tmp('cinzas-excl-save-');
+  const db = join(dir, 's.db');
+  const zone = new GameServer({ port: 0, host: '127.0.0.1', dbPath: db, seed: 7, log: false, auth: 'token', tokenSecret: SECRET, dev: true });
+  const zport = await zone.start();
+  clearInterval(zone.saveTimer); // o salvamento periódico roda na mão, na hora certa
+  const { svc, port } = await startAccounts(db);
+  const entra = async (conta, name) => {
+    confirmada(svc.store, conta);
+    const t = await post(port, '/sessoes', { conta, senha: SENHA });
+    assert.equal(t.ok, true, t.erro);
+    const c = new SimClient(conta);
+    await c.connect(`ws://127.0.0.1:${zport}`);
+    assert.equal((await c.request('login_token', { token: t.token })).ok, true);
+    const ch = await c.request('create_char', { name, classId: 'breaker' });
+    assert.equal((await c.request('enter', { charId: ch.char.id })).ok, true);
+    assert.equal((await c.request('gm', { cmd: 'gold', amount: 5000 })).ok, true);
+    return { c, id: ch.char.id };
+  };
+  const raw = (id) => zone.store.db.prepare('SELECT name, gold, flags_json, level, updated_at FROM characters WHERE id = ?').get(id);
+  try {
+    const alfa = await entra('alfa', 'Alfeira');
+    const gama = await entra('gama', 'Gamela');
+    // marcas ganhas na sessão (título, prova da classe, escolha do capítulo 4), ainda só na memória da zona
+    for (const { id } of [alfa, gama]) Object.assign(zone.playerOf(id).char, { title: 'Guardião da Ponte', trialDone: true, choices: { c4_reasons: 'b' } });
+    zone.saveAll();
+    assert.equal(raw(alfa.id).gold, 5000, 'antes da exclusão, o salvamento periódico grava');
+    assert.equal((await post(port, '/contas/excluir', { conta: 'alfa', senha: SENHA })).ok, true);
+    const anon = raw(alfa.id);
+    assert.match(anon.name, /^excluido_\d+$/);
+    assert.deepEqual([anon.gold, anon.flags_json], [0, '{}']);
+    // a sessão de alfa segue no mundo até a varredura, com o ouro e as marcas na memória
+    zone.playerOf(alfa.id).char.gold += 250;
+    zone.playerOf(gama.id).char.gold += 250;
+    zone.saveAll();
+    zone.saveAll();
+    assert.deepEqual(raw(alfa.id), anon, 'a linha anônima ficou como a exclusão deixou');
+    const g = raw(gama.id);
+    assert.equal(g.gold, 5250, 'gama gravada no mesmo lote');
+    assert.deepEqual(JSON.parse(g.flags_json), { trialDone: true, title: 'Guardião da Ponte', choices: { c4_reasons: 'b' } });
+    // a varredura derruba alfa sem gravar a saída (D178); gama continua no mundo e gravando
+    const closed = new Promise((r) => alfa.c.ws.on('close', r));
+    zone.mod.lastSweep = 0;
+    zone.mod.sweep();
+    await closed;
+    assert.deepEqual(raw(alfa.id), anon);
+    assert.ok(zone.playerOf(gama.id), 'gama segue no mundo');
+    zone.playerOf(gama.id).char.gold += 1;
+    zone.saveAll();
+    assert.equal(raw(gama.id).gold, 5251);
+    await gama.c.close();
+  } finally { await svc.stop(); await zone.stop(); rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('última mensagem antes de fechar: "kicked" da outra conexão e a resposta do delete_account chegam antes do fechamento (o Godot perde o que vem junto com ele)', async () => {
   const dir = tmp('cinzas-fecha-');
   const db = join(dir, 'f.db');

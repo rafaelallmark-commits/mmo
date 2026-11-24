@@ -246,8 +246,10 @@ export function lockKey(schema) {
 
 const INSERT_ITEM = 'INSERT INTO item_instances (id, char_id, def_id, qty, enh, loc, slot, source, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)';
 const itemValues = ({ id, charId, defId, qty, enh, loc, slot, source }) => [id, charId, defId, qty, enh, loc, slot ?? null, source, Date.now()];
+// Personagem anonimizado (excluido_<id>, o filtro de listCharacters) nunca é regravado, nem sozinho nem no
+// lote: a condição vai na própria UPDATE, sem consulta a mais (D184; ver Store.saveCharacter).
 const SAVE_CHAR = `UPDATE characters SET level=$1, xp=$2, alloc_json=$3, unspent=$4, skill_points=$5, skills_json=$6, hp=$7, mp=$8, gold=$9,
-  map_id=$10, x=$11, z=$12, dead=$13, flags_json=$14, played_s=$15, updated_at=$16 WHERE id=$17`;
+  map_id=$10, x=$11, z=$12, dead=$13, flags_json=$14, played_s=$15, updated_at=$16 WHERE id=$17 AND nocase(name) NOT LIKE 'excluido\\_%' ESCAPE '\\'`;
 // lote: um UPDATE só, com uma lista por coluna (mesma ordem de charSaveValues)
 const SAVE_CHARS = `UPDATE characters AS c SET level = v.level, xp = v.xp, alloc_json = v.alloc_json, unspent = v.unspent, skill_points = v.skill_points,
   skills_json = v.skills_json, hp = v.hp, mp = v.mp, gold = v.gold, map_id = v.map_id, x = v.x, z = v.z, dead = v.dead, flags_json = v.flags_json,
@@ -255,7 +257,7 @@ const SAVE_CHARS = `UPDATE characters AS c SET level = v.level, xp = v.xp, alloc
   FROM unnest($1::bigint[], $2::bigint[], $3::text[], $4::bigint[], $5::bigint[], $6::text[], $7::bigint[], $8::bigint[], $9::bigint[], $10::text[],
     $11::float8[], $12::float8[], $13::bigint[], $14::text[], $15::float8[], $16::bigint[], $17::bigint[])
     AS v(level, xp, alloc_json, unspent, skill_points, skills_json, hp, mp, gold, map_id, x, z, dead, flags_json, played_s, updated_at, id)
-  WHERE c.id = v.id`;
+  WHERE c.id = v.id AND nocase(c.name) NOT LIKE 'excluido\\_%' ESCAPE '\\'`;
 
 export class PgStore {
   // opts: schema (padrão: ?schema= da URL ou public), dropSchemaOnClose (testes), migrate (false = não
